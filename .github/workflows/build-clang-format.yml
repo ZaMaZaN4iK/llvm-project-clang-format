@@ -6,7 +6,7 @@ on:
       - 'release/**'
     paths:
       - 'clang/**'
-      - '.github/workflows/clang-format.yml'
+      - '.github/workflows/build-clang-format.yml'
   pull_request:
     paths:
       - 'clang/**'
