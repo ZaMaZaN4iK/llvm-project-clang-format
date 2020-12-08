@@ -19,10 +19,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
-          - macOS-latest
+        include:
+          - os: ubuntu-latest
+            artifact_name: clang-format
+            asset_name: clang-format-linux-amd64
+          - os: windows-latest
+            artifact_name: clang-format.exe
+            asset_name: clang-format-windows-amd64
+          - os: macOS-latest
+            artifact_name: clang-format
+            asset_name: clang-format-macos-amd64
     steps:
     - name: Setup Windows
       if: startsWith(matrix.os, 'windows')
@@ -35,7 +41,23 @@ jobs:
       with:
         fetch-depth: 1
     - name: Build clang-format
+      if: startsWith(matrix.os, 'ubuntu')
       uses: llvm/actions/build-test-llvm-project@master
       with:
-        cmake_args: -G Ninja  -DLLVM_ENABLE_PROJECTS="clang" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="-static-libgcc" -DCMAKE_CXX_FLAGS="-static-libgcc -static-libstdc++"
+        cmake_args: -G Ninja -DLLVM_ENABLE_PROJECTS="clang" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="-static-libgcc" -DCMAKE_CXX_FLAGS="-static-libgcc -static-libstdc++"
         build_target: clang-format
+    - name: Build clang-format
+      if: startsWith(matrix.os, 'windows') || startsWith(matrix.os, 'macOS')
+      uses: llvm/actions/build-test-llvm-project@master
+      with:
+        cmake_args: -G Ninja -DLLVM_ENABLE_PROJECTS="clang" -DCMAKE_BUILD_TYPE=Release
+        build_target: clang-format
+    - name: Publish clang-format
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: bin/${{matrix.artifact_name}}
+        asset_name: ${{matrix.asset_name}}
+        tag: ${{ github.ref }}
+        overwrite: true
+        text: clang-format powered by Mike Gelfand
