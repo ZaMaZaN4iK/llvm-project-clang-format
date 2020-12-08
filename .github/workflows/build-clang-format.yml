@@ -25,7 +25,7 @@ jobs:
             asset_name: clang-format-linux-amd64
           - os: windows-latest
             artifact_name: clang-format.exe
-            asset_name: clang-format-windows-amd64
+            asset_name: clang-format-windows-amd64.exe
           - os: macOS-latest
             artifact_name: clang-format
             asset_name: clang-format-macos-amd64
