@@ -1,8 +1,9 @@
 //===- lib/ReaderWriter/MachO/ShimPass.cpp -------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -25,9 +26,9 @@
 #include "ArchHandler.h"
 #include "File.h"
 #include "MachOPasses.h"
-#include "lld/Common/LLVM.h"
 #include "lld/Core/DefinedAtom.h"
 #include "lld/Core/File.h"
+#include "lld/Core/LLVM.h"
 #include "lld/Core/Reference.h"
 #include "lld/Core/Simple.h"
 #include "lld/ReaderWriter/MachOLinkingContext.h"
@@ -121,7 +122,7 @@ private:
 
 
 void addShimPass(PassManager &pm, const MachOLinkingContext &ctx) {
-  pm.add(std::make_unique<ShimPass>(ctx));
+  pm.add(llvm::make_unique<ShimPass>(ctx));
 }
 
 } // end namespace mach_o

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,9 +13,7 @@
 
 #include <system_error>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     static_assert(static_cast<int>(std::errc::address_family_not_supported) == EAFNOSUPPORT, "");
     static_assert(static_cast<int>(std::errc::address_in_use) == EADDRINUSE, "");
@@ -102,6 +101,4 @@ int main(int, char**)
     static_assert(static_cast<int>(std::errc::too_many_symbolic_link_levels) == ELOOP, "");
     static_assert(static_cast<int>(std::errc::value_too_large) == EOVERFLOW, "");
     static_assert(static_cast<int>(std::errc::wrong_protocol_type) == EPROTOTYPE, "");
-
-  return 0;
 }

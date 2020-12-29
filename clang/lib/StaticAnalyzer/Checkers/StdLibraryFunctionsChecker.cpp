@@ -1,8 +1,9 @@
 //=== StdLibraryFunctionsChecker.cpp - Model standard functions -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -50,7 +51,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
@@ -224,7 +225,7 @@ class StdLibraryFunctionsChecker : public Checker<check::PostCall, eval::Call> {
 
 public:
   void checkPostCall(const CallEvent &Call, CheckerContext &C) const;
-  bool evalCall(const CallEvent &Call, CheckerContext &C) const;
+  bool evalCall(const CallExpr *CE, CheckerContext &C) const;
 
 private:
   Optional<FunctionSummaryTy> findFunctionSummary(const FunctionDecl *FD,
@@ -367,14 +368,10 @@ void StdLibraryFunctionsChecker::checkPostCall(const CallEvent &Call,
   }
 }
 
-bool StdLibraryFunctionsChecker::evalCall(const CallEvent &Call,
+bool StdLibraryFunctionsChecker::evalCall(const CallExpr *CE,
                                           CheckerContext &C) const {
-  const auto *FD = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
+  const FunctionDecl *FD = dyn_cast_or_null<FunctionDecl>(CE->getCalleeDecl());
   if (!FD)
-    return false;
-
-  const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
-  if (!CE)
     return false;
 
   Optional<FunctionSummaryTy> FoundSummary = findFunctionSummary(FD, CE, C);
@@ -443,10 +440,7 @@ StdLibraryFunctionsChecker::findFunctionSummary(const FunctionDecl *FD,
   BasicValueFactory &BVF = SVB.getBasicValueFactory();
   initFunctionSummaries(BVF);
 
-  IdentifierInfo *II = FD->getIdentifier();
-  if (!II)
-    return None;
-  StringRef Name = II->getName();
+  std::string Name = FD->getQualifiedNameAsString();
   if (Name.empty() || !C.isCLibraryFunction(FD, Name))
     return None;
 
@@ -1058,8 +1052,4 @@ void ento::registerStdCLibraryFunctionsChecker(CheckerManager &mgr) {
   // which would register various checkers with the help of the same Checker
   // class, turning on different function summaries.
   mgr.registerChecker<StdLibraryFunctionsChecker>();
-}
-
-bool ento::shouldRegisterStdCLibraryFunctionsChecker(const LangOptions &LO) {
-  return true;
 }

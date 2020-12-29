@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,11 +17,9 @@
 #include <streambuf>
 #include <cassert>
 
-#include "test_macros.h"
-
 struct testbuf : public std::streambuf {};
 
-int main(int, char**)
+int main()
 {
     testbuf sb;
     std::ios ios(&sb);
@@ -28,6 +27,4 @@ int main(int, char**)
     std::ios_base& r = std::noshowpoint(ios);
     assert(&r == &ios);
     assert(!(ios.flags() & std::ios::showpoint));
-
-  return 0;
 }

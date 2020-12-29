@@ -4,9 +4,9 @@
 @acc = external global i32
 @val = external global i32
 
-; CHECK-DAG: memw(gp+#num)
-; CHECK-DAG: memw(gp+#acc)
-; CHECK-DAG: memw(gp+#val)
+; CHECK-DAG: memw(#num)
+; CHECK-DAG: memw(#acc)
+; CHECK-DAG: memw(#val)
 
 define void @foo() nounwind {
 entry:

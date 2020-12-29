@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -64,7 +65,7 @@ CMyClass::~CMyClass() {
 
 bool operator==(const CMyClass &lhs, const CMyClass &rhs) { return lhs.equal(rhs); }
 
-int main(int, char**)
+int main()
 {
     CMyClass instance(42);
     std::vector<CMyClass> vec;
@@ -85,6 +86,4 @@ int main(int, char**)
         assert(is_contiguous_container_asan_correct(vec));
     }
 #endif
-
-  return 0;
 }

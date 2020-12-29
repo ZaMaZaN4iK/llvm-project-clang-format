@@ -1,8 +1,9 @@
 //=-- ProfilesummaryBuilder.cpp - Profile summary computation ---------------=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/IR/Attributes.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Type.h"
@@ -26,8 +28,8 @@ using namespace llvm;
 static const uint32_t DefaultCutoffsData[] = {
     10000,  /*  1% */
     100000, /* 10% */
-    200000, 300000, 400000, 500000, 600000, 700000, 800000,
-    900000, 950000, 990000, 999000, 999900, 999990, 999999};
+    200000, 300000, 400000, 500000, 600000, 500000, 600000, 700000,
+    800000, 900000, 950000, 990000, 999000, 999900, 999990, 999999};
 const ArrayRef<uint32_t> ProfileSummaryBuilder::DefaultCutoffs =
     DefaultCutoffsData;
 
@@ -44,17 +46,12 @@ void InstrProfSummaryBuilder::addRecord(const InstrProfRecord &R) {
 // To compute the detailed summary, we consider each line containing samples as
 // equivalent to a block with a count in the instrumented profile.
 void SampleProfileSummaryBuilder::addRecord(
-    const sampleprof::FunctionSamples &FS, bool isCallsiteSample) {
-  if (!isCallsiteSample) {
-    NumFunctions++;
-    if (FS.getHeadSamples() > MaxFunctionCount)
-      MaxFunctionCount = FS.getHeadSamples();
-  }
+    const sampleprof::FunctionSamples &FS) {
+  NumFunctions++;
+  if (FS.getHeadSamples() > MaxFunctionCount)
+    MaxFunctionCount = FS.getHeadSamples();
   for (const auto &I : FS.getBodySamples())
     addCount(I.second.getSamples());
-  for (const auto &I : FS.getCallsiteSamples())
-    for (const auto &CS : I.second)
-      addRecord(CS.second, true);
 }
 
 // The argument to this method is a vector of cutoff percentages and the return
@@ -62,7 +59,7 @@ void SampleProfileSummaryBuilder::addRecord(
 void ProfileSummaryBuilder::computeDetailedSummary() {
   if (DetailedSummaryCutoffs.empty())
     return;
-  llvm::sort(DetailedSummaryCutoffs);
+  std::sort(DetailedSummaryCutoffs.begin(), DetailedSummaryCutoffs.end());
   auto Iter = CountFrequencies.begin();
   const auto End = CountFrequencies.end();
 
@@ -93,14 +90,14 @@ void ProfileSummaryBuilder::computeDetailedSummary() {
 
 std::unique_ptr<ProfileSummary> SampleProfileSummaryBuilder::getSummary() {
   computeDetailedSummary();
-  return std::make_unique<ProfileSummary>(
+  return llvm::make_unique<ProfileSummary>(
       ProfileSummary::PSK_Sample, DetailedSummary, TotalCount, MaxCount, 0,
       MaxFunctionCount, NumCounts, NumFunctions);
 }
 
 std::unique_ptr<ProfileSummary> InstrProfSummaryBuilder::getSummary() {
   computeDetailedSummary();
-  return std::make_unique<ProfileSummary>(
+  return llvm::make_unique<ProfileSummary>(
       ProfileSummary::PSK_Instr, DetailedSummary, TotalCount, MaxCount,
       MaxInternalBlockCount, MaxFunctionCount, NumCounts, NumFunctions);
 }

@@ -1,19 +1,15 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // <string>
 
 // void resize(size_type n);
-
-// When back-deploying to macosx10.7, the RTTI for exception classes
-// incorrectly provided by libc++.dylib is mixed with the one in
-// libc++abi.dylib and exceptions are not caught properly.
-// XFAIL: with_system_cxx_lib=macosx10.7
 
 #include <string>
 #include <stdexcept>
@@ -48,7 +44,7 @@ test(S s, typename S::size_type n, S expected)
 #endif
 }
 
-int main(int, char**)
+int main()
 {
     {
     typedef std::string S;
@@ -90,6 +86,4 @@ int main(int, char**)
     test(S(), S::npos, S("not going to happen"));
     }
 #endif
-
-  return 0;
 }

@@ -5,6 +5,9 @@ Test the iteration protocol for frame registers.
 from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -23,10 +26,11 @@ class RegistersIteratorTestCase(TestBase):
             'main.cpp', '// Set break point at this line.')
 
     @add_test_categories(['pyapi'])
+    @expectedFailureAll(oslist=["windows"])
     def test_iter_registers(self):
         """Test iterator works correctly for lldbutil.iter_registers()."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
@@ -72,18 +76,17 @@ class RegistersIteratorTestCase(TestBase):
 
                     REGs = lldbutil.get_ESRs(frame)
                     if self.platformIsDarwin():
-                        if self.getArchitecture() != 'armv7' and self.getArchitecture() != 'armv7k':
-                            num = len(REGs)
+                        num = len(REGs)
+                        if self.TraceOn():
+                            print(
+                                "\nNumber of exception state registers: %d" %
+                                num)
+                        for reg in REGs:
+                            self.assertTrue(reg)
                             if self.TraceOn():
                                 print(
-                                    "\nNumber of exception state registers: %d" %
-                                    num)
-                            for reg in REGs:
-                                self.assertTrue(reg)
-                                if self.TraceOn():
-                                    print(
-                                        "%s => %s" %
-                                        (reg.GetName(), reg.GetValue()))
+                                    "%s => %s" %
+                                    (reg.GetName(), reg.GetValue()))
                     else:
                         self.assertIsNone(REGs)
 
@@ -96,8 +99,7 @@ class RegistersIteratorTestCase(TestBase):
                     REGs = lldbutil.get_registers(
                         frame, "Exception State Registers")
                     if self.platformIsDarwin():
-                        if self.getArchitecture() != 'armv7' and self.getArchitecture() != 'armv7k':
-                            self.assertIsNotNone(REGs)
+                        self.assertIsNotNone(REGs)
                     else:
                         self.assertIsNone(REGs)
 

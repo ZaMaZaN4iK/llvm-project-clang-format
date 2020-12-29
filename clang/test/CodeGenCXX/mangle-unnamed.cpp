@@ -48,7 +48,6 @@ int f5() {
   return a;
 }
 
-#if __cplusplus <= 199711L
 int f6() {
   static union {
     union {
@@ -57,10 +56,9 @@ int f6() {
     int b;
   };
   
-  // CXX98: _ZZ2f6vE1b
+  // CHECK: _ZZ2f6vE1b
   return b;
 }
-#endif
 
 int f7() {
   static union {

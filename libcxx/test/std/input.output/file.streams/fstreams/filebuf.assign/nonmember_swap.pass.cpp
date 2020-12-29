@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,10 +18,9 @@
 
 #include <fstream>
 #include <cassert>
-#include "test_macros.h"
 #include "platform_support.h"
 
-int main(int, char**)
+int main()
 {
     std::string temp = get_temp_file_name();
     {
@@ -53,6 +53,4 @@ int main(int, char**)
         assert(f2.sgetc() == L'2');
     }
     std::remove(temp.c_str());
-
-  return 0;
 }

@@ -5,6 +5,9 @@ Test SBType and SBTypeList API.
 from __future__ import print_function
 
 
+import os
+import re
+import time
 
 import lldb
 from lldbsuite.test.decorators import *
@@ -31,7 +34,7 @@ class TypeAndTypeListTestCase(TestBase):
         d = {'EXE': self.exe_name}
         self.build(dictionary=d)
         self.setTearDownCleanup(dictionary=d)
-        exe = self.getBuildArtifact(self.exe_name)
+        exe = os.path.join(os.getcwd(), self.exe_name)
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)
@@ -73,17 +76,13 @@ class TypeAndTypeListTestCase(TestBase):
                         self.assertTrue(enum_member)
                         self.DebugSBType(enum_member.type)
                 elif field.name == "my_type_is_nameless":
-                    self.assertFalse(
+                    self.assertTrue(
                         field.type.IsAnonymousType(),
-                        "my_type_is_nameless is not an anonymous type")
+                        "my_type_is_nameless has an anonymous type")
                 elif field.name == "my_type_is_named":
                     self.assertFalse(
                         field.type.IsAnonymousType(),
                         "my_type_is_named has a named type")
-                elif field.name == None:
-                    self.assertTrue(
-                        field.type.IsAnonymousType(),
-                        "Nameless type is not anonymous")
 
         # Pass an empty string.  LLDB should not crash. :-)
         fuzz_types = target.FindTypes(None)

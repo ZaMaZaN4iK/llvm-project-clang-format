@@ -1,8 +1,9 @@
 //===-- CFGPrinter.h - CFG printer external interface -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -139,7 +140,8 @@ struct DOTGraphTraits<const Function*> : public DefaultDOTGraphTraits {
 
       std::string Str;
       raw_string_ostream OS(Str);
-      auto Case = *SwitchInst::ConstCaseIt::fromSuccessorIndex(SI, SuccNo);
+      SwitchInst::ConstCaseIt Case =
+          SwitchInst::ConstCaseIt::fromSuccessorIndex(SI, SuccNo);
       OS << Case.getCaseValue()->getValue();
       return OS.str();
     }
@@ -149,7 +151,7 @@ struct DOTGraphTraits<const Function*> : public DefaultDOTGraphTraits {
   /// Display the raw branch weights from PGO.
   std::string getEdgeAttributes(const BasicBlock *Node, succ_const_iterator I,
                                 const Function *F) {
-    const Instruction *TI = Node->getTerminator();
+    const TerminatorInst *TI = Node->getTerminator();
     if (TI->getNumSuccessors() == 1)
       return "";
 
@@ -171,7 +173,8 @@ struct DOTGraphTraits<const Function*> : public DefaultDOTGraphTraits {
 
     // Prepend a 'W' to indicate that this is a weight rather than the actual
     // profile count (due to scaling).
-    return ("label=\"W:" + Twine(Weight->getZExtValue()) + "\"").str();
+    Twine Attrs = "label=\"W:" + Twine(Weight->getZExtValue()) + "\"";
+    return Attrs.str();
   }
 };
 } // End llvm namespace

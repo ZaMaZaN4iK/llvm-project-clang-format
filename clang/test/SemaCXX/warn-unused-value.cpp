@@ -59,13 +59,11 @@ struct Used {
   Used();
   Used(int);
   Used(int, int);
-  ~Used() {}
 };
 struct __attribute__((warn_unused)) Unused {
   Unused();
   Unused(int);
   Unused(int, int);
-  ~Unused() {}
 };
 void f() {
   Used();
@@ -74,10 +72,6 @@ void f() {
   Unused();     // expected-warning {{expression result unused}}
   Unused(1);    // expected-warning {{expression result unused}}
   Unused(1, 1); // expected-warning {{expression result unused}}
-#if __cplusplus >= 201103L // C++11 or later
-  Used({});
-  Unused({}); // expected-warning {{expression result unused}}
-#endif
 }
 }
 

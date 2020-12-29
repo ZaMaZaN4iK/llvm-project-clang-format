@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -50,7 +51,7 @@ public:
     ~Class();
 };
 
-int main(int, char**)
+int main()
 {
     test_extent<void, 0>();
     test_extent<int&, 0>();
@@ -70,6 +71,4 @@ int main(int, char**)
     test_extent1<int[2], 0>();
     test_extent1<int[2][4], 4>();
     test_extent1<int[][4], 4>();
-
-  return 0;
 }

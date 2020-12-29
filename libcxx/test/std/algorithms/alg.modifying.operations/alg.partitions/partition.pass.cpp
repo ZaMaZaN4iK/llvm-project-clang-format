@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,9 +17,10 @@
 
 #include <algorithm>
 #include <cassert>
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
+#include <memory>
+#endif
 
-
-#include "test_macros.h"
 #include "test_iterators.h"
 
 struct is_odd
@@ -94,11 +96,9 @@ test()
         assert(!is_odd()(*i));
 }
 
-int main(int, char**)
+int main()
 {
     test<bidirectional_iterator<int*> >();
     test<random_access_iterator<int*> >();
     test<int*>();
-
-  return 0;
 }

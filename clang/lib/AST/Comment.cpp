@@ -1,8 +1,9 @@
 //===--- Comment.cpp - Comment AST node implementation --------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,24 +14,9 @@
 #include "clang/AST/DeclTemplate.h"
 #include "clang/Basic/CharInfo.h"
 #include "llvm/Support/ErrorHandling.h"
-#include <type_traits>
 
 namespace clang {
 namespace comments {
-
-// Check that no comment class has a non-trival destructor. They are allocated
-// with a BumpPtrAllocator and therefore their destructor is not executed.
-#define ABSTRACT_COMMENT(COMMENT)
-#define COMMENT(CLASS, PARENT)                                                 \
-  static_assert(std::is_trivially_destructible<CLASS>::value,                  \
-                #CLASS " should be trivially destructible!");
-#include "clang/AST/CommentNodes.inc"
-#undef COMMENT
-#undef ABSTRACT_COMMENT
-
-// DeclInfo is also allocated with a BumpPtrAllocator.
-static_assert(std::is_trivially_destructible<DeclInfo>::value,
-              "DeclInfo should be trivially destructible!");
 
 const char *Comment::getCommentKindName() const {
   switch (getCommentKind()) {
@@ -130,9 +116,6 @@ bool ParagraphComment::isWhitespaceNoCache() const {
 static TypeLoc lookThroughTypedefOrTypeAliasLocs(TypeLoc &SrcTL) {
   TypeLoc TL = SrcTL.IgnoreParens();
 
-  // Look through attribute types.
-  if (AttributedTypeLoc AttributeTL = TL.getAs<AttributedTypeLoc>())
-    return AttributeTL.getModifiedLoc();
   // Look through qualified types.
   if (QualifiedTypeLoc QualifiedTL = TL.getAs<QualifiedTypeLoc>())
     return QualifiedTL.getUnqualifiedLoc();
@@ -219,7 +202,7 @@ void DeclInfo::fill() {
     return;
   }
   CurrentDecl = CommentDecl;
-
+  
   Decl::Kind K = CommentDecl->getKind();
   switch (K) {
   default:
@@ -297,25 +280,8 @@ void DeclInfo::fill() {
   case Decl::EnumConstant:
   case Decl::ObjCIvar:
   case Decl::ObjCAtDefsField:
-  case Decl::ObjCProperty: {
-    const TypeSourceInfo *TSI;
-    if (const auto *VD = dyn_cast<DeclaratorDecl>(CommentDecl))
-      TSI = VD->getTypeSourceInfo();
-    else if (const auto *PD = dyn_cast<ObjCPropertyDecl>(CommentDecl))
-      TSI = PD->getTypeSourceInfo();
-    else
-      TSI = nullptr;
-    if (TSI) {
-      TypeLoc TL = TSI->getTypeLoc().getUnqualifiedLoc();
-      FunctionTypeLoc FTL;
-      if (getFunctionTypeLoc(TL, FTL)) {
-        ParamVars = FTL.getParams();
-        ReturnType = FTL.getReturnLoc().getType();
-      }
-    }
     Kind = VariableKind;
     break;
-  }
   case Decl::Namespace:
     Kind = NamespaceKind;
     break;
@@ -379,11 +345,11 @@ StringRef TParamCommandComment::getParamName(const FullComment *FC) const {
   assert(isPositionValid());
   const TemplateParameterList *TPL = FC->getDeclInfo()->TemplateParameters;
   for (unsigned i = 0, e = getDepth(); i != e; ++i) {
-    assert(TPL && "Unknown TemplateParameterList");
-    if (i == e - 1)
+    if (i == e-1)
       return TPL->getParam(getIndex(i))->getName();
     const NamedDecl *Param = TPL->getParam(getIndex(i));
-    if (auto *TTP = dyn_cast<TemplateTemplateParmDecl>(Param))
+    if (const TemplateTemplateParmDecl *TTP =
+          dyn_cast<TemplateTemplateParmDecl>(Param))
       TPL = TTP->getTemplateParameters();
   }
   return "";

@@ -1,15 +1,16 @@
 //===-- BreakpointIDTest.cpp ------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "gtest/gtest.h"
 
 #include "lldb/Breakpoint/BreakpointID.h"
-#include "lldb/Utility/Status.h"
+#include "lldb/Core/Error.h"
 
 #include "llvm/ADT/StringRef.h"
 
@@ -17,7 +18,7 @@ using namespace lldb;
 using namespace lldb_private;
 
 TEST(BreakpointIDTest, StringIsBreakpointName) {
-  Status E;
+  Error E;
   EXPECT_FALSE(BreakpointID::StringIsBreakpointName("1breakpoint", E));
   EXPECT_FALSE(BreakpointID::StringIsBreakpointName("-", E));
   EXPECT_FALSE(BreakpointID::StringIsBreakpointName("", E));

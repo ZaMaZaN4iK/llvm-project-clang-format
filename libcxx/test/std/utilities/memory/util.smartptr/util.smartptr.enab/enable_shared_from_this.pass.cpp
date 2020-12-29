@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -25,7 +26,7 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "count_new.h"
+#include "count_new.hpp"
 
 struct T
     : public std::enable_shared_from_this<T>
@@ -40,7 +41,7 @@ void nullDeleter(void*) {}
 
 struct Foo : virtual public std::enable_shared_from_this<Foo>
 {
-    virtual ~Foo() {}
+	virtual ~Foo() {}
 };
 
 struct Bar : public Foo {
@@ -48,17 +49,13 @@ struct Bar : public Foo {
 };
 
 
-struct PrivateBase : private std::enable_shared_from_this<PrivateBase> {
-};
-
-
-int main(int, char**)
+int main()
 {
-    {  // https://bugs.llvm.org/show_bug.cgi?id=18843
+    {  // https://llvm.org/bugs/show_bug.cgi?id=18843
     std::shared_ptr<T const> t1(new T);
     std::shared_ptr<T const> t2(std::make_shared<T>());
     }
-    { // https://bugs.llvm.org/show_bug.cgi?id=27115
+    { // https://llvm.org/bugs/show_bug.cgi?id=27115
     int x = 42;
     std::shared_ptr<Bar> t1(new Bar(42));
     assert(t1->shared_from_this() == t1);
@@ -77,13 +74,8 @@ int main(int, char**)
     assert(p == q);
     assert(!p.owner_before(q) && !q.owner_before(p)); // p and q share ownership
     }
-    {
-      typedef std::shared_ptr<PrivateBase> APtr;
-      APtr a1 = std::make_shared<PrivateBase>();
-      assert(a1.use_count() == 1);
-    }
     // Test LWG issue 2529. Only reset '__weak_ptr_' when it's already expired.
-    // https://cplusplus.github.io/LWG/lwg-defects.html#2529
+    // http://cplusplus.github.io/LWG/lwg-active.html#2529.
     // Test two different ways:
     // * Using 'weak_from_this().expired()' in C++17.
     // * Using 'shared_from_this()' in all dialects.
@@ -92,12 +84,12 @@ int main(int, char**)
         T* ptr = new T;
         std::shared_ptr<T> s(ptr);
         {
-            // Don't re-initialize the "enable_shared_from_this" base
+            // Don't re-initialize the "enabled_shared_from_this" base
             // because it already references a non-expired shared_ptr.
             std::shared_ptr<T> s2(ptr, &nullDeleter);
         }
 #if TEST_STD_VER > 14
-        // The enable_shared_from_this base should still be referencing
+        // The enabled_shared_from_this base should still be referencing
         // the original shared_ptr.
         assert(!ptr->weak_from_this().expired());
 #endif
@@ -133,7 +125,7 @@ int main(int, char**)
 
 #ifndef TEST_HAS_NO_EXCEPTIONS
         try {
-            TEST_IGNORE_NODISCARD ptr->shared_from_this();
+            ptr->shared_from_this();
             assert(false);
         } catch (std::bad_weak_ptr const&) {
         } catch (...) { assert(false); }
@@ -167,6 +159,4 @@ int main(int, char**)
         assert(my_weak.lock().get() == ptr);
     }
 #endif
-
-  return 0;
 }

@@ -1,7 +1,7 @@
 // REQUIRES: powerpc-registered-target
-// RUN: %clang_cc1 -target-feature +altivec -target-feature +power8-vector -triple powerpc64-unknown-unknown -emit-llvm %s -o - | FileCheck %s
-// RUN: %clang_cc1 -target-feature +altivec -target-feature +power8-vector -triple powerpc64le-unknown-unknown -emit-llvm %s -o - | FileCheck %s -check-prefix=CHECK-LE
-// RUN: not %clang_cc1 -target-feature +altivec -target-feature +vsx -triple powerpc64-unknown-unknown -emit-llvm %s -o - 2>&1 | FileCheck %s -check-prefix=CHECK-PPC
+// RUN: %clang_cc1 -faltivec -target-feature +power8-vector -triple powerpc64-unknown-unknown -emit-llvm %s -o - | FileCheck %s
+// RUN: %clang_cc1 -faltivec -target-feature +power8-vector -triple powerpc64le-unknown-unknown -emit-llvm %s -o - | FileCheck %s -check-prefix=CHECK-LE
+// RUN: not %clang_cc1 -faltivec -target-feature +vsx -triple powerpc64-unknown-unknown -emit-llvm %s -o - 2>&1 | FileCheck %s -check-prefix=CHECK-PPC
 // Added -target-feature +vsx above to avoid errors about "vector double" and to
 // generate the correct errors for functions that are only overloaded with VSX
 // (vec_cmpge, vec_cmple). Without this option, there is only one overload so
@@ -469,10 +469,6 @@ void test1() {
 // CHECK: @llvm.ppc.vsx.xvcmpeqdp.p
 // CHECK-LE: @llvm.ppc.vsx.xvcmpeqdp.p
 
-  res_i = vec_all_eq(vfa, vfa);
-// CHECK: @llvm.ppc.vsx.xvcmpeqsp.p
-// CHECK-LE: @llvm.ppc.vsx.xvcmpeqsp.p
-
   /* vec_all_ne */
   res_i = vec_all_ne(vsll, vsll);
 // CHECK: @llvm.ppc.altivec.vcmpequd.p
@@ -515,13 +511,6 @@ void test1() {
   res_i = vec_all_ne(vda, vda);
 // CHECK: @llvm.ppc.vsx.xvcmpeqdp.p
 // CHECK-LE: @llvm.ppc.vsx.xvcmpeqdp.p
-
-  dummy();
-// CHECK: @dummy
-
-  res_i = vec_all_ne(vfa, vfa);
-// CHECK: @llvm.ppc.vsx.xvcmpeqsp.p
-// CHECK-LE: @llvm.ppc.vsx.xvcmpeqsp.p
 
   dummy();
 // CHECK: @dummy
@@ -574,10 +563,6 @@ void test1() {
 // CHECK: @llvm.ppc.vsx.xvcmpeqdp.p
 // CHECK-LE: @llvm.ppc.vsx.xvcmpeqdp.p
 
-  res_i = vec_any_eq(vfa, vfa);
-// CHECK: @llvm.ppc.vsx.xvcmpeqsp.p
-// CHECK-LE: @llvm.ppc.vsx.xvcmpeqsp.p
-
   /* vec_any_ne */
   res_i = vec_any_ne(vsll, vsll);
 // CHECK: @llvm.ppc.altivec.vcmpequd.p
@@ -617,10 +602,6 @@ void test1() {
   res_i = vec_any_ne(vda, vda);
 // CHECK: @llvm.ppc.vsx.xvcmpeqdp.p
 // CHECK-LE: @llvm.ppc.vsx.xvcmpeqdp.p
-
-  res_i = vec_any_ne(vfa, vfa);
-// CHECK: @llvm.ppc.vsx.xvcmpeqsp.p
-// CHECK-LE: @llvm.ppc.vsx.xvcmpeqsp.p
 
   /* vec_all_ge */
   res_i = vec_all_ge(vsll, vsll);
@@ -662,10 +643,6 @@ void test1() {
 // CHECK: @llvm.ppc.vsx.xvcmpgedp.p
 // CHECK-LE: @llvm.ppc.vsx.xvcmpgedp.p
 
-  res_i = vec_all_ge(vfa, vfa);
-// CHECK: @llvm.ppc.vsx.xvcmpgesp.p
-// CHECK-LE: @llvm.ppc.vsx.xvcmpgesp.p
-
   /* vec_all_gt */
   res_i = vec_all_gt(vsll, vsll);
 // CHECK: @llvm.ppc.altivec.vcmpgtsd.p
@@ -705,10 +682,6 @@ void test1() {
   res_i = vec_all_gt(vda, vda);
 // CHECK: @llvm.ppc.vsx.xvcmpgtdp.p
 // CHECK-LE: @llvm.ppc.vsx.xvcmpgtdp.p
-
-  res_i = vec_all_gt(vfa, vfa);
-// CHECK: @llvm.ppc.vsx.xvcmpgtsp.p
-// CHECK-LE: @llvm.ppc.vsx.xvcmpgtsp.p
 
   /* vec_all_le */
   res_i = vec_all_le(vsll, vsll);
@@ -750,10 +723,6 @@ void test1() {
 // CHECK: @llvm.ppc.vsx.xvcmpgedp.p
 // CHECK-LE: @llvm.ppc.vsx.xvcmpgedp.p
 
-  res_i = vec_all_le(vfa, vfa);
-// CHECK: @llvm.ppc.vsx.xvcmpgesp.p
-// CHECK-LE: @llvm.ppc.vsx.xvcmpgesp.p
-
   /* vec_all_lt */
   res_i = vec_all_lt(vsll, vsll);
 // CHECK: @llvm.ppc.altivec.vcmpgtsd.p
@@ -794,17 +763,9 @@ void test1() {
 // CHECK: @llvm.ppc.vsx.xvcmpgtdp.p
 // CHECK-LE: @llvm.ppc.vsx.xvcmpgtdp.p
 
-  res_i = vec_all_lt(vfa, vfa);
-// CHECK: @llvm.ppc.vsx.xvcmpgtsp.p
-// CHECK-LE: @llvm.ppc.vsx.xvcmpgtsp.p
-
   res_i = vec_all_nan(vda);
 // CHECK: @llvm.ppc.vsx.xvcmpeqdp.p
 // CHECK-LE: @llvm.ppc.vsx.xvcmpeqdp.p
-
-  res_i = vec_all_nan(vfa);
-// CHECK: @llvm.ppc.vsx.xvcmpeqsp.p
-// CHECK-LE: @llvm.ppc.vsx.xvcmpeqsp.p
 
   /* vec_any_ge */
   res_i = vec_any_ge(vsll, vsll);
@@ -845,10 +806,6 @@ void test1() {
   res_i = vec_any_ge(vda, vda);
 // CHECK: @llvm.ppc.vsx.xvcmpgedp.p
 // CHECK-LE: @llvm.ppc.vsx.xvcmpgedp.p
-
-  res_i = vec_any_ge(vfa, vfa);
-// CHECK: @llvm.ppc.vsx.xvcmpgesp.p
-// CHECK-LE: @llvm.ppc.vsx.xvcmpgesp.p
 
   /* vec_any_gt */
   res_i = vec_any_gt(vsll, vsll);
@@ -930,10 +887,6 @@ void test1() {
 // CHECK: @llvm.ppc.vsx.xvcmpgedp.p
 // CHECK-LE: @llvm.ppc.vsx.xvcmpgedp.p
 
-  res_i = vec_any_le(vfa, vfa);
-// CHECK: @llvm.ppc.vsx.xvcmpgesp.p
-// CHECK-LE: @llvm.ppc.vsx.xvcmpgesp.p
-
   /* vec_any_lt */
   res_i = vec_any_lt(vsll, vsll);
 // CHECK: @llvm.ppc.altivec.vcmpgtsd.p
@@ -973,10 +926,6 @@ void test1() {
   res_i = vec_any_lt(vda, vda);
 // CHECK: @llvm.ppc.vsx.xvcmpgtdp.p
 // CHECK-LE: @llvm.ppc.vsx.xvcmpgtdp.p
-
-  res_i = vec_any_lt(vfa, vfa);
-// CHECK: @llvm.ppc.vsx.xvcmpgtsp.p
-// CHECK-LE: @llvm.ppc.vsx.xvcmpgtsp.p
 
   /* vec_max */
   res_vsll = vec_max(vsll, vsll);
@@ -1117,17 +1066,13 @@ void test1() {
 
   /* vec_sr */
   res_vsll = vec_sr(vsll, vull);
-// CHECK: [[UREM:[0-9a-zA-Z%.]+]] = urem <2 x i64> {{[0-9a-zA-Z%.]+}}, <i64 64, i64 64>
-// CHECK: lshr <2 x i64> {{[0-9a-zA-Z%.]+}}, [[UREM]]
-// CHECK-LE: [[UREM:[0-9a-zA-Z%.]+]] = urem <2 x i64> {{[0-9a-zA-Z%.]+}}, <i64 64, i64 64>
-// CHECK-LE: lshr <2 x i64> {{[0-9a-zA-Z%.]+}}, [[UREM]]
+// CHECK: lshr <2 x i64>
+// CHECK-LE: lshr <2 x i64>
 // CHECK-PPC: error: call to 'vec_sr' is ambiguous
 
   res_vull = vec_sr(vull, vull);
-// CHECK: [[UREM:[0-9a-zA-Z%.]+]] = urem <2 x i64> {{[0-9a-zA-Z%.]+}}, <i64 64, i64 64>
-// CHECK: lshr <2 x i64> {{[0-9a-zA-Z%.]+}}, [[UREM]]
-// CHECK-LE: [[UREM:[0-9a-zA-Z%.]+]] = urem <2 x i64> {{[0-9a-zA-Z%.]+}}, <i64 64, i64 64>
-// CHECK-LE: lshr <2 x i64> {{[0-9a-zA-Z%.]+}}, [[UREM]]
+// CHECK: lshr <2 x i64>
+// CHECK-LE: lshr <2 x i64>
 // CHECK-PPC: error: call to 'vec_sr' is ambiguous
 
   /* vec_sra */
@@ -1359,12 +1304,6 @@ void test1() {
 // CHECK: xor <2 x i64> [[T1]], <i64 -1, i64 -1>
 // CHECK-LE: [[T1:%.+]] = and <2 x i64>
 // CHECK-LE: xor <2 x i64> [[T1]], <i64 -1, i64 -1>
-
-  res_vf = vec_nand(vfa, vfa);
-// CHECK: [[T1:%.+]] = and <4 x i32>
-// CHECK: xor <4 x i32> [[T1]], <i32 -1, i32 -1, i32 -1, i32 -1>
-// CHECK-LE: [[T1:%.+]] = and <4 x i32>
-// CHECK-LE: xor <4 x i32> [[T1]], <i32 -1, i32 -1, i32 -1, i32 -1>
 
   /* vec_orc */
   res_vsc = vec_orc(vsc, vsc);

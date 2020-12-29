@@ -314,8 +314,7 @@ DWARF:
     - int
     - char
   debug_pubnames:  
-    Length:
-      TotalLength:       23
+    Length:          23
     Version:         2
     UnitOffset:      0
     UnitSize:        121
@@ -323,8 +322,7 @@ DWARF:
       - DieOffset:       0x0000002A
         Name:            main
   debug_pubtypes:  
-    Length:
-      TotalLength:       31
+    Length:          31
     Version:         2
     UnitOffset:      0
     UnitSize:        121
@@ -337,8 +335,7 @@ DWARF:
 
 #CHECK: DWARF:           
 #CHECK:   debug_pubnames:  
-#CHECK:     Length:
-#CHECK:       TotalLength:       23
+#CHECK:     Length:          23
 #CHECK:     Version:         2
 #CHECK:     UnitOffset:      0
 #CHECK:     UnitSize:        121
@@ -346,8 +343,7 @@ DWARF:
 #CHECK:       - DieOffset:       0x0000002A
 #CHECK:         Name:            main
 #CHECK:   debug_pubtypes:  
-#CHECK:     Length:
-#CHECK:       TotalLength:       31
+#CHECK:     Length:          31
 #CHECK:     Version:         2
 #CHECK:     UnitOffset:      0
 #CHECK:     UnitSize:        121

@@ -1,8 +1,9 @@
 //===- lib/ReaderWriter/MachO/MachONormalizedFile.h -----------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -42,15 +43,15 @@
 #define LLD_READER_WRITER_MACHO_NORMALIZE_FILE_H
 
 #include "DebugInfo.h"
-#include "lld/Common/LLVM.h"
 #include "lld/Core/Error.h"
+#include "lld/Core/LLVM.h"
 #include "lld/ReaderWriter/MachOLinkingContext.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorOr.h"
+#include "llvm/Support/MachO.h"
 #include "llvm/Support/YAMLTraits.h"
 
 using llvm::BumpPtrAllocator;
@@ -123,6 +124,15 @@ struct Section {
   ArrayRef<uint8_t> content;
   Relocations     relocations;
   IndirectSymbols indirectSymbols;
+
+#ifndef NDEBUG
+  raw_ostream& operator<<(raw_ostream &OS) const {
+    dump(OS);
+    return OS;
+  }
+
+  void dump(raw_ostream &OS = llvm::dbgs()) const;
+#endif
 };
 
 
@@ -287,8 +297,7 @@ readBinary(std::unique_ptr<MemoryBuffer> &mb,
 /// Takes in-memory normalized view and writes a mach-o object file.
 llvm::Error writeBinary(const NormalizedFile &file, StringRef path);
 
-size_t headerAndLoadCommandsSize(const NormalizedFile &file,
-                                 bool includeFunctionStarts);
+size_t headerAndLoadCommandsSize(const NormalizedFile &file);
 
 
 /// Parses a yaml encoded mach-o file to produce an in-memory normalized view.

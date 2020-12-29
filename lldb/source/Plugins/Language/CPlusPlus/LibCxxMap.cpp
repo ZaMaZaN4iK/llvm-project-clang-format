@@ -1,22 +1,27 @@
 //===-- LibCxxMap.cpp -------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "LibCxx.h"
 
+#include "lldb/Core/DataBufferHeap.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Core/ValueObjectConstResult.h"
 #include "lldb/DataFormatters/FormattersHelpers.h"
+#include "lldb/Host/Endian.h"
 #include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/Endian.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -93,8 +98,6 @@ public:
       : m_entry(rhs.m_entry), m_max_depth(rhs.m_max_depth), m_error(false) {}
   MapIterator(ValueObject *entry, size_t depth = 0)
       : m_entry(entry), m_max_depth(depth), m_error(false) {}
-
-  MapIterator &operator=(const MapIterator &) = default;
 
   ValueObjectSP value() { return m_entry.GetEntry(); }
 
@@ -186,7 +189,7 @@ public:
 
   bool MightHaveChildren() override;
 
-  size_t GetIndexOfChildWithName(ConstString name) override;
+  size_t GetIndexOfChildWithName(const ConstString &name) override;
 
 private:
   bool GetDataType();
@@ -216,7 +219,6 @@ size_t lldb_private::formatters::LibcxxStdMapSyntheticFrontEnd::
     CalculateNumChildren() {
   static ConstString g___pair3_("__pair3_");
   static ConstString g___first_("__first_");
-  static ConstString g___value_("__value_");
 
   if (m_count != UINT32_MAX)
     return m_count;
@@ -225,22 +227,7 @@ size_t lldb_private::formatters::LibcxxStdMapSyntheticFrontEnd::
   ValueObjectSP m_item(m_tree->GetChildMemberWithName(g___pair3_, true));
   if (!m_item)
     return 0;
-
-  switch (m_item->GetCompilerType().GetNumDirectBaseClasses()) {
-  case 1:
-    // Assume a pre llvm r300140 __compressed_pair implementation:
-    m_item = m_item->GetChildMemberWithName(g___first_, true);
-    break;
-  case 2: {
-    // Assume a post llvm r300140 __compressed_pair implementation:
-    ValueObjectSP first_elem_parent = m_item->GetChildAtIndex(0, true);
-    m_item = first_elem_parent->GetChildMemberWithName(g___value_, true);
-    break;
-  }
-  default:
-    return false;
-  }
-
+  m_item = m_item->GetChildMemberWithName(g___first_, true);
   if (!m_item)
     return 0;
   m_count = m_item->GetValueAsUnsigned(0);
@@ -256,7 +243,7 @@ bool lldb_private::formatters::LibcxxStdMapSyntheticFrontEnd::GetDataType() {
     return true;
   m_element_type.Clear();
   ValueObjectSP deref;
-  Status error;
+  Error error;
   deref = m_root_node->Dereference(error);
   if (!deref || error.Fail())
     return false;
@@ -265,12 +252,13 @@ bool lldb_private::formatters::LibcxxStdMapSyntheticFrontEnd::GetDataType() {
     m_element_type = deref->GetCompilerType();
     return true;
   }
+  lldb::TemplateArgumentKind kind;
   deref = m_backend.GetChildAtNamePath({g_tree_, g_pair3});
   if (!deref)
     return false;
-  m_element_type = deref->GetCompilerType()
-                       .GetTypeTemplateArgument(1)
-                       .GetTypeTemplateArgument(1);
+  m_element_type =
+      deref->GetCompilerType().GetTemplateArgument(1, kind).GetTemplateArgument(
+          1, kind);
   if (m_element_type) {
     std::string name;
     uint64_t bit_offset_ptr;
@@ -281,7 +269,7 @@ bool lldb_private::formatters::LibcxxStdMapSyntheticFrontEnd::GetDataType() {
     m_element_type = m_element_type.GetTypedefedType();
     return m_element_type.IsValid();
   } else {
-    m_element_type = m_backend.GetCompilerType().GetTypeTemplateArgument(0);
+    m_element_type = m_backend.GetCompilerType().GetTemplateArgument(0, kind);
     return m_element_type.IsValid();
   }
 }
@@ -361,7 +349,7 @@ lldb_private::formatters::LibcxxStdMapSyntheticFrontEnd::GetChildAtIndex(
   }
   if (GetDataType()) {
     if (!need_to_skip) {
-      Status error;
+      Error error;
       iterated_sp = iterated_sp->Dereference(error);
       if (!iterated_sp || error.Fail()) {
         m_tree = nullptr;
@@ -379,8 +367,8 @@ lldb_private::formatters::LibcxxStdMapSyntheticFrontEnd::GetChildAtIndex(
         return lldb::ValueObjectSP();
       }
     } else {
-      // because of the way our debug info is made, we need to read item 0
-      // first so that we can cache information used to generate other elements
+      // because of the way our debug info is made, we need to read item 0 first
+      // so that we can cache information used to generate other elements
       if (m_skip_size == UINT32_MAX)
         GetChildAtIndex(0);
       if (m_skip_size == UINT32_MAX) {
@@ -402,7 +390,7 @@ lldb_private::formatters::LibcxxStdMapSyntheticFrontEnd::GetChildAtIndex(
   // we need to copy current_sp into a new object otherwise we will end up with
   // all items named __value_
   DataExtractor data;
-  Status error;
+  Error error;
   iterated_sp->GetData(data, error);
   if (error.Fail()) {
     m_tree = nullptr;
@@ -418,7 +406,7 @@ lldb_private::formatters::LibcxxStdMapSyntheticFrontEnd::GetChildAtIndex(
     case 1: {
       auto child0_sp = potential_child_sp->GetChildAtIndex(0, true);
       if (child0_sp && child0_sp->GetName() == g___cc)
-        potential_child_sp = child0_sp->Clone(ConstString(name.GetString()));
+        potential_child_sp = child0_sp;
       break;
     }
     case 2: {
@@ -426,10 +414,11 @@ lldb_private::formatters::LibcxxStdMapSyntheticFrontEnd::GetChildAtIndex(
       auto child1_sp = potential_child_sp->GetChildAtIndex(1, true);
       if (child0_sp && child0_sp->GetName() == g___cc && child1_sp &&
           child1_sp->GetName() == g___nc)
-        potential_child_sp = child0_sp->Clone(ConstString(name.GetString()));
+        potential_child_sp = child0_sp;
       break;
     }
     }
+    potential_child_sp->SetName(ConstString(name.GetString()));
   }
   m_iterators[idx] = iterator;
   return potential_child_sp;
@@ -454,7 +443,7 @@ bool lldb_private::formatters::LibcxxStdMapSyntheticFrontEnd::
 }
 
 size_t lldb_private::formatters::LibcxxStdMapSyntheticFrontEnd::
-    GetIndexOfChildWithName(ConstString name) {
+    GetIndexOfChildWithName(const ConstString &name) {
   return ExtractIndexFromString(name.GetCString());
 }
 

@@ -2,6 +2,7 @@
 Fuzz tests an object after the default construction to make sure it does not crash lldb.
 """
 
+import sys
 import lldb
 
 
@@ -12,10 +13,7 @@ def fuzz_obj(obj):
     obj.GetSTDOUT(6)
     obj.GetSTDERR(6)
     event = lldb.SBEvent()
-    try:
-        obj.ReportEventState(event, None)
-    except Exception:
-        pass
+    obj.ReportEventState(event, None)
     obj.AppendEventStateReport(event, lldb.SBCommandReturnObject())
     error = lldb.SBError()
     obj.RemoteAttachToProcessWithID(123, error)
@@ -50,4 +48,3 @@ def fuzz_obj(obj):
     obj.GetNumSupportedHardwareWatchpoints(error)
     for thread in obj:
         s = str(thread)
-    len(obj)

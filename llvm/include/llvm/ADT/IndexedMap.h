@@ -1,8 +1,9 @@
 //===- llvm/ADT/IndexedMap.h - An index map implementation ------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -19,28 +20,28 @@
 #ifndef LLVM_ADT_INDEXEDMAP_H
 #define LLVM_ADT_INDEXEDMAP_H
 
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include <cassert>
+#include <functional>
 
 namespace llvm {
 
-template <typename T, typename ToIndexT = identity<unsigned>>
+template <typename T, typename ToIndexT = llvm::identity<unsigned> >
   class IndexedMap {
-    using IndexT = typename ToIndexT::argument_type;
+    typedef typename ToIndexT::argument_type IndexT;
     // Prefer SmallVector with zero inline storage over std::vector. IndexedMaps
     // can grow very large and SmallVector grows more efficiently as long as T
     // is trivially copyable.
-    using StorageT = SmallVector<T, 0>;
-
+    typedef SmallVector<T, 0> StorageT;
     StorageT storage_;
     T nullVal_;
     ToIndexT toIndex_;
 
   public:
-    IndexedMap() : nullVal_(T()) {}
+    IndexedMap() : nullVal_(T()) { }
 
-    explicit IndexedMap(const T& val) : nullVal_(val) {}
+    explicit IndexedMap(const T& val) : nullVal_(val) { }
 
     typename StorageT::reference operator[](IndexT n) {
       assert(toIndex_(n) < storage_.size() && "index out of bounds!");
@@ -79,6 +80,6 @@ template <typename T, typename ToIndexT = identity<unsigned>>
     }
   };
 
-} // end namespace llvm
+} // End llvm namespace
 
-#endif // LLVM_ADT_INDEXEDMAP_H
+#endif

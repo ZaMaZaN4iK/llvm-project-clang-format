@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,10 +14,9 @@
 
 #include <string_view>
 #include <cassert>
-#include <stdexcept>
 
 #include "test_macros.h"
-#include "constexpr_char_traits.h"
+#include "constexpr_char_traits.hpp"
 
 int sign ( int x ) { return x > 0 ? 1 : ( x < 0 ? -1 : 0 ); }
 
@@ -1291,7 +1291,7 @@ void test11()
     }
 
 
-int main(int, char**) {
+int main () {
     test0();
     test1();
     test2();
@@ -1345,10 +1345,8 @@ int main(int, char**) {
     constexpr SV  sv1;
     constexpr SV  sv2 { "abcdefghijklmnopqrst", 21 };
     static_assert ( sv1.compare(0, 0, "abcde", 0) == 0, "" );
-    static_assert ( sv1.compare(0, 0, "abcde", 1) < 0, "" );
+    static_assert ( sv1.compare(0, 0, "abcde", 1) == -1, "" );
     static_assert ( sv2.compare(0, 0, "abcde", 1, 0) == 0, "" );
     }
 #endif
-
-  return 0;
 }

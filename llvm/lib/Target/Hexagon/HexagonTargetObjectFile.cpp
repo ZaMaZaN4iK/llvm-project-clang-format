@@ -1,8 +1,9 @@
 //===-- HexagonTargetObjectFile.cpp ---------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,7 +17,6 @@
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/GlobalObject.h"
@@ -28,6 +28,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ELF.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
 
@@ -48,14 +49,6 @@ static cl::opt<bool> TraceGVPlacement("trace-gv-placement",
   cl::Hidden, cl::init(false),
   cl::desc("Trace global value placement"));
 
-static cl::opt<bool>
-    EmitJtInText("hexagon-emit-jt-text", cl::Hidden, cl::init(false),
-                 cl::desc("Emit hexagon jump tables in function section"));
-
-static cl::opt<bool>
-    EmitLutInText("hexagon-emit-lut-text", cl::Hidden, cl::init(false),
-                 cl::desc("Emit hexagon lookup tables in function section"));
-
 // TraceGVPlacement controls messages for all builds. For builds with assertions
 // (debug or release), messages are also controlled by the usual debug flags
 // (e.g. -debug and -debug-only=globallayout)
@@ -73,7 +66,7 @@ static cl::opt<bool>
     if (TraceGVPlacement) {                                                    \
       TRACE_TO(errs(), X);                                                     \
     } else {                                                                   \
-      LLVM_DEBUG(TRACE_TO(dbgs(), X));                                         \
+      DEBUG(TRACE_TO(dbgs(), X));                                              \
     }                                                                          \
   } while (false)
 #endif
@@ -139,13 +132,6 @@ MCSection *HexagonTargetObjectFile::SelectSectionForGlobal(
          << (Kind.isBSS() ? "kind_bss " : "" )
          << (Kind.isBSSLocal() ? "kind_bss_local " : "" ));
 
-  // If the lookup table is used by more than one function, do not place
-  // it in text section.
-  if (EmitLutInText && GO->getName().startswith("switch.table")) {
-    if (const Function *Fn = getLutUsedFunction(GO))
-      return selectSectionForLookupTable(GO, TM, Fn);
-  }
-
   if (isGlobalInSmallSection(GO, TM))
     return selectSmallSectionForGlobal(GO, Kind, TM);
 
@@ -198,16 +184,12 @@ MCSection *HexagonTargetObjectFile::getExplicitSectionGlobal(
 /// section.
 bool HexagonTargetObjectFile::isGlobalInSmallSection(const GlobalObject *GO,
       const TargetMachine &TM) const {
-  bool HaveSData = isSmallDataEnabled(TM);
-  if (!HaveSData)
-    LLVM_DEBUG(dbgs() << "Small-data allocation is disabled, but symbols "
-                         "may have explicit section assignments...\n");
   // Only global variables, not functions.
-  LLVM_DEBUG(dbgs() << "Checking if value is in small-data, -G"
-                    << SmallDataThreshold << ": \"" << GO->getName() << "\": ");
+  DEBUG(dbgs() << "Checking if value is in small-data, -G"
+               << SmallDataThreshold << ": \"" << GO->getName() << "\": ");
   const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GO);
   if (!GVar) {
-    LLVM_DEBUG(dbgs() << "no, not a global variable\n");
+    DEBUG(dbgs() << "no, not a global variable\n");
     return false;
   }
 
@@ -216,31 +198,28 @@ bool HexagonTargetObjectFile::isGlobalInSmallSection(const GlobalObject *GO,
   // small data or not. This is how we can support mixing -G0/-G8 in LTO.
   if (GVar->hasSection()) {
     bool IsSmall = isSmallDataSection(GVar->getSection());
-    LLVM_DEBUG(dbgs() << (IsSmall ? "yes" : "no")
-                      << ", has section: " << GVar->getSection() << '\n');
+    DEBUG(dbgs() << (IsSmall ? "yes" : "no") << ", has section: "
+                 << GVar->getSection() << '\n');
     return IsSmall;
   }
 
-  // If sdata is disabled, stop the checks here.
-  if (!HaveSData) {
-    LLVM_DEBUG(dbgs() << "no, small-data allocation is disabled\n");
-    return false;
-  }
-
   if (GVar->isConstant()) {
-    LLVM_DEBUG(dbgs() << "no, is a constant\n");
+    DEBUG(dbgs() << "no, is a constant\n");
     return false;
   }
 
   bool IsLocal = GVar->hasLocalLinkage();
   if (!StaticsInSData && IsLocal) {
-    LLVM_DEBUG(dbgs() << "no, is static\n");
+    DEBUG(dbgs() << "no, is static\n");
     return false;
   }
 
-  Type *GType = GVar->getValueType();
+  Type *GType = GVar->getType();
+  if (PointerType *PT = dyn_cast<PointerType>(GType))
+    GType = PT->getElementType();
+
   if (isa<ArrayType>(GType)) {
-    LLVM_DEBUG(dbgs() << "no, is an array\n");
+    DEBUG(dbgs() << "no, is an array\n");
     return false;
   }
 
@@ -250,37 +229,31 @@ bool HexagonTargetObjectFile::isGlobalInSmallSection(const GlobalObject *GO,
   // these objects end up in the sdata, the references will still be valid.
   if (StructType *ST = dyn_cast<StructType>(GType)) {
     if (ST->isOpaque()) {
-      LLVM_DEBUG(dbgs() << "no, has opaque type\n");
+      DEBUG(dbgs() << "no, has opaque type\n");
       return false;
     }
   }
 
   unsigned Size = GVar->getParent()->getDataLayout().getTypeAllocSize(GType);
   if (Size == 0) {
-    LLVM_DEBUG(dbgs() << "no, has size 0\n");
+    DEBUG(dbgs() << "no, has size 0\n");
     return false;
   }
   if (Size > SmallDataThreshold) {
-    LLVM_DEBUG(dbgs() << "no, size exceeds sdata threshold: " << Size << '\n');
+    DEBUG(dbgs() << "no, size exceeds sdata threshold: " << Size << '\n');
     return false;
   }
 
-  LLVM_DEBUG(dbgs() << "yes\n");
+  DEBUG(dbgs() << "yes\n");
   return true;
 }
 
-bool HexagonTargetObjectFile::isSmallDataEnabled(const TargetMachine &TM)
-    const {
-  return SmallDataThreshold > 0 && !TM.isPositionIndependent();
+bool HexagonTargetObjectFile::isSmallDataEnabled() const {
+  return SmallDataThreshold > 0;
 }
 
 unsigned HexagonTargetObjectFile::getSmallDataSize() const {
   return SmallDataThreshold;
-}
-
-bool HexagonTargetObjectFile::shouldPutJumpTableInFunctionSection(
-    bool UsesLabelDifference, const Function &F) const {
-  return EmitJtInText;
 }
 
 /// Descends any type down to "elementary" components,
@@ -338,7 +311,7 @@ unsigned HexagonTargetObjectFile::getSmallestAddressableSize(const Type *Ty,
 
 MCSection *HexagonTargetObjectFile::selectSmallSectionForGlobal(
     const GlobalObject *GO, SectionKind Kind, const TargetMachine &TM) const {
-  const Type *GTy = GO->getValueType();
+  const Type *GTy = GO->getType()->getElementType();
   unsigned Size = getSmallestAddressableSize(GTy, GO, TM);
 
   // If we have -ffunction-section or -fdata-section then we should emit the
@@ -419,40 +392,4 @@ MCSection *HexagonTargetObjectFile::selectSmallSectionForGlobal(
   TRACE("default ELF section\n");
   // Otherwise, we work the same as ELF.
   return TargetLoweringObjectFileELF::SelectSectionForGlobal(GO, Kind, TM);
-}
-
-// Return the function that uses the lookup table. If there are more
-// than one live function that uses this look table, bail out and place
-// the lookup table in default section.
-const Function *
-HexagonTargetObjectFile::getLutUsedFunction(const GlobalObject *GO) const {
-  const Function *ReturnFn = nullptr;
-  for (auto U : GO->users()) {
-    // validate each instance of user to be a live function.
-    auto *I = dyn_cast<Instruction>(U);
-    if (!I)
-      continue;
-    auto *Bb = I->getParent();
-    if (!Bb)
-      continue;
-    auto *UserFn = Bb->getParent();
-    if (!ReturnFn)
-      ReturnFn = UserFn;
-    else if (ReturnFn != UserFn)
-      return nullptr;
-  }
-  return ReturnFn;
-}
-
-MCSection *HexagonTargetObjectFile::selectSectionForLookupTable(
-    const GlobalObject *GO, const TargetMachine &TM, const Function *Fn) const {
-
-  SectionKind Kind = SectionKind::getText();
-  // If the function has explicit section, place the lookup table in this
-  // explicit section.
-  if (Fn->hasSection())
-    return getExplicitSectionGlobal(Fn, Kind, TM);
-
-  const auto *FuncObj = dyn_cast<GlobalObject>(Fn);
-  return SelectSectionForGlobal(FuncObj, Kind, TM);
 }

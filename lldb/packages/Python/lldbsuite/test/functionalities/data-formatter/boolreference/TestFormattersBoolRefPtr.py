@@ -2,8 +2,12 @@
 Test lldb data formatter subsystem.
 """
 
+from __future__ import print_function
 
 
+import datetime
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -28,7 +32,7 @@ class DataFormatterBoolRefPtr(TestBase):
 
     def boolrefptr_data_formatter_commands(self):
         """Test the formatters we use for BOOL& and BOOL* in Objective-C."""
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(
             self, "main.mm", self.line, num_expected_locations=1, loc_exact=True)
@@ -50,7 +54,7 @@ class DataFormatterBoolRefPtr(TestBase):
         # Execute the cleanup function during test case tear down.
         self.addTearDownHook(cleanup)
 
-        isiOS = (lldbplatformutil.getPlatform() == 'ios' or lldbplatformutil.getPlatform() == 'watchos')
+        isiOS = (lldbplatformutil.getPlatform() == 'ios')
 
         # Now check that we use the right summary for BOOL&
         self.expect('frame variable yes_ref',

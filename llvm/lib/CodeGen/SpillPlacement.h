@@ -1,8 +1,9 @@
-//===- SpillPlacement.h - Optimal Spill Code Placement ---------*- C++ -*--===//
+//===-- SpillPlacement.h - Optimal Spill Code Placement --------*- C++ -*--===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -36,9 +37,9 @@ namespace llvm {
 
 class BitVector;
 class EdgeBundles;
-class MachineBlockFrequencyInfo;
-class MachineFunction;
+class MachineBasicBlock;
 class MachineLoopInfo;
+class MachineBlockFrequencyInfo;
 
 class SpillPlacement : public MachineFunctionPass {
   struct Node;
@@ -46,7 +47,7 @@ class SpillPlacement : public MachineFunctionPass {
   const EdgeBundles *bundles;
   const MachineLoopInfo *loops;
   const MachineBlockFrequencyInfo *MBFI;
-  Node *nodes = nullptr;
+  Node *nodes;
 
   // Nodes that are active in the current computation. Owned by the prepare()
   // caller.
@@ -72,7 +73,7 @@ class SpillPlacement : public MachineFunctionPass {
 public:
   static char ID; // Pass identification, replacement for typeid.
 
-  SpillPlacement() : MachineFunctionPass(ID) {}
+  SpillPlacement() : MachineFunctionPass(ID), nodes(nullptr) {}
   ~SpillPlacement() override { releaseMemory(); }
 
   /// BorderConstraint - A basic block has separate constraints for entry and
@@ -154,16 +155,16 @@ public:
   }
 
 private:
-  bool runOnMachineFunction(MachineFunction &mf) override;
-  void getAnalysisUsage(AnalysisUsage &AU) const override;
+  bool runOnMachineFunction(MachineFunction&) override;
+  void getAnalysisUsage(AnalysisUsage&) const override;
   void releaseMemory() override;
 
-  void activate(unsigned n);
+  void activate(unsigned);
   void setThreshold(const BlockFrequency &Entry);
 
-  bool update(unsigned n);
+  bool update(unsigned);
 };
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_CODEGEN_SPILLPLACEMENT_H
+#endif

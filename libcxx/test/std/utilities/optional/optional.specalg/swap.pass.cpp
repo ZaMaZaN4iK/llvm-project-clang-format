@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,7 +18,7 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "archetypes.h"
+#include "archetypes.hpp"
 
 using std::optional;
 
@@ -91,7 +92,7 @@ void test_swap_sfinae() {
         static_assert(!std::is_swappable_v<optional<T>>, "");
     }
     {
-        // Even though CopyOnly has deleted move operations, those operations
+        // Even thought CopyOnly has deleted move operations, those operations
         // cause optional<CopyOnly> to have implicitly deleted move operations
         // that decay into copies.
         using T = TestTypes::CopyOnly;
@@ -109,7 +110,7 @@ void test_swap_sfinae() {
     }
 }
 
-int main(int, char**)
+int main()
 {
     test_swap_sfinae();
     {
@@ -348,6 +349,4 @@ int main(int, char**)
         assert(*opt2 == 2);
     }
 #endif // TEST_HAS_NO_EXCEPTIONS
-
-  return 0;
 }

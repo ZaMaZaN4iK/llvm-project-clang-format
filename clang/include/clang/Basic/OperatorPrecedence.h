@@ -1,13 +1,14 @@
 //===--- OperatorPrecedence.h - Operator precedence levels ------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Defines and computes precedence levels for binary/ternary operators.
+/// \brief Defines and computes precedence levels for binary/ternary operators.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -35,15 +36,14 @@ namespace prec {
     And             = 8,    // &
     Equality        = 9,    // ==, !=
     Relational      = 10,   //  >=, <=, >, <
-    Spaceship       = 11,   // <=>
-    Shift           = 12,   // <<, >>
-    Additive        = 13,   // -, +
-    Multiplicative  = 14,   // *, /, %
-    PointerToMember = 15    // .*, ->*
+    Shift           = 11,   // <<, >>
+    Additive        = 12,   // -, +
+    Multiplicative  = 13,   // *, /, %
+    PointerToMember = 14    // .*, ->*
   };
 }
 
-/// Return the precedence of the specified binary operator token.
+/// \brief Return the precedence of the specified binary operator token.
 prec::Level getBinOpPrecedence(tok::TokenKind Kind, bool GreaterThanIsOperator,
                                bool CPlusPlus11);
 

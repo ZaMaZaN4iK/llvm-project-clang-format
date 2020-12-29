@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,10 +14,8 @@
 // REQUIRES: locale.en_US.UTF-8
 
 #include <iomanip>
-#include <ostream>
 #include <cassert>
 
-#include "test_macros.h"
 #include "platform_support.h" // locale name macros
 
 template <class CharT>
@@ -36,22 +35,22 @@ public:
 protected:
 
     virtual typename base::int_type
-        overflow(typename base::int_type ch = base::traits_type::eof())
+        overflow(typename base::int_type __c = base::traits_type::eof())
         {
-            if (ch != base::traits_type::eof())
+            if (__c != base::traits_type::eof())
             {
                 int n = str_.size();
-                str_.push_back(static_cast<CharT>(ch));
+                str_.push_back(__c);
                 str_.resize(str_.capacity());
                 base::setp(const_cast<CharT*>(str_.data()),
                            const_cast<CharT*>(str_.data() + str_.size()));
                 base::pbump(n+1);
             }
-            return ch;
+            return __c;
         }
 };
 
-int main(int, char**)
+int main()
 {
     {
         testbuf<char> sb;
@@ -89,6 +88,4 @@ int main(int, char**)
         os << std::put_money(x, true);
         assert(sb.str() == L"-USD 1,234,567.89");
     }
-
-  return 0;
 }

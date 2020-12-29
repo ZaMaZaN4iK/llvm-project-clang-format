@@ -1,8 +1,9 @@
 //===- CodegenCleanup.cpp -------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,13 +13,11 @@
 #include "llvm/Analysis/TypeBasedAliasAnalysis.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/PassInfo.h"
+#include "llvm/PassRegistry.h"
 #include "llvm/PassSupport.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Transforms/Scalar/GVN.h"
-#include "llvm/Transforms/Utils.h"
-
 #define DEBUG_TYPE "polly-cleanup"
 
 using namespace llvm;
@@ -48,7 +47,7 @@ public:
 
     // TODO: How to make parent passes discoverable?
     // TODO: Should be sensitive to compiler options in PassManagerBuilder, to
-    // which we do not have access here.
+    // which wo do not have access here.
     FPM->add(createScopedNoAliasAAWrapperPass());
     FPM->add(createTypeBasedAAWrapperPass());
     FPM->add(createAAResultsWrapperPass());
@@ -61,46 +60,35 @@ public:
     FPM->add(createCFGSimplificationPass());
     FPM->add(createSROAPass());
     FPM->add(createEarlyCSEPass());
-
-    FPM->add(createPromoteMemoryToRegisterPass());
-    FPM->add(createInstructionCombiningPass(true));
-    FPM->add(createCFGSimplificationPass());
-    FPM->add(createSROAPass());
-    FPM->add(createEarlyCSEPass(true));
-    FPM->add(createSpeculativeExecutionIfHasBranchDivergencePass());
+    FPM->add(createInstructionCombiningPass());
     FPM->add(createJumpThreadingPass());
     FPM->add(createCorrelatedValuePropagationPass());
     FPM->add(createCFGSimplificationPass());
-    FPM->add(createInstructionCombiningPass(true));
-    FPM->add(createLibCallsShrinkWrapPass());
-    FPM->add(createTailCallEliminationPass());
+    FPM->add(createInstructionCombiningPass());
     FPM->add(createCFGSimplificationPass());
     FPM->add(createReassociatePass());
-    FPM->add(createLoopRotatePass(-1));
-    FPM->add(createGVNPass());
+    FPM->add(createLoopRotatePass());
     FPM->add(createLICMPass());
     FPM->add(createLoopUnswitchPass());
     FPM->add(createCFGSimplificationPass());
-    FPM->add(createInstructionCombiningPass(true));
+    FPM->add(createInstructionCombiningPass());
     FPM->add(createIndVarSimplifyPass());
     FPM->add(createLoopIdiomPass());
     FPM->add(createLoopDeletionPass());
     FPM->add(createCFGSimplificationPass());
-    FPM->add(createSimpleLoopUnrollPass(3));
+    FPM->add(createSimpleLoopUnrollPass());
     FPM->add(createMergedLoadStoreMotionPass());
-    FPM->add(createGVNPass());
     FPM->add(createMemCpyOptPass());
-    FPM->add(createSCCPPass());
     FPM->add(createBitTrackingDCEPass());
-    FPM->add(createInstructionCombiningPass(true));
+    FPM->add(createInstructionCombiningPass());
     FPM->add(createJumpThreadingPass());
     FPM->add(createCorrelatedValuePropagationPass());
     FPM->add(createDeadStoreEliminationPass());
     FPM->add(createLICMPass());
+    FPM->add(createLoopRerollPass());
     FPM->add(createAggressiveDCEPass());
     FPM->add(createCFGSimplificationPass());
-    FPM->add(createInstructionCombiningPass(true));
-    FPM->add(createFloat2IntPass());
+    FPM->add(createInstructionCombiningPass());
 
     return FPM->doInitialization();
   }
@@ -116,13 +104,12 @@ public:
 
   virtual bool runOnFunction(llvm::Function &F) override {
     if (!F.hasFnAttribute("polly-optimized")) {
-      LLVM_DEBUG(
-          dbgs() << F.getName()
-                 << ": Skipping cleanup because Polly did not optimize it.");
+      DEBUG(dbgs() << F.getName()
+                   << ": Skipping cleanup because Polly did not optimize it.");
       return false;
     }
 
-    LLVM_DEBUG(dbgs() << F.getName() << ": Running codegen cleanup...");
+    DEBUG(dbgs() << F.getName() << ": Running codegen cleanup...");
     return FPM->run(F);
   }
   //@}

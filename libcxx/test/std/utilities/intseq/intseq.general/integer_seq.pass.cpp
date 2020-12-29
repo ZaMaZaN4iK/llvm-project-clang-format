@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,14 +17,12 @@
 #include <type_traits>
 #include <cassert>
 
-#include "test_macros.h"
-
 template <typename AtContainer, typename T, T... I>
 auto extract ( const AtContainer &t, const std::integer_sequence<T, I...> )
 -> decltype ( std::make_tuple ( std::get<I>(t)... ))
 {     return  std::make_tuple ( std::get<I>(t)... ); }
 
-int main(int, char**)
+int main()
 {
 //  Make a couple of sequences
     using int3    = std::make_integer_sequence<int, 3>;     // generates int:    0,1,2
@@ -78,6 +77,4 @@ int main(int, char**)
     auto tsizemix = extract ( tup, sizemix ());
     static_assert ( std::tuple_size<decltype(tsizemix)>::value == sizemix::size (), "tsizemix size wrong");
     assert ( tsizemix == std::make_tuple ( 11, 11, 12, 13, 15 ));
-
-  return 0;
 }

@@ -1,15 +1,14 @@
 // -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
-
-// XFAIL: dylib-has-no-bad_variant_access && !libcpp-no-exceptions
 
 // <variant>
 
@@ -22,9 +21,9 @@
 #include <type_traits>
 #include <variant>
 
-#include "test_convertible.h"
+#include "test_convertible.hpp"
 #include "test_macros.h"
-#include "variant_test_helpers.h"
+#include "variant_test_helpers.hpp"
 
 struct NotSwappable {};
 void swap(NotSwappable &, NotSwappable &) = delete;
@@ -583,12 +582,10 @@ void test_swap_noexcept() {
 template class std::variant<int, NotSwappable>;
 #endif
 
-int main(int, char**) {
+int main() {
   test_swap_valueless_by_exception();
   test_swap_same_alternative();
   test_swap_different_alternatives();
   test_swap_sfinae();
   test_swap_noexcept();
-
-  return 0;
 }

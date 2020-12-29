@@ -1,13 +1,4 @@
-// RUN: %clang_cc1 -verify -fopenmp -ferror-limit 100 -std=c++11 -o - %s -Wuninitialized
-
-// RUN: %clang_cc1 -verify -fopenmp-simd -ferror-limit 100 -std=c++11 -o - %s -Wuninitialized
-
-void xxx(int argc) {
-  int x; // expected-note {{initialize the variable 'x' to silence this warning}}
-#pragma omp parallel for
-  for(int i = 0; i < 10; ++i)
-  argc = x; // expected-warning {{variable 'x' is uninitialized when used here}}
-}
+// RUN: %clang_cc1 -verify -fopenmp -ferror-limit 100 -std=c++11 -o - %s
 
 void foo() {
 }
@@ -65,7 +56,7 @@ L1:
       break;
     }
   }
-#pragma omp parallel for default(none) // expected-note {{explicit data sharing attribute requested here}}
+#pragma omp parallel for default(none)
   for (int i = 0; i < 10; ++i)
     ++argc; // expected-error {{variable 'argc' must have explicitly specified data sharing attributes}}
 

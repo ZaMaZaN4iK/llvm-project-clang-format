@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,8 +16,6 @@
 
 #include <ostream>
 #include <cassert>
-
-#include "test_macros.h"
 
 int seekpos_called = 0;
 
@@ -38,7 +37,7 @@ protected:
     }
 };
 
-int main(int, char**)
+int main()
 {
     {
         seekpos_called = 0;
@@ -57,7 +56,7 @@ int main(int, char**)
         assert(seekpos_called == 2);
         assert(os.fail());
     }
-    { // See https://bugs.llvm.org/show_bug.cgi?id=21361
+    { // See https://llvm.org/bugs/show_bug.cgi?id=21361
         seekpos_called = 0;
         testbuf<char> sb;
         std::ostream os(&sb);
@@ -66,6 +65,4 @@ int main(int, char**)
         assert(seekpos_called == 1);
         assert(os.rdstate() == std::ios_base::eofbit);
     }
-
-  return 0;
 }

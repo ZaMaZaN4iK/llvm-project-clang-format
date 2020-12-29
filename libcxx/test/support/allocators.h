@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,7 +15,7 @@
 
 #include "test_macros.h"
 
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
 
 template <class T>
 class A1
@@ -103,7 +104,7 @@ public:
     T* allocate(std::size_t, const void* hint)
     {
         allocate_called = true;
-        return (T*) const_cast<void *>(hint);
+        return (T*)hint;
     }
 };
 
@@ -185,6 +186,6 @@ bool operator!=(const A3<T>& x, const A3<U>& y)
     return !(x == y);
 }
 
-#endif  // TEST_STD_VER >= 11
+#endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
 
 #endif  // ALLOCATORS_H

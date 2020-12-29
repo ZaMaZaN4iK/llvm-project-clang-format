@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -28,7 +29,7 @@ struct A
     int second;
 };
 
-int main(int, char**)
+int main()
 {
     {
         typedef int T;
@@ -76,8 +77,6 @@ int main(int, char**)
         typedef std::vector<T> C;
         C::iterator i;
         C::const_iterator j;
-        (void) i;
-        (void) j;
     }
 #if TEST_STD_VER >= 11
     {
@@ -126,8 +125,6 @@ int main(int, char**)
         typedef std::vector<T, min_allocator<T>> C;
         C::iterator i;
         C::const_iterator j;
-        (void) i;
-        (void) j;
     }
     {
         typedef A T;
@@ -166,6 +163,4 @@ int main(int, char**)
         assert (ii1 - cii == 0);
     }
 #endif
-
-  return 0;
 }

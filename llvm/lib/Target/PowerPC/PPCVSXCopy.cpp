@@ -1,8 +1,9 @@
 //===-------------- PPCVSXCopy.cpp - VSX Copy Legalization ----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,8 +13,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MCTargetDesc/PPCPredicates.h"
 #include "PPC.h"
+#include "MCTargetDesc/PPCPredicates.h"
 #include "PPCHazardRecognizers.h"
 #include "PPCInstrBuilder.h"
 #include "PPCInstrInfo.h"
@@ -36,6 +37,10 @@ using namespace llvm;
 
 #define DEBUG_TYPE "ppc-vsx-copy"
 
+namespace llvm {
+  void initializePPCVSXCopyPass(PassRegistry&);
+}
+
 namespace {
   // PPCVSXCopy pass - For copies between VSX registers and non-VSX registers
   // (Altivec and scalar floating-point registers), we need to transform the
@@ -50,7 +55,7 @@ namespace {
 
     bool IsRegInClass(unsigned Reg, const TargetRegisterClass *RC,
                       MachineRegisterInfo &MRI) {
-      if (Register::isVirtualRegister(Reg)) {
+      if (TargetRegisterInfo::isVirtualRegister(Reg)) {
         return RC->hasSubClassEq(MRI.getRegClass(Reg));
       } else if (RC->contains(Reg)) {
         return true;
@@ -102,12 +107,12 @@ protected:
                   IsVSFReg(SrcMO.getReg(), MRI)) &&
                  "Unknown source for a VSX copy");
 
-          Register NewVReg = MRI.createVirtualRegister(SrcRC);
+          unsigned NewVReg = MRI.createVirtualRegister(SrcRC);
           BuildMI(MBB, MI, MI.getDebugLoc(),
                   TII->get(TargetOpcode::SUBREG_TO_REG), NewVReg)
               .addImm(1) // add 1, not 0, because there is no implicit clearing
                          // of the high bits.
-              .add(SrcMO)
+              .addOperand(SrcMO)
               .addImm(PPC::sub_64);
 
           // The source of the original copy is now the new virtual register.
@@ -124,10 +129,10 @@ protected:
                  "Unknown destination for a VSX copy");
 
           // Copy the VSX value into a new VSX register of the correct subclass.
-          Register NewVReg = MRI.createVirtualRegister(DstRC);
+          unsigned NewVReg = MRI.createVirtualRegister(DstRC);
           BuildMI(MBB, MI, MI.getDebugLoc(), TII->get(TargetOpcode::COPY),
                   NewVReg)
-              .add(SrcMO);
+              .addOperand(SrcMO);
 
           // Transform the original copy into a subregister extraction copy.
           SrcMO.setReg(NewVReg);

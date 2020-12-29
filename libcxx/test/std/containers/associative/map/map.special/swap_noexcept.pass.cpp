@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -91,23 +92,21 @@ struct some_alloc3
     typedef std::false_type is_always_equal;
 };
 
-int main(int, char**)
+int main()
 {
     typedef std::pair<const MoveOnly, MoveOnly> V;
     {
         typedef std::map<MoveOnly, MoveOnly> C;
         static_assert(noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
     }
-#if defined(_LIBCPP_VERSION)
     {
         typedef std::map<MoveOnly, MoveOnly, std::less<MoveOnly>, test_allocator<V>> C;
-        static_assert(noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
+        LIBCPP_STATIC_ASSERT(noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
     }
     {
         typedef std::map<MoveOnly, MoveOnly, std::less<MoveOnly>, other_allocator<V>> C;
-        static_assert(noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
+        LIBCPP_STATIC_ASSERT(noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
     }
-#endif // _LIBCPP_VERSION
     {
         typedef std::map<MoveOnly, MoveOnly, some_comp<MoveOnly>> C;
         static_assert(!noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
@@ -130,14 +129,11 @@ int main(int, char**)
     typedef std::map<MoveOnly, MoveOnly, some_comp2<MoveOnly>, some_alloc2<V>> C;
     static_assert( noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
     }
-#if defined(_LIBCPP_VERSION)
+
     { // NOT always equal allocator, nothrow swap for comp
     typedef std::map<MoveOnly, MoveOnly, some_comp2<MoveOnly>, some_alloc3<V>> C;
-    static_assert( noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
+    LIBCPP_STATIC_ASSERT( noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
     }
-#endif // _LIBCPP_VERSION
 #endif
 
-
-  return 0;
 }

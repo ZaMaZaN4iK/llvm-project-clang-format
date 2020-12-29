@@ -1,9 +1,10 @@
 //===-- ARMOptimizeBarriersPass - two DMBs without a memory access in between,
 //removed one -===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===------------------------------------------------------------------------------------------===//
 
@@ -48,7 +49,7 @@ static bool CanMovePastDMB(const MachineInstr *MI) {
 }
 
 bool ARMOptimizeBarriersPass::runOnMachineFunction(MachineFunction &MF) {
-  if (skipFunction(MF.getFunction()))
+  if (skipFunction(*MF.getFunction()))
     return false;
 
   // Vector to store the DMBs we will remove after the first iteration
@@ -87,15 +88,13 @@ bool ARMOptimizeBarriersPass::runOnMachineFunction(MachineFunction &MF) {
       }
     }
   }
-  bool Changed = false;
   // Remove the tagged DMB
   for (auto MI : ToRemove) {
     MI->eraseFromParent();
     ++NumDMBsRemoved;
-    Changed = true;
   }
 
-  return Changed;
+  return NumDMBsRemoved > 0;
 }
 
 /// createARMOptimizeBarriersPass - Returns an instance of the remove double

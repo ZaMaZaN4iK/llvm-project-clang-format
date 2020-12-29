@@ -1,24 +1,23 @@
 //===- lib/MC/MCSection.cpp - Machine Code Section Representation ---------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCSection.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/Config/llvm-config.h"
+#include "llvm/MC/MCAssembler.h"
+#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
-#include "llvm/MC/MCFragment.h"
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/Support/Compiler.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include <algorithm>
-#include <utility>
-
 using namespace llvm;
+
+//===----------------------------------------------------------------------===//
+// MCSection
+//===----------------------------------------------------------------------===//
 
 MCSection::MCSection(SectionVariant V, SectionKind K, MCSymbol *Begin)
     : Begin(Begin), BundleGroupBeforeFirstInst(false), HasInstructions(false),
@@ -32,7 +31,8 @@ MCSymbol *MCSection::getEndSymbol(MCContext &Ctx) {
 
 bool MCSection::hasEnded() const { return End && End->isInSection(); }
 
-MCSection::~MCSection() = default;
+MCSection::~MCSection() {
+}
 
 void MCSection::setBundleLockState(BundleLockStateType NewState) {
   if (NewState == NotBundleLocked) {
@@ -85,44 +85,8 @@ MCSection::getSubsectionInsertionPoint(unsigned Subsection) {
   return IP;
 }
 
-void MCSection::addPendingLabel(MCSymbol* label, unsigned Subsection) {
-  PendingLabels.push_back(PendingLabel(label, Subsection));
-}
-
-void MCSection::flushPendingLabels(MCFragment *F, uint64_t FOffset,
-				   unsigned Subsection) {
-  if (PendingLabels.empty())
-    return;
-
-  // Set the fragment and fragment offset for all pending symbols in the
-  // specified Subsection, and remove those symbols from the pending list.
-  for (auto It = PendingLabels.begin(); It != PendingLabels.end(); ++It) {
-    PendingLabel& Label = *It;
-    if (Label.Subsection == Subsection) {
-      Label.Sym->setFragment(F);
-      Label.Sym->setOffset(FOffset);
-      PendingLabels.erase(It--);
-    }
-  }
-}
-
-void MCSection::flushPendingLabels() {
-  // Make sure all remaining pending labels point to data fragments, by
-  // creating new empty data fragments for each Subsection with labels pending.
-  while (!PendingLabels.empty()) {
-    PendingLabel& Label = PendingLabels[0];
-    iterator CurInsertionPoint =
-      this->getSubsectionInsertionPoint(Label.Subsection);
-    MCFragment *F = new MCDataFragment();
-    getFragmentList().insert(CurInsertionPoint, F);
-    F->setParent(this);
-    flushPendingLabels(F, 0, Label.Subsection);
-  }
-}
-
-#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-LLVM_DUMP_METHOD void MCSection::dump() const {
-  raw_ostream &OS = errs();
+LLVM_DUMP_METHOD void MCSection::dump() {
+  raw_ostream &OS = llvm::errs();
 
   OS << "<MCSection";
   OS << " Fragments:[\n      ";
@@ -133,4 +97,3 @@ LLVM_DUMP_METHOD void MCSection::dump() const {
   }
   OS << "]>";
 }
-#endif

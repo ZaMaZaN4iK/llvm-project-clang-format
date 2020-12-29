@@ -1,34 +1,23 @@
-//===- RDFCopy.cpp --------------------------------------------------------===//
+//===--- RDFCopy.cpp ------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // RDF-based copy propagation.
-//
-//===----------------------------------------------------------------------===//
 
 #include "RDFCopy.h"
+#include "RDFGraph.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/RDFGraph.h"
-#include "llvm/CodeGen/RDFLiveness.h"
-#include "llvm/CodeGen/RDFRegisters.h"
-#include "llvm/CodeGen/TargetOpcodes.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/raw_ostream.h"
-#include <cassert>
-#include <cstdint>
-#include <utility>
-
+#include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/Target/TargetRegisterInfo.h"
 using namespace llvm;
 using namespace rdf;
 
@@ -45,8 +34,8 @@ bool CopyPropagation::interpretAsCopy(const MachineInstr *MI, EqualityMap &EM) {
       const MachineOperand &Src = MI->getOperand(1);
       RegisterRef DstR = DFG.makeRegRef(Dst.getReg(), Dst.getSubReg());
       RegisterRef SrcR = DFG.makeRegRef(Src.getReg(), Src.getSubReg());
-      assert(Register::isPhysicalRegister(DstR.Reg));
-      assert(Register::isPhysicalRegister(SrcR.Reg));
+      assert(TargetRegisterInfo::isPhysicalRegister(DstR.Reg));
+      assert(TargetRegisterInfo::isPhysicalRegister(SrcR.Reg));
       const TargetRegisterInfo &TRI = DFG.getTRI();
       if (TRI.getMinimalPhysRegClass(DstR.Reg) !=
           TRI.getMinimalPhysRegClass(SrcR.Reg))
@@ -60,14 +49,51 @@ bool CopyPropagation::interpretAsCopy(const MachineInstr *MI, EqualityMap &EM) {
   return false;
 }
 
+
 void CopyPropagation::recordCopy(NodeAddr<StmtNode*> SA, EqualityMap &EM) {
   CopyMap.insert(std::make_pair(SA.Id, EM));
   Copies.push_back(SA.Id);
+
+  for (auto I : EM) {
+    auto FS = DefM.find(I.second.Reg);
+    if (FS == DefM.end() || FS->second.empty())
+      continue; // Undefined source
+    RDefMap[I.second][SA.Id] = FS->second.top()->Id;
+    // Insert DstR into the map.
+    RDefMap[I.first];
+  }
 }
+
+
+void CopyPropagation::updateMap(NodeAddr<InstrNode*> IA) {
+  RegisterSet RRs;
+  for (NodeAddr<RefNode*> RA : IA.Addr->members(DFG))
+    RRs.insert(RA.Addr->getRegRef(DFG));
+  bool Common = false;
+  for (auto &R : RDefMap) {
+    if (!RRs.count(R.first))
+      continue;
+    Common = true;
+    break;
+  }
+  if (!Common)
+    return;
+
+  for (auto &R : RDefMap) {
+    if (!RRs.count(R.first))
+      continue;
+    auto F = DefM.find(R.first.Reg);
+    if (F == DefM.end() || F->second.empty())
+      continue;
+    R.second[IA.Id] = F->second.top()->Id;
+  }
+}
+
 
 bool CopyPropagation::scanBlock(MachineBasicBlock *B) {
   bool Changed = false;
-  NodeAddr<BlockNode*> BA = DFG.findBlock(B);
+  auto BA = DFG.getFunc().Addr->findBlock(B, DFG);
+  DFG.markBlock(BA.Id, DefM);
 
   for (NodeAddr<InstrNode*> IA : BA.Addr->members(DFG)) {
     if (DFG.IsCode<NodeAttrs::Stmt>(IA)) {
@@ -76,39 +102,39 @@ bool CopyPropagation::scanBlock(MachineBasicBlock *B) {
       if (interpretAsCopy(SA.Addr->getCode(), EM))
         recordCopy(SA, EM);
     }
+
+    updateMap(IA);
+    DFG.pushDefs(IA, DefM);
   }
 
   MachineDomTreeNode *N = MDT.getNode(B);
   for (auto I : *N)
     Changed |= scanBlock(I->getBlock());
 
+  DFG.releaseBlock(BA.Id, DefM);
   return Changed;
 }
 
-NodeId CopyPropagation::getLocalReachingDef(RegisterRef RefRR,
-      NodeAddr<InstrNode*> IA) {
-  NodeAddr<RefNode*> RA = L.getNearestAliasedRef(RefRR, IA);
-  if (RA.Id != 0) {
-    if (RA.Addr->getKind() == NodeAttrs::Def)
-      return RA.Id;
-    assert(RA.Addr->getKind() == NodeAttrs::Use);
-    if (NodeId RD = RA.Addr->getReachingDef())
-      return RD;
-  }
-  return 0;
-}
 
 bool CopyPropagation::run() {
   scanBlock(&DFG.getMF().front());
 
   if (trace()) {
     dbgs() << "Copies:\n";
-    for (NodeId I : Copies) {
+    for (auto I : Copies) {
       dbgs() << "Instr: " << *DFG.addr<StmtNode*>(I).Addr->getCode();
       dbgs() << "   eq: {";
       for (auto J : CopyMap[I])
         dbgs() << ' ' << Print<RegisterRef>(J.first, DFG) << '='
                << Print<RegisterRef>(J.second, DFG);
+      dbgs() << " }\n";
+    }
+    dbgs() << "\nRDef map:\n";
+    for (auto R : RDefMap) {
+      dbgs() << Print<RegisterRef>(R.first, DFG) << " -> {";
+      for (auto &M : R.second)
+        dbgs() << ' ' << Print<NodeId>(M.first, DFG) << ':'
+               << Print<NodeId>(M.second, DFG);
       dbgs() << " }\n";
     }
   }
@@ -130,7 +156,7 @@ bool CopyPropagation::run() {
     return 0;
   };
 
-  for (NodeId C : Copies) {
+  for (auto C : Copies) {
 #ifndef NDEBUG
     if (HasLimit && CpCount >= CpLimit)
       break;
@@ -150,7 +176,8 @@ bool CopyPropagation::run() {
       if (DR == SR)
         continue;
 
-      NodeId AtCopy = getLocalReachingDef(SR, SA);
+      auto &RDefSR = RDefMap[SR];
+      NodeId RDefSR_SA = RDefSR[SA.Id];
 
       for (NodeId N = DA.Addr->getReachedUse(), NextN; N; N = NextN) {
         auto UA = DFG.addr<UseNode*>(N);
@@ -163,8 +190,7 @@ bool CopyPropagation::run() {
 
         NodeAddr<InstrNode*> IA = UA.Addr->getOwner(DFG);
         assert(DFG.IsCode<NodeAttrs::Stmt>(IA));
-        NodeId AtUse = getLocalReachingDef(SR, IA);
-        if (AtCopy != AtUse)
+        if (RDefSR[IA.Id] != RDefSR_SA)
           continue;
 
         MachineOperand &Op = UA.Addr->getOp();
@@ -180,8 +206,8 @@ bool CopyPropagation::run() {
         Op.setReg(NewReg);
         Op.setSubReg(0);
         DFG.unlinkUse(UA, false);
-        if (AtCopy != 0) {
-          UA.Addr->linkToDef(UA.Id, DFG.addr<DefNode*>(AtCopy));
+        if (RDefSR_SA != 0) {
+          UA.Addr->linkToDef(UA.Id, DFG.addr<DefNode*>(RDefSR_SA));
         } else {
           UA.Addr->setReachingDef(0);
           UA.Addr->setSibling(0);
@@ -211,3 +237,4 @@ bool CopyPropagation::run() {
 
   return Changed;
 }
+

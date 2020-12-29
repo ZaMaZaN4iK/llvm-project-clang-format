@@ -1,56 +1,59 @@
-lldb_tablegen(CoreProperties.inc -gen-lldb-property-defs
-  SOURCE CoreProperties.td
-  TARGET LLDBCorePropertiesGen)
-
-lldb_tablegen(CorePropertiesEnum.inc -gen-lldb-property-enum-defs
-  SOURCE CoreProperties.td
-  TARGET LLDBCorePropertiesEnumGen)
-
-set(LLDB_CURSES_LIBS)
-set(LLDB_LIBEDIT_LIBS)
-
-if (LLDB_ENABLE_CURSES)
-  list(APPEND LLDB_CURSES_LIBS ${CURSES_LIBRARIES} ${PANEL_LIBRARIES})
-  if(LLVM_ENABLE_TERMINFO AND HAVE_TERMINFO)
-    list(APPEND LLDB_CURSES_LIBS ${TERMINFO_LIBS})
-  endif()
-  if (LLVM_BUILD_STATIC)
-    list(APPEND LLDB_CURSES_LIBS gpm)
-  endif()
-endif()
-
 add_lldb_library(lldbCore
   Address.cpp
   AddressRange.cpp
   AddressResolver.cpp
   AddressResolverFileLine.cpp
   AddressResolverName.cpp
+  ArchSpec.cpp
+  Baton.cpp
+  Broadcaster.cpp
   Communication.cpp
+  Connection.cpp
+  ConstString.cpp
+  DataBufferHeap.cpp
+  DataBufferMemoryMap.cpp
+  DataEncoder.cpp
+  DataExtractor.cpp
   Debugger.cpp
   Disassembler.cpp
-  DumpDataExtractor.cpp
-  DumpRegisterValue.cpp
   DynamicLoader.cpp
   EmulateInstruction.cpp
+  Error.cpp
+  Event.cpp
+  FastDemangle.cpp
   FileLineResolver.cpp
   FileSpecList.cpp
   FormatEntity.cpp
-  Highlighter.cpp
+  History.cpp
   IOHandler.cpp
-  IOHandlerCursesGUI.cpp
+  Listener.cpp
+  Log.cpp
+  Logging.cpp
   Mangled.cpp
   Module.cpp
   ModuleChild.cpp
   ModuleList.cpp
   Opcode.cpp
   PluginManager.cpp
-  RichManglingContext.cpp
+  RegisterValue.cpp
+  RegularExpression.cpp
+  Scalar.cpp
   SearchFilter.cpp
   Section.cpp
   SourceManager.cpp
+  State.cpp
+  Stream.cpp
   StreamAsynchronousIO.cpp
+  StreamCallback.cpp
   StreamFile.cpp
+  StreamGDBRemote.cpp
+  StreamString.cpp
+  StringList.cpp
+  StructuredData.cpp
+  Timer.cpp
+  UserID.cpp
   UserSettingsController.cpp
+  UUID.cpp
   Value.cpp
   ValueObject.cpp
   ValueObjectCast.cpp
@@ -65,43 +68,6 @@ add_lldb_library(lldbCore
   ValueObjectRegister.cpp
   ValueObjectSyntheticFilter.cpp
   ValueObjectVariable.cpp
-
-  DEPENDS
-    clang-tablegen-targets
-
-  LINK_LIBS
-    lldbBreakpoint
-    lldbDataFormatters
-    lldbExpression
-    lldbHost
-    lldbInterpreter
-    lldbSymbol
-    lldbTarget
-    lldbUtility
-    lldbPluginCPlusPlusLanguage
-    lldbPluginObjCLanguage
-    ${LLDB_CURSES_LIBS}
-
-  CLANG_LIBS
-    clangDriver
-
-  LINK_COMPONENTS
-    Support
-    Demangle
+  VMRange.cpp
   )
 
-add_dependencies(lldbCore
-  LLDBCorePropertiesGen
-  LLDBCorePropertiesEnumGen)
-
-# Needed to properly resolve references in a debug build.
-# TODO: Remove once we have better layering
-set_target_properties(lldbCore PROPERTIES LINK_INTERFACE_MULTIPLICITY 4)
-
-if (LLDB_ENABLE_LIBEDIT)
-  target_include_directories(lldbCore PRIVATE ${LibEdit_INCLUDE_DIRS})
-endif()
-
-if (LLDB_ENABLE_CURSES)
-  target_include_directories(lldbCore PRIVATE ${CURSES_INCLUDE_DIRS})
-endif()

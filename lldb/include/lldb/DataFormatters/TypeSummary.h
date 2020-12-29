@@ -1,33 +1,41 @@
 //===-- TypeSummary.h -------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef lldb_TypeSummary_h_
 #define lldb_TypeSummary_h_
 
+// C Includes
 #include <stdint.h>
 
+// C++ Includes
 #include <functional>
 #include <memory>
 #include <string>
 
+// Other libraries and framework includes
+// Project includes
 #include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-public.h"
 
+#include "lldb/Core/Error.h"
 #include "lldb/Core/FormatEntity.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/StructuredData.h"
+#include "lldb/Core/StructuredData.h"
 
 namespace lldb_private {
 class TypeSummaryOptions {
 public:
   TypeSummaryOptions();
+  TypeSummaryOptions(const TypeSummaryOptions &rhs);
 
   ~TypeSummaryOptions() = default;
+
+  TypeSummaryOptions &operator=(const TypeSummaryOptions &rhs);
 
   lldb::LanguageType GetLanguage() const;
 
@@ -250,9 +258,10 @@ public:
   void SetOptions(uint32_t value) { m_flags.SetValue(value); }
 
   // we are using a ValueObject* instead of a ValueObjectSP because we do not
-  // need to hold on to this for extended periods of time and we trust the
-  // ValueObject to stay around for as long as it is required for us to
-  // generate its summary
+  // need to hold on to this for
+  // extended periods of time and we trust the ValueObject to stay around for as
+  // long as it is required
+  // for us to generate its summary
   virtual bool FormatObject(ValueObject *valobj, std::string &dest,
                             const TypeSummaryOptions &options) = 0;
 
@@ -277,7 +286,7 @@ private:
 struct StringSummaryFormat : public TypeSummaryImpl {
   std::string m_format_str;
   FormatEntity::Entry m_format;
-  Status m_error;
+  Error m_error;
 
   StringSummaryFormat(const TypeSummaryImpl::Flags &flags, const char *f);
 
@@ -302,8 +311,8 @@ private:
 
 // summaries implemented via a C++ function
 struct CXXFunctionSummaryFormat : public TypeSummaryImpl {
-  // we should convert these to SBValue and SBStream if we ever cross the
-  // boundary towards the external world
+  // we should convert these to SBValue and SBStream if we ever cross
+  // the boundary towards the external world
   typedef std::function<bool(ValueObject &, Stream &,
                              const TypeSummaryOptions &)>
       Callback;

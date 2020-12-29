@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,7 +13,7 @@
 // <map>
 
 // Previously this code caused a segfault when compiled at -O2 due to undefined
-// behavior in __tree. See https://bugs.llvm.org/show_bug.cgi?id=28469
+// behavior in __tree. See https://llvm.org/bugs/show_bug.cgi?id=28469
 
 #include <functional>
 #include <map>
@@ -24,9 +25,7 @@ struct F {
     F() { m[42] = &dummy; }
 };
 
-int main(int, char**) {
+int main() {
     F f;
     f = F();
-
-  return 0;
 }

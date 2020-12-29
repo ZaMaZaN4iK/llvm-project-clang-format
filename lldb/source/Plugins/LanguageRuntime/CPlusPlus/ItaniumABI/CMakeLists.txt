@@ -1,11 +1,3 @@
-add_lldb_library(lldbPluginCXXItaniumABI PLUGIN
+add_lldb_library(lldbPluginCXXItaniumABI
   ItaniumABILanguageRuntime.cpp
-
-  LINK_LIBS
-    lldbBreakpoint
-    lldbCore
-    lldbInterpreter
-    lldbSymbol
-    lldbTarget
-    lldbPluginCPPRuntime
   )

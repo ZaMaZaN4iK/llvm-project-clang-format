@@ -1,22 +1,27 @@
 //===-- CommunicationKDP.h --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_CommunicationKDP_h_
 #define liblldb_CommunicationKDP_h_
 
+// C Includes
+// C++ Includes
 #include <list>
 #include <mutex>
 #include <string>
 
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Core/Communication.h"
+#include "lldb/Core/Listener.h"
 #include "lldb/Core/StreamBuffer.h"
-#include "lldb/Utility/Listener.h"
-#include "lldb/Utility/Predicate.h"
+#include "lldb/Host/Predicate.h"
 #include "lldb/lldb-private.h"
 
 class CommunicationKDP : public lldb_private::Communication {
@@ -26,7 +31,7 @@ public:
   const static uint32_t kMaxPacketSize = 1200;
   const static uint32_t kMaxDataSize = 1024;
   typedef lldb_private::StreamBuffer<1024> PacketStreamType;
-  enum CommandType {
+  typedef enum {
     KDP_CONNECT = 0u,
     KDP_DISCONNECT,
     KDP_HOSTINFO,
@@ -59,24 +64,26 @@ public:
     KDP_READMSR64,
     KDP_WRITEMSR64,
     KDP_DUMPINFO
-  };
+  } CommandType;
 
   enum { KDP_FEATURE_BP = (1u << 0) };
 
-  enum KDPError {
+  typedef enum {
     KDP_PROTERR_SUCCESS = 0,
     KDP_PROTERR_ALREADY_CONNECTED,
     KDP_PROTERR_BAD_NBYTES,
     KDP_PROTERR_BADFLAVOR
-  };
+  } KDPError;
 
-  enum PacketType {
+  typedef enum {
     ePacketTypeRequest = 0x00u,
     ePacketTypeReply = 0x80u,
     ePacketTypeMask = 0x80u,
     eCommandTypeMask = 0x7fu
-  };
+  } PacketType;
+  //------------------------------------------------------------------
   // Constructors and Destructors
+  //------------------------------------------------------------------
   CommunicationKDP(const char *comm_name);
 
   virtual ~CommunicationKDP();
@@ -94,12 +101,14 @@ public:
                       lldb_private::DataExtractor &packet);
   bool IsRunning() const { return m_is_running.GetValue(); }
 
+  //------------------------------------------------------------------
   // Set the global packet timeout.
   //
   // For clients, this is the timeout that gets used when sending
   // packets and waiting for responses. For servers, this might not
   // get used, and if it doesn't this should be moved to the
   // CommunicationKDPClient.
+  //------------------------------------------------------------------
   std::chrono::seconds SetPacketTimeout(std::chrono::seconds packet_timeout) {
     const auto old_packet_timeout = m_packet_timeout;
     m_packet_timeout = packet_timeout;
@@ -108,7 +117,9 @@ public:
 
   std::chrono::seconds GetPacketTimeout() const { return m_packet_timeout; }
 
+  //------------------------------------------------------------------
   // Public Request Packets
+  //------------------------------------------------------------------
   bool SendRequestConnect(uint16_t reply_port, uint16_t exc_port,
                           const char *greeting);
 
@@ -117,24 +128,22 @@ public:
   bool SendRequestDisconnect();
 
   uint32_t SendRequestReadMemory(lldb::addr_t addr, void *dst,
-                                 uint32_t dst_size,
-                                 lldb_private::Status &error);
+                                 uint32_t dst_size, lldb_private::Error &error);
 
   uint32_t SendRequestWriteMemory(lldb::addr_t addr, const void *src,
-                                  uint32_t src_len,
-                                  lldb_private::Status &error);
+                                  uint32_t src_len, lldb_private::Error &error);
 
   bool SendRawRequest(uint8_t command_byte, const void *src, uint32_t src_len,
                       lldb_private::DataExtractor &reply,
-                      lldb_private::Status &error);
+                      lldb_private::Error &error);
 
   uint32_t SendRequestReadRegisters(uint32_t cpu, uint32_t flavor, void *dst,
                                     uint32_t dst_size,
-                                    lldb_private::Status &error);
+                                    lldb_private::Error &error);
 
   uint32_t SendRequestWriteRegisters(uint32_t cpu, uint32_t flavor,
                                      const void *src, uint32_t src_size,
-                                     lldb_private::Status &error);
+                                     lldb_private::Error &error);
 
   const char *GetKernelVersion();
 
@@ -182,8 +191,10 @@ protected:
                                PacketStreamType &request_packet,
                                uint16_t request_length);
 
+  //------------------------------------------------------------------
   // Protected Request Packets (use public accessors which will cache
   // results.
+  //------------------------------------------------------------------
   bool SendRequestVersion();
 
   bool SendRequestHostInfo();
@@ -220,7 +231,9 @@ protected:
   bool SendRequestAndGetReply(const CommandType command,
                               const PacketStreamType &request_packet,
                               lldb_private::DataExtractor &reply_packet);
+  //------------------------------------------------------------------
   // Classes that inherit from CommunicationKDP can see and modify these
+  //------------------------------------------------------------------
   uint32_t m_addr_byte_size;
   lldb::ByteOrder m_byte_order;
   std::chrono::seconds m_packet_timeout;
@@ -240,7 +253,9 @@ protected:
   // hang the KDP connection...
   lldb::addr_t m_last_read_memory_addr; // Last memory read address for logging
 private:
+  //------------------------------------------------------------------
   // For CommunicationKDP only
+  //------------------------------------------------------------------
   DISALLOW_COPY_AND_ASSIGN(CommunicationKDP);
 };
 

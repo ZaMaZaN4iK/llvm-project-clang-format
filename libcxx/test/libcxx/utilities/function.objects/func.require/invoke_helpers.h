@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -128,7 +129,7 @@ private:
 };
 
 //==============================================================================
-// DerivedFromBase - A type that derives from its template argument 'Base'
+// DerivedFromBase - A type that derives from it's template argument 'Base'
 template <class Base>
 struct DerivedFromType : public Base {
     DerivedFromType() : Base() {}
@@ -137,7 +138,7 @@ struct DerivedFromType : public Base {
 };
 
 //==============================================================================
-// DerefToType - A type that dereferences to its template argument 'To'.
+// DerefToType - A type that dereferences to it's template argument 'To'.
 //   The cv-ref qualifiers of the 'DerefToType' object do not propagate
 //   to the resulting 'To' object.
 template <class To>
@@ -153,7 +154,7 @@ struct DerefToType {
 };
 
 //==============================================================================
-// DerefPropToType - A type that dereferences to its template argument 'To'.
+// DerefPropToType - A type that dereferences to it's template argument 'To'.
 //   The cv-ref qualifiers of the 'DerefPropToType' object propagate
 //   to the resulting 'To' object.
 template <class To>

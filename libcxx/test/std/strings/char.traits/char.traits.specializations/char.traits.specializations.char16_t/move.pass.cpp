@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,9 +16,7 @@
 #include <string>
 #include <cassert>
 
-#include "test_macros.h"
-
-TEST_CONSTEXPR_CXX20 bool test()
+int main()
 {
 #ifndef _LIBCPP_HAS_NO_UNICODE_CHARS
     char16_t s1[] = {1, 2, 3};
@@ -33,17 +32,4 @@ TEST_CONSTEXPR_CXX20 bool test()
     assert(std::char_traits<char16_t>::move(NULL, s1, 0) == NULL);
     assert(std::char_traits<char16_t>::move(s1, NULL, 0) == s1);
 #endif  // _LIBCPP_HAS_NO_UNICODE_CHARS
-
-  return true;
-}
-
-int main(int, char**)
-{
-    test();
-
-#if TEST_STD_VER > 17
-    static_assert(test());
-#endif
-
-  return 0;
 }

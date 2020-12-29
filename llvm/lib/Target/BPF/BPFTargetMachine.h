@@ -1,8 +1,9 @@
 //===-- BPFTargetMachine.h - Define TargetMachine for BPF --- C++ ---===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -24,8 +25,8 @@ class BPFTargetMachine : public LLVMTargetMachine {
 public:
   BPFTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
                    StringRef FS, const TargetOptions &Options,
-                   Optional<Reloc::Model> RM, Optional<CodeModel::Model> CM,
-                   CodeGenOpt::Level OL, bool JIT);
+                   Optional<Reloc::Model> RM, CodeModel::Model CM,
+                   CodeGenOpt::Level OL);
 
   const BPFSubtarget *getSubtargetImpl() const { return &Subtarget; }
   const BPFSubtarget *getSubtargetImpl(const Function &) const override {

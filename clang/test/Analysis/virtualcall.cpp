@@ -1,86 +1,99 @@
-// RUN: %clang_analyze_cc1 -analyzer-checker=core,optin.cplusplus.VirtualCall \
-// RUN:                    -analyzer-checker=debug.ExprInspection \
-// RUN:                    -std=c++11 -verify=impure %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=optin.cplusplus.VirtualCall -analyzer-store region -verify -std=c++11 %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=optin.cplusplus.VirtualCall -analyzer-store region -analyzer-config optin.cplusplus.VirtualCall:Interprocedural=true -DINTERPROCEDURAL=1 -verify -std=c++11 %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=optin.cplusplus.VirtualCall -analyzer-store region -analyzer-config optin.cplusplus.VirtualCall:PureOnly=true -DPUREONLY=1 -verify -std=c++11 %s
 
-// RUN: %clang_analyze_cc1 -analyzer-checker=core,cplusplus.PureVirtualCall \
-// RUN:                    -analyzer-checker=debug.ExprInspection \
-// RUN:                    -std=c++11 -verify=pure -std=c++11 %s
+/* When INTERPROCEDURAL is set, we expect diagnostics in all functions reachable
+   from a constructor or destructor. If it is not set, we expect diagnostics
+   only in the constructor or destructor.
 
-// RUN: %clang_analyze_cc1 -analyzer-checker=core,optin.cplusplus.VirtualCall \
-// RUN:                    -analyzer-config \
-// RUN:                        optin.cplusplus.VirtualCall:PureOnly=true \
-// RUN:                    -analyzer-checker=debug.ExprInspection \
-// RUN:                    -std=c++11 -verify=none %s
-
-// RUN: %clang_analyze_cc1 -analyzer-checker=core,cplusplus.PureVirtualCall \
-// RUN:                    -analyzer-checker=optin.cplusplus.VirtualCall \
-// RUN:                    -analyzer-checker=debug.ExprInspection \
-// RUN:                    -std=c++11 -verify=pure,impure -std=c++11 %s
-
-// RUN: %clang_analyze_cc1 -analyzer-checker=core,cplusplus.PureVirtualCall \
-// RUN:                    -analyzer-checker=optin.cplusplus.VirtualCall \
-// RUN:                    -analyzer-config \
-// RUN:                        optin.cplusplus.VirtualCall:PureOnly=true \
-// RUN:                    -analyzer-checker=debug.ExprInspection \
-// RUN:                    -std=c++11 -verify=pure %s
-
-
-// We expect no diagnostics when all checks are disabled.
-// none-no-diagnostics
-
-
-#include "virtualcall.h"
-
-void clang_analyzer_warnIfReached();
+   When PUREONLY is set, we expect diagnostics only for calls to pure virtual
+   functions not to non-pure virtual functions.
+*/
 
 class A {
 public:
   A();
+  A(int i);
 
-  ~A(){};
-
-  virtual int foo() = 0;
+  ~A() {};
+  
+  virtual int foo() = 0; // from Sema: expected-note {{'foo' declared here}}
   virtual void bar() = 0;
   void f() {
-    foo(); // pure-warning{{Call to pure virtual method 'A::foo' during construction has undefined behavior}}
-    clang_analyzer_warnIfReached(); // no-warning
+    foo();
+#if INTERPROCEDURAL
+        // expected-warning-re@-2 {{{{^}}Call Path : foo <-- fCall to pure virtual function during construction has undefined behavior}}
+#endif
   }
+};
+
+class B : public A {
+public:
+  B() {
+    foo();
+#if !PUREONLY
+#if INTERPROCEDURAL
+        // expected-warning-re@-3 {{{{^}}Call Path : fooCall to virtual function during construction will not dispatch to derived class}}
+#else
+        // expected-warning-re@-5 {{{{^}}Call to virtual function during construction will not dispatch to derived class}}
+#endif
+#endif
+
+  }
+  ~B();
+  
+  virtual int foo();
+  virtual void bar() { foo(); }
+#if INTERPROCEDURAL
+      // expected-warning-re@-2 {{{{^}}Call Path : foo <-- barCall to virtual function during destruction will not dispatch to derived class}}
+#endif
 };
 
 A::A() {
   f();
 }
 
-class B {
-public:
-  B() {
-    foo(); // impure-warning {{Call to virtual method 'B::foo' during construction bypasses virtual dispatch}}
-  }
-  ~B();
-
-  virtual int foo();
-  virtual void bar() {
-    foo(); // impure-warning {{Call to virtual method 'B::foo' during destruction bypasses virtual dispatch}}
-  }
-};
+A::A(int i) {
+  foo(); // From Sema: expected-warning {{call to pure virtual member function 'foo' has undefined behavior}}
+#if INTERPROCEDURAL
+      // expected-warning-re@-2 {{{{^}}Call Path : fooCall to pure virtual function during construction has undefined behavior}}
+#else
+      // expected-warning-re@-4 {{{{^}}Call to pure virtual function during construction has undefined behavior}}
+#endif
+}
 
 B::~B() {
   this->B::foo(); // no-warning
   this->B::bar();
-  this->foo(); // impure-warning {{Call to virtual method 'B::foo' during destruction bypasses virtual dispatch}}
+  this->foo();
+#if !PUREONLY
+#if INTERPROCEDURAL
+      // expected-warning-re@-3 {{{{^}}Call Path : fooCall to virtual function during destruction will not dispatch to derived class}}
+#else
+      // expected-warning-re@-5 {{{{^}}Call to virtual function during destruction will not dispatch to derived class}}
+#endif
+#endif
+
 }
 
 class C : public B {
 public:
   C();
   ~C();
-
+  
   virtual int foo();
   void f(int i);
 };
 
 C::C() {
-  f(foo()); // impure-warning {{Call to virtual method 'C::foo' during construction bypasses virtual dispatch}}
+  f(foo());
+#if !PUREONLY
+#if INTERPROCEDURAL
+      // expected-warning-re@-3 {{{{^}}Call Path : fooCall to virtual function during construction will not dispatch to derived class}}
+#else
+      // expected-warning-re@-5 {{{{^}}Call to virtual function during construction will not dispatch to derived class}}
+#endif
+#endif
 }
 
 class D : public B {
@@ -102,122 +115,27 @@ public:
   int foo() override;
 };
 
+// Regression test: don't crash when there's no direct callee.
 class F {
 public:
   F() {
-    void (F::*ptr)() = &F::foo;
+    void (F::* ptr)() = &F::foo;
     (this->*ptr)();
   }
   void foo();
 };
 
-class G {
-public:
-  G() {}
-  virtual void bar();
-  void foo() {
-    bar(); // no warning
-  }
-};
-
-class H {
-public:
-  H() : initState(0) { init(); }
-  int initState;
-  virtual void f() const;
-  void init() {
-    if (initState)
-      f(); // no warning
-  }
-
-  H(int i) {
-    G g;
-    g.foo();
-    g.bar(); // no warning
-    f(); // impure-warning {{Call to virtual method 'H::f' during construction bypasses virtual dispatch}}
-    H &h = *this;
-    h.f(); // impure-warning {{Call to virtual method 'H::f' during construction bypasses virtual dispatch}}
-  }
-};
-
-class X {
-public:
-  X() {
-    g(); // impure-warning {{Call to virtual method 'X::g' during construction bypasses virtual dispatch}}
-  }
-  X(int i) {
-    if (i > 0) {
-      X x(i - 1);
-      x.g(); // no warning
-    }
-    g(); // impure-warning {{Call to virtual method 'X::g' during construction bypasses virtual dispatch}}
-  }
-  virtual void g();
-};
-
-class M;
-class N {
-public:
-  virtual void virtualMethod();
-  void callFooOfM(M *);
-};
-class M {
-public:
-  M() {
-    N n;
-    n.virtualMethod(); // no warning
-    n.callFooOfM(this);
-  }
-  virtual void foo();
-};
-void N::callFooOfM(M *m) {
-  m->foo(); // impure-warning {{Call to virtual method 'M::foo' during construction bypasses virtual dispatch}}
-}
-
-class Y {
-public:
-  virtual void foobar();
-  void fooY() {
-    F f1;
-    foobar(); // impure-warning {{Call to virtual method 'Y::foobar' during construction bypasses virtual dispatch}}
-  }
-  Y() { fooY(); }
-};
-
 int main() {
-  B b;
-  C c;
-  D d;
-  E e;
-  F f;
-  G g;
-  H h;
-  H h1(1);
-  X x; 
-  X x1(1);
-  M m;
-  Y *y = new Y;
-  delete y;
-  header::Z z;
+  A *a;
+  B *b;
+  C *c;
+  D *d;
+  E *e;
+  F *f;
 }
 
-namespace PR34451 {
-struct a {
-  void b() {
-    a c[1];
-    c->b();
-  }
-};
+#include "virtualcall.h"
 
-class e {
- public:
-  void b() const;
-};
-
-class c {
-  void m_fn2() const;
-  e d[];
-};
-
-void c::m_fn2() const { d->b(); }
-}
+#define AS_SYSTEM
+#include "virtualcall.h"
+#undef AS_SYSTEM

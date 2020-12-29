@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -132,7 +133,7 @@ self_reference_test()
     }
 }
 
-int main(int, char**)
+int main()
 {
     {
     int rng[] = {0, 1, 2, 3, 1023, 1024, 1025, 2047, 2048, 2049};
@@ -154,6 +155,4 @@ int main(int, char**)
     self_reference_test<std::deque<int, min_allocator<int>> >();
     }
 #endif
-
-  return 0;
 }

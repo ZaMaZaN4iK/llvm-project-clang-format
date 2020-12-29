@@ -1,13 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-//
-// PR11871
-// XFAIL: with_system_cxx_lib=macosx10.7
 
 // <locale>
 
@@ -21,7 +19,6 @@
 #include <cassert>
 #include <streambuf>
 #include <cmath>
-#include "test_macros.h"
 #include "test_iterators.h"
 #include "hexfloat.h"
 
@@ -36,7 +33,7 @@ public:
 };
 
 
-int main(int, char**)
+int main()
 {
     const my_facet f(1);
     std::ios ios(0);
@@ -256,18 +253,4 @@ int main(int, char**)
         assert(err == ios.failbit);
         assert(v == -HUGE_VALL);
     }
-    {
-        v = -1;
-        const char str[] = "2-";
-        std::ios_base::iostate err = ios.goodbit;
-        input_iterator<const char*> iter =
-            f.get(input_iterator<const char*>(str),
-                  input_iterator<const char*>(str+sizeof(str)),
-                  ios, err, v);
-        assert(iter.base() == str+1);
-        assert(err == ios.goodbit);
-        assert(v == 2);
-    }
-
-  return 0;
 }

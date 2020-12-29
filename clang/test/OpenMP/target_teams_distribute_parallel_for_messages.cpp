@@ -1,13 +1,4 @@
-// RUN: %clang_cc1 -verify -fopenmp -std=c++11 %s -Wuninitialized
-
-// RUN: %clang_cc1 -verify -fopenmp-simd -std=c++11 %s -Wuninitialized
-
-void xxx(int argc) {
-  int x; // expected-note {{initialize the variable 'x' to silence this warning}}
-#pragma omp target teams distribute parallel for
-  for (int i = 0; i < 10; ++i)
-    argc = x; // expected-warning {{variable 'x' is uninitialized when used here}}
-}
+// RUN: %clang_cc1 -verify -fopenmp -std=c++11 %s
 
 void foo() {
 }
@@ -36,7 +27,7 @@ int main(int argc, char **argv) {
 #pragma omp target teams distribute parallel for } // expected-warning {{extra tokens at the end of '#pragma omp target teams distribute parallel for' are ignored}}
   for (int i = 0; i < argc; ++i)
     foo();
-#pragma omp target teams distribute parallel for linear(argc) // expected-error {{unexpected OpenMP clause 'linear' in directive '#pragma omp target teams distribute parallel for'}}
+#pragma omp target teams distribute parallel for
   for (int i = 0; i < argc; ++i)
     foo();
 // expected-warning@+1 {{extra tokens at the end of '#pragma omp target teams distribute parallel for' are ignored}}
@@ -68,7 +59,7 @@ L1:
       break;
     }
   }
-#pragma omp target teams distribute parallel for default(none) // expected-note {{explicit data sharing attribute requested here}}
+#pragma omp target teams distribute parallel for default(none)
   for (int i = 0; i < 10; ++i)
     ++argc; // expected-error {{ariable 'argc' must have explicitly specified data sharing attributes}}
 

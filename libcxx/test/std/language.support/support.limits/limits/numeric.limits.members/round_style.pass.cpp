@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,8 +12,6 @@
 // round_style
 
 #include <limits>
-
-#include "test_macros.h"
 
 template <class T, std::float_round_style expected>
 void
@@ -24,16 +23,13 @@ test()
     static_assert(std::numeric_limits<const volatile T>::round_style == expected, "round_style test 4");
 }
 
-int main(int, char**)
+int main()
 {
     test<bool, std::round_toward_zero>();
     test<char, std::round_toward_zero>();
     test<signed char, std::round_toward_zero>();
     test<unsigned char, std::round_toward_zero>();
     test<wchar_t, std::round_toward_zero>();
-#if TEST_STD_VER > 17 && defined(__cpp_char8_t)
-    test<char8_t, std::round_toward_zero>();
-#endif
 #ifndef _LIBCPP_HAS_NO_UNICODE_CHARS
     test<char16_t, std::round_toward_zero>();
     test<char32_t, std::round_toward_zero>();
@@ -53,6 +49,4 @@ int main(int, char**)
     test<float, std::round_to_nearest>();
     test<double, std::round_to_nearest>();
     test<long double, std::round_to_nearest>();
-
-  return 0;
 }

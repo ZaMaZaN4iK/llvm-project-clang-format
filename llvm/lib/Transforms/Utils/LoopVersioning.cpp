@@ -1,8 +1,9 @@
 //===- LoopVersioning.cpp - Utility to version a loop ---------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,8 +19,6 @@
 #include "llvm/Analysis/ScalarEvolutionExpander.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/MDBuilder.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 
@@ -94,8 +93,8 @@ void LoopVersioning::versionLoop(
   // Create empty preheader for the loop (and after cloning for the
   // non-versioned loop).
   BasicBlock *PH =
-      SplitBlock(RuntimeCheckBB, RuntimeCheckBB->getTerminator(), DT, LI,
-                 nullptr, VersionedLoop->getHeader()->getName() + ".ph");
+      SplitBlock(RuntimeCheckBB, RuntimeCheckBB->getTerminator(), DT, LI);
+  PH->setName(VersionedLoop->getHeader()->getName() + ".ph");
 
   // Clone the loop including the preheader.
   //
@@ -141,12 +140,9 @@ void LoopVersioning::addPHINodes(
     if (!PN) {
       PN = PHINode::Create(Inst->getType(), 2, Inst->getName() + ".lver",
                            &PHIBlock->front());
-      SmallVector<User*, 8> UsersToUpdate;
-      for (User *U : Inst->users())
-        if (!VersionedLoop->contains(cast<Instruction>(U)->getParent()))
-          UsersToUpdate.push_back(U);
-      for (User *U : UsersToUpdate)
-        U->replaceUsesOfWith(Inst, PN);
+      for (auto *User : Inst->users())
+        if (!VersionedLoop->contains(cast<Instruction>(User)->getParent()))
+          User->replaceUsesOfWith(Inst, PN);
       PN->addIncoming(Inst, VersionedLoop->getExitingBlock());
     }
   }
@@ -252,7 +248,7 @@ void LoopVersioning::annotateInstWithNoAlias(Instruction *VersionedInst,
 }
 
 namespace {
-/// Also expose this is a pass.  Currently this is only used for
+/// \brief Also expose this is a pass.  Currently this is only used for
 /// unit-testing.  It adds all memchecks necessary to remove all may-aliasing
 /// array accesses from the loop.
 class LoopVersioningPass : public FunctionPass {
@@ -282,9 +278,8 @@ public:
     bool Changed = false;
     for (Loop *L : Worklist) {
       const LoopAccessInfo &LAI = LAA->getInfo(L);
-      if (L->isLoopSimplifyForm() && !LAI.hasConvergentOp() &&
-          (LAI.getNumRuntimePointerChecks() ||
-           !LAI.getPSE().getUnionPredicate().isAlwaysTrue())) {
+      if (L->isLoopSimplifyForm() && (LAI.getNumRuntimePointerChecks() ||
+          !LAI.getPSE().getUnionPredicate().isAlwaysTrue())) {
         LoopVersioning LVer(LAI, L, LI, DT, SE);
         LVer.versionLoop();
         LVer.annotateLoopWithNoAlias();

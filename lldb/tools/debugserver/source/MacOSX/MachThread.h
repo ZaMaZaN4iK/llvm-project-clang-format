@@ -1,8 +1,9 @@
 //===-- MachThread.h --------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -109,7 +110,7 @@ public:
   const char *GetBasicInfoAsString() const;
   const char *GetName();
 
-  DNBArchProtocol *GetArchProtocol() { return m_arch_up.get(); }
+  DNBArchProtocol *GetArchProtocol() { return m_arch_ap.get(); }
 
   ThreadInfo::QoS GetRequestedQoS(nub_addr_t tsd, uint64_t dti_qos_class_index);
   nub_addr_t GetPThreadT();
@@ -146,7 +147,7 @@ protected:
   MachException::Data m_stop_exception; // The best exception that describes why
                                         // this thread is stopped
   std::unique_ptr<DNBArchProtocol>
-      m_arch_up; // Arch specific information for register state and more
+      m_arch_ap; // Arch specific information for register state and more
   const DNBRegisterSetInfo
       *m_reg_sets; // Register set information for this thread
   nub_size_t m_num_reg_sets;

@@ -1,23 +1,27 @@
 //===-- ModuleSpec.h --------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ModuleSpec_h_
 #define liblldb_ModuleSpec_h_
 
-#include "lldb/Host/FileSystem.h"
+// Project includes
+#include "lldb/Core/ArchSpec.h"
+#include "lldb/Core/Stream.h"
+#include "lldb/Core/UUID.h"
+#include "lldb/Host/FileSpec.h"
 #include "lldb/Target/PathMappingList.h"
-#include "lldb/Utility/ArchSpec.h"
-#include "lldb/Utility/FileSpec.h"
-#include "lldb/Utility/Stream.h"
-#include "lldb/Utility/UUID.h"
 
+// Other libraries and framework includes
 #include "llvm/Support/Chrono.h"
 
+// C Includes
+// C++ Includes
 #include <mutex>
 #include <vector>
 
@@ -30,17 +34,15 @@ public:
         m_object_name(), m_object_offset(0), m_object_size(0),
         m_source_mappings() {}
 
-  ModuleSpec(const FileSpec &file_spec, const UUID &uuid = UUID())
+  ModuleSpec(const FileSpec &file_spec)
       : m_file(file_spec), m_platform_file(), m_symbol_file(), m_arch(),
-        m_uuid(uuid), m_object_name(), m_object_offset(0),
-        m_object_size(FileSystem::Instance().GetByteSize(file_spec)),
-        m_source_mappings() {}
+        m_uuid(), m_object_name(), m_object_offset(0),
+        m_object_size(file_spec.GetByteSize()), m_source_mappings() {}
 
   ModuleSpec(const FileSpec &file_spec, const ArchSpec &arch)
       : m_file(file_spec), m_platform_file(), m_symbol_file(), m_arch(arch),
         m_uuid(), m_object_name(), m_object_offset(0),
-        m_object_size(FileSystem::Instance().GetByteSize(file_spec)),
-        m_source_mappings() {}
+        m_object_size(file_spec.GetByteSize()), m_source_mappings() {}
 
   ModuleSpec(const ModuleSpec &rhs)
       : m_file(rhs.m_file), m_platform_file(rhs.m_platform_file),
@@ -124,7 +126,7 @@ public:
 
   ConstString &GetObjectName() { return m_object_name; }
 
-  ConstString GetObjectName() const { return m_object_name; }
+  const ConstString &GetObjectName() const { return m_object_name; }
 
   uint64_t GetObjectOffset() const { return m_object_offset; }
 
@@ -207,7 +209,7 @@ public:
       if (dumped_something)
         strm.PutCString(", ");
       strm.Printf("arch = ");
-      m_arch.DumpTriple(strm.AsRawOstream());
+      m_arch.DumpTriple(strm);
       dumped_something = true;
     }
     if (m_uuid.IsValid()) {
@@ -251,18 +253,24 @@ public:
     if (match_module_spec.GetObjectName() &&
         match_module_spec.GetObjectName() != GetObjectName())
       return false;
-    if (!FileSpec::Match(match_module_spec.GetFileSpec(), GetFileSpec()))
-      return false;
-    if (GetPlatformFileSpec() &&
-        !FileSpec::Match(match_module_spec.GetPlatformFileSpec(),
-                         GetPlatformFileSpec())) {
-      return false;
+    if (match_module_spec.GetFileSpecPtr()) {
+      const FileSpec &fspec = match_module_spec.GetFileSpec();
+      if (!FileSpec::Equal(fspec, GetFileSpec(),
+                           fspec.GetDirectory().IsEmpty() == false))
+        return false;
+    }
+    if (GetPlatformFileSpec() && match_module_spec.GetPlatformFileSpecPtr()) {
+      const FileSpec &fspec = match_module_spec.GetPlatformFileSpec();
+      if (!FileSpec::Equal(fspec, GetPlatformFileSpec(),
+                           fspec.GetDirectory().IsEmpty() == false))
+        return false;
     }
     // Only match the symbol file spec if there is one in this ModuleSpec
-    if (GetSymbolFileSpec() &&
-        !FileSpec::Match(match_module_spec.GetSymbolFileSpec(),
-                         GetSymbolFileSpec())) {
-      return false;
+    if (GetSymbolFileSpec() && match_module_spec.GetSymbolFileSpecPtr()) {
+      const FileSpec &fspec = match_module_spec.GetSymbolFileSpec();
+      if (!FileSpec::Equal(fspec, GetSymbolFileSpec(),
+                           fspec.GetDirectory().IsEmpty() == false))
+        return false;
     }
     if (match_module_spec.GetArchitecturePtr()) {
       if (exact_arch_match) {
@@ -305,10 +313,8 @@ public:
 
   ModuleSpecList &operator=(const ModuleSpecList &rhs) {
     if (this != &rhs) {
-      std::lock(m_mutex, rhs.m_mutex);
-      std::lock_guard<std::recursive_mutex> lhs_guard(m_mutex, std::adopt_lock);
-      std::lock_guard<std::recursive_mutex> rhs_guard(rhs.m_mutex, 
-                                                      std::adopt_lock);
+      std::lock_guard<std::recursive_mutex> lhs_guard(m_mutex);
+      std::lock_guard<std::recursive_mutex> rhs_guard(rhs.m_mutex);
       m_specs = rhs.m_specs;
     }
     return *this;
@@ -335,8 +341,8 @@ public:
     m_specs.insert(m_specs.end(), rhs.m_specs.begin(), rhs.m_specs.end());
   }
 
-  // The index "i" must be valid and this can't be used in multi-threaded code
-  // as no mutex lock is taken.
+  // The index "i" must be valid and this can't be used in
+  // multi-threaded code as no mutex lock is taken.
   ModuleSpec &GetModuleSpecRefAtIndex(size_t i) { return m_specs[i]; }
 
   bool GetModuleSpecAtIndex(size_t i, ModuleSpec &module_spec) const {
@@ -374,8 +380,8 @@ public:
     return false;
   }
 
-  void FindMatchingModuleSpecs(const ModuleSpec &module_spec,
-                               ModuleSpecList &matching_list) const {
+  size_t FindMatchingModuleSpecs(const ModuleSpec &module_spec,
+                                 ModuleSpecList &matching_list) const {
     std::lock_guard<std::recursive_mutex> guard(m_mutex);
     bool exact_arch_match = true;
     const size_t initial_match_count = matching_list.GetSize();
@@ -394,6 +400,7 @@ public:
           matching_list.Append(spec);
       }
     }
+    return matching_list.GetSize() - initial_match_count;
   }
 
   void Dump(Stream &strm) {

@@ -1,26 +1,33 @@
 //===-- BreakpointResolverAddress.cpp ---------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Breakpoint/BreakpointResolverAddress.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 
 #include "lldb/Breakpoint/BreakpointLocation.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/Section.h"
+#include "lldb/Core/StreamString.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/StreamString.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
+//----------------------------------------------------------------------
 // BreakpointResolverAddress:
+//----------------------------------------------------------------------
 BreakpointResolverAddress::BreakpointResolverAddress(
     Breakpoint *bkpt, const Address &addr, const FileSpec &module_spec)
     : BreakpointResolver(bkpt, BreakpointResolver::AddressResolver),
@@ -37,8 +44,8 @@ BreakpointResolverAddress::~BreakpointResolverAddress() {}
 
 BreakpointResolver *BreakpointResolverAddress::CreateFromStructuredData(
     Breakpoint *bkpt, const StructuredData::Dictionary &options_dict,
-    Status &error) {
-  llvm::StringRef module_name;
+    Error &error) {
+  std::string module_name;
   lldb::addr_t addr_offset;
   FileSpec module_filespec;
   bool success;
@@ -59,7 +66,7 @@ BreakpointResolver *BreakpointResolverAddress::CreateFromStructuredData(
       error.SetErrorString("BRA::CFSD: Couldn't read module name entry.");
       return nullptr;
     }
-    module_filespec.SetFile(module_name, FileSpec::Style::native);
+    module_filespec.SetFile(module_name, false);
   }
   return new BreakpointResolverAddress(bkpt, address, module_filespec);
 }
@@ -93,10 +100,11 @@ BreakpointResolverAddress::SerializeToStructuredData() {
 }
 
 void BreakpointResolverAddress::ResolveBreakpoint(SearchFilter &filter) {
-  // If the address is not section relative, then we should not try to re-
-  // resolve it, it is just some random address and we wouldn't know what to do
-  // on reload.  But if it is section relative, we need to re-resolve it since
-  // the section it's in may have shifted on re-run.
+  // If the address is not section relative, then we should not try to
+  // re-resolve it, it is just some
+  // random address and we wouldn't know what to do on reload.  But if it is
+  // section relative, we need to
+  // re-resolve it since the section it's in may have shifted on re-run.
   bool re_resolve = false;
   if (m_addr.GetSection() || m_module_filespec)
     re_resolve = true;
@@ -120,15 +128,17 @@ void BreakpointResolverAddress::ResolveBreakpointInModules(
     BreakpointResolver::ResolveBreakpointInModules(filter, modules);
 }
 
-Searcher::CallbackReturn BreakpointResolverAddress::SearchCallback(
-    SearchFilter &filter, SymbolContext &context, Address *addr) {
-  assert(m_breakpoint != nullptr);
+Searcher::CallbackReturn
+BreakpointResolverAddress::SearchCallback(SearchFilter &filter,
+                                          SymbolContext &context, Address *addr,
+                                          bool containing) {
+  assert(m_breakpoint != NULL);
 
   if (filter.AddressPasses(m_addr)) {
     if (m_breakpoint->GetNumLocations() == 0) {
       // If the address is just an offset, and we're given a module, see if we
-      // can find the appropriate module loaded in the binary, and fix up
-      // m_addr to use that.
+      // can find the appropriate module
+      // loaded in the binary, and fix up m_addr to use that.
       if (!m_addr.IsSectionOffset() && m_module_filespec) {
         Target &target = m_breakpoint->GetTarget();
         ModuleSpec module_spec(m_module_filespec);
@@ -147,7 +157,8 @@ Searcher::CallbackReturn BreakpointResolverAddress::SearchCallback(
         bp_loc_sp->GetDescription(&s, lldb::eDescriptionLevelVerbose);
         Log *log(
             lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_BREAKPOINTS));
-        LLDB_LOGF(log, "Added location: %s\n", s.GetData());
+        if (log)
+          log->Printf("Added location: %s\n", s.GetData());
       }
     } else {
       BreakpointLocationSP loc_sp = m_breakpoint->GetLocationAtIndex(0);
@@ -163,8 +174,8 @@ Searcher::CallbackReturn BreakpointResolverAddress::SearchCallback(
   return Searcher::eCallbackReturnStop;
 }
 
-lldb::SearchDepth BreakpointResolverAddress::GetDepth() {
-  return lldb::eSearchDepthTarget;
+Searcher::Depth BreakpointResolverAddress::GetDepth() {
+  return Searcher::eDepthTarget;
 }
 
 void BreakpointResolverAddress::GetDescription(Stream *s) {

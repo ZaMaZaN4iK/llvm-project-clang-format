@@ -1,6 +1,4 @@
-// RUN: %clang_cc1 -verify -fopenmp %s -Wno-openmp-mapping -Wuninitialized
-
-// RUN: %clang_cc1 -verify -fopenmp-simd %s -Wno-openmp-mapping -Wuninitialized
+// RUN: %clang_cc1 -verify -fopenmp %s
 
 void foo() {
 }
@@ -59,7 +57,7 @@ int main(int argc, char **argv) {
   const int da[5] = { 0 };
   S4 e(4);
   S5 g(5);
-  int i, z;
+  int i;
   int &j = i;
   #pragma omp target
   #pragma omp teams shared // expected-error {{expected '(' after 'shared'}}
@@ -86,7 +84,7 @@ int main(int argc, char **argv) {
   #pragma omp teams shared (S1) // expected-error {{'S1' does not refer to a value}}
   foo();
   #pragma omp target
-  #pragma omp teams shared (a, b, c, d, f) // expected-error {{incomplete type 'S1' where a complete type is required}}
+  #pragma omp teams shared (a, b, c, d, f)
   foo();
   #pragma omp target
   #pragma omp teams shared (argv[1]) // expected-error {{expected variable name}}
@@ -101,7 +99,7 @@ int main(int argc, char **argv) {
   #pragma omp teams shared(da)
   foo();
   #pragma omp target
-  #pragma omp teams shared(e, g, z)
+  #pragma omp teams shared(e, g)
   foo();
   #pragma omp target
   #pragma omp teams shared(h, B::x) // expected-error 2 {{threadprivate or thread local variable cannot be shared}}

@@ -1,8 +1,9 @@
 //===-- ARMSelectionDAGInfo.cpp - ARM SelectionDAG Info -------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -48,7 +49,7 @@ SDValue ARMSelectionDAGInfo::EmitSpecializedLibcall(
   case RTLIB::MEMMOVE:
     AEABILibcall = AEABI_MEMMOVE;
     break;
-  case RTLIB::MEMSET:
+  case RTLIB::MEMSET: 
     AEABILibcall = AEABI_MEMSET;
     if (ConstantSDNode *ConstantSrc = dyn_cast<ConstantSDNode>(Src))
       if (ConstantSrc->getZExtValue() == 0)
@@ -92,14 +93,14 @@ SDValue ARMSelectionDAGInfo::EmitSpecializedLibcall(
     else if (Src.getValueType().bitsLT(MVT::i32))
       Src = DAG.getNode(ISD::ZERO_EXTEND, dl, MVT::i32, Src);
 
-    Entry.Node = Src;
+    Entry.Node = Src; 
     Entry.Ty = Type::getInt32Ty(*DAG.getContext());
-    Entry.IsSExt = false;
+    Entry.isSExt = false;
     Args.push_back(Entry);
   } else {
     Entry.Node = Src;
     Args.push_back(Entry);
-
+    
     Entry.Node = Size;
     Args.push_back(Entry);
   }
@@ -120,7 +121,7 @@ SDValue ARMSelectionDAGInfo::EmitSpecializedLibcall(
           std::move(Args))
       .setDiscardResult();
   std::pair<SDValue,SDValue> CallResult = TLI->LowerCallTo(CLI);
-
+  
   return CallResult.second;
 }
 
@@ -170,7 +171,7 @@ SDValue ARMSelectionDAGInfo::EmitTargetCodeForMemcpy(
 
   // Code size optimisation: do not inline memcpy if expansion results in
   // more instructions than the libary call.
-  if (NumMEMCPYs > 1 && Subtarget.hasMinSize()) {
+  if (NumMEMCPYs > 1 && DAG.getMachineFunction().getFunction()->optForMinSize()) {
     return SDValue();
   }
 
@@ -197,18 +198,17 @@ SDValue ARMSelectionDAGInfo::EmitTargetCodeForMemcpy(
     return Chain;
 
   // Issue loads / stores for the trailing (1 - 3) bytes.
-  auto getRemainingValueType = [](unsigned BytesLeft) {
-    return (BytesLeft >= 2) ? MVT::i16 : MVT::i8;
-  };
-  auto getRemainingSize = [](unsigned BytesLeft) {
-    return (BytesLeft >= 2) ? 2 : 1;
-  };
-
   unsigned BytesLeftSave = BytesLeft;
   i = 0;
   while (BytesLeft) {
-    VT = getRemainingValueType(BytesLeft);
-    VTSize = getRemainingSize(BytesLeft);
+    if (BytesLeft >= 2) {
+      VT = MVT::i16;
+      VTSize = 2;
+    } else {
+      VT = MVT::i8;
+      VTSize = 1;
+    }
+
     Loads[i] = DAG.getLoad(VT, dl, Chain,
                            DAG.getNode(ISD::ADD, dl, MVT::i32, Src,
                                        DAG.getConstant(SrcOff, dl, MVT::i32)),
@@ -224,8 +224,14 @@ SDValue ARMSelectionDAGInfo::EmitTargetCodeForMemcpy(
   i = 0;
   BytesLeft = BytesLeftSave;
   while (BytesLeft) {
-    VT = getRemainingValueType(BytesLeft);
-    VTSize = getRemainingSize(BytesLeft);
+    if (BytesLeft >= 2) {
+      VT = MVT::i16;
+      VTSize = 2;
+    } else {
+      VT = MVT::i8;
+      VTSize = 1;
+    }
+
     TFOps[i] = DAG.getStore(Chain, dl, Loads[i],
                             DAG.getNode(ISD::ADD, dl, MVT::i32, Dst,
                                         DAG.getConstant(DstOff, dl, MVT::i32)),

@@ -1,8 +1,9 @@
 //===-- asan_poisoning.h ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,7 +16,6 @@
 #include "asan_internal.h"
 #include "asan_mapping.h"
 #include "sanitizer_common/sanitizer_flags.h"
-#include "sanitizer_common/sanitizer_platform.h"
 
 namespace __asan {
 
@@ -38,11 +38,7 @@ void PoisonShadowPartialRightRedzone(uptr addr,
 // performance-critical code with care.
 ALWAYS_INLINE void FastPoisonShadow(uptr aligned_beg, uptr aligned_size,
                                     u8 value) {
-  DCHECK(!value || CanPoisonMemory());
-#if SANITIZER_FUCHSIA
-  __sanitizer_fill_shadow(aligned_beg, aligned_size, value,
-                          common_flags()->clear_shadow_mmap_threshold);
-#else
+  DCHECK(CanPoisonMemory());
   uptr shadow_beg = MEM_TO_SHADOW(aligned_beg);
   uptr shadow_end = MEM_TO_SHADOW(
       aligned_beg + aligned_size - SHADOW_GRANULARITY) + 1;
@@ -50,10 +46,8 @@ ALWAYS_INLINE void FastPoisonShadow(uptr aligned_beg, uptr aligned_size,
   // for mapping shadow and zeroing out pages doesn't "just work", so we should
   // probably provide higher-level interface for these operations.
   // For now, just memset on Windows.
-  if (value || SANITIZER_WINDOWS == 1 ||
-      // RTEMS doesn't have have pages, let alone a fast way to zero
-      // them, so default to memset.
-      SANITIZER_RTEMS == 1 ||
+  if (value ||
+      SANITIZER_WINDOWS == 1 ||
       shadow_end - shadow_beg < common_flags()->clear_shadow_mmap_threshold) {
     REAL(memset)((void*)shadow_beg, value, shadow_end - shadow_beg);
   } else {
@@ -73,7 +67,6 @@ ALWAYS_INLINE void FastPoisonShadow(uptr aligned_beg, uptr aligned_size,
       ReserveShadowMemoryRange(page_beg, page_end - 1, nullptr);
     }
   }
-#endif // SANITIZER_FUCHSIA
 }
 
 ALWAYS_INLINE void FastPoisonShadowPartialRightRedzone(

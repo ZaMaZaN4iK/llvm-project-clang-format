@@ -1,19 +1,28 @@
 #
 #//===----------------------------------------------------------------------===//
 #//
-#// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-#// See https://llvm.org/LICENSE.txt for license information.
-#// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+#//                     The LLVM Compiler Infrastructure
+#//
+#// This file is dual licensed under the MIT and the University of Illinois Open
+#// Source Licenses. See LICENSE.txt for details.
 #//
 #//===----------------------------------------------------------------------===//
 #
 
-if("${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}")
-  message(FATAL_ERROR "Direct configuration not supported, please use parent directory!")
-endif()
+# CMAKE libomp
+cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
 
 # Add cmake directory to search for custom cmake functions
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
+
+# Standalone build or part of LLVM?
+set(LIBOMP_STANDALONE_BUILD FALSE)
+if(OPENMP_STANDALONE_BUILD OR
+   "${CMAKE_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}" OR
+   "${CMAKE_SOURCE_DIR}/runtime" STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}")
+  project(libomp C CXX)
+  set(LIBOMP_STANDALONE_BUILD TRUE)
+endif()
 
 # Set libomp version
 set(LIBOMP_VERSION_MAJOR 5)
@@ -26,14 +35,23 @@ include(LibompHandleFlags)
 include(LibompDefinitions)
 
 # Determine the target architecture
-if(${OPENMP_STANDALONE_BUILD})
+if(${LIBOMP_STANDALONE_BUILD})
   # If adding a new architecture, take a look at cmake/LibompGetArchitecture.cmake
   libomp_get_architecture(LIBOMP_DETECTED_ARCH)
   set(LIBOMP_ARCH ${LIBOMP_DETECTED_ARCH} CACHE STRING
-    "The architecture to build for (x86_64/i386/arm/ppc64/ppc64le/aarch64/mic/mips/mips64/riscv64).")
+    "The architecture to build for (x86_64/i386/arm/ppc64/ppc64le/aarch64/mic/mips/mips64).")
+  # Allow user to choose a suffix for the installation directory.
+  set(LIBOMP_LIBDIR_SUFFIX "" CACHE STRING
+    "suffix of lib installation directory e.g., 64 => lib64")
   # Should assertions be enabled?  They are on by default.
   set(LIBOMP_ENABLE_ASSERTIONS TRUE CACHE BOOL
     "enable assertions?")
+  set(LIBOMP_ENABLE_WERROR FALSE CACHE BOOL
+    "Enable -Werror flags to turn warnings into errors for supporting compilers.")
+  # CMAKE_BUILD_TYPE was not defined, set default to Release
+  if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+  endif()
 else() # Part of LLVM build
   # Determine the native architecture from LLVM.
   string(TOLOWER "${LLVM_TARGET_ARCH}" LIBOMP_NATIVE_ARCH)
@@ -58,21 +76,36 @@ else() # Part of LLVM build
     set(LIBOMP_ARCH aarch64)
   elseif(LIBOMP_NATIVE_ARCH MATCHES "arm")
     set(LIBOMP_ARCH arm)
-  elseif(LIBOMP_NATIVE_ARCH MATCHES "riscv64")
-    set(LIBOMP_ARCH riscv64)
   else()
     # last ditch effort
     libomp_get_architecture(LIBOMP_ARCH)
   endif ()
+  set(LIBOMP_LIBDIR_SUFFIX ${LLVM_LIBDIR_SUFFIX})
   set(LIBOMP_ENABLE_ASSERTIONS ${LLVM_ENABLE_ASSERTIONS})
+  set(LIBOMP_ENABLE_WERROR ${LLVM_ENABLE_WERROR})
 endif()
-libomp_check_variable(LIBOMP_ARCH 32e x86_64 32 i386 arm ppc64 ppc64le aarch64 mic mips mips64 riscv64)
+libomp_check_variable(LIBOMP_ARCH 32e x86_64 32 i386 arm ppc64 ppc64le aarch64 mic mips mips64)
 
 set(LIBOMP_LIB_TYPE normal CACHE STRING
   "Performance,Profiling,Stubs library (normal/profile/stubs)")
 libomp_check_variable(LIBOMP_LIB_TYPE normal profile stubs)
-# Set the OpenMP Year and Month associated with version
-set(LIBOMP_OMP_YEAR_MONTH 201611)
+set(LIBOMP_OMP_VERSION 45 CACHE STRING
+  "The OpenMP version (45/40/30)")
+if(LIBOMP_OMP_VERSION EQUAL 41)
+  libomp_warning_say("LIBOMP_OMP_VERSION=41 is deprecated and will be removed in a later version. Please use 45.")
+  set(LIBOMP_OMP_VERSION 45)
+endif()
+libomp_check_variable(LIBOMP_OMP_VERSION 45 40 30)
+# Set the OpenMP Year and Month assiociated with version
+if(${LIBOMP_OMP_VERSION} GREATER 45 OR ${LIBOMP_OMP_VERSION} EQUAL 45)
+  set(LIBOMP_OMP_YEAR_MONTH 201511)
+elseif(${LIBOMP_OMP_VERSION} GREATER 40 OR ${LIBOMP_OMP_VERSION} EQUAL 40)
+  set(LIBOMP_OMP_YEAR_MONTH 201307)
+elseif(${LIBOMP_OMP_VERSION} GREATER 30 OR ${LIBOMP_OMP_VERSION} EQUAL 30)
+  set(LIBOMP_OMP_YEAR_MONTH 201107)
+else()
+  set(LIBOMP_OMP_YEAR_MONTH 200505)
+endif()
 set(LIBOMP_MIC_ARCH knc CACHE STRING
   "Intel(R) Many Integrated Core Architecture (Intel(R) MIC Architecture) (knf/knc).  Ignored if not Intel(R) MIC Architecture build.")
 if("${LIBOMP_ARCH}" STREQUAL "mic")
@@ -97,6 +130,8 @@ if(NOT DEFINED CMAKE_MACOSX_RPATH)
 endif()
 
 # User specified flags.  These are appended to the configured flags.
+set(LIBOMP_CFLAGS "" CACHE STRING
+  "Appended user specified C compiler flags.")
 set(LIBOMP_CXXFLAGS "" CACHE STRING
   "Appended user specified C++ compiler flags.")
 set(LIBOMP_CPPFLAGS "" CACHE STRING
@@ -142,7 +177,6 @@ set(PPC64 FALSE)
 set(MIC FALSE)
 set(MIPS64 FALSE)
 set(MIPS FALSE)
-set(RISCV64 FALSE)
 if("${LIBOMP_ARCH}" STREQUAL "i386" OR "${LIBOMP_ARCH}" STREQUAL "32")    # IA-32 architecture
   set(IA32 TRUE)
 elseif("${LIBOMP_ARCH}" STREQUAL "x86_64" OR "${LIBOMP_ARCH}" STREQUAL "32e") # Intel(R) 64 architecture
@@ -163,8 +197,6 @@ elseif("${LIBOMP_ARCH}" STREQUAL "mips") # MIPS architecture
     set(MIPS TRUE)
 elseif("${LIBOMP_ARCH}" STREQUAL "mips64") # MIPS64 architecture
     set(MIPS64 TRUE)
-  elseif("${LIBOMP_ARCH}" STREQUAL "riscv64") # RISCV64 architecture
-    set(RISCV64 TRUE)
 endif()
 
 # Set some flags based on build_type
@@ -203,7 +235,7 @@ endif()
 set(LIBOMP_BASE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(LIBOMP_SRC_DIR ${LIBOMP_BASE_DIR}/src)
 set(LIBOMP_TOOLS_DIR ${LIBOMP_BASE_DIR}/tools)
-set(LIBOMP_INC_DIR ${LIBOMP_SRC_DIR}/include)
+set(LIBOMP_INC_DIR ${LIBOMP_SRC_DIR}/include/${LIBOMP_OMP_VERSION})
 set(LIBOMP_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 # Enabling Fortran if it is needed
@@ -249,13 +281,12 @@ set(LIBOMP_USE_DEBUGGER FALSE CACHE BOOL
 set(LIBOMP_USE_STDCPPLIB FALSE CACHE BOOL
   "Should we link to C++ library?")
 
-# Intel(R) Transactional Synchronization Extensions (Intel(R) TSX) based locks have
-# __asm code which can be troublesome for some compilers.  This feature is also x86 specific.
+# TSX (x86) based locks have __asm code which can be troublesome for some compilers.
 # TODO: Make this a real feature check
 set(LIBOMP_USE_ADAPTIVE_LOCKS "${LIBOMP_HAVE_ADAPTIVE_LOCKS}" CACHE BOOL
-  "Should Intel(R) TSX lock be compiled (adaptive lock in kmp_lock.cpp).  These are x86 specific.")
+  "Should TSX-based lock be compiled (adaptive lock in kmp_lock.cpp).  These are x86 specific.")
 if(LIBOMP_USE_ADAPTIVE_LOCKS AND (NOT LIBOMP_HAVE_ADAPTIVE_LOCKS))
-  libomp_error_say("Adaptive locks (Intel(R) TSX) functionality is only supported on x86 Architecture")
+  libomp_error_say("Adaptive locks (TSX) functionality requested but not available")
 endif()
 
 # - stats-gathering enables OpenMP stats where things like the number of
@@ -278,31 +309,17 @@ if(WIN32 AND NOT LIBOMP_ENABLE_SHARED)
   libomp_error_say("Static libraries requested but not available on Windows")
 endif()
 
-if(LIBOMP_USE_ITT_NOTIFY AND NOT LIBOMP_ENABLE_SHARED)
-  message(STATUS "ITT Notify not supported for static libraries - forcing ITT Notify off")
-  set(LIBOMP_USE_ITT_NOTIFY FALSE)
-endif()
-
-if(LIBOMP_USE_VERSION_SYMBOLS AND (NOT LIBOMP_ENABLE_SHARED) )
-  message(STATUS "Version symbols not supported for static libraries - forcing Version symbols functionality off")
-  set (LIBOMP_USE_VERSION_SYMBOLS FALSE)
-endif()
-
-# OMPT-support defaults to ON for OpenMP 5.0+ and if the requirements in
-# cmake/config-ix.cmake are fulfilled.
-set(OMPT_DEFAULT FALSE)
-if ((LIBOMP_HAVE_OMPT_SUPPORT) AND (NOT WIN32))
-  set(OMPT_DEFAULT TRUE)
-endif()
-set(LIBOMP_OMPT_SUPPORT ${OMPT_DEFAULT} CACHE BOOL
-  "OMPT-support?")
-
+# OMPT-support
 set(LIBOMP_OMPT_DEBUG FALSE CACHE BOOL
   "Trace OMPT initialization?")
-set(LIBOMP_OMPT_OPTIONAL TRUE CACHE BOOL
-  "OMPT-optional?")
+set(LIBOMP_OMPT_SUPPORT FALSE CACHE BOOL
+  "OMPT-support?")
+set(LIBOMP_OMPT_BLAME TRUE CACHE BOOL
+  "OMPT-blame?")
+set(LIBOMP_OMPT_TRACE TRUE CACHE BOOL
+  "OMPT-trace?")
 if(LIBOMP_OMPT_SUPPORT AND (NOT LIBOMP_HAVE_OMPT_SUPPORT))
-  libomp_error_say("OpenMP Tools Interface requested but not available in this implementation")
+  libomp_error_say("OpenMP Tools Interface requested but not available")
 endif()
 
 # TSAN-support
@@ -316,10 +333,6 @@ endif()
 if(LIBOMP_USE_HWLOC AND (NOT LIBOMP_HAVE_HWLOC))
   libomp_error_say("Hwloc requested but not available")
 endif()
-
-# Hierarchical scheduling support
-set(LIBOMP_USE_HIER_SCHED FALSE CACHE BOOL
-  "Hierarchical scheduling support?")
 
 # Setting final library name
 set(LIBOMP_DEFAULT_LIB_NAME libomp)
@@ -348,13 +361,14 @@ set(LIBOMP_INSTALL_ALIASES TRUE CACHE BOOL
   "Install libgomp and libiomp5 library aliases for backwards compatibility")
 
 # Print configuration after all variables are set.
-if(${OPENMP_STANDALONE_BUILD})
+if(${LIBOMP_STANDALONE_BUILD})
   libomp_say("Operating System     -- ${CMAKE_SYSTEM_NAME}")
   libomp_say("Target Architecture  -- ${LIBOMP_ARCH}")
   if(${MIC})
     libomp_say("Intel(R) MIC Architecture    -- ${LIBOMP_MIC_ARCH}")
   endif()
   libomp_say("Build Type           -- ${CMAKE_BUILD_TYPE}")
+  libomp_say("OpenMP Version       -- ${LIBOMP_OMP_VERSION}")
   libomp_say("Library Kind         -- ${LIBOMP_LIBRARY_KIND}")
   libomp_say("Library Type         -- ${LIBOMP_LIB_TYPE}")
   libomp_say("Fortran Modules      -- ${LIBOMP_FORTRAN_MODULES}")
@@ -370,7 +384,8 @@ if(${OPENMP_STANDALONE_BUILD})
   libomp_say("Use ITT notify       -- ${LIBOMP_USE_ITT_NOTIFY}")
   libomp_say("Use OMPT-support     -- ${LIBOMP_OMPT_SUPPORT}")
   if(${LIBOMP_OMPT_SUPPORT})
-    libomp_say("Use OMPT-optional  -- ${LIBOMP_OMPT_OPTIONAL}")
+    libomp_say("Use OMPT-blame       -- ${LIBOMP_OMPT_BLAME}")
+    libomp_say("Use OMPT-trace       -- ${LIBOMP_OMPT_TRACE}")
   endif()
   libomp_say("Use Adaptive locks   -- ${LIBOMP_USE_ADAPTIVE_LOCKS}")
   libomp_say("Use quad precision   -- ${LIBOMP_USE_QUAD_PRECISION}")
@@ -380,7 +395,3 @@ endif()
 
 add_subdirectory(src)
 add_subdirectory(test)
-
-# make these variables available for tools:
-set(LIBOMP_LIBRARY_DIR ${LIBOMP_LIBRARY_DIR} PARENT_SCOPE)
-set(LIBOMP_INCLUDE_DIR ${LIBOMP_INCLUDE_DIR} PARENT_SCOPE)

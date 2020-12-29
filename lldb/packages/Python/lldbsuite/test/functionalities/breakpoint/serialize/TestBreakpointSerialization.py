@@ -2,7 +2,12 @@
 Test breakpoint serialization.
 """
 
+from __future__ import print_function
+
+
 import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -12,7 +17,6 @@ from lldbsuite.test import lldbutil
 class BreakpointSerialization(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
-    NO_DEBUG_INFO_TESTCASE = True
 
     @add_test_categories(['pyapi'])
     def test_resolvers(self):
@@ -44,12 +48,7 @@ class BreakpointSerialization(TestBase):
         self.build()
         self.setup_targets_and_cleanup()
         self.do_check_names()
-        
-    def test_scripted_extra_args(self):
-        self.build()
-        self.setup_targets_and_cleanup()
-        self.do_check_extra_args()
-        
+
     def setup_targets_and_cleanup(self):
         def cleanup ():
             self.RemoveTempFile(self.bkpts_file_path)
@@ -61,12 +60,12 @@ class BreakpointSerialization(TestBase):
         self.addTearDownHook(cleanup)
         self.RemoveTempFile(self.bkpts_file_path)
 
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create the targets we are making breakpoints in and copying them to:
         self.orig_target = self.dbg.CreateTarget(exe)
         self.assertTrue(self.orig_target, VALID_TARGET)
-
+        
         self.copy_target = self.dbg.CreateTarget(exe)
         self.assertTrue(self.copy_target, VALID_TARGET)
 
@@ -74,7 +73,7 @@ class BreakpointSerialization(TestBase):
         # Call super's setUp().
         TestBase.setUp(self)
 
-        self.bkpts_file_path = self.getBuildArtifact("breakpoints.json")
+        self.bkpts_file_path = os.path.join(os.getcwd(), "breakpoints.json")
         self.bkpts_file_spec = lldb.SBFileSpec(self.bkpts_file_path)
 
     def check_equivalence(self, source_bps, do_write = True):
@@ -92,7 +91,7 @@ class BreakpointSerialization(TestBase):
         num_source_bps = source_bps.GetSize()
         num_copy_bps = copy_bps.GetSize()
         self.assertTrue(num_source_bps == num_copy_bps, "Didn't get same number of input and output breakpoints - orig: %d copy: %d"%(num_source_bps, num_copy_bps))
-
+        
         for i in range(0, num_source_bps):
             source_bp = source_bps.GetBreakpointAtIndex(i)
             source_desc = lldb.SBStream()
@@ -120,7 +119,7 @@ class BreakpointSerialization(TestBase):
 
         empty_module_list = lldb.SBFileSpecList()
         empty_cu_list = lldb.SBFileSpecList()
-        blubby_file_spec = lldb.SBFileSpec(os.path.join(self.getSourceDir(), "blubby.c"))
+        blubby_file_spec = lldb.SBFileSpec(os.path.join(os.getcwd(), "blubby.c"))
 
         # It isn't actually important for these purposes that these breakpoint
         # actually have locations.
@@ -133,7 +132,7 @@ class BreakpointSerialization(TestBase):
         source_bps.Append(self.orig_target.BreakpointCreateByName("blubby", lldb.eFunctionNameTypeAuto, empty_module_list, empty_cu_list))
         source_bps.Append(self.orig_target.BreakpointCreateByName("blubby", lldb.eFunctionNameTypeFull, empty_module_list,empty_cu_list))
         source_bps.Append(self.orig_target.BreakpointCreateBySourceRegex("dont really care", blubby_file_spec))
-
+        
         # And some number greater than one:
         self.check_equivalence(source_bps)
 
@@ -148,7 +147,7 @@ class BreakpointSerialization(TestBase):
         cu_list.Append(lldb.SBFileSpec("AnotherCU.c"))
         cu_list.Append(lldb.SBFileSpec("ThirdCU.c"))
 
-        blubby_file_spec = lldb.SBFileSpec(os.path.join(self.getSourceDir(), "blubby.c"))
+        blubby_file_spec = lldb.SBFileSpec(os.path.join(os.getcwd(), "blubby.c"))
 
         # It isn't actually important for these purposes that these breakpoint
         # actually have locations.
@@ -175,19 +174,18 @@ class BreakpointSerialization(TestBase):
 
         empty_module_list = lldb.SBFileSpecList()
         empty_cu_list = lldb.SBFileSpecList()
-        blubby_file_spec = lldb.SBFileSpec(os.path.join(self.getSourceDir(), "blubby.c"))
+        blubby_file_spec = lldb.SBFileSpec(os.path.join(os.getcwd(), "blubby.c"))
 
         # It isn't actually important for these purposes that these breakpoint
         # actually have locations.
         source_bps = lldb.SBBreakpointList(self.orig_target)
 
-        bkpt = self.orig_target.BreakpointCreateByLocation(
-            lldb.SBFileSpec("blubby.c"), 666, 333, 0, lldb.SBFileSpecList())
+        bkpt = self.orig_target.BreakpointCreateByLocation("blubby.c", 666)
         bkpt.SetEnabled(False)
         bkpt.SetOneShot(True)
         bkpt.SetThreadID(10)
         source_bps.Append(bkpt)
-
+        
         # Make sure we get one right:
         self.check_equivalence(source_bps)
         source_bps.Clear()
@@ -195,11 +193,6 @@ class BreakpointSerialization(TestBase):
         bkpt = self.orig_target.BreakpointCreateByName("blubby", lldb.eFunctionNameTypeAuto, empty_module_list, empty_cu_list)
         bkpt.SetIgnoreCount(10)
         bkpt.SetThreadName("grubby")
-        source_bps.Append(bkpt)
-
-        bkpt = self.orig_target.BreakpointCreateByName("blubby", lldb.eFunctionNameTypeAuto, empty_module_list, empty_cu_list)
-        bkpt.SetCondition("gonna remove this")
-        bkpt.SetCondition("")
         source_bps.Append(bkpt)
 
         bkpt = self.orig_target.BreakpointCreateByName("blubby", lldb.eFunctionNameTypeFull, empty_module_list,empty_cu_list)
@@ -225,7 +218,7 @@ class BreakpointSerialization(TestBase):
 
         empty_module_list = lldb.SBFileSpecList()
         empty_cu_list = lldb.SBFileSpecList()
-        blubby_file_spec = lldb.SBFileSpec(os.path.join(self.getSourceDir(), "blubby.c"))
+        blubby_file_spec = lldb.SBFileSpec(os.path.join(os.getcwd(), "blubby.c"))
 
         # It isn't actually important for these purposes that these breakpoint
         # actually have locations.
@@ -233,14 +226,13 @@ class BreakpointSerialization(TestBase):
         all_bps = lldb.SBBreakpointList(self.orig_target)
         source_bps = lldb.SBBreakpointList(self.orig_target)
 
-        bkpt = self.orig_target.BreakpointCreateByLocation(
-            lldb.SBFileSpec("blubby.c"), 666, 333, 0, lldb.SBFileSpecList())
+        bkpt = self.orig_target.BreakpointCreateByLocation("blubby.c", 666)
         bkpt.SetEnabled(False)
         bkpt.SetOneShot(True)
         bkpt.SetThreadID(10)
         source_bps.Append(bkpt)
         all_bps.Append(bkpt)
-
+        
         error = lldb.SBError()
         error = self.orig_target.BreakpointsWriteToFile(self.bkpts_file_spec, source_bps)
         self.assertTrue(error.Success(), "Failed writing breakpoints to file: %s."%(error.GetCString()))
@@ -268,13 +260,12 @@ class BreakpointSerialization(TestBase):
         self.check_equivalence(all_bps)
 
     def do_check_names(self):
-        bkpt = self.orig_target.BreakpointCreateByLocation(
-            lldb.SBFileSpec("blubby.c"), 666, 333, 0, lldb.SBFileSpecList())
+        bkpt = self.orig_target.BreakpointCreateByLocation("blubby.c", 666)
         good_bkpt_name = "GoodBreakpoint"
         write_bps = lldb.SBBreakpointList(self.orig_target)
         bkpt.AddName(good_bkpt_name)
         write_bps.Append(bkpt)
-
+        
         error = lldb.SBError()
         error = self.orig_target.BreakpointsWriteToFile(self.bkpts_file_spec, write_bps)
         self.assertTrue(error.Success(), "Failed writing breakpoints to file: %s."%(error.GetCString()))
@@ -291,85 +282,7 @@ class BreakpointSerialization(TestBase):
         error = self.copy_target.BreakpointsCreateFromFile(self.bkpts_file_spec, names_list, copy_bps)
         self.assertTrue(error.Success(), "Failed reading breakpoints from file: %s"%(error.GetCString()))
         self.assertTrue(copy_bps.GetSize() == 1, "Found the matching breakpoint.")
-
-    def do_check_extra_args(self):
-
-        import side_effect
-        interp = self.dbg.GetCommandInterpreter()
-        error = lldb.SBError()
-
-        script_name = os.path.join(self.getSourceDir(), "resolver.py")
-
-        command = "command script import " + script_name
-        result = lldb.SBCommandReturnObject()
-        interp.HandleCommand(command, result)
-        self.assertTrue(result.Succeeded(), "com scr imp failed: %s"%(result.GetError()))
-
-        # First make sure a scripted breakpoint with no args works:
-        bkpt = self.orig_target.BreakpointCreateFromScript("resolver.Resolver", lldb.SBStructuredData(),
-                                                           lldb.SBFileSpecList(), lldb.SBFileSpecList())
-        self.assertTrue(bkpt.IsValid(), "Bkpt is valid")
-        write_bps = lldb.SBBreakpointList(self.orig_target)
-
-        error = self.orig_target.BreakpointsWriteToFile(self.bkpts_file_spec, write_bps)
-        self.assertTrue(error.Success(), "Failed writing breakpoints: %s"%(error.GetCString()))
-
-        side_effect.g_extra_args = None
-        copy_bps = lldb.SBBreakpointList(self.copy_target)
-        error = self.copy_target.BreakpointsCreateFromFile(self.bkpts_file_spec, copy_bps)
-        self.assertTrue(error.Success(), "Failed reading breakpoints: %s"%(error.GetCString()))
-
-        self.assertEqual(copy_bps.GetSize(), 1, "Got one breakpoint from file.")
-        no_keys = lldb.SBStringList()
-        side_effect.g_extra_args.GetKeys(no_keys)
-        self.assertEqual(no_keys.GetSize(), 0, "Should have no keys")
-
-        self.orig_target.DeleteAllBreakpoints()
-        self.copy_target.DeleteAllBreakpoints()
-
-        # Now try one with extra args:
         
-        extra_args = lldb.SBStructuredData()
-        stream = lldb.SBStream()
-        stream.Print('{"first_arg" : "first_value", "second_arg" : "second_value"}')
-        extra_args.SetFromJSON(stream)
-        self.assertTrue(extra_args.IsValid(), "SBStructuredData is valid.")
         
-        bkpt = self.orig_target.BreakpointCreateFromScript("resolver.Resolver",
-                                                           extra_args, lldb.SBFileSpecList(), lldb.SBFileSpecList())
-        self.assertTrue(bkpt.IsValid(), "Bkpt is valid")
-        write_bps = lldb.SBBreakpointList(self.orig_target)
-
-        error = self.orig_target.BreakpointsWriteToFile(self.bkpts_file_spec, write_bps)
-        self.assertTrue(error.Success(), "Failed writing breakpoints: %s"%(error.GetCString()))
-
-        orig_extra_args = side_effect.g_extra_args
-        self.assertTrue(orig_extra_args.IsValid(), "Extra args originally valid")
-
-        orig_keys = lldb.SBStringList()
-        orig_extra_args.GetKeys(orig_keys)
-        self.assertEqual(2, orig_keys.GetSize(), "Should have two keys")
-
-        side_effect.g_extra_args = None
-
-        copy_bps = lldb.SBBreakpointList(self.copy_target)
-        error = self.copy_target.BreakpointsCreateFromFile(self.bkpts_file_spec, copy_bps)
-        self.assertTrue(error.Success(), "Failed reading breakpoints: %s"%(error.GetCString()))
-
-        self.assertEqual(copy_bps.GetSize(), 1, "Got one breakpoint from file.")
-
-        copy_extra_args = side_effect.g_extra_args
-        copy_keys = lldb.SBStringList()
-        copy_extra_args.GetKeys(copy_keys)
-        self.assertEqual(2, copy_keys.GetSize(), "Copy should have two keys")
-
-        for idx in range(0, orig_keys.GetSize()):
-            key = orig_keys.GetStringAtIndex(idx)
-            copy_value = copy_extra_args.GetValueForKey(key).GetStringValue(100)
-
-            if key == "first_arg":
-                self.assertEqual(copy_value, "first_value")
-            elif key == "second_arg":
-                self.assertEqual(copy_value, "second_value")
-            else:
-                self.Fail("Unknown key: %s"%(key))
+        
+        

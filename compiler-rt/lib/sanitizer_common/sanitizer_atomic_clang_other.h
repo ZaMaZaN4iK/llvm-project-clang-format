@@ -1,8 +1,9 @@
 //===-- sanitizer_atomic_clang_other.h --------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,7 +16,6 @@
 #define SANITIZER_ATOMIC_CLANG_OTHER_H
 
 namespace __sanitizer {
-
 
 INLINE void proc_yield(int cnt) {
   __asm__ __volatile__("" ::: "memory");
@@ -85,7 +85,7 @@ INLINE void atomic_store(volatile T *a, typename T::Type v, memory_order mo) {
     typename T::Type cur;
     for (;;) {
       cur = __sync_val_compare_and_swap(&a->val_dont_use, cmp, v);
-      if (cur == cmp || cur == v)
+      if (cmp == v)
         break;
       cmp = cur;
     }

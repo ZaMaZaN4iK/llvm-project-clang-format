@@ -1,12 +1,15 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // test move
+
+// UNSUPPORTED: c++98, c++03
 
 #include <utility>
 #include <type_traits>
@@ -34,7 +37,7 @@ int x = 42;
 const int& cx = x;
 
 template <class QualInt>
-QualInt get() TEST_NOEXCEPT { return static_cast<QualInt>(x); }
+QualInt get() noexcept { return static_cast<QualInt>(x); }
 
 
 int copy_ctor = 0;
@@ -47,27 +50,30 @@ struct A {
     A& operator=(const A&) = delete;
 };
 
-#if TEST_STD_VER > 11
 constexpr bool test_constexpr_move() {
+#if TEST_STD_VER > 11
     int y = 42;
     const int cy = y;
     return std::move(y) == 42
         && std::move(cy) == 42
         && std::move(static_cast<int&&>(y)) == 42
         && std::move(static_cast<int const&&>(y)) == 42;
-}
+#else
+    return true;
 #endif
-int main(int, char**)
+}
+
+int main()
 {
     { // Test return type and noexcept.
         static_assert(std::is_same<decltype(std::move(x)), int&&>::value, "");
-        ASSERT_NOEXCEPT(std::move(x));
+        static_assert(noexcept(std::move(x)), "");
         static_assert(std::is_same<decltype(std::move(cx)), const int&&>::value, "");
-        ASSERT_NOEXCEPT(std::move(cx));
+        static_assert(noexcept(std::move(cx)), "");
         static_assert(std::is_same<decltype(std::move(42)), int&&>::value, "");
-        ASSERT_NOEXCEPT(std::move(42));
+        static_assert(noexcept(std::move(42)), "");
         static_assert(std::is_same<decltype(std::move(get<const int&&>())), const int&&>::value, "");
-        ASSERT_NOEXCEPT(std::move(get<int const&&>()));
+        static_assert(noexcept(std::move(get<int const&&>())), "");
     }
     { // test copy and move semantics
         A a;
@@ -112,6 +118,4 @@ int main(int, char**)
         static_assert(std::move(y) == 42, "");
     }
 #endif
-
-  return 0;
 }

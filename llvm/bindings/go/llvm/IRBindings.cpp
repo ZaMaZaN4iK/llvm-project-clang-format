@@ -1,8 +1,9 @@
 //===- IRBindings.cpp - Additional bindings for ir ------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,7 +14,6 @@
 #include "IRBindings.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/DebugLoc.h"
-#include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
@@ -35,6 +35,13 @@ LLVMMetadataRef LLVMMDNode2(LLVMContextRef C, LLVMMetadataRef *MDs,
       MDNode::get(*unwrap(C), ArrayRef<Metadata *>(unwrap(MDs), Count)));
 }
 
+LLVMMetadataRef LLVMTemporaryMDNode(LLVMContextRef C, LLVMMetadataRef *MDs,
+                                    unsigned Count) {
+  return wrap(MDTuple::getTemporary(*unwrap(C),
+                                    ArrayRef<Metadata *>(unwrap(MDs), Count))
+                  .release());
+}
+
 void LLVMAddNamedMetadataOperand2(LLVMModuleRef M, const char *name,
                                   LLVMMetadataRef Val) {
   NamedMDNode *N = unwrap(M)->getOrInsertNamedMetadata(name);
@@ -50,7 +57,13 @@ void LLVMSetMetadata2(LLVMValueRef Inst, unsigned KindID, LLVMMetadataRef MD) {
   unwrap<Instruction>(Inst)->setMetadata(KindID, N);
 }
 
-void LLVMGoSetCurrentDebugLocation(LLVMBuilderRef Bref, unsigned Line,
+void LLVMMetadataReplaceAllUsesWith(LLVMMetadataRef MD, LLVMMetadataRef New) {
+  auto *Node = unwrap<MDNode>(MD);
+  Node->replaceAllUsesWith(unwrap<Metadata>(New));
+  MDNode::deleteTemporary(Node);
+}
+
+void LLVMSetCurrentDebugLocation2(LLVMBuilderRef Bref, unsigned Line,
                                   unsigned Col, LLVMMetadataRef Scope,
                                   LLVMMetadataRef InlinedAt) {
   unwrap(Bref)->SetCurrentDebugLocation(
@@ -58,15 +71,6 @@ void LLVMGoSetCurrentDebugLocation(LLVMBuilderRef Bref, unsigned Line,
                     InlinedAt ? unwrap<MDNode>(InlinedAt) : nullptr));
 }
 
-LLVMDebugLocMetadata LLVMGoGetCurrentDebugLocation(LLVMBuilderRef Bref) {
-  const auto& Loc = unwrap(Bref)->getCurrentDebugLocation();
-  const auto* InlinedAt = Loc.getInlinedAt();
-  const LLVMDebugLocMetadata md{
-    Loc.getLine(),
-    Loc.getCol(),
-    wrap(Loc.getScope()),
-    InlinedAt == nullptr ? nullptr : wrap(InlinedAt->getRawInlinedAt()),
-  };
-  return md;
+void LLVMSetSubprogram(LLVMValueRef Func, LLVMMetadataRef SP) {
+  unwrap<Function>(Func)->setSubprogram(unwrap<DISubprogram>(SP));
 }
-

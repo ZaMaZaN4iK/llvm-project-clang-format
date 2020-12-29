@@ -1,12 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-// NOTE: Older versions of clang have a bug where they fail to evaluate
+// NOTE: Older versions of clang have a bug where they fail to evalute
 // string_view::at as a constant expression.
 // XFAIL: clang-3.4, clang-3.3
 
@@ -31,12 +32,12 @@ void test ( const CharT *s, size_t len ) {
     }
 
 #ifndef TEST_HAS_NO_EXCEPTIONS
-    try { (void)sv.at(len); } catch ( const std::out_of_range & ) { return ; }
+    try { sv.at(len); } catch ( const std::out_of_range & ) { return ; }
     assert ( false );
 #endif
 }
 
-int main(int, char**) {
+int main () {
     test ( "ABCDE", 5 );
     test ( "a", 1 );
 
@@ -59,6 +60,4 @@ int main(int, char**) {
     static_assert ( sv.at(1) == 'B', "" );
     }
 #endif
-
-  return 0;
 }

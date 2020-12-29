@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -47,7 +48,7 @@ struct Nasty
 
 int Nasty::counter_ = 0;
 
-int main(int, char**)
+int main()
 {
     {
     const int N = 5;
@@ -70,7 +71,7 @@ int main(int, char**)
     std::uninitialized_copy(b, b+2, bp);
     for (int i = 0; i < 2; ++i)
         assert(bp[i].data_ == 1);
-    assert(B::population_ == N + 2);
+	assert(B::population_ == N + 2);
     }
 
     {
@@ -85,6 +86,4 @@ int main(int, char**)
         }
     }
 
-
-  return 0;
 }

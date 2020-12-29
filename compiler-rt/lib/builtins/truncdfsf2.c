@@ -1,8 +1,9 @@
 //===-- lib/truncdfsf2.c - double -> single conversion ------------*- C -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,12 +11,8 @@
 #define DST_SINGLE
 #include "fp_trunc_impl.inc"
 
-COMPILER_RT_ABI float __truncdfsf2(double a) { return __truncXfYf2__(a); }
+ARM_EABI_FNALIAS(d2f, truncdfsf2)
 
-#if defined(__ARM_EABI__)
-#if defined(COMPILER_RT_ARMHF_TARGET)
-AEABI_RTABI float __aeabi_d2f(double a) { return __truncdfsf2(a); }
-#else
-COMPILER_RT_ALIAS(__truncdfsf2, __aeabi_d2f)
-#endif
-#endif
+COMPILER_RT_ABI float __truncdfsf2(double a) {
+    return __truncXfYf2__(a);
+}

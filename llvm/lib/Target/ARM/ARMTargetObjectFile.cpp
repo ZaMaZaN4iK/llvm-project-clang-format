@@ -1,25 +1,23 @@
 //===-- llvm/Target/ARMTargetObjectFile.cpp - ARM Object Info Impl --------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "ARMTargetObjectFile.h"
-#include "ARMSubtarget.h"
 #include "ARMTargetMachine.h"
-#include "llvm/BinaryFormat/Dwarf.h"
-#include "llvm/BinaryFormat/ELF.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/IR/Mangler.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCSectionELF.h"
-#include "llvm/MC/MCTargetOptions.h"
-#include "llvm/MC/SectionKind.h"
-#include "llvm/Target/TargetMachine.h"
-#include <cassert>
-
+#include "llvm/Support/Dwarf.h"
+#include "llvm/Support/ELF.h"
+#include "llvm/Target/TargetLowering.h"
 using namespace llvm;
 using namespace dwarf;
 
@@ -29,10 +27,9 @@ using namespace dwarf;
 
 void ARMElfTargetObjectFile::Initialize(MCContext &Ctx,
                                         const TargetMachine &TM) {
-  const ARMBaseTargetMachine &ARM_TM = static_cast<const ARMBaseTargetMachine &>(TM);
-  bool isAAPCS_ABI = ARM_TM.TargetABI == ARMBaseTargetMachine::ARMABI::ARM_ABI_AAPCS;
-  bool genExecuteOnly =
-      ARM_TM.getMCSubtargetInfo()->hasFeature(ARM::FeatureExecuteOnly);
+  const ARMTargetMachine &ARM_TM = static_cast<const ARMTargetMachine &>(TM);
+  bool isAAPCS_ABI = ARM_TM.TargetABI == ARMTargetMachine::ARMABI::ARM_ABI_AAPCS;
+  genExecuteOnly = ARM_TM.getSubtargetImpl()->genExecuteOnly();
 
   TargetLoweringObjectFileELF::Initialize(Ctx, TM);
   InitializeELF(isAAPCS_ABI);
@@ -41,11 +38,13 @@ void ARMElfTargetObjectFile::Initialize(MCContext &Ctx,
     LSDASection = nullptr;
   }
 
+  AttributesSection =
+      getContext().getELFSection(".ARM.attributes", ELF::SHT_ARM_ATTRIBUTES, 0);
+
   // Make code section unreadable when in execute-only mode
   if (genExecuteOnly) {
-    unsigned Type = ELF::SHT_PROGBITS;
-    unsigned Flags =
-        ELF::SHF_EXECINSTR | ELF::SHF_ALLOC | ELF::SHF_ARM_PURECODE;
+    unsigned  Type = ELF::SHT_PROGBITS;
+    unsigned Flags = ELF::SHF_EXECINSTR | ELF::SHF_ALLOC | ELF::SHF_ARM_PURECODE;
     // Since we cannot modify flags for an existing section, we create a new
     // section with the right flags, and use 0 as the unique ID for
     // execute-only text
@@ -72,27 +71,21 @@ getDebugThreadLocalSymbol(const MCSymbol *Sym) const {
                                  getContext());
 }
 
-static bool isExecuteOnlyFunction(const GlobalObject *GO, SectionKind SK,
-                                  const TargetMachine &TM) {
-  if (const Function *F = dyn_cast<Function>(GO))
-    if (TM.getSubtarget<ARMSubtarget>(*F).genExecuteOnly() && SK.isText())
-      return true;
-  return false;
-}
-
-MCSection *ARMElfTargetObjectFile::getExplicitSectionGlobal(
-    const GlobalObject *GO, SectionKind SK, const TargetMachine &TM) const {
+MCSection *
+ARMElfTargetObjectFile::getExplicitSectionGlobal(const GlobalObject *GO,
+                                                 SectionKind SK, const TargetMachine &TM) const {
   // Set execute-only access for the explicit section
-  if (isExecuteOnlyFunction(GO, SK, TM))
+  if (genExecuteOnly && SK.isText())
     SK = SectionKind::getExecuteOnly();
 
   return TargetLoweringObjectFileELF::getExplicitSectionGlobal(GO, SK, TM);
 }
 
-MCSection *ARMElfTargetObjectFile::SelectSectionForGlobal(
-    const GlobalObject *GO, SectionKind SK, const TargetMachine &TM) const {
+MCSection *
+ARMElfTargetObjectFile::SelectSectionForGlobal(const GlobalObject *GO,
+                                               SectionKind SK, const TargetMachine &TM) const {
   // Place the global in the execute-only text section
-  if (isExecuteOnlyFunction(GO, SK, TM))
+  if (genExecuteOnly && SK.isText())
     SK = SectionKind::getExecuteOnly();
 
   return TargetLoweringObjectFileELF::SelectSectionForGlobal(GO, SK, TM);

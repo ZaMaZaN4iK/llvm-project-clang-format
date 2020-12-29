@@ -1,14 +1,15 @@
 //===------------------------- cxa_exception.cpp --------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
 //
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
+//  
 //  This file implements the "Exception Handling APIs"
-//  https://itanium-cxx-abi.github.io/cxx-abi/abi-eh.html
+//  http://mentorembedded.github.io/cxx-abi/abi-eh.html
 //  http://www.intel.com/design/itanium/downloads/245358.htm
-//
+//  
 //===----------------------------------------------------------------------===//
 
 #include <assert.h>
@@ -17,20 +18,11 @@
 #include <typeinfo>
 
 #include "__cxxabi_config.h"
-#include "cxa_exception.h"
-#include "cxa_handlers.h"
+#include "config.h"
+#include "cxa_exception.hpp"
+#include "cxa_handlers.hpp"
 #include "private_typeinfo.h"
 #include "unwind.h"
-
-#if defined(__SEH__) && !defined(__USING_SJLJ_EXCEPTIONS__)
-#include <windows.h>
-#include <winnt.h>
-
-extern "C" EXCEPTION_DISPOSITION _GCC_specific_handler(PEXCEPTION_RECORD,
-                                                       void *, PCONTEXT,
-                                                       PDISPATCHER_CONTEXT,
-                                                       _Unwind_Personality_Fn);
-#endif
 
 /*
     Exception Header Layout:
@@ -188,8 +180,8 @@ enum
     DW_EH_PE_omit     = 0xFF
 };
 
-/// Read a uleb128 encoded value and advance pointer
-/// See Variable Length Data Appendix C in:
+/// Read a uleb128 encoded value and advance pointer 
+/// See Variable Length Data Appendix C in: 
 /// @link http://dwarfstd.org/Dwarf4.pdf @unlink
 /// @param data reference variable holding memory pointer to decode from
 /// @returns decoded value
@@ -211,8 +203,8 @@ readULEB128(const uint8_t** data)
     return result;
 }
 
-/// Read a sleb128 encoded value and advance pointer
-/// See Variable Length Data Appendix C in:
+/// Read a sleb128 encoded value and advance pointer 
+/// See Variable Length Data Appendix C in: 
 /// @link http://dwarfstd.org/Dwarf4.pdf @unlink
 /// @param data reference variable holding memory pointer to decode from
 /// @returns decoded value
@@ -236,8 +228,8 @@ readSLEB128(const uint8_t** data)
     return static_cast<intptr_t>(result);
 }
 
-/// Read a pointer encoded value and advance pointer
-/// See Variable Length Data in:
+/// Read a pointer encoded value and advance pointer 
+/// See Variable Length Data in: 
 /// @link http://dwarfstd.org/Dwarf3.pdf @unlink
 /// @param data reference variable holding memory pointer to decode from
 /// @param encoding dwarf encoding type
@@ -247,10 +239,10 @@ uintptr_t
 readEncodedPointer(const uint8_t** data, uint8_t encoding)
 {
     uintptr_t result = 0;
-    if (encoding == DW_EH_PE_omit)
+    if (encoding == DW_EH_PE_omit) 
         return result;
     const uint8_t* p = *data;
-    // first get value
+    // first get value 
     switch (encoding & 0x0F)
     {
     case DW_EH_PE_absptr:
@@ -281,15 +273,15 @@ readEncodedPointer(const uint8_t** data, uint8_t encoding)
         result = readPointerHelper<int64_t>(p);
         break;
     default:
-        // not supported
+        // not supported 
         abort();
         break;
     }
-    // then add relative offset
+    // then add relative offset 
     switch (encoding & 0x70)
     {
     case DW_EH_PE_absptr:
-        // do nothing
+        // do nothing 
         break;
     case DW_EH_PE_pcrel:
         if (result)
@@ -300,11 +292,11 @@ readEncodedPointer(const uint8_t** data, uint8_t encoding)
     case DW_EH_PE_funcrel:
     case DW_EH_PE_aligned:
     default:
-        // not supported
+        // not supported 
         abort();
         break;
     }
-    // then apply indirection
+    // then apply indirection 
     if (result && (encoding & DW_EH_PE_indirect))
         result = *((uintptr_t*)result);
     *data = p;
@@ -325,7 +317,7 @@ call_terminate(bool native_exception, _Unwind_Exception* unwind_exception)
     std::terminate();
 }
 
-#if defined(_LIBCXXABI_ARM_EHABI)
+#if LIBCXXABI_ARM_EHABI
 static const void* read_target2_value(const void* ptr)
 {
     uintptr_t offset = *reinterpret_cast<const uintptr_t*>(ptr);
@@ -336,7 +328,7 @@ static const void* read_target2_value(const void* ptr)
     // deferred to the linker. For bare-metal they turn into absolute
     // relocations. For linux they turn into GOT-REL relocations."
     // https://gcc.gnu.org/ml/gcc-patches/2009-08/msg00264.html
-#if defined(LIBCXXABI_BAREMETAL)
+#if LIBCXXABI_BAREMETAL
     return reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(ptr) +
                                          offset);
 #else
@@ -366,7 +358,7 @@ get_shim_type_info(uint64_t ttypeIndex, const uint8_t* classInfo,
     return reinterpret_cast<const __shim_type_info *>(
         read_target2_value(ttypePtr));
 }
-#else // !defined(_LIBCXXABI_ARM_EHABI)
+#else // !LIBCXXABI_ARM_EHABI
 static
 const __shim_type_info*
 get_shim_type_info(uint64_t ttypeIndex, const uint8_t* classInfo,
@@ -402,7 +394,7 @@ get_shim_type_info(uint64_t ttypeIndex, const uint8_t* classInfo,
     classInfo -= ttypeIndex;
     return (const __shim_type_info*)readEncodedPointer(&classInfo, ttypeEncoding);
 }
-#endif // !defined(_LIBCXXABI_ARM_EHABI)
+#endif // !LIBCXXABI_ARM_EHABI
 
 /*
     This is checking a thrown exception type, excpType, against a possibly empty
@@ -413,7 +405,7 @@ get_shim_type_info(uint64_t ttypeIndex, const uint8_t* classInfo,
     the list will catch a excpType.  If any catchType in the list can catch an
     excpType, then this exception spec does not catch the excpType.
 */
-#if defined(_LIBCXXABI_ARM_EHABI)
+#if LIBCXXABI_ARM_EHABI
 static
 bool
 exception_spec_can_catch(int64_t specIndex, const uint8_t* classInfo,
@@ -501,7 +493,7 @@ get_thrown_object_ptr(_Unwind_Exception* unwind_exception)
     // Even for foreign exceptions, the exception object is *probably* at unwind_exception + 1
     //    Regardless, this library is prohibited from touching a foreign exception
     void* adjustedPtr = unwind_exception + 1;
-    if (__getExceptionClass(unwind_exception) == kOurDependentExceptionClass)
+    if (unwind_exception->exception_class == kOurDependentExceptionClass)
         adjustedPtr = ((__cxa_dependent_exception*)adjustedPtr - 1)->primaryException;
     return adjustedPtr;
 }
@@ -613,7 +605,7 @@ static void scan_eh_tab(scan_results &results, _Unwind_Action actions,
     // Get the current instruction pointer and offset it before next
     // instruction in the current frame which threw the exception.
     uintptr_t ip = _Unwind_GetIP(context) - 1;
-    // Get beginning current frame's code (as defined by the
+    // Get beginning current frame's code (as defined by the 
     // emitted dwarf code)
     uintptr_t funcStart = _Unwind_GetRegionStart(context);
 #ifdef __USING_SJLJ_EXCEPTIONS__
@@ -646,8 +638,8 @@ static void scan_eh_tab(scan_results &results, _Unwind_Action actions,
         uintptr_t classInfoOffset = readULEB128(&lsda);
         classInfo = lsda + classInfoOffset;
     }
-    // Walk call-site table looking for range that
-    // includes current PC.
+    // Walk call-site table looking for range that 
+    // includes current PC. 
     uint8_t callSiteEncoding = *lsda++;
 #ifdef __USING_SJLJ_EXCEPTIONS__
     (void)callSiteEncoding;  // When using SjLj exceptions, callSiteEncoding is never used
@@ -928,13 +920,13 @@ _UA_CLEANUP_PHASE
         else
             Recover state from header
         Transfer control to landing pad.  return _URC_INSTALL_CONTEXT
-
+    
     Else
 
         This branch handles both normal C++ non-catching handlers (cleanups)
-          and forced unwinding.
+          and forced unwinding.    
         Scan for anything that can not stop unwinding:
-
+    
             1.  A cleanup.
 
         If a cleanup is found
@@ -942,16 +934,12 @@ _UA_CLEANUP_PHASE
         Else a cleanup is not found: return _URC_CONTINUE_UNWIND
 */
 
-#if !defined(_LIBCXXABI_ARM_EHABI)
-#if defined(__SEH__) && !defined(__USING_SJLJ_EXCEPTIONS__)
-static _Unwind_Reason_Code __gxx_personality_imp
-#else
+#if !LIBCXXABI_ARM_EHABI
 _LIBCXXABI_FUNC_VIS _Unwind_Reason_Code
 #ifdef __USING_SJLJ_EXCEPTIONS__
 __gxx_personality_sj0
 #else
 __gxx_personality_v0
-#endif
 #endif
                     (int version, _Unwind_Action actions, uint64_t exceptionClass,
                      _Unwind_Exception* unwind_exception, _Unwind_Context* context)
@@ -1035,17 +1023,6 @@ __gxx_personality_v0
     // We were called improperly: neither a phase 1 or phase 2 search
     return _URC_FATAL_PHASE1_ERROR;
 }
-
-#if defined(__SEH__) && !defined(__USING_SJLJ_EXCEPTIONS__)
-extern "C" _LIBCXXABI_FUNC_VIS EXCEPTION_DISPOSITION
-__gxx_personality_seh0(PEXCEPTION_RECORD ms_exc, void *this_frame,
-                       PCONTEXT ms_orig_context, PDISPATCHER_CONTEXT ms_disp)
-{
-  return _GCC_specific_handler(ms_exc, this_frame, ms_orig_context, ms_disp,
-                               __gxx_personality_imp);
-}
-#endif
-
 #else
 
 extern "C" _Unwind_Reason_Code __gnu_unwind_frame(_Unwind_Exception*,
@@ -1097,7 +1074,8 @@ __gxx_personality_v0(_Unwind_State state,
     if (unwind_exception == 0 || context == 0)
         return _URC_FATAL_PHASE1_ERROR;
 
-    bool native_exception = __isOurExceptionClass(unwind_exception);
+    bool native_exception = (unwind_exception->exception_class & get_vendor_and_language) ==
+                            (kOurExceptionClass & get_vendor_and_language);
 
 #if !defined(LIBCXXABI_USE_LLVM_UNWINDER)
     // Copy the address of _Unwind_Control_Block to r12 so that
@@ -1201,7 +1179,9 @@ __cxa_call_unexpected(void* arg)
     if (unwind_exception == 0)
         call_terminate(false, unwind_exception);
     __cxa_begin_catch(unwind_exception);
-    bool native_old_exception = __isOurExceptionClass(unwind_exception);
+    bool native_old_exception =
+        (unwind_exception->exception_class & get_vendor_and_language) ==
+        (kOurExceptionClass                & get_vendor_and_language);
     std::unexpected_handler u_handler;
     std::terminate_handler t_handler;
     __cxa_exception* old_exception_header = 0;
@@ -1214,7 +1194,7 @@ __cxa_call_unexpected(void* arg)
         u_handler = old_exception_header->unexpectedHandler;
         // If std::__unexpected(u_handler) rethrows the same exception,
         //   these values get overwritten by the rethrow.  So save them now:
-#if defined(_LIBCXXABI_ARM_EHABI)
+#if LIBCXXABI_ARM_EHABI
         ttypeIndex = (int64_t)(int32_t)unwind_exception->barrier_cache.bitpattern[4];
         lsda = (const uint8_t*)unwind_exception->barrier_cache.bitpattern[2];
 #else
@@ -1263,14 +1243,16 @@ __cxa_call_unexpected(void* arg)
             if (new_exception_header == 0)
                 // This shouldn't be able to happen!
                 std::__terminate(t_handler);
-            bool native_new_exception = __isOurExceptionClass(&new_exception_header->unwindHeader);
+            bool native_new_exception =
+                (new_exception_header->unwindHeader.exception_class & get_vendor_and_language) ==
+                                                (kOurExceptionClass & get_vendor_and_language);
             void* adjustedPtr;
             if (native_new_exception && (new_exception_header != old_exception_header))
             {
                 const __shim_type_info* excpType =
                     static_cast<const __shim_type_info*>(new_exception_header->exceptionType);
                 adjustedPtr =
-                    __getExceptionClass(&new_exception_header->unwindHeader) == kOurDependentExceptionClass ?
+                    new_exception_header->unwindHeader.exception_class == kOurDependentExceptionClass ?
                         ((__cxa_dependent_exception*)new_exception_header)->primaryException :
                         new_exception_header + 1;
                 if (!exception_spec_can_catch(ttypeIndex, classInfo, ttypeEncoding,

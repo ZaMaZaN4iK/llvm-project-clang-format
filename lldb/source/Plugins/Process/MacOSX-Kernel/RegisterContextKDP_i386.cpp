@@ -1,11 +1,16 @@
 //===-- RegisterContextKDP_i386.cpp -----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "RegisterContextKDP_i386.h"
 #include "ProcessKDP.h"
 #include "ThreadKDP.h"
@@ -23,7 +28,7 @@ RegisterContextKDP_i386::~RegisterContextKDP_i386() {}
 int RegisterContextKDP_i386::DoReadGPR(lldb::tid_t tid, int flavor, GPR &gpr) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestReadRegisters(tid, GPRRegSet, &gpr, sizeof(gpr),
@@ -38,7 +43,7 @@ int RegisterContextKDP_i386::DoReadGPR(lldb::tid_t tid, int flavor, GPR &gpr) {
 int RegisterContextKDP_i386::DoReadFPU(lldb::tid_t tid, int flavor, FPU &fpu) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestReadRegisters(tid, FPURegSet, &fpu, sizeof(fpu),
@@ -53,7 +58,7 @@ int RegisterContextKDP_i386::DoReadFPU(lldb::tid_t tid, int flavor, FPU &fpu) {
 int RegisterContextKDP_i386::DoReadEXC(lldb::tid_t tid, int flavor, EXC &exc) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestReadRegisters(tid, EXCRegSet, &exc, sizeof(exc),
@@ -69,7 +74,7 @@ int RegisterContextKDP_i386::DoWriteGPR(lldb::tid_t tid, int flavor,
                                         const GPR &gpr) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestWriteRegisters(tid, GPRRegSet, &gpr, sizeof(gpr),
@@ -85,7 +90,7 @@ int RegisterContextKDP_i386::DoWriteFPU(lldb::tid_t tid, int flavor,
                                         const FPU &fpu) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestWriteRegisters(tid, FPURegSet, &fpu, sizeof(fpu),
@@ -101,7 +106,7 @@ int RegisterContextKDP_i386::DoWriteEXC(lldb::tid_t tid, int flavor,
                                         const EXC &exc) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestWriteRegisters(tid, EXCRegSet, &exc, sizeof(exc),

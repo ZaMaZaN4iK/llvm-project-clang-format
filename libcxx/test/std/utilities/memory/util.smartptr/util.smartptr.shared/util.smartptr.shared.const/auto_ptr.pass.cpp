@@ -1,17 +1,16 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // <memory>
 
 // template<class Y> explicit shared_ptr(auto_ptr<Y>&& r);
-// REQUIRES: c++98 || c++03 || c++11 || c++14
 
-#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
 
 #include <memory>
 #include <new>
@@ -19,7 +18,7 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "count_new.h"
+#include "count_new.hpp"
 
 struct B
 {
@@ -44,7 +43,7 @@ struct A
 
 int A::count = 0;
 
-int main(int, char**)
+int main()
 {
     {
         std::auto_ptr<A> ptr(new A);
@@ -86,7 +85,6 @@ int main(int, char**)
             // Without rvalue references, ptr got copied into
             // the shared_ptr destructor and the copy was
             // destroyed during unwinding.
-            (void) raw_ptr; // silence 'unused variable' warning
             assert(A::count == 0);
             assert(B::count == 0);
 #endif
@@ -95,6 +93,4 @@ int main(int, char**)
     assert(A::count == 0);
     assert(globalMemCounter.checkOutstandingNewEq(0));
 #endif // !defined(TEST_HAS_NO_EXCEPTIONS) && !defined(DISABLE_NEW_COUNT)
-
-  return 0;
 }

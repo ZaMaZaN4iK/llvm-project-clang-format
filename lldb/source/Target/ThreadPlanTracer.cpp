@@ -1,17 +1,26 @@
 //===-- ThreadPlanTracer.cpp ------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
 #include <cstring>
 
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/ArchSpec.h"
+#include "lldb/Core/DataBufferHeap.h"
+#include "lldb/Core/DataExtractor.h"
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/Disassembler.h"
-#include "lldb/Core/DumpRegisterValue.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Core/Module.h"
+#include "lldb/Core/State.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Core/Value.h"
 #include "lldb/Symbol/TypeList.h"
@@ -23,10 +32,6 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadPlan.h"
-#include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/State.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -46,7 +51,7 @@ Stream *ThreadPlanTracer::GetLogStream() {
   else {
     TargetSP target_sp(m_thread.CalculateTarget());
     if (target_sp)
-      return &(target_sp->GetDebugger().GetOutputStream());
+      return target_sp->GetDebugger().GetOutputFile().get();
   }
   return nullptr;
 }
@@ -93,20 +98,15 @@ Disassembler *ThreadPlanAssemblyTracer::GetDisassembler() {
 
 TypeFromUser ThreadPlanAssemblyTracer::GetIntPointerType() {
   if (!m_intptr_type.IsValid()) {
-    if (auto target_sp = m_thread.CalculateTarget()) {
-      auto type_system_or_err =
-          target_sp->GetScratchTypeSystemForLanguage(eLanguageTypeC);
-      if (auto err = type_system_or_err.takeError()) {
-        LLDB_LOG_ERROR(
-            lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_TYPES),
-            std::move(err),
-            "Unable to get integer pointer type from TypeSystem");
-      } else {
-        m_intptr_type = TypeFromUser(
-            type_system_or_err->GetBuiltinTypeForEncodingAndBitSize(
+    TargetSP target_sp(m_thread.CalculateTarget());
+    if (target_sp) {
+      TypeSystem *type_system =
+          target_sp->GetScratchTypeSystemForLanguage(nullptr, eLanguageTypeC);
+      if (type_system)
+        m_intptr_type =
+            TypeFromUser(type_system->GetBuiltinTypeForEncodingAndBitSize(
                 eEncodingUint,
                 target_sp->GetArchitecture().GetAddressByteSize() * 8));
-      }
     }
   }
   return m_intptr_type;
@@ -115,6 +115,10 @@ TypeFromUser ThreadPlanAssemblyTracer::GetIntPointerType() {
 ThreadPlanAssemblyTracer::~ThreadPlanAssemblyTracer() = default;
 
 void ThreadPlanAssemblyTracer::TracingStarted() {
+  RegisterContext *reg_ctx = m_thread.GetRegisterContext().get();
+
+  if (m_register_values.empty())
+    m_register_values.resize(reg_ctx->GetRegisterCount());
 }
 
 void ThreadPlanAssemblyTracer::TracingEnded() { m_register_values.clear(); }
@@ -141,7 +145,7 @@ void ThreadPlanAssemblyTracer::Log() {
 
   Disassembler *disassembler = GetDisassembler();
   if (disassembler) {
-    Status err;
+    Error err;
     process_sp->ReadMemory(pc, buffer, sizeof(buffer), err);
 
     if (err.Success()) {
@@ -188,6 +192,8 @@ void ThreadPlanAssemblyTracer::Log() {
     for (int arg_index = 0; arg_index < num_args; ++arg_index) {
       Value value;
       value.SetValueType(Value::eValueTypeScalar);
+      //            value.SetContext (Value::eContextTypeClangType,
+      //            intptr_type.GetOpaqueQualType());
       value.SetCompilerType(intptr_type);
       value_list.PushValue(value);
     }
@@ -204,11 +210,6 @@ void ThreadPlanAssemblyTracer::Log() {
     }
   }
 
-  if (m_register_values.empty()) {
-    RegisterContext *reg_ctx = m_thread.GetRegisterContext().get();
-    m_register_values.resize(reg_ctx->GetRegisterCount());
-  }
-
   RegisterValue reg_value;
   for (uint32_t reg_num = 0, num_registers = reg_ctx->GetRegisterCount();
        reg_num < num_registers; ++reg_num) {
@@ -219,8 +220,7 @@ void ThreadPlanAssemblyTracer::Log() {
           reg_value != m_register_values[reg_num]) {
         if (reg_value.GetType() != RegisterValue::eTypeInvalid) {
           stream->PutCString("\n\t");
-          DumpRegisterValue(reg_value, stream, reg_info, true, false,
-                            eFormatDefault);
+          reg_value.Dump(stream, reg_info, true, false, eFormatDefault);
         }
       }
       m_register_values[reg_num] = reg_value;

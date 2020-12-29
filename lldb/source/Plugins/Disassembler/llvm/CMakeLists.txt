@@ -1,14 +1,3 @@
-add_lldb_library(lldbPluginDisassemblerLLVM PLUGIN
+add_lldb_library(lldbPluginDisassemblerLLVM
   DisassemblerLLVMC.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbSymbol
-    lldbTarget
-  LINK_COMPONENTS
-    ${LLVM_TARGETS_TO_BUILD}
-    MC
-    MCDisassembler
-    RuntimeDyld
-    Support
   )

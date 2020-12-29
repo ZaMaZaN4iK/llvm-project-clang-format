@@ -1,11 +1,3 @@
-add_lldb_library(lldbPluginABISysV_arm PLUGIN
+add_lldb_library(lldbPluginABISysV_arm
   ABISysV_arm.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbSymbol
-    lldbTarget
-    lldbPluginProcessUtility
-  LINK_COMPONENTS
-    Support
   )

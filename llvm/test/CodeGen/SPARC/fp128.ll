@@ -1,17 +1,8 @@
 ; RUN: llc < %s -march=sparc -mattr=hard-quad-float | FileCheck %s --check-prefix=CHECK --check-prefix=HARD --check-prefix=BE
 ; RUN: llc < %s -march=sparcel -mattr=hard-quad-float | FileCheck %s --check-prefix=CHECK --check-prefix=HARD --check-prefix=EL
-; RUN: llc < %s -march=sparc -mattr=-hard-quad-float -verify-machineinstrs | FileCheck %s --check-prefix=CHECK --check-prefix=SOFT --check-prefix=BE
+; RUN: llc < %s -march=sparc -mattr=-hard-quad-float | FileCheck %s --check-prefix=CHECK --check-prefix=SOFT --check-prefix=BE
 ; RUN: llc < %s -march=sparcel -mattr=-hard-quad-float | FileCheck %s --check-prefix=CHECK --check-prefix=SOFT --check-prefix=EL
 
-; XFAIL: *
-; This test currently fails with expensive checks enabled, for more details see
-; https://bugs.llvm.org/show_bug.cgi?id=44091.
-; *** Bad machine code: Expected a register operand. ***
-; - function:    f128_compare
-; - basic block: %bb.0 entry (0x63f4028)
-; - instruction: CMPrr killed %21:intregs, 0, implicit-def $icc
-; - operand 1:   0
-; NB: When this is fixed the verifier should not be run by default in the CL above.
 
 ; CHECK-LABEL: f128_ops:
 ; CHECK:      ldd
@@ -23,13 +14,9 @@
 ; HARD:       fmulq [[R4]], [[R5:.+]], [[R6:.+]]
 ; HARD:       fdivq [[R6]], [[R2]]
 ; SOFT:       call _Q_add
-; SOFT:       unimp 16
 ; SOFT:       call _Q_sub
-; SOFT:       unimp 16
 ; SOFT:       call _Q_mul
-; SOFT:       unimp 16
 ; SOFT:       call _Q_div
-; SOFT:       unimp 16
 ; CHECK:      std
 ; CHECK:      std
 
@@ -62,29 +49,6 @@ entry:
   ret void
 }
 
-; CHECK-LABEL: f128_spill_large:
-; CHECK:       sethi 4, %g1
-; CHECK:       sethi 4, %g1
-; CHECK-NEXT:  add %g1, %sp, %g1
-; CHECK-NEXT:  std %f{{.+}}, [%g1]
-; CHECK:       sethi 4, %g1
-; CHECK-NEXT:  add %g1, %sp, %g1
-; CHECK-NEXT:  std %f{{.+}}, [%g1+8]
-; CHECK:       sethi 4, %g1
-; CHECK-NEXT:  add %g1, %sp, %g1
-; CHECK-NEXT:  ldd [%g1], %f{{.+}}
-; CHECK:       sethi 4, %g1
-; CHECK-NEXT:  add %g1, %sp, %g1
-; CHECK-NEXT:  ldd [%g1+8], %f{{.+}}
-
-define void @f128_spill_large(<251 x fp128>* noalias sret %scalar.result, <251 x fp128>* byval %a) {
-entry:
-  %0 = load <251 x fp128>, <251 x fp128>* %a, align 8
-  call void asm sideeffect "", "~{f0},~{f1},~{f2},~{f3},~{f4},~{f5},~{f6},~{f7},~{f8},~{f9},~{f10},~{f11},~{f12},~{f13},~{f14},~{f15},~{f16},~{f17},~{f18},~{f19},~{f20},~{f21},~{f22},~{f23},~{f24},~{f25},~{f26},~{f27},~{f28},~{f29},~{f30},~{f31}"()
-  store <251 x fp128> %0, <251 x fp128>* %scalar.result, align 8
-  ret void
-}
-
 ; CHECK-LABEL: f128_compare:
 ; HARD:       fcmpq
 ; HARD-NEXT:  nop
@@ -105,11 +69,10 @@ entry:
 ; SOFT:       _Q_cmp
 ; SOFT:       cmp
 
-define i32 @f128_compare2(fp128* byval %f0) {
+define i32 @f128_compare2() {
 entry:
-  %0 = load fp128, fp128* %f0, align 8
-  %1 = fcmp ogt fp128 %0, 0xL00000000000000000000000000000000
-  br i1 %1, label %"5", label %"7"
+  %0 = fcmp ogt fp128 undef, 0xL00000000000000000000000000000000
+  br i1 %0, label %"5", label %"7"
 
 "5":                                              ; preds = %entry
   ret i32 0
@@ -138,7 +101,6 @@ declare fp128 @llvm.fabs.f128(fp128) nounwind readonly
 ; CHECK-LABEL: int_to_f128:
 ; HARD:       fitoq
 ; SOFT:       _Q_itoq
-; SOFT:       unimp 16
 
 define void @int_to_f128(fp128* noalias sret %scalar.result, i32 %i) {
 entry:
@@ -151,7 +113,6 @@ entry:
 ; CHECK:       ldub
 ; HARD:        faddq
 ; SOFT:       call _Q_add
-; SOFT:       unimp 16
 ; CHECK:       stb
 ; CHECK:       ret
 
@@ -167,7 +128,6 @@ entry:
 ; CHECK-LABEL: uint_to_f128:
 ; HARD:       fdtoq
 ; SOFT:       _Q_utoq
-; SOFT:       unimp 16
 
 define void @uint_to_f128(fp128* noalias sret %scalar.result, i32 %i) {
 entry:
@@ -199,10 +159,8 @@ entry:
 ; HARD-DAG:      fitoq
 ; HARD-DAG:      fqtoi
 ; SOFT-DAG:      call _Q_lltoq
-; SOFT-DAG:      unimp 16
 ; SOFT-DAG:      call _Q_qtoll
 ; SOFT-DAG:      call _Q_itoq
-; SOFT-DAG:      unimp 16
 ; SOFT-DAG:      call _Q_qtoi
 
 define void @test_itoq_qtoi(i64 %a, i32 %b, fp128* %c, fp128* %d, i64* %ptr0, fp128* %ptr1) {
@@ -227,7 +185,6 @@ entry:
 ; HARD-DAG:      fdtoq
 ; HARD-DAG:      fqtoi
 ; SOFT-DAG:      call _Q_utoq
-; SOFT-DAG:      unimp 16
 ; SOFT-DAG:      call _Q_qtou
 
 define void @test_utoq_qtou(i64 %a, i32 %b, fp128* %c, fp128* %d, i64* %ptr0, fp128* %ptr1) {

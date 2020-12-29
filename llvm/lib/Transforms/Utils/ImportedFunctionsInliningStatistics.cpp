@@ -1,8 +1,9 @@
 //===-- ImportedFunctionsInliningStats.cpp ----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 // Generating inliner statistics for imported functions, mostly useful for
@@ -25,8 +26,8 @@ ImportedFunctionsInliningStatistics::createInlineGraphNode(const Function &F) {
 
   auto &ValueLookup = NodesMap[F.getName()];
   if (!ValueLookup) {
-    ValueLookup = std::make_unique<InlineGraphNode>();
-    ValueLookup->Imported = F.hasMetadata("thinlto_src_module");
+    ValueLookup = llvm::make_unique<InlineGraphNode>();
+    ValueLookup->Imported = F.getMetadata("thinlto_src_module") != nullptr;
   }
   return *ValueLookup;
 }
@@ -61,10 +62,8 @@ void ImportedFunctionsInliningStatistics::recordInline(const Function &Caller,
 void ImportedFunctionsInliningStatistics::setModuleInfo(const Module &M) {
   ModuleName = M.getName();
   for (const auto &F : M.functions()) {
-    if (F.isDeclaration())
-      continue;
     AllFunctions++;
-    ImportedFunctions += int(F.hasMetadata("thinlto_src_module"));
+    ImportedFunctions += int(F.getMetadata("thinlto_src_module") != nullptr);
   }
 }
 static std::string getStatString(const char *Msg, int32_t Fraction, int32_t All,
@@ -160,7 +159,7 @@ void ImportedFunctionsInliningStatistics::dump(const bool Verbose) {
 
 void ImportedFunctionsInliningStatistics::calculateRealInlines() {
   // Removing duplicated Callers.
-  llvm::sort(NonImportedCallers);
+  std::sort(NonImportedCallers.begin(), NonImportedCallers.end());
   NonImportedCallers.erase(
       std::unique(NonImportedCallers.begin(), NonImportedCallers.end()),
       NonImportedCallers.end());
@@ -189,14 +188,16 @@ ImportedFunctionsInliningStatistics::getSortedNodes() {
   for (const NodesMapTy::value_type& Node : NodesMap)
     SortedNodes.push_back(&Node);
 
-  llvm::sort(SortedNodes, [&](const SortedNodesTy::value_type &Lhs,
-                              const SortedNodesTy::value_type &Rhs) {
-    if (Lhs->second->NumberOfInlines != Rhs->second->NumberOfInlines)
-      return Lhs->second->NumberOfInlines > Rhs->second->NumberOfInlines;
-    if (Lhs->second->NumberOfRealInlines != Rhs->second->NumberOfRealInlines)
-      return Lhs->second->NumberOfRealInlines >
-             Rhs->second->NumberOfRealInlines;
-    return Lhs->first() < Rhs->first();
-  });
+  std::sort(
+      SortedNodes.begin(), SortedNodes.end(),
+      [&](const SortedNodesTy::value_type &Lhs,
+          const SortedNodesTy::value_type &Rhs) {
+        if (Lhs->second->NumberOfInlines != Rhs->second->NumberOfInlines)
+          return Lhs->second->NumberOfInlines > Rhs->second->NumberOfInlines;
+        if (Lhs->second->NumberOfRealInlines != Rhs->second->NumberOfRealInlines)
+          return Lhs->second->NumberOfRealInlines >
+                 Rhs->second->NumberOfRealInlines;
+        return Lhs->first() < Rhs->first();
+      });
   return SortedNodes;
 }

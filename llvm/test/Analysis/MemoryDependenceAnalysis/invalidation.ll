@@ -1,16 +1,31 @@
 ; Test that memdep gets invalidated when the analyses it depends on are
 ; invalidated.
 ;
-; Check AA. AA is stateless, there's nothing to invalidate.
+; Check AA specifically.
 ; RUN: opt -disable-output -debug-pass-manager -aa-pipeline='basic-aa' %s 2>&1 \
 ; RUN:     -passes='require<memdep>,invalidate<aa>,gvn' \
 ; RUN:     | FileCheck %s --check-prefix=CHECK-AA-INVALIDATE
 ; CHECK-AA-INVALIDATE: Running pass: RequireAnalysisPass
 ; CHECK-AA-INVALIDATE: Running analysis: MemoryDependenceAnalysis
 ; CHECK-AA-INVALIDATE: Running pass: InvalidateAnalysisPass
-; CHECK-NOT-AA-INVALIDATE: Invalidating analysis: MemoryDependenceAnalysis
+; CHECK-AA-INVALIDATE: Invalidating analysis: AAManager
+; CHECK-AA-INVALIDATE: Invalidating analysis: MemoryDependenceAnalysis
 ; CHECK-AA-INVALIDATE: Running pass: GVN
-; CHECK-NOT-AA-INVALIDATE: Running analysis: MemoryDependenceAnalysis
+; CHECK-AA-INVALIDATE: Running analysis: MemoryDependenceAnalysis
+;
+; Check the assumptions analysis specifically.
+; FIXME: We don't have any test cases that actually fail if the assumption
+; cache becomes stale. This just tests what we believe to be correct.
+; RUN: opt -disable-output -debug-pass-manager %s 2>&1 \
+; RUN:     -passes='require<memdep>,invalidate<assumptions>,gvn' \
+; RUN:     | FileCheck %s --check-prefix=CHECK-ASSUMPTIONS-INVALIDATE
+; CHECK-ASSUMPTIONS-INVALIDATE: Running pass: RequireAnalysisPass
+; CHECK-ASSUMPTIONS-INVALIDATE: Running analysis: MemoryDependenceAnalysis
+; CHECK-ASSUMPTIONS-INVALIDATE: Running pass: InvalidateAnalysisPass
+; CHECK-ASSUMPTIONS-INVALIDATE: Invalidating analysis: AssumptionAnalysis
+; CHECK-ASSUMPTIONS-INVALIDATE: Invalidating analysis: MemoryDependenceAnalysis
+; CHECK-ASSUMPTIONS-INVALIDATE: Running pass: GVN
+; CHECK-ASSUMPTIONS-INVALIDATE: Running analysis: MemoryDependenceAnalysis
 ;
 ; Check domtree specifically.
 ; RUN: opt -disable-output -debug-pass-manager %s 2>&1 \

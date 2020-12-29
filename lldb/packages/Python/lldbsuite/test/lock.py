@@ -3,6 +3,7 @@ Interprocess mutex based on file locks
 """
 
 import fcntl
+import os
 
 
 class Lock:

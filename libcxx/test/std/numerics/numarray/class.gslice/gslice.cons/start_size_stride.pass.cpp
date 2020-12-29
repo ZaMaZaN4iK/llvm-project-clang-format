@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,9 +17,7 @@
 #include <valarray>
 #include <cassert>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     std::size_t a1[] = {1, 2, 3};
     std::size_t a2[] = {4, 5, 6};
@@ -36,6 +35,4 @@ int main(int, char**)
     assert(r[0] == 4);
     assert(r[1] == 5);
     assert(r[2] == 6);
-
-  return 0;
 }

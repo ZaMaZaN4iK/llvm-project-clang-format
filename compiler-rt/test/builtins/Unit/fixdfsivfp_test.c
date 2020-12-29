@@ -1,11 +1,9 @@
-// RUN: %clang_builtins %s %librt -o %t && %run %t
-// REQUIRES: librt_has_fixdfsivfp
-
 //===-- fixdfsivfp_test.c - Test __fixdfsivfp -----------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,7 +18,7 @@
 
 extern int __fixdfsivfp(double a);
 
-#if __arm__ && __VFP_FP__
+#if __arm__
 int test__fixdfsivfp(double a)
 {
 	int actual = __fixdfsivfp(a);
@@ -34,7 +32,7 @@ int test__fixdfsivfp(double a)
 
 int main()
 {
-#if __arm__ && __VFP_FP__
+#if __arm__
     if (test__fixdfsivfp(0.0))
         return 1;
     if (test__fixdfsivfp(1.0))

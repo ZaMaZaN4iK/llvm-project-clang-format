@@ -7,8 +7,6 @@ The code for sending of the directory is copied from
 http://docs.python.org/library/email-examples.html.
 """
 
-from __future__ import print_function
-
 import os
 import sys
 import shutil
@@ -35,7 +33,7 @@ def runTestsuite(testDir, sessDir, envs=None):
         list = env.split('=')
         var = list[0].strip()
         val = list[1].strip()
-        print(var + "=" + val)
+        print var + "=" + val
         os.environ[var] = val
 
     import shlex

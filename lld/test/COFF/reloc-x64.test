@@ -1,4 +1,3 @@
-# REQUIRES: x86
 # RUN: yaml2obj < %s > %t.obj
 # RUN: lld-link /out:%t.exe /entry:main %t.obj
 # RUN: llvm-objdump -d %t.exe | FileCheck %s

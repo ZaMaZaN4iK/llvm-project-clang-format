@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,7 +13,6 @@
 #include <vector>
 #include <cassert>
 
-#include "test_macros.h"
 #include "asan_testing.h"
 
 class X {
@@ -50,7 +50,6 @@ public:
             throw 0;
         }
     }
-    ThrowOnCopy& operator=(ThrowOnCopy const&) = default;
 
     bool should_throw;
 };
@@ -71,7 +70,7 @@ void test_push_back() {
 }
 
 void test_emplace_back() {
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_VARIADICS
   std::vector<X> v;
   v.reserve(2);
   v.push_back(X(2));
@@ -84,7 +83,7 @@ void test_emplace_back() {
   }
   assert(v.size() == 1);
   assert(is_contiguous_container_asan_correct(v));
-#endif
+#endif // _LIBCPP_HAS_NO_VARIADICS
 }
 
 void test_insert_range() {
@@ -122,7 +121,7 @@ void test_insert() {
 }
 
 void test_emplace() {
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_VARIADICS
   std::vector<X> v;
   v.reserve(3);
   v.insert(v.end(), X(1));
@@ -136,7 +135,7 @@ void test_emplace() {
   }
   assert(v.size() == 2);
   assert(is_contiguous_container_asan_correct(v));
-#endif
+#endif // _LIBCPP_HAS_NO_VARIADICS
 }
 
 void test_insert_range2() {
@@ -220,7 +219,7 @@ void test_resize_param() {
   assert(is_contiguous_container_asan_correct(v));
 }
 
-int main(int, char**) {
+int main() {
   test_push_back();
   test_emplace_back();
   test_insert_range();
@@ -231,6 +230,4 @@ int main(int, char**) {
   test_insert_n2();
   test_resize();
   test_resize_param();
-
-  return 0;
 }

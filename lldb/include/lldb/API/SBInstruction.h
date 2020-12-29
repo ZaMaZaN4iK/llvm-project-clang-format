@@ -1,8 +1,9 @@
 //===-- SBInstruction.h -----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,7 +16,8 @@
 #include <stdio.h>
 
 // There's a lot to be fixed here, but need to wait for underlying insn
-// implementation to be revised & settle down first.
+// implementation
+// to be revised & settle down first.
 
 class InstructionImpl;
 
@@ -31,11 +33,11 @@ public:
 
   ~SBInstruction();
 
-  explicit operator bool() const;
-
   bool IsValid();
 
   SBAddress GetAddress();
+
+  lldb::AddressClass GetAddressClass();
 
   const char *GetMnemonic(lldb::SBTarget target);
 
@@ -51,13 +53,7 @@ public:
 
   bool HasDelaySlot();
 
-  bool CanSetBreakpoint();
-
   void Print(FILE *out);
-
-  void Print(SBFile out);
-
-  void Print(FileSP out);
 
   bool GetDescription(lldb::SBStream &description);
 

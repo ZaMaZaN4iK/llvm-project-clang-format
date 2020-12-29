@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,8 +17,6 @@
 #include <memory>
 #include <type_traits>
 #include <cassert>
-
-#include "test_macros.h"
 
 struct B
 {
@@ -56,7 +55,7 @@ int C::count = 0;
 template <class T>
 std::weak_ptr<T> source (std::shared_ptr<T> p) { return std::weak_ptr<T>(p); }
 
-int main(int, char**)
+int main()
 {
     static_assert(( std::is_convertible<std::weak_ptr<A>, std::weak_ptr<B> >::value), "");
     static_assert((!std::is_convertible<std::weak_ptr<B>, std::weak_ptr<A> >::value), "");
@@ -106,6 +105,4 @@ int main(int, char**)
     }
     assert(B::count == 0);
     assert(A::count == 0);
-
-  return 0;
 }

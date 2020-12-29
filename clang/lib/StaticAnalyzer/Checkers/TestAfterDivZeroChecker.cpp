@@ -1,8 +1,9 @@
 //== TestAfterDivZeroChecker.cpp - Test after division by zero checker --*--==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
@@ -54,7 +55,7 @@ public:
   }
 };
 
-class DivisionBRVisitor : public BugReporterVisitor {
+class DivisionBRVisitor : public BugReporterVisitorImpl<DivisionBRVisitor> {
 private:
   SymbolRef ZeroSymbol;
   const StackFrameContext *SFC;
@@ -69,9 +70,10 @@ public:
     ID.Add(SFC);
   }
 
-  PathDiagnosticPieceRef VisitNode(const ExplodedNode *Succ,
-                                   BugReporterContext &BRC,
-                                   PathSensitiveBugReport &BR) override;
+  std::shared_ptr<PathDiagnosticPiece> VisitNode(const ExplodedNode *Succ,
+                                                 const ExplodedNode *Pred,
+                                                 BugReporterContext &BRC,
+                                                 BugReport &BR) override;
 };
 
 class TestAfterDivZeroChecker
@@ -83,7 +85,7 @@ class TestAfterDivZeroChecker
 public:
   void checkPreStmt(const BinaryOperator *B, CheckerContext &C) const;
   void checkBranchCondition(const Stmt *Condition, CheckerContext &C) const;
-  void checkEndFunction(const ReturnStmt *RS, CheckerContext &C) const;
+  void checkEndFunction(CheckerContext &C) const;
   void setDivZeroMap(SVal Var, CheckerContext &C) const;
   bool hasDivZeroMap(SVal Var, const CheckerContext &C) const;
   bool isZero(SVal S, CheckerContext &C) const;
@@ -92,9 +94,9 @@ public:
 
 REGISTER_SET_WITH_PROGRAMSTATE(DivZeroMap, ZeroState)
 
-PathDiagnosticPieceRef
-DivisionBRVisitor::VisitNode(const ExplodedNode *Succ, BugReporterContext &BRC,
-                             PathSensitiveBugReport &BR) {
+std::shared_ptr<PathDiagnosticPiece>
+DivisionBRVisitor::VisitNode(const ExplodedNode *Succ, const ExplodedNode *Pred,
+                             BugReporterContext &BRC, BugReport &BR) {
   if (Satisfied)
     return nullptr;
 
@@ -112,7 +114,8 @@ DivisionBRVisitor::VisitNode(const ExplodedNode *Succ, BugReporterContext &BRC,
   if (!E)
     return nullptr;
 
-  SVal S = Succ->getSVal(E);
+  ProgramStateRef State = Succ->getState();
+  SVal S = State->getSVal(E, Succ->getLocationContext());
   if (ZeroSymbol == S.getAsSymbol() && SFC == Succ->getStackFrame()) {
     Satisfied = true;
 
@@ -167,19 +170,18 @@ void TestAfterDivZeroChecker::reportBug(SVal Val, CheckerContext &C) const {
     if (!DivZeroBug)
       DivZeroBug.reset(new BuiltinBug(this, "Division by zero"));
 
-    auto R = std::make_unique<PathSensitiveBugReport>(
+    auto R = llvm::make_unique<BugReport>(
         *DivZeroBug, "Value being compared against zero has already been used "
                      "for division",
         N);
 
-    R->addVisitor(std::make_unique<DivisionBRVisitor>(Val.getAsSymbol(),
+    R->addVisitor(llvm::make_unique<DivisionBRVisitor>(Val.getAsSymbol(),
                                                        C.getStackFrame()));
     C.emitReport(std::move(R));
   }
 }
 
-void TestAfterDivZeroChecker::checkEndFunction(const ReturnStmt *,
-                                               CheckerContext &C) const {
+void TestAfterDivZeroChecker::checkEndFunction(CheckerContext &C) const {
   ProgramStateRef State = C.getState();
 
   DivZeroMapTy DivZeroes = State->get<DivZeroMap>();
@@ -259,8 +261,4 @@ void TestAfterDivZeroChecker::checkBranchCondition(const Stmt *Condition,
 
 void ento::registerTestAfterDivZeroChecker(CheckerManager &mgr) {
   mgr.registerChecker<TestAfterDivZeroChecker>();
-}
-
-bool ento::shouldRegisterTestAfterDivZeroChecker(const LangOptions &LO) {
-  return true;
 }

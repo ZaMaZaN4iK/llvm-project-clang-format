@@ -1,8 +1,9 @@
 //===--- SemaPseudoObject.cpp - Semantic Analysis for Pseudo-Objects ------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -131,8 +132,7 @@ namespace {
                                              uop->getType(),
                                              uop->getValueKind(),
                                              uop->getObjectKind(),
-                                             uop->getOperatorLoc(),
-                                             uop->canOverflow());
+                                             uop->getOperatorLoc());
       }
 
       if (GenericSelectionExpr *gse = dyn_cast<GenericSelectionExpr>(e)) {
@@ -140,24 +140,25 @@ namespace {
         unsigned resultIndex = gse->getResultIndex();
         unsigned numAssocs = gse->getNumAssocs();
 
-        SmallVector<Expr *, 8> assocExprs;
-        SmallVector<TypeSourceInfo *, 8> assocTypes;
-        assocExprs.reserve(numAssocs);
-        assocTypes.reserve(numAssocs);
+        SmallVector<Expr*, 8> assocs(numAssocs);
+        SmallVector<TypeSourceInfo*, 8> assocTypes(numAssocs);
 
-        for (const GenericSelectionExpr::Association assoc :
-             gse->associations()) {
-          Expr *assocExpr = assoc.getAssociationExpr();
-          if (assoc.isSelected())
-            assocExpr = rebuild(assocExpr);
-          assocExprs.push_back(assocExpr);
-          assocTypes.push_back(assoc.getTypeSourceInfo());
+        for (unsigned i = 0; i != numAssocs; ++i) {
+          Expr *assoc = gse->getAssocExpr(i);
+          if (i == resultIndex) assoc = rebuild(assoc);
+          assocs[i] = assoc;
+          assocTypes[i] = gse->getAssocTypeSourceInfo(i);
         }
 
-        return GenericSelectionExpr::Create(
-            S.Context, gse->getGenericLoc(), gse->getControllingExpr(),
-            assocTypes, assocExprs, gse->getDefaultLoc(), gse->getRParenLoc(),
-            gse->containsUnexpandedParameterPack(), resultIndex);
+        return new (S.Context) GenericSelectionExpr(S.Context,
+                                                    gse->getGenericLoc(),
+                                                    gse->getControllingExpr(),
+                                                    assocTypes,
+                                                    assocs,
+                                                    gse->getDefaultLoc(),
+                                                    gse->getRParenLoc(),
+                                      gse->containsUnexpandedParameterPack(),
+                                                    resultIndex);
       }
 
       if (ChooseExpr *ce = dyn_cast<ChooseExpr>(e)) {
@@ -188,12 +189,11 @@ namespace {
     Sema &S;
     unsigned ResultIndex;
     SourceLocation GenericLoc;
-    bool IsUnique;
     SmallVector<Expr *, 4> Semantics;
 
-    PseudoOpBuilder(Sema &S, SourceLocation genericLoc, bool IsUnique)
+    PseudoOpBuilder(Sema &S, SourceLocation genericLoc)
       : S(S), ResultIndex(PseudoObjectExpr::NoResult),
-        GenericLoc(genericLoc), IsUnique(IsUnique) {}
+        GenericLoc(genericLoc) {}
 
     virtual ~PseudoOpBuilder() {}
 
@@ -207,9 +207,6 @@ namespace {
       assert(ResultIndex == PseudoObjectExpr::NoResult);
       ResultIndex = Semantics.size();
       Semantics.push_back(resultExpr);
-      // An OVE is not unique if it is used as the result expression.
-      if (auto *OVE = dyn_cast<OpaqueValueExpr>(Semantics.back()))
-        OVE->setIsUnique(false);
     }
 
     ExprResult buildRValueOperation(Expr *op);
@@ -229,9 +226,6 @@ namespace {
     void setResultToLastSemantic() {
       assert(ResultIndex == PseudoObjectExpr::NoResult);
       ResultIndex = Semantics.size() - 1;
-      // An OVE is not unique if it is used as the result expression.
-      if (auto *OVE = dyn_cast<OpaqueValueExpr>(Semantics.back()))
-        OVE->setIsUnique(false);
     }
 
     /// Return true if assignments have a non-void result.
@@ -251,7 +245,7 @@ namespace {
     virtual ExprResult buildGet() = 0;
     virtual ExprResult buildSet(Expr *, SourceLocation,
                                 bool captureSetValueAsResult) = 0;
-    /// Should the result of an assignment be the formal result of the
+    /// \brief Should the result of an assignment be the formal result of the
     /// setter call or the value that was passed to the setter?
     ///
     /// Different pseudo-object language features use different language rules
@@ -279,10 +273,10 @@ namespace {
     Selector GetterSelector;
 
   public:
-    ObjCPropertyOpBuilder(Sema &S, ObjCPropertyRefExpr *refExpr, bool IsUnique)
-        : PseudoOpBuilder(S, refExpr->getLocation(), IsUnique),
-          RefExpr(refExpr), SyntacticRefExpr(nullptr),
-          InstanceReceiver(nullptr), Getter(nullptr), Setter(nullptr) {
+    ObjCPropertyOpBuilder(Sema &S, ObjCPropertyRefExpr *refExpr) :
+      PseudoOpBuilder(S, refExpr->getLocation()), RefExpr(refExpr),
+      SyntacticRefExpr(nullptr), InstanceReceiver(nullptr), Getter(nullptr),
+      Setter(nullptr) {
     }
 
     ExprResult buildRValueOperation(Expr *op);
@@ -314,15 +308,16 @@ namespace {
    OpaqueValueExpr *InstanceKey;
    ObjCMethodDecl *AtIndexGetter;
    Selector AtIndexGetterSelector;
-
+  
    ObjCMethodDecl *AtIndexSetter;
    Selector AtIndexSetterSelector;
-
+  
  public:
-   ObjCSubscriptOpBuilder(Sema &S, ObjCSubscriptRefExpr *refExpr, bool IsUnique)
-       : PseudoOpBuilder(S, refExpr->getSourceRange().getBegin(), IsUnique),
-         RefExpr(refExpr), InstanceBase(nullptr), InstanceKey(nullptr),
-         AtIndexGetter(nullptr), AtIndexSetter(nullptr) {}
+    ObjCSubscriptOpBuilder(Sema &S, ObjCSubscriptRefExpr *refExpr) :
+      PseudoOpBuilder(S, refExpr->getSourceRange().getBegin()), 
+      RefExpr(refExpr),
+      InstanceBase(nullptr), InstanceKey(nullptr),
+      AtIndexGetter(nullptr), AtIndexSetter(nullptr) {}
 
    ExprResult buildRValueOperation(Expr *op);
    ExprResult buildAssignmentOperation(Scope *Sc,
@@ -346,11 +341,11 @@ namespace {
    MSPropertyRefExpr *getBaseMSProperty(MSPropertySubscriptExpr *E);
 
  public:
-   MSPropertyOpBuilder(Sema &S, MSPropertyRefExpr *refExpr, bool IsUnique)
-       : PseudoOpBuilder(S, refExpr->getSourceRange().getBegin(), IsUnique),
-         RefExpr(refExpr), InstanceBase(nullptr) {}
-   MSPropertyOpBuilder(Sema &S, MSPropertySubscriptExpr *refExpr, bool IsUnique)
-       : PseudoOpBuilder(S, refExpr->getSourceRange().getBegin(), IsUnique),
+   MSPropertyOpBuilder(Sema &S, MSPropertyRefExpr *refExpr) :
+     PseudoOpBuilder(S, refExpr->getSourceRange().getBegin()),
+     RefExpr(refExpr), InstanceBase(nullptr) {}
+   MSPropertyOpBuilder(Sema &S, MSPropertySubscriptExpr *refExpr)
+       : PseudoOpBuilder(S, refExpr->getSourceRange().getBegin()),
          InstanceBase(nullptr) {
      RefExpr = getBaseMSProperty(refExpr);
    }
@@ -365,13 +360,11 @@ namespace {
 /// Capture the given expression in an OpaqueValueExpr.
 OpaqueValueExpr *PseudoOpBuilder::capture(Expr *e) {
   // Make a new OVE whose source is the given expression.
-  OpaqueValueExpr *captured =
+  OpaqueValueExpr *captured = 
     new (S.Context) OpaqueValueExpr(GenericLoc, e->getType(),
                                     e->getValueKind(), e->getObjectKind(),
                                     e);
-  if (IsUnique)
-    captured->setIsUnique(true);
-
+  
   // Make sure we bind that in the semantics.
   addSemanticExpr(captured);
   return captured;
@@ -387,7 +380,7 @@ OpaqueValueExpr *PseudoOpBuilder::captureValueAsResult(Expr *e) {
   assert(ResultIndex == PseudoObjectExpr::NoResult);
 
   // If the expression hasn't already been captured, just capture it
-  // and set the new semantic
+  // and set the new semantic 
   if (!isa<OpaqueValueExpr>(e)) {
     OpaqueValueExpr *cap = capture(e);
     setResultToLastSemantic();
@@ -403,8 +396,6 @@ OpaqueValueExpr *PseudoOpBuilder::captureValueAsResult(Expr *e) {
     if (e == Semantics[index]) break;
   }
   ResultIndex = index;
-  // An OVE is not unique if it is used as the result expression.
-  cast<OpaqueValueExpr>(e)->setIsUnique(false);
   return cast<OpaqueValueExpr>(e);
 }
 
@@ -456,8 +447,7 @@ PseudoOpBuilder::buildAssignmentOperation(Scope *Sc, SourceLocation opcLoc,
     syntactic = new (S.Context) BinaryOperator(syntacticLHS, capturedRHS,
                                                opcode, capturedRHS->getType(),
                                                capturedRHS->getValueKind(),
-                                               OK_Ordinary, opcLoc,
-                                               FPOptions());
+                                               OK_Ordinary, opcLoc, false);
   } else {
     ExprResult opLHS = buildGet();
     if (opLHS.isInvalid()) return ExprError();
@@ -475,7 +465,7 @@ PseudoOpBuilder::buildAssignmentOperation(Scope *Sc, SourceLocation opcLoc,
                                              OK_Ordinary,
                                              opLHS.get()->getType(),
                                              result.get()->getType(),
-                                             opcLoc, FPOptions());
+                                             opcLoc, false);
   }
 
   // The result of the assignment, if not void, is the value set into
@@ -536,12 +526,9 @@ PseudoOpBuilder::buildIncDecOperation(Scope *Sc, SourceLocation opcLoc,
       (result.get()->isTypeDependent() || CanCaptureValue(result.get())))
     setResultToLastSemantic();
 
-  UnaryOperator *syntactic = new (S.Context) UnaryOperator(
-      syntacticOp, opcode, resultType, VK_LValue, OK_Ordinary, opcLoc,
-      !resultType->isDependentType()
-          ? S.Context.getTypeSize(resultType) >=
-                S.Context.getTypeSize(S.Context.IntTy)
-          : false);
+  UnaryOperator *syntactic =
+    new (S.Context) UnaryOperator(syntacticOp, opcode, resultType,
+                                  VK_LValue, OK_Ordinary, opcLoc);
   return complete(syntactic);
 }
 
@@ -616,11 +603,11 @@ bool ObjCPropertyOpBuilder::findGetter() {
       // Must build the getter selector the hard way.
       ObjCMethodDecl *setter = RefExpr->getImplicitPropertySetter();
       assert(setter && "both setter and getter are null - cannot happen");
-      IdentifierInfo *setterName =
+      IdentifierInfo *setterName = 
         setter->getSelector().getIdentifierInfoForSlot(0);
       IdentifierInfo *getterName =
           &S.Context.Idents.get(setterName->getName().substr(3));
-      GetterSelector =
+      GetterSelector = 
         S.PP.getSelectorTable().getNullarySelector(getterName);
       return false;
     }
@@ -634,7 +621,7 @@ bool ObjCPropertyOpBuilder::findGetter() {
 /// Try to find the most accurate setter declaration for the property
 /// reference.
 ///
-/// \return true if a setter was found, in which case Setter
+/// \return true if a setter was found, in which case Setter 
 bool ObjCPropertyOpBuilder::findSetter(bool warn) {
   // For implicit properties, just trust the lookup we already did.
   if (RefExpr->isImplicitProperty()) {
@@ -854,10 +841,12 @@ ExprResult ObjCPropertyOpBuilder::buildRValueOperation(Expr *op) {
           result = S.ImpCastExprToType(result.get(), propType, CK_BitCast);
       }
     }
-    if (propType.getObjCLifetime() == Qualifiers::OCL_Weak &&
-        !S.Diags.isIgnored(diag::warn_arc_repeated_use_of_weak,
-                           RefExpr->getLocation()))
-      S.getCurFunction()->markSafeWeakUse(RefExpr);
+    if (S.getLangOpts().ObjCAutoRefCount) {
+      Qualifiers::ObjCLifetime LT = propType.getObjCLifetime();
+      if (LT == Qualifiers::OCL_Weak)
+        if (!S.Diags.isIgnored(diag::warn_arc_repeated_use_of_weak, RefExpr->getLocation()))
+              S.getCurFunction()->markSafeWeakUse(RefExpr);
+    }
   }
 
   return result;
@@ -973,11 +962,11 @@ ObjCPropertyOpBuilder::buildIncDecOperation(Scope *Sc, SourceLocation opcLoc,
 }
 
 ExprResult ObjCPropertyOpBuilder::complete(Expr *SyntacticForm) {
-  if (isWeakProperty() && !S.isUnevaluatedContext() &&
+  if (S.getLangOpts().ObjCAutoRefCount && isWeakProperty() &&
       !S.Diags.isIgnored(diag::warn_arc_repeated_use_of_weak,
-                         SyntacticForm->getBeginLoc()))
-    S.getCurFunction()->recordUseOfWeak(SyntacticRefExpr,
-                                        SyntacticRefExpr->isMessagingGetter());
+                         SyntacticForm->getLocStart()))
+      S.recordUseOfEvaluatedWeak(SyntacticRefExpr,
+                                 SyntacticRefExpr->isMessagingGetter());
 
   return PseudoOpBuilder::complete(SyntacticForm);
 }
@@ -985,9 +974,9 @@ ExprResult ObjCPropertyOpBuilder::complete(Expr *SyntacticForm) {
 // ObjCSubscript build stuff.
 //
 
-/// objective-c subscripting-specific behavior for doing lvalue-to-rvalue
+/// objective-c subscripting-specific behavior for doing lvalue-to-rvalue 
 /// conversion.
-/// FIXME. Remove this routine if it is proven that no additional
+/// FIXME. Remove this routine if it is proven that no additional 
 /// specifity is needed.
 ExprResult ObjCSubscriptOpBuilder::buildRValueOperation(Expr *op) {
   ExprResult result = PseudoOpBuilder::buildRValueOperation(op);
@@ -1005,21 +994,21 @@ ObjCSubscriptOpBuilder::buildAssignmentOperation(Scope *Sc,
   // There must be a method to do the Index'ed assignment.
   if (!findAtIndexSetter())
     return ExprError();
-
+  
   // Verify that we can do a compound assignment.
   if (opcode != BO_Assign && !findAtIndexGetter())
     return ExprError();
-
+  
   ExprResult result =
   PseudoOpBuilder::buildAssignmentOperation(Sc, opcLoc, opcode, LHS, RHS);
   if (result.isInvalid()) return ExprError();
-
+  
   // Various warnings about objc Index'ed assignments in ARC.
   if (S.getLangOpts().ObjCAutoRefCount && InstanceBase) {
     S.checkRetainCycles(InstanceBase->getSourceExpr(), RHS);
     S.checkUnsafeExprAssigns(opcLoc, LHS, RHS);
   }
-
+  
   return result;
 }
 
@@ -1047,15 +1036,15 @@ Expr *ObjCSubscriptOpBuilder::rebuildAndCaptureObject(Expr *syntacticBase) {
   return syntacticBase;
 }
 
-/// CheckSubscriptingKind - This routine decide what type
+/// CheckSubscriptingKind - This routine decide what type 
 /// of indexing represented by "FromE" is being done.
-Sema::ObjCSubscriptKind
+Sema::ObjCSubscriptKind 
   Sema::CheckSubscriptingKind(Expr *FromE) {
   // If the expression already has integral or enumeration type, we're golden.
   QualType T = FromE->getType();
   if (T->isIntegralOrEnumerationType())
     return OS_Array;
-
+  
   // If we don't have a class type in C++, there's no way we can get an
   // expression of integral or enumeration type.
   const RecordType *RecordTy = T->getAs<RecordType>();
@@ -1064,7 +1053,7 @@ Sema::ObjCSubscriptKind
     // All other scalar cases are assumed to be dictionary indexing which
     // caller handles, with diagnostics if needed.
     return OS_Dictionary;
-  if (!getLangOpts().CPlusPlus ||
+  if (!getLangOpts().CPlusPlus || 
       !RecordTy || RecordTy->isIncompleteType()) {
     // No indexing can be done. Issue diagnostics and quit.
     const Expr *IndexExpr = FromE->IgnoreParenImpCasts();
@@ -1076,12 +1065,12 @@ Sema::ObjCSubscriptKind
         << T;
     return OS_Error;
   }
-
+  
   // We must have a complete class type.
-  if (RequireCompleteType(FromE->getExprLoc(), T,
+  if (RequireCompleteType(FromE->getExprLoc(), T, 
                           diag::err_objc_index_incomplete_class_type, FromE))
     return OS_Error;
-
+  
   // Look for a conversion to an integral, enumeration type, or
   // objective-C pointer type.
   int NoIntegrals=0, NoObjCIdPointers=0;
@@ -1123,47 +1112,47 @@ Sema::ObjCSubscriptKind
 
 /// CheckKeyForObjCARCConversion - This routine suggests bridge casting of CF
 /// objects used as dictionary subscript key objects.
-static void CheckKeyForObjCARCConversion(Sema &S, QualType ContainerT,
+static void CheckKeyForObjCARCConversion(Sema &S, QualType ContainerT, 
                                          Expr *Key) {
   if (ContainerT.isNull())
     return;
   // dictionary subscripting.
   // - (id)objectForKeyedSubscript:(id)key;
   IdentifierInfo *KeyIdents[] = {
-    &S.Context.Idents.get("objectForKeyedSubscript")
+    &S.Context.Idents.get("objectForKeyedSubscript")  
   };
   Selector GetterSelector = S.Context.Selectors.getSelector(1, KeyIdents);
-  ObjCMethodDecl *Getter = S.LookupMethodInObjectType(GetterSelector, ContainerT,
+  ObjCMethodDecl *Getter = S.LookupMethodInObjectType(GetterSelector, ContainerT, 
                                                       true /*instance*/);
   if (!Getter)
     return;
   QualType T = Getter->parameters()[0]->getType();
-  S.CheckObjCConversion(Key->getSourceRange(), T, Key,
-                        Sema::CCK_ImplicitConversion);
+  S.CheckObjCARCConversion(Key->getSourceRange(), 
+                         T, Key, Sema::CCK_ImplicitConversion);
 }
 
 bool ObjCSubscriptOpBuilder::findAtIndexGetter() {
   if (AtIndexGetter)
     return true;
-
+  
   Expr *BaseExpr = RefExpr->getBaseExpr();
   QualType BaseT = BaseExpr->getType();
-
+  
   QualType ResultType;
   if (const ObjCObjectPointerType *PTy =
       BaseT->getAs<ObjCObjectPointerType>()) {
     ResultType = PTy->getPointeeType();
   }
-  Sema::ObjCSubscriptKind Res =
+  Sema::ObjCSubscriptKind Res = 
     S.CheckSubscriptingKind(RefExpr->getKeyExpr());
   if (Res == Sema::OS_Error) {
     if (S.getLangOpts().ObjCAutoRefCount)
-      CheckKeyForObjCARCConversion(S, ResultType,
+      CheckKeyForObjCARCConversion(S, ResultType, 
                                    RefExpr->getKeyExpr());
     return false;
   }
   bool arrayRef = (Res == Sema::OS_Array);
-
+  
   if (ResultType.isNull()) {
     S.Diag(BaseExpr->getExprLoc(), diag::err_objc_subscript_base_type)
       << BaseExpr->getType() << arrayRef;
@@ -1173,32 +1162,35 @@ bool ObjCSubscriptOpBuilder::findAtIndexGetter() {
     // dictionary subscripting.
     // - (id)objectForKeyedSubscript:(id)key;
     IdentifierInfo *KeyIdents[] = {
-      &S.Context.Idents.get("objectForKeyedSubscript")
+      &S.Context.Idents.get("objectForKeyedSubscript")  
     };
     AtIndexGetterSelector = S.Context.Selectors.getSelector(1, KeyIdents);
   }
   else {
     // - (id)objectAtIndexedSubscript:(size_t)index;
     IdentifierInfo *KeyIdents[] = {
-      &S.Context.Idents.get("objectAtIndexedSubscript")
+      &S.Context.Idents.get("objectAtIndexedSubscript")  
     };
-
+  
     AtIndexGetterSelector = S.Context.Selectors.getSelector(1, KeyIdents);
   }
-
-  AtIndexGetter = S.LookupMethodInObjectType(AtIndexGetterSelector, ResultType,
+  
+  AtIndexGetter = S.LookupMethodInObjectType(AtIndexGetterSelector, ResultType, 
                                              true /*instance*/);
-
+  bool receiverIdType = (BaseT->isObjCIdType() ||
+                         BaseT->isObjCQualifiedIdType());
+  
   if (!AtIndexGetter && S.getLangOpts().DebuggerObjCLiteral) {
-    AtIndexGetter = ObjCMethodDecl::Create(
-        S.Context, SourceLocation(), SourceLocation(), AtIndexGetterSelector,
-        S.Context.getObjCIdType() /*ReturnType*/, nullptr /*TypeSourceInfo */,
-        S.Context.getTranslationUnitDecl(), true /*Instance*/,
-        false /*isVariadic*/,
-        /*isPropertyAccessor=*/false,
-        /*isSynthesizedAccessorStub=*/false,
-        /*isImplicitlyDeclared=*/true, /*isDefined=*/false,
-        ObjCMethodDecl::Required, false);
+    AtIndexGetter = ObjCMethodDecl::Create(S.Context, SourceLocation(), 
+                           SourceLocation(), AtIndexGetterSelector,
+                           S.Context.getObjCIdType() /*ReturnType*/,
+                           nullptr /*TypeSourceInfo */,
+                           S.Context.getTranslationUnitDecl(),
+                           true /*Instance*/, false/*isVariadic*/,
+                           /*isPropertyAccessor=*/false,
+                           /*isImplicitlyDeclared=*/true, /*isDefined=*/false,
+                           ObjCMethodDecl::Required,
+                           false);
     ParmVarDecl *Argument = ParmVarDecl::Create(S.Context, AtIndexGetter,
                                                 SourceLocation(), SourceLocation(),
                                                 arrayRef ? &S.Context.Idents.get("index")
@@ -1212,25 +1204,25 @@ bool ObjCSubscriptOpBuilder::findAtIndexGetter() {
   }
 
   if (!AtIndexGetter) {
-    if (!BaseT->isObjCIdType()) {
+    if (!receiverIdType) {
       S.Diag(BaseExpr->getExprLoc(), diag::err_objc_subscript_method_not_found)
       << BaseExpr->getType() << 0 << arrayRef;
       return false;
     }
-    AtIndexGetter =
-      S.LookupInstanceMethodInGlobalPool(AtIndexGetterSelector,
-                                         RefExpr->getSourceRange(),
+    AtIndexGetter = 
+      S.LookupInstanceMethodInGlobalPool(AtIndexGetterSelector, 
+                                         RefExpr->getSourceRange(), 
                                          true);
   }
-
+  
   if (AtIndexGetter) {
     QualType T = AtIndexGetter->parameters()[0]->getType();
     if ((arrayRef && !T->isIntegralOrEnumerationType()) ||
         (!arrayRef && !T->isObjCObjectPointerType())) {
-      S.Diag(RefExpr->getKeyExpr()->getExprLoc(),
+      S.Diag(RefExpr->getKeyExpr()->getExprLoc(), 
              arrayRef ? diag::err_objc_subscript_index_type
                       : diag::err_objc_subscript_key_type) << T;
-      S.Diag(AtIndexGetter->parameters()[0]->getLocation(),
+      S.Diag(AtIndexGetter->parameters()[0]->getLocation(), 
              diag::note_parameter_type) << T;
       return false;
     }
@@ -1248,32 +1240,32 @@ bool ObjCSubscriptOpBuilder::findAtIndexGetter() {
 bool ObjCSubscriptOpBuilder::findAtIndexSetter() {
   if (AtIndexSetter)
     return true;
-
+  
   Expr *BaseExpr = RefExpr->getBaseExpr();
   QualType BaseT = BaseExpr->getType();
-
+  
   QualType ResultType;
   if (const ObjCObjectPointerType *PTy =
       BaseT->getAs<ObjCObjectPointerType>()) {
     ResultType = PTy->getPointeeType();
   }
-
-  Sema::ObjCSubscriptKind Res =
+  
+  Sema::ObjCSubscriptKind Res = 
     S.CheckSubscriptingKind(RefExpr->getKeyExpr());
   if (Res == Sema::OS_Error) {
     if (S.getLangOpts().ObjCAutoRefCount)
-      CheckKeyForObjCARCConversion(S, ResultType,
+      CheckKeyForObjCARCConversion(S, ResultType, 
                                    RefExpr->getKeyExpr());
     return false;
   }
   bool arrayRef = (Res == Sema::OS_Array);
-
+  
   if (ResultType.isNull()) {
     S.Diag(BaseExpr->getExprLoc(), diag::err_objc_subscript_base_type)
       << BaseExpr->getType() << arrayRef;
     return false;
   }
-
+  
   if (!arrayRef) {
     // dictionary subscripting.
     // - (void)setObject:(id)object forKeyedSubscript:(id)key;
@@ -1291,8 +1283,11 @@ bool ObjCSubscriptOpBuilder::findAtIndexSetter() {
     };
     AtIndexSetterSelector = S.Context.Selectors.getSelector(2, KeyIdents);
   }
-  AtIndexSetter = S.LookupMethodInObjectType(AtIndexSetterSelector, ResultType,
+  AtIndexSetter = S.LookupMethodInObjectType(AtIndexSetterSelector, ResultType, 
                                              true /*instance*/);
+  
+  bool receiverIdType = (BaseT->isObjCIdType() ||
+                         BaseT->isObjCQualifiedIdType());
 
   if (!AtIndexSetter && S.getLangOpts().DebuggerObjCLiteral) {
     TypeSourceInfo *ReturnTInfo = nullptr;
@@ -1302,7 +1297,6 @@ bool ObjCSubscriptOpBuilder::findAtIndexSetter() {
         ReturnType, ReturnTInfo, S.Context.getTranslationUnitDecl(),
         true /*Instance*/, false /*isVariadic*/,
         /*isPropertyAccessor=*/false,
-        /*isSynthesizedAccessorStub=*/false,
         /*isImplicitlyDeclared=*/true, /*isDefined=*/false,
         ObjCMethodDecl::Required, false);
     SmallVector<ParmVarDecl *, 2> Params;
@@ -1326,35 +1320,35 @@ bool ObjCSubscriptOpBuilder::findAtIndexSetter() {
     Params.push_back(key);
     AtIndexSetter->setMethodParams(S.Context, Params, None);
   }
-
+  
   if (!AtIndexSetter) {
-    if (!BaseT->isObjCIdType()) {
-      S.Diag(BaseExpr->getExprLoc(),
+    if (!receiverIdType) {
+      S.Diag(BaseExpr->getExprLoc(), 
              diag::err_objc_subscript_method_not_found)
       << BaseExpr->getType() << 1 << arrayRef;
       return false;
     }
-    AtIndexSetter =
-      S.LookupInstanceMethodInGlobalPool(AtIndexSetterSelector,
-                                         RefExpr->getSourceRange(),
+    AtIndexSetter = 
+      S.LookupInstanceMethodInGlobalPool(AtIndexSetterSelector, 
+                                         RefExpr->getSourceRange(), 
                                          true);
   }
-
+  
   bool err = false;
   if (AtIndexSetter && arrayRef) {
     QualType T = AtIndexSetter->parameters()[1]->getType();
     if (!T->isIntegralOrEnumerationType()) {
-      S.Diag(RefExpr->getKeyExpr()->getExprLoc(),
+      S.Diag(RefExpr->getKeyExpr()->getExprLoc(), 
              diag::err_objc_subscript_index_type) << T;
-      S.Diag(AtIndexSetter->parameters()[1]->getLocation(),
+      S.Diag(AtIndexSetter->parameters()[1]->getLocation(), 
              diag::note_parameter_type) << T;
       err = true;
     }
     T = AtIndexSetter->parameters()[0]->getType();
     if (!T->isObjCObjectPointerType()) {
-      S.Diag(RefExpr->getBaseExpr()->getExprLoc(),
+      S.Diag(RefExpr->getBaseExpr()->getExprLoc(), 
              diag::err_objc_subscript_object_type) << T << arrayRef;
-      S.Diag(AtIndexSetter->parameters()[0]->getLocation(),
+      S.Diag(AtIndexSetter->parameters()[0]->getLocation(), 
              diag::note_parameter_type) << T;
       err = true;
     }
@@ -1369,7 +1363,7 @@ bool ObjCSubscriptOpBuilder::findAtIndexSetter() {
         else
           S.Diag(RefExpr->getBaseExpr()->getExprLoc(),
                  diag::err_objc_subscript_dic_object_type) << T;
-        S.Diag(AtIndexSetter->parameters()[i]->getLocation(),
+        S.Diag(AtIndexSetter->parameters()[i]->getLocation(), 
                diag::note_parameter_type) << T;
         err = true;
       }
@@ -1383,13 +1377,13 @@ bool ObjCSubscriptOpBuilder::findAtIndexSetter() {
 ExprResult ObjCSubscriptOpBuilder::buildGet() {
   if (!findAtIndexGetter())
     return ExprError();
-
+  
   QualType receiverType = InstanceBase->getType();
-
+    
   // Build a message-send.
   ExprResult msg;
   Expr *Index = InstanceKey;
-
+  
   // Arguments.
   Expr *args[] = { Index };
   assert(InstanceBase);
@@ -1415,17 +1409,17 @@ ExprResult ObjCSubscriptOpBuilder::buildSet(Expr *op, SourceLocation opcLoc,
     S.DiagnoseUseOfDecl(AtIndexSetter, GenericLoc);
   QualType receiverType = InstanceBase->getType();
   Expr *Index = InstanceKey;
-
+  
   // Arguments.
   Expr *args[] = { op, Index };
-
+  
   // Build a message-send.
   ExprResult msg = S.BuildInstanceMessageImplicit(InstanceBase, receiverType,
                                                   GenericLoc,
                                                   AtIndexSetterSelector,
                                                   AtIndexSetter,
                                                   MultiExprArg(args, 2));
-
+  
   if (!msg.isInvalid() && captureSetValueAsResult) {
     ObjCMessageExpr *msgExpr =
       cast<ObjCMessageExpr>(msg.get()->IgnoreImplicit());
@@ -1433,7 +1427,7 @@ ExprResult ObjCSubscriptOpBuilder::buildSet(Expr *op, SourceLocation opcLoc,
     if (CanCaptureValue(arg))
       msgExpr->setArg(0, captureValueAsResult(arg));
   }
-
+  
   return msg;
 }
 
@@ -1454,7 +1448,8 @@ MSPropertyOpBuilder::getBaseMSProperty(MSPropertySubscriptExpr *E) {
 
 Expr *MSPropertyOpBuilder::rebuildAndCaptureObject(Expr *syntacticBase) {
   InstanceBase = capture(RefExpr->getBaseExpr());
-  llvm::for_each(CallArgs, [this](Expr *&Arg) { Arg = capture(Arg); });
+  std::for_each(CallArgs.begin(), CallArgs.end(),
+                [this](Expr *&Arg) { Arg = capture(Arg); });
   syntacticBase = Rebuilder(S, [=](Expr *, unsigned Idx) -> Expr * {
                     switch (Idx) {
                     case 0:
@@ -1491,7 +1486,7 @@ ExprResult MSPropertyOpBuilder::buildGet() {
     return ExprError();
   }
 
-  return S.BuildCallExpr(S.getCurScope(), GetterExpr.get(),
+  return S.ActOnCallExpr(S.getCurScope(), GetterExpr.get(),
                          RefExpr->getSourceRange().getBegin(), CallArgs,
                          RefExpr->getSourceRange().getEnd());
 }
@@ -1523,7 +1518,7 @@ ExprResult MSPropertyOpBuilder::buildSet(Expr *op, SourceLocation sl,
   SmallVector<Expr*, 4> ArgExprs;
   ArgExprs.append(CallArgs.begin(), CallArgs.end());
   ArgExprs.push_back(op);
-  return S.BuildCallExpr(S.getCurScope(), SetterExpr.get(),
+  return S.ActOnCallExpr(S.getCurScope(), SetterExpr.get(),
                          RefExpr->getSourceRange().getBegin(), ArgExprs,
                          op->getSourceRange().getEnd());
 }
@@ -1536,20 +1531,20 @@ ExprResult Sema::checkPseudoObjectRValue(Expr *E) {
   Expr *opaqueRef = E->IgnoreParens();
   if (ObjCPropertyRefExpr *refExpr
         = dyn_cast<ObjCPropertyRefExpr>(opaqueRef)) {
-    ObjCPropertyOpBuilder builder(*this, refExpr, true);
+    ObjCPropertyOpBuilder builder(*this, refExpr);
     return builder.buildRValueOperation(E);
   }
   else if (ObjCSubscriptRefExpr *refExpr
            = dyn_cast<ObjCSubscriptRefExpr>(opaqueRef)) {
-    ObjCSubscriptOpBuilder builder(*this, refExpr, true);
+    ObjCSubscriptOpBuilder builder(*this, refExpr);
     return builder.buildRValueOperation(E);
   } else if (MSPropertyRefExpr *refExpr
              = dyn_cast<MSPropertyRefExpr>(opaqueRef)) {
-    MSPropertyOpBuilder builder(*this, refExpr, true);
+    MSPropertyOpBuilder builder(*this, refExpr);
     return builder.buildRValueOperation(E);
   } else if (MSPropertySubscriptExpr *RefExpr =
                  dyn_cast<MSPropertySubscriptExpr>(opaqueRef)) {
-    MSPropertyOpBuilder Builder(*this, RefExpr, true);
+    MSPropertyOpBuilder Builder(*this, RefExpr);
     return Builder.buildRValueOperation(E);
   } else {
     llvm_unreachable("unknown pseudo-object kind!");
@@ -1562,24 +1557,24 @@ ExprResult Sema::checkPseudoObjectIncDec(Scope *Sc, SourceLocation opcLoc,
   // Do nothing if the operand is dependent.
   if (op->isTypeDependent())
     return new (Context) UnaryOperator(op, opcode, Context.DependentTy,
-                                       VK_RValue, OK_Ordinary, opcLoc, false);
+                                       VK_RValue, OK_Ordinary, opcLoc);
 
   assert(UnaryOperator::isIncrementDecrementOp(opcode));
   Expr *opaqueRef = op->IgnoreParens();
   if (ObjCPropertyRefExpr *refExpr
         = dyn_cast<ObjCPropertyRefExpr>(opaqueRef)) {
-    ObjCPropertyOpBuilder builder(*this, refExpr, false);
+    ObjCPropertyOpBuilder builder(*this, refExpr);
     return builder.buildIncDecOperation(Sc, opcLoc, opcode, op);
   } else if (isa<ObjCSubscriptRefExpr>(opaqueRef)) {
     Diag(opcLoc, diag::err_illegal_container_subscripting_op);
     return ExprError();
   } else if (MSPropertyRefExpr *refExpr
              = dyn_cast<MSPropertyRefExpr>(opaqueRef)) {
-    MSPropertyOpBuilder builder(*this, refExpr, false);
+    MSPropertyOpBuilder builder(*this, refExpr);
     return builder.buildIncDecOperation(Sc, opcLoc, opcode, op);
   } else if (MSPropertySubscriptExpr *RefExpr
              = dyn_cast<MSPropertySubscriptExpr>(opaqueRef)) {
-    MSPropertyOpBuilder Builder(*this, RefExpr, false);
+    MSPropertyOpBuilder Builder(*this, RefExpr);
     return Builder.buildIncDecOperation(Sc, opcLoc, opcode, op);
   } else {
     llvm_unreachable("unknown pseudo-object kind!");
@@ -1592,8 +1587,7 @@ ExprResult Sema::checkPseudoObjectAssignment(Scope *S, SourceLocation opcLoc,
   // Do nothing if either argument is dependent.
   if (LHS->isTypeDependent() || RHS->isTypeDependent())
     return new (Context) BinaryOperator(LHS, RHS, opcode, Context.DependentTy,
-                                        VK_RValue, OK_Ordinary, opcLoc,
-                                        FPOptions());
+                                        VK_RValue, OK_Ordinary, opcLoc, false);
 
   // Filter out non-overload placeholder types in the RHS.
   if (RHS->getType()->isNonOverloadPlaceholderType()) {
@@ -1602,23 +1596,22 @@ ExprResult Sema::checkPseudoObjectAssignment(Scope *S, SourceLocation opcLoc,
     RHS = result.get();
   }
 
-  bool IsSimpleAssign = opcode == BO_Assign;
   Expr *opaqueRef = LHS->IgnoreParens();
   if (ObjCPropertyRefExpr *refExpr
         = dyn_cast<ObjCPropertyRefExpr>(opaqueRef)) {
-    ObjCPropertyOpBuilder builder(*this, refExpr, IsSimpleAssign);
+    ObjCPropertyOpBuilder builder(*this, refExpr);
     return builder.buildAssignmentOperation(S, opcLoc, opcode, LHS, RHS);
   } else if (ObjCSubscriptRefExpr *refExpr
              = dyn_cast<ObjCSubscriptRefExpr>(opaqueRef)) {
-    ObjCSubscriptOpBuilder builder(*this, refExpr, IsSimpleAssign);
+    ObjCSubscriptOpBuilder builder(*this, refExpr);
     return builder.buildAssignmentOperation(S, opcLoc, opcode, LHS, RHS);
   } else if (MSPropertyRefExpr *refExpr
              = dyn_cast<MSPropertyRefExpr>(opaqueRef)) {
-      MSPropertyOpBuilder builder(*this, refExpr, IsSimpleAssign);
+      MSPropertyOpBuilder builder(*this, refExpr);
       return builder.buildAssignmentOperation(S, opcLoc, opcode, LHS, RHS);
   } else if (MSPropertySubscriptExpr *RefExpr
              = dyn_cast<MSPropertySubscriptExpr>(opaqueRef)) {
-      MSPropertyOpBuilder Builder(*this, RefExpr, IsSimpleAssign);
+      MSPropertyOpBuilder Builder(*this, RefExpr);
       return Builder.buildAssignmentOperation(S, opcLoc, opcode, LHS, RHS);
   } else {
     llvm_unreachable("unknown pseudo-object kind!");
@@ -1646,9 +1639,9 @@ Expr *Sema::recreateSyntacticForm(PseudoObjectExpr *E) {
   Expr *syntax = E->getSyntacticForm();
   if (UnaryOperator *uop = dyn_cast<UnaryOperator>(syntax)) {
     Expr *op = stripOpaqueValuesFromPseudoObjectRef(*this, uop->getSubExpr());
-    return new (Context) UnaryOperator(
-        op, uop->getOpcode(), uop->getType(), uop->getValueKind(),
-        uop->getObjectKind(), uop->getOperatorLoc(), uop->canOverflow());
+    return new (Context) UnaryOperator(op, uop->getOpcode(), uop->getType(),
+                                       uop->getValueKind(), uop->getObjectKind(),
+                                       uop->getOperatorLoc());
   } else if (CompoundAssignOperator *cop
                = dyn_cast<CompoundAssignOperator>(syntax)) {
     Expr *lhs = stripOpaqueValuesFromPseudoObjectRef(*this, cop->getLHS());
@@ -1659,15 +1652,14 @@ Expr *Sema::recreateSyntacticForm(PseudoObjectExpr *E) {
                                                 cop->getObjectKind(),
                                                 cop->getComputationLHSType(),
                                                 cop->getComputationResultType(),
-                                                cop->getOperatorLoc(),
-                                                FPOptions());
+                                                cop->getOperatorLoc(), false);
   } else if (BinaryOperator *bop = dyn_cast<BinaryOperator>(syntax)) {
     Expr *lhs = stripOpaqueValuesFromPseudoObjectRef(*this, bop->getLHS());
     Expr *rhs = cast<OpaqueValueExpr>(bop->getRHS())->getSourceExpr();
     return new (Context) BinaryOperator(lhs, rhs, bop->getOpcode(),
                                         bop->getType(), bop->getValueKind(),
                                         bop->getObjectKind(),
-                                        bop->getOperatorLoc(), FPOptions());
+                                        bop->getOperatorLoc(), false);
   } else {
     assert(syntax->hasPlaceholderType(BuiltinType::PseudoObject));
     return stripOpaqueValuesFromPseudoObjectRef(*this, syntax);

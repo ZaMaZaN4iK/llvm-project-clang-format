@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -30,7 +31,7 @@ test(It i, typename std::iterator_traits<It>::difference_type n,
     assert(rr == x);
 }
 
-int main(int, char**)
+int main()
 {
     const char* s = "1234567890";
     test(random_access_iterator<const char*>(s+5), 4, '1');
@@ -45,6 +46,4 @@ int main(int, char**)
     static_assert(it1[4] == '1', "");
     }
 #endif
-
-  return 0;
 }

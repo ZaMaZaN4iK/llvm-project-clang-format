@@ -1,18 +1,19 @@
 //===-- HostInfoBase.h ------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef lldb_Host_HostInfoBase_h_
 #define lldb_Host_HostInfoBase_h_
 
-#include "lldb/Utility/ArchSpec.h"
-#include "lldb/Utility/FileSpec.h"
-#include "lldb/Utility/UserIDResolver.h"
+#include "lldb/Core/ArchSpec.h"
+#include "lldb/Host/FileSpec.h"
 #include "lldb/lldb-enumerations.h"
+
 #include "llvm/ADT/StringRef.h"
 
 #include <stdint.h>
@@ -33,12 +34,54 @@ public:
   static void Initialize();
   static void Terminate();
 
-  /// Gets the host target triple.
+  //------------------------------------------------------------------
+  /// Returns the number of CPUs on this current host.
   ///
-  /// \return
-  ///     The host target triple.
-  static llvm::Triple GetTargetTriple();
+  /// @return
+  ///     Number of CPUs on this current host, or zero if the number
+  ///     of CPUs can't be determined on this host.
+  //------------------------------------------------------------------
+  static uint32_t GetNumberCPUS();
 
+  //------------------------------------------------------------------
+  /// Returns the maximum length of a thread name on this platform.
+  ///
+  /// @return
+  ///     Maximum length of a thread name on this platform.
+  //------------------------------------------------------------------
+  static uint32_t GetMaxThreadNameLength();
+
+  //------------------------------------------------------------------
+  /// Gets the host vendor string.
+  ///
+  /// @return
+  ///     A const string object containing the host vendor name.
+  //------------------------------------------------------------------
+  static llvm::StringRef GetVendorString();
+
+  //------------------------------------------------------------------
+  /// Gets the host Operating System (OS) string.
+  ///
+  /// @return
+  ///     A const string object containing the host OS name.
+  //------------------------------------------------------------------
+  static llvm::StringRef GetOSString();
+
+  //------------------------------------------------------------------
+  /// Gets the host target triple as a const string.
+  ///
+  /// @return
+  ///     A const string object containing the host target triple.
+  //------------------------------------------------------------------
+  static llvm::StringRef GetTargetTriple();
+
+  //------------------------------------------------------------------
+  /// Gets the host architecture.
+  ///
+  /// @return
+  ///     A const architecture object that represents the host
+  ///     architecture.
+  //------------------------------------------------------------------
   enum ArchitectureKind {
     eArchKindDefault, // The overall default architecture that applications will
                       // run on this host
@@ -51,45 +94,25 @@ public:
   static const ArchSpec &
   GetArchitecture(ArchitectureKind arch_kind = eArchKindDefault);
 
-  static llvm::Optional<ArchitectureKind> ParseArchitectureKind(llvm::StringRef kind);
-
-  /// Returns the directory containing the lldb shared library. Only the
-  /// directory member of the FileSpec is filled in.
-  static FileSpec GetShlibDir();
-
-  /// Returns the directory containing the support executables (debugserver,
-  /// ...). Only the directory member of the FileSpec is filled in.
-  static FileSpec GetSupportExeDir();
-
-  /// Returns the directory containing the lldb headers. Only the directory
-  /// member of the FileSpec is filled in.
-  static FileSpec GetHeaderDir();
-
-  /// Returns the directory containing the system plugins. Only the directory
-  /// member of the FileSpec is filled in.
-  static FileSpec GetSystemPluginDir();
-
-  /// Returns the directory containing the user plugins. Only the directory
-  /// member of the FileSpec is filled in.
-  static FileSpec GetUserPluginDir();
-
-  /// Returns the proces temporary directory. This directory will be cleaned up
-  /// when this process exits. Only the directory member of the FileSpec is
-  /// filled in.
-  static FileSpec GetProcessTempDir();
-
-  /// Returns the global temporary directory. This directory will **not** be
-  /// cleaned up when this process exits. Only the directory member of the
-  /// FileSpec is filled in.
-  static FileSpec GetGlobalTempDir();
-
-  /// If the triple does not specify the vendor, os, and environment parts, we
-  /// "augment" these using information from the host and return the resulting
-  /// ArchSpec object.
-  static ArchSpec GetAugmentedArchSpec(llvm::StringRef triple);
-
-  static bool ComputePathRelativeToLibrary(FileSpec &file_spec,
-                                           llvm::StringRef dir);
+  //------------------------------------------------------------------
+  /// Find a resource files that are related to LLDB.
+  ///
+  /// Operating systems have different ways of storing shared
+  /// libraries and related resources. This function abstracts the
+  /// access to these paths.
+  ///
+  /// @param[in] path_type
+  ///     The type of LLDB resource path you are looking for. If the
+  ///     enumeration ends with "Dir", then only the \a file_spec's
+  ///     directory member gets filled in.
+  ///
+  /// @param[in] file_spec
+  ///     A file spec that gets filled in with the appropriate path.
+  ///
+  /// @return
+  ///     \b true if \a resource_path was resolved, \a false otherwise.
+  //------------------------------------------------------------------
+  static bool GetLLDBPath(lldb::PathType type, FileSpec &file_spec);
 
 protected:
   static bool ComputeSharedLibraryDirectory(FileSpec &file_spec);
@@ -99,6 +122,7 @@ protected:
   static bool ComputeTempFileBaseDirectory(FileSpec &file_spec);
   static bool ComputeHeaderDirectory(FileSpec &file_spec);
   static bool ComputeSystemPluginsDirectory(FileSpec &file_spec);
+  static bool ComputeClangDirectory(FileSpec &file_spec);
   static bool ComputeUserPluginsDirectory(FileSpec &file_spec);
 
   static void ComputeHostArchitectureSupport(ArchSpec &arch_32,

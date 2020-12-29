@@ -1,12 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-// REQUIRES: c++98 || c++03
+// REQUIRES-ANY: c++98, c++03
 
 // <utility>
 
@@ -18,8 +19,6 @@
 #include <memory>
 #include <cassert>
 
-#include "test_macros.h"
-
 struct NonAssignable {
   NonAssignable() {}
 private:
@@ -29,7 +28,7 @@ private:
 struct Incomplete;
 extern Incomplete inc_obj;
 
-int main(int, char**)
+int main()
 {
     {
     // Test that we don't constrain the assignment operator in C++03 mode.
@@ -44,8 +43,6 @@ int main(int, char**)
     P p(42, inc_obj);
     assert(&p.second == &inc_obj);
     }
-
-  return 0;
 }
 
 struct Incomplete {};

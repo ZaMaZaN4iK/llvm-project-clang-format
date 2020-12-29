@@ -1,43 +1,5 @@
-// RUN: %clang_analyze_cc1 -std=c++11 -fblocks -verify %s \
-// RUN:   -analyzer-checker=core \
-// RUN:   -analyzer-checker=cplusplus.NewDelete
-//
-// RUN: %clang_analyze_cc1 -DLEAKS -std=c++11 -fblocks -verify %s \
-// RUN:   -analyzer-checker=core \
-// RUN:   -analyzer-checker=cplusplus.NewDeleteLeaks
-//
-// RUN: %clang_analyze_cc1 -std=c++11 -fblocks -verify %s \
-// RUN:   -analyzer-checker=core \
-// RUN:   -analyzer-checker=cplusplus.NewDelete \
-// RUN:   -analyzer-config c++-allocator-inlining=true
-//
-// RUN: %clang_analyze_cc1 -DLEAKS -std=c++11 -fblocks -verify %s \
-// RUN:   -analyzer-checker=core \
-// RUN:   -analyzer-checker=cplusplus.NewDeleteLeaks \
-// RUN:   -analyzer-config c++-allocator-inlining=true
-//
-// RUN: %clang_analyze_cc1 -DTEST_INLINABLE_ALLOCATORS \
-// RUN:   -std=c++11 -fblocks -verify %s \
-// RUN:   -analyzer-checker=core \
-// RUN:   -analyzer-checker=cplusplus.NewDelete
-//
-// RUN: %clang_analyze_cc1 -DLEAKS -DTEST_INLINABLE_ALLOCATORS \
-// RUN:   -std=c++11 -fblocks -verify %s \
-// RUN:   -analyzer-checker=core \
-// RUN:   -analyzer-checker=cplusplus.NewDeleteLeaks
-//
-// RUN: %clang_analyze_cc1 -DTEST_INLINABLE_ALLOCATORS \
-// RUN:   -std=c++11 -fblocks -verify %s \
-// RUN:   -analyzer-checker=core \
-// RUN:   -analyzer-checker=cplusplus.NewDelete \
-// RUN:   -analyzer-config c++-allocator-inlining=true
-//
-// RUN: %clang_analyze_cc1 -DLEAKS -DTEST_INLINABLE_ALLOCATORS \
-// RUN:   -std=c++11 -fblocks -verify %s \
-// RUN:   -analyzer-checker=core \
-// RUN:   -analyzer-checker=cplusplus.NewDeleteLeaks \
-// RUN:   -analyzer-config c++-allocator-inlining=true
-
+// RUN: %clang_cc1 -analyze -analyzer-checker=core,cplusplus.NewDelete -std=c++11 -fblocks -verify %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=core,cplusplus.NewDeleteLeaks -DLEAKS -std=c++11 -fblocks -verify %s
 #include "Inputs/system-header-simulator-cxx.h"
 
 typedef __typeof__(sizeof(int)) size_t;
@@ -83,18 +45,14 @@ void testGlobalNoThrowPlacementOpNewBeforeOverload() {
   void *p = operator new(0, std::nothrow);
 }
 #ifdef LEAKS
-#ifndef TEST_INLINABLE_ALLOCATORS
-// expected-warning@-3{{Potential leak of memory pointed to by 'p'}}
-#endif
+// expected-warning@-2{{Potential leak of memory pointed to by 'p'}}
 #endif
 
 void testGlobalNoThrowPlacementExprNewBeforeOverload() {
   int *p = new(std::nothrow) int;
 }
 #ifdef LEAKS
-#ifndef TEST_INLINABLE_ALLOCATORS
-// expected-warning@-3{{Potential leak of memory pointed to by 'p'}}
-#endif
+// expected-warning@-2{{Potential leak of memory pointed to by 'p'}}
 #endif
 
 //----- Standard pointer placement operators
@@ -228,10 +186,7 @@ void testExprDeleteArrArg() {
 
 void testAllocDeallocNames() {
   int *p = new(std::nothrow) int[1];
-  delete[] (++p);
-#ifndef TEST_INLINABLE_ALLOCATORS
-  // expected-warning@-2{{Argument to 'delete[]' is offset by 4 bytes from the start of memory allocated by 'new[]'}}
-#endif
+  delete[] (++p); // expected-warning{{Argument to 'delete[]' is offset by 4 bytes from the start of memory allocated by 'new[]'}}
 }
 
 //--------------------------------
@@ -289,7 +244,7 @@ void testUninitDeleteArray() {
 
 void testUninitFree() {
   int *x;
-  free(x); // expected-warning{{1st function call argument is an uninitialized value}}
+  free(x); // expected-warning{{Function call argument is an uninitialized value}}
 }
 
 void testUninitDeleteSink() {

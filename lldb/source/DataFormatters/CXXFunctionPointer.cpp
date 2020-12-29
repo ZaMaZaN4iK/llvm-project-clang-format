@@ -1,17 +1,18 @@
 //===-- CXXFunctionPointer.cpp-----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/DataFormatters/CXXFunctionPointer.h"
 
+#include "lldb/Core/Stream.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Target/SectionLoadList.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/Stream.h"
 
 #include <string>
 
@@ -37,7 +38,7 @@ bool lldb_private::formatters::CXXFunctionPointerSummaryProvider(
 
       Address so_addr;
       Target *target = exe_ctx.GetTargetPtr();
-      if (target && !target->GetSectionLoadList().IsEmpty()) {
+      if (target && target->GetSectionLoadList().IsEmpty() == false) {
         if (target->GetSectionLoadList().ResolveLoadAddress(func_ptr_address,
                                                             so_addr)) {
           so_addr.Dump(&sstr, exe_ctx.GetBestExecutionContextScope(),

@@ -1,17 +1,7 @@
-add_lldb_library(lldbPluginSymbolFilePDB PLUGIN
-  PDBASTParser.cpp
-  PDBLocationToDWARFExpression.cpp
-  SymbolFilePDB.cpp
+set(LLVM_LINK_COMPONENTS
+    DebugInfoPDB)
 
-  LINK_LIBS
-    lldbCore
-    lldbPluginSymbolFileNativePDB
-    lldbSymbol
-    lldbUtility
-  CLANG_LIBS
-    clangAST
-    clangLex
-  LINK_COMPONENTS
-    DebugInfoPDB
-    Support
+add_lldb_library(lldbPluginSymbolFilePDB
+  PDBASTParser.cpp
+  SymbolFilePDB.cpp
   )

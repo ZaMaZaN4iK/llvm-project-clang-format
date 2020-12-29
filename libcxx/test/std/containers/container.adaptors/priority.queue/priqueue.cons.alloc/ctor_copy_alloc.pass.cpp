@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,7 +25,6 @@ make(int n)
     return c;
 }
 
-#include "test_macros.h"
 #include "test_allocator.h"
 
 template <class T>
@@ -46,7 +46,7 @@ struct test
     using base::c;
 };
 
-int main(int, char**)
+int main()
 {
     test<int> qo(std::less<int>(),
                       make<std::vector<int, test_allocator<int> > >(5),
@@ -55,6 +55,4 @@ int main(int, char**)
     assert(q.size() == 5);
     assert(q.c.get_allocator() == test_allocator<int>(6));
     assert(q.top() == int(4));
-
-  return 0;
 }

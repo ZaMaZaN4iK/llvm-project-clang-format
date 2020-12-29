@@ -1,8 +1,9 @@
 //===-- AVRMCTargetDesc.h - AVR Target Descriptions -------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,24 +16,21 @@
 
 #include "llvm/Support/DataTypes.h"
 
-#include <memory>
-
 namespace llvm {
 
 class MCAsmBackend;
 class MCCodeEmitter;
 class MCContext;
 class MCInstrInfo;
-class MCObjectTargetWriter;
+class MCObjectWriter;
 class MCRegisterInfo;
-class MCSubtargetInfo;
 class MCTargetOptions;
 class StringRef;
 class Target;
 class Triple;
 class raw_pwrite_stream;
 
-MCInstrInfo *createAVRMCInstrInfo();
+Target &getTheAVRTarget();
 
 /// Creates a machine code emitter for AVR.
 MCCodeEmitter *createAVRMCCodeEmitter(const MCInstrInfo &MCII,
@@ -40,12 +38,12 @@ MCCodeEmitter *createAVRMCCodeEmitter(const MCInstrInfo &MCII,
                                       MCContext &Ctx);
 
 /// Creates an assembly backend for AVR.
-MCAsmBackend *createAVRAsmBackend(const Target &T, const MCSubtargetInfo &STI,
-                                  const MCRegisterInfo &MRI,
+MCAsmBackend *createAVRAsmBackend(const Target &T, const MCRegisterInfo &MRI,
+                                  const Triple &TT, StringRef CPU,
                                   const llvm::MCTargetOptions &TO);
 
 /// Creates an ELF object writer for AVR.
-std::unique_ptr<MCObjectTargetWriter> createAVRELFObjectWriter(uint8_t OSABI);
+MCObjectWriter *createAVRELFObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI);
 
 } // end namespace llvm
 

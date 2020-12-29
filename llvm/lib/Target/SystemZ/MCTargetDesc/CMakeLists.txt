@@ -1,5 +1,4 @@
-add_llvm_component_library(LLVMSystemZDesc
-  SystemZInstPrinter.cpp
+add_llvm_library(LLVMSystemZDesc
   SystemZMCAsmBackend.cpp
   SystemZMCAsmInfo.cpp
   SystemZMCCodeEmitter.cpp

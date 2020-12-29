@@ -1,25 +1,32 @@
 //===-- UriParser.cpp -------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "lldb/Utility/UriParser.h"
+#include "Utility/UriParser.h"
 
-#include <string>
+// C Includes
 
-#include <stdint.h>
-#include <tuple>
+// C++ Includes
+#include <cstring>
+
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Host/StringConvert.h"
 
 using namespace lldb_private;
 
+//----------------------------------------------------------------------
 // UriParser::Parse
+//----------------------------------------------------------------------
 bool UriParser::Parse(llvm::StringRef uri, llvm::StringRef &scheme,
                       llvm::StringRef &hostname, int &port,
                       llvm::StringRef &path) {
-  llvm::StringRef tmp_scheme, tmp_hostname, tmp_path;
+  llvm::StringRef tmp_scheme, tmp_hostname, tmp_port, tmp_path;
 
   const llvm::StringRef kSchemeSep("://");
   auto pos = uri.find(kSchemeSep);
@@ -40,7 +47,7 @@ bool UriParser::Parse(llvm::StringRef uri, llvm::StringRef &scheme,
       ((path_pos != std::string::npos) ? path_pos : uri.size()) - host_pos);
 
   // Extract hostname
-  if (!host_port.empty() && host_port[0] == '[') {
+  if (host_port[0] == '[') {
     // hostname is enclosed with square brackets.
     pos = host_port.find(']');
     if (pos == std::string::npos)

@@ -1,8 +1,9 @@
 //===-- GDBRemoteCommunicationClient.h --------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,22 +12,21 @@
 
 #include "GDBRemoteClientBase.h"
 
+// C Includes
+// C++ Includes
 #include <chrono>
 #include <map>
 #include <mutex>
 #include <string>
 #include <vector>
 
-#include "lldb/Host/File.h"
-#include "lldb/Utility/ArchSpec.h"
-#include "lldb/Utility/GDBRemote.h"
-#include "lldb/Utility/StructuredData.h"
-#if defined(_WIN32)
-#include "lldb/Host/windows/PosixApi.h"
-#endif
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/ArchSpec.h"
+#include "lldb/Core/StructuredData.h"
+#include "lldb/Target/Process.h"
 
 #include "llvm/ADT/Optional.h"
-#include "llvm/Support/VersionTuple.h"
 
 namespace lldb_private {
 namespace process_gdb_remote {
@@ -37,9 +37,11 @@ public:
 
   ~GDBRemoteCommunicationClient() override;
 
+  //------------------------------------------------------------------
   // After connecting, send the handshake to the server to make sure
   // we are communicating with it.
-  bool HandshakeWithServer(Status *error_ptr);
+  //------------------------------------------------------------------
+  bool HandshakeWithServer(Error *error_ptr);
 
   // For packets which specify a range of output to be returned,
   // return all of the output via a series of request packets of the form
@@ -86,142 +88,159 @@ public:
 
   bool KillSpawnedProcess(lldb::pid_t pid);
 
+  //------------------------------------------------------------------
   /// Sends a GDB remote protocol 'A' packet that delivers program
   /// arguments to the remote server.
   ///
-  /// \param[in] launch_info
+  /// @param[in] argv
   ///     A NULL terminated array of const C strings to use as the
   ///     arguments.
   ///
-  /// \return
+  /// @return
   ///     Zero if the response was "OK", a positive value if the
   ///     the response was "Exx" where xx are two hex digits, or
   ///     -1 if the call is unsupported or any other unexpected
   ///     response was received.
+  //------------------------------------------------------------------
   int SendArgumentsPacket(const ProcessLaunchInfo &launch_info);
 
+  //------------------------------------------------------------------
   /// Sends a "QEnvironment:NAME=VALUE" packet that will build up the
   /// environment that will get used when launching an application
   /// in conjunction with the 'A' packet. This function can be called
   /// multiple times in a row in order to pass on the desired
   /// environment that the inferior should be launched with.
   ///
-  /// \param[in] name_equal_value
+  /// @param[in] name_equal_value
   ///     A NULL terminated C string that contains a single environment
   ///     in the format "NAME=VALUE".
   ///
-  /// \return
+  /// @return
   ///     Zero if the response was "OK", a positive value if the
   ///     the response was "Exx" where xx are two hex digits, or
   ///     -1 if the call is unsupported or any other unexpected
   ///     response was received.
+  //------------------------------------------------------------------
   int SendEnvironmentPacket(char const *name_equal_value);
-  int SendEnvironment(const Environment &env);
 
   int SendLaunchArchPacket(const char *arch);
 
   int SendLaunchEventDataPacket(const char *data,
                                 bool *was_supported = nullptr);
 
+  //------------------------------------------------------------------
   /// Sends a "vAttach:PID" where PID is in hex.
   ///
-  /// \param[in] pid
+  /// @param[in] pid
   ///     A process ID for the remote gdb server to attach to.
   ///
-  /// \param[out] response
+  /// @param[out] response
   ///     The response received from the gdb server. If the return
   ///     value is zero, \a response will contain a stop reply
   ///     packet.
   ///
-  /// \return
+  /// @return
   ///     Zero if the attach was successful, or an error indicating
   ///     an error code.
+  //------------------------------------------------------------------
   int SendAttach(lldb::pid_t pid, StringExtractorGDBRemote &response);
 
+  //------------------------------------------------------------------
   /// Sends a GDB remote protocol 'I' packet that delivers stdin
   /// data to the remote process.
   ///
-  /// \param[in] data
+  /// @param[in] data
   ///     A pointer to stdin data.
   ///
-  /// \param[in] data_len
+  /// @param[in] data_len
   ///     The number of bytes available at \a data.
   ///
-  /// \return
+  /// @return
   ///     Zero if the attach was successful, or an error indicating
   ///     an error code.
+  //------------------------------------------------------------------
   int SendStdinNotification(const char *data, size_t data_len);
 
+  //------------------------------------------------------------------
   /// Sets the path to use for stdin/out/err for a process
   /// that will be launched with the 'A' packet.
   ///
-  /// \param[in] file_spec
+  /// @param[in] path
   ///     The path to use for stdin/out/err
   ///
-  /// \return
+  /// @return
   ///     Zero if the for success, or an error code for failure.
+  //------------------------------------------------------------------
   int SetSTDIN(const FileSpec &file_spec);
   int SetSTDOUT(const FileSpec &file_spec);
   int SetSTDERR(const FileSpec &file_spec);
 
+  //------------------------------------------------------------------
   /// Sets the disable ASLR flag to \a enable for a process that will
   /// be launched with the 'A' packet.
   ///
-  /// \param[in] enable
+  /// @param[in] enable
   ///     A boolean value indicating whether to disable ASLR or not.
   ///
-  /// \return
+  /// @return
   ///     Zero if the for success, or an error code for failure.
+  //------------------------------------------------------------------
   int SetDisableASLR(bool enable);
 
+  //------------------------------------------------------------------
   /// Sets the DetachOnError flag to \a enable for the process controlled by the
   /// stub.
   ///
-  /// \param[in] enable
+  /// @param[in] enable
   ///     A boolean value indicating whether to detach on error or not.
   ///
-  /// \return
+  /// @return
   ///     Zero if the for success, or an error code for failure.
+  //------------------------------------------------------------------
   int SetDetachOnError(bool enable);
 
+  //------------------------------------------------------------------
   /// Sets the working directory to \a path for a process that will
   /// be launched with the 'A' packet for non platform based
   /// connections. If this packet is sent to a GDB server that
   /// implements the platform, it will change the current working
   /// directory for the platform process.
   ///
-  /// \param[in] working_dir
+  /// @param[in] working_dir
   ///     The path to a directory to use when launching our process
   ///
-  /// \return
+  /// @return
   ///     Zero if the for success, or an error code for failure.
+  //------------------------------------------------------------------
   int SetWorkingDir(const FileSpec &working_dir);
 
+  //------------------------------------------------------------------
   /// Gets the current working directory of a remote platform GDB
   /// server.
   ///
-  /// \param[out] working_dir
+  /// @param[out] working_dir
   ///     The current working directory on the remote platform.
   ///
-  /// \return
+  /// @return
   ///     Boolean for success
+  //------------------------------------------------------------------
   bool GetWorkingDir(FileSpec &working_dir);
 
   lldb::addr_t AllocateMemory(size_t size, uint32_t permissions);
 
   bool DeallocateMemory(lldb::addr_t addr);
 
-  Status Detach(bool keep_stopped);
+  Error Detach(bool keep_stopped);
 
-  Status GetMemoryRegionInfo(lldb::addr_t addr, MemoryRegionInfo &range_info);
+  Error GetMemoryRegionInfo(lldb::addr_t addr, MemoryRegionInfo &range_info);
 
-  Status GetWatchpointSupportInfo(uint32_t &num);
+  Error GetWatchpointSupportInfo(uint32_t &num);
 
-  Status GetWatchpointSupportInfo(uint32_t &num, bool &after,
-                                  const ArchSpec &arch);
+  Error GetWatchpointSupportInfo(uint32_t &num, bool &after,
+                                 const ArchSpec &arch);
 
-  Status GetWatchpointsTriggerAfterInstruction(bool &after,
-                                               const ArchSpec &arch);
+  Error GetWatchpointsTriggerAfterInstruction(bool &after,
+                                              const ArchSpec &arch);
 
   const ArchSpec &GetHostArchitecture();
 
@@ -247,9 +266,7 @@ public:
 
   bool GetDefaultThreadId(lldb::tid_t &tid);
 
-  llvm::VersionTuple GetOSVersion();
-
-  llvm::VersionTuple GetMacCatalystVersion();
+  bool GetOSVersion(uint32_t &major, uint32_t &minor, uint32_t &update);
 
   bool GetOSBuildString(std::string &s);
 
@@ -322,8 +339,6 @@ public:
 
   bool GetQXferAuxvReadSupported();
 
-  void EnableErrorStringInPacket();
-
   bool GetQXferLibrariesReadSupported();
 
   bool GetQXferLibrariesSVR4ReadSupported();
@@ -332,13 +347,9 @@ public:
 
   bool GetEchoSupported();
 
-  bool GetQPassSignalsSupported();
-
   bool GetAugmentedLibrariesSVR4ReadSupported();
 
   bool GetQXferFeaturesReadSupported();
-
-  bool GetQXferMemoryMapReadSupported();
 
   LazyBool SupportsAllocDeallocMemory() // const
   {
@@ -351,34 +362,34 @@ public:
   size_t GetCurrentThreadIDs(std::vector<lldb::tid_t> &thread_ids,
                              bool &sequence_mutex_unavailable);
 
-  lldb::user_id_t OpenFile(const FileSpec &file_spec, File::OpenOptions flags,
-                           mode_t mode, Status &error);
+  lldb::user_id_t OpenFile(const FileSpec &file_spec, uint32_t flags,
+                           mode_t mode, Error &error);
 
-  bool CloseFile(lldb::user_id_t fd, Status &error);
+  bool CloseFile(lldb::user_id_t fd, Error &error);
 
   lldb::user_id_t GetFileSize(const FileSpec &file_spec);
 
-  Status GetFilePermissions(const FileSpec &file_spec,
-                            uint32_t &file_permissions);
+  Error GetFilePermissions(const FileSpec &file_spec,
+                           uint32_t &file_permissions);
 
-  Status SetFilePermissions(const FileSpec &file_spec,
-                            uint32_t file_permissions);
+  Error SetFilePermissions(const FileSpec &file_spec,
+                           uint32_t file_permissions);
 
   uint64_t ReadFile(lldb::user_id_t fd, uint64_t offset, void *dst,
-                    uint64_t dst_len, Status &error);
+                    uint64_t dst_len, Error &error);
 
   uint64_t WriteFile(lldb::user_id_t fd, uint64_t offset, const void *src,
-                     uint64_t src_len, Status &error);
+                     uint64_t src_len, Error &error);
 
-  Status CreateSymlink(const FileSpec &src, const FileSpec &dst);
+  Error CreateSymlink(const FileSpec &src, const FileSpec &dst);
 
-  Status Unlink(const FileSpec &file_spec);
+  Error Unlink(const FileSpec &file_spec);
 
-  Status MakeDirectory(const FileSpec &file_spec, uint32_t mode);
+  Error MakeDirectory(const FileSpec &file_spec, uint32_t mode);
 
   bool GetFileExists(const FileSpec &file_spec);
 
-  Status RunShellCommand(
+  Error RunShellCommand(
       const char *command,         // Shouldn't be nullptr
       const FileSpec &working_dir, // Pass empty FileSpec to use the current
                                    // working directory
@@ -387,7 +398,8 @@ public:
                        // the process to exit
       std::string
           *command_output, // Pass nullptr if you don't want the command output
-      const Timeout<std::micro> &timeout);
+      uint32_t timeout_sec); // Timeout in seconds to wait for shell program to
+                             // finish
 
   bool CalculateMD5(const FileSpec &file_spec, uint64_t &high, uint64_t &low);
 
@@ -434,25 +446,25 @@ public:
 
   bool ReadExtFeature(const lldb_private::ConstString object,
                       const lldb_private::ConstString annex, std::string &out,
-                      lldb_private::Status &err);
+                      lldb_private::Error &err);
 
   void ServeSymbolLookups(lldb_private::Process *process);
 
-  // Sends QPassSignals packet to the server with given signals to ignore.
-  Status SendSignalsToIgnore(llvm::ArrayRef<int32_t> signals);
-
+  //------------------------------------------------------------------
   /// Return the feature set supported by the gdb-remote server.
   ///
   /// This method returns the remote side's response to the qSupported
   /// packet.  The response is the complete string payload returned
   /// to the client.
   ///
-  /// \return
+  /// @return
   ///     The string returned by the server to the qSupported query.
+  //------------------------------------------------------------------
   const std::string &GetServerSupportedFeatures() const {
     return m_qSupported_response;
   }
 
+  //------------------------------------------------------------------
   /// Return the array of async JSON packet types supported by the remote.
   ///
   /// This method returns the remote side's array of supported JSON
@@ -468,31 +480,19 @@ public:
   /// A plugin indicates whether it knows how to handle a type_name.
   /// If so, it can be used to process the async JSON packet.
   ///
-  /// \return
+  /// @return
   ///     The string returned by the server to the qSupported query.
+  //------------------------------------------------------------------
   lldb_private::StructuredData::Array *GetSupportedStructuredDataPlugins();
 
+  //------------------------------------------------------------------
   /// Configure a StructuredData feature on the remote end.
   ///
-  /// \see \b Process::ConfigureStructuredData(...) for details.
-  Status
-  ConfigureRemoteStructuredData(ConstString type_name,
+  /// @see \b Process::ConfigureStructuredData(...) for details.
+  //------------------------------------------------------------------
+  Error
+  ConfigureRemoteStructuredData(const ConstString &type_name,
                                 const StructuredData::ObjectSP &config_sp);
-
-  lldb::user_id_t SendStartTracePacket(const TraceOptions &options,
-                                       Status &error);
-
-  Status SendStopTracePacket(lldb::user_id_t uid, lldb::tid_t thread_id);
-
-  Status SendGetDataPacket(lldb::user_id_t uid, lldb::tid_t thread_id,
-                           llvm::MutableArrayRef<uint8_t> &buffer,
-                           size_t offset = 0);
-
-  Status SendGetMetaDataPacket(lldb::user_id_t uid, lldb::tid_t thread_id,
-                               llvm::MutableArrayRef<uint8_t> &buffer,
-                               size_t offset = 0);
-
-  Status SendGetTraceConfigPacket(lldb::user_id_t uid, TraceOptions &options);
 
 protected:
   LazyBool m_supports_not_sending_acks;
@@ -523,13 +523,10 @@ protected:
   LazyBool m_supports_qXfer_libraries_read;
   LazyBool m_supports_qXfer_libraries_svr4_read;
   LazyBool m_supports_qXfer_features_read;
-  LazyBool m_supports_qXfer_memory_map_read;
   LazyBool m_supports_augmented_libraries_svr4_read;
   LazyBool m_supports_jThreadExtendedInfo;
   LazyBool m_supports_jLoadedDynamicLibrariesInfos;
   LazyBool m_supports_jGetSharedCacheInfo;
-  LazyBool m_supports_QPassSignals;
-  LazyBool m_supports_error_string_reply;
 
   bool m_supports_qProcessInfoPID : 1, m_supports_qfProcessInfo : 1,
       m_supports_qUserName : 1, m_supports_qGroupName : 1,
@@ -550,8 +547,9 @@ protected:
 
   ArchSpec m_host_arch;
   ArchSpec m_process_arch;
-  llvm::VersionTuple m_os_version;
-  llvm::VersionTuple m_maccatalyst_version;
+  uint32_t m_os_version_major;
+  uint32_t m_os_version_minor;
+  uint32_t m_os_version_update;
   std::string m_os_build;
   std::string m_os_kernel;
   std::string m_hostname;
@@ -565,9 +563,6 @@ protected:
 
   bool m_supported_async_json_packets_is_valid;
   lldb_private::StructuredData::ObjectSP m_supported_async_json_packets_sp;
-
-  std::vector<MemoryRegionInfo> m_qXfer_memory_map;
-  bool m_qXfer_memory_map_loaded;
 
   bool GetCurrentProcessInfo(bool allow_lazy_pid = true);
 
@@ -585,18 +580,6 @@ protected:
   PacketResult SendThreadSpecificPacketAndWaitForResponse(
       lldb::tid_t tid, StreamString &&payload,
       StringExtractorGDBRemote &response, bool send_async);
-
-  Status SendGetTraceDataPacket(StreamGDBRemote &packet, lldb::user_id_t uid,
-                                lldb::tid_t thread_id,
-                                llvm::MutableArrayRef<uint8_t> &buffer,
-                                size_t offset);
-
-  Status LoadQXferMemoryMap();
-
-  Status GetQXferMemoryMapRegionInfo(lldb::addr_t addr,
-                                     MemoryRegionInfo &region);
-
-  LazyBool GetThreadPacketSupported(lldb::tid_t tid, llvm::StringRef packetStr);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(GDBRemoteCommunicationClient);

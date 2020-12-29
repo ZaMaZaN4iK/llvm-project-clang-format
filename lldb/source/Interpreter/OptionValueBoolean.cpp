@@ -1,17 +1,22 @@
 //===-- OptionValueBoolean.cpp ----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Interpreter/OptionValueBoolean.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/Stream.h"
+#include "lldb/Core/StringList.h"
 #include "lldb/Host/PosixApi.h"
-#include "lldb/Interpreter/OptionArgParser.h"
-#include "lldb/Utility/Stream.h"
-#include "lldb/Utility/StringList.h"
+#include "lldb/Interpreter/Args.h"
 #include "llvm/ADT/STLExtras.h"
 
 using namespace lldb;
@@ -30,9 +35,9 @@ void OptionValueBoolean::DumpValue(const ExecutionContext *exe_ctx,
   }
 }
 
-Status OptionValueBoolean::SetValueFromString(llvm::StringRef value_str,
-                                              VarSetOperationType op) {
-  Status error;
+Error OptionValueBoolean::SetValueFromString(llvm::StringRef value_str,
+                                             VarSetOperationType op) {
+  Error error;
   switch (op) {
   case eVarSetOperationClear:
     Clear();
@@ -42,7 +47,7 @@ Status OptionValueBoolean::SetValueFromString(llvm::StringRef value_str,
   case eVarSetOperationReplace:
   case eVarSetOperationAssign: {
     bool success = false;
-    bool value = OptionArgParser::ToBoolean(value_str, false, &success);
+    bool value = Args::StringToBoolean(value_str, false, &success);
     if (success) {
       m_value_was_set = true;
       m_current_value = value;
@@ -71,17 +76,23 @@ lldb::OptionValueSP OptionValueBoolean::DeepCopy() const {
   return OptionValueSP(new OptionValueBoolean(*this));
 }
 
-void OptionValueBoolean::AutoComplete(CommandInterpreter &interpreter,
-                                      CompletionRequest &request) {
-  llvm::StringRef autocomplete_entries[] = {"true", "false", "on", "off",
-                                            "yes",  "no",    "1",  "0"};
+size_t OptionValueBoolean::AutoComplete(
+    CommandInterpreter &interpreter, llvm::StringRef s, int match_start_point,
+    int max_return_elements, bool &word_complete, StringList &matches) {
+  word_complete = false;
+  matches.Clear();
+  static const llvm::StringRef g_autocomplete_entries[] = {
+      "true", "false", "on", "off", "yes", "no", "1", "0"};
 
-  auto entries = llvm::makeArrayRef(autocomplete_entries);
+  auto entries = llvm::makeArrayRef(g_autocomplete_entries);
 
   // only suggest "true" or "false" by default
-  if (request.GetCursorArgumentPrefix().empty())
+  if (s.empty())
     entries = entries.take_front(2);
 
-  for (auto entry : entries)
-    request.TryCompleteCurrentArg(entry);
+  for (auto entry : entries) {
+    if (entry.startswith_lower(s))
+      matches.AppendString(entry);
+  }
+  return matches.GetSize();
 }

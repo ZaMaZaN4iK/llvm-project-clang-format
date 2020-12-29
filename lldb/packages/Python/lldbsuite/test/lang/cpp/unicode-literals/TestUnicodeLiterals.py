@@ -3,8 +3,11 @@
 Test that the expression parser returns proper Unicode strings.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -28,16 +31,25 @@ class UnicodeLiteralsTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
+    @expectedFailureAll(
+        oslist=["windows"],
+        bugnumber="llvm.org/pr24489: Name lookup not working correctly on Windows")
     def test_expr1(self):
         """Test that the expression parser returns proper Unicode strings."""
         self.build()
         self.rdar12991846(expr=1)
 
+    @expectedFailureAll(
+        oslist=["windows"],
+        bugnumber="llvm.org/pr24489: Name lookup not working correctly on Windows")
     def test_expr2(self):
         """Test that the expression parser returns proper Unicode strings."""
         self.build()
         self.rdar12991846(expr=2)
 
+    @expectedFailureAll(
+        oslist=["windows"],
+        bugnumber="llvm.org/pr24489: Name lookup not working correctly on Windows")
     def test_expr3(self):
         """Test that the expression parser returns proper Unicode strings."""
         self.build()
@@ -57,7 +69,7 @@ class UnicodeLiteralsTestCase(TestBase):
             self.skipTest(
                 "Skipping because this test is known to crash on i386")
 
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)

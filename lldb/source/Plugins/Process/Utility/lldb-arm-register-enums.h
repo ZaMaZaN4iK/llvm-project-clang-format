@@ -1,8 +1,9 @@
 //===-- lldb-arm-register-enums.h -----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,7 +13,9 @@
 namespace lldb_private {
 // LLDB register codes (e.g. RegisterKind == eRegisterKindLLDB)
 
+//---------------------------------------------------------------------------
 // Internal codes for all ARM registers.
+//---------------------------------------------------------------------------
 enum {
   k_first_gpr_arm = 0,
   gpr_r0_arm = k_first_gpr_arm,

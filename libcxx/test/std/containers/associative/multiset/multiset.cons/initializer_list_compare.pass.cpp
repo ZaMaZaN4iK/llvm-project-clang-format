@@ -1,12 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// UNSUPPORTED: c++98, c++03
 
 // <set>
 
@@ -16,11 +15,11 @@
 
 #include <set>
 #include <cassert>
-#include "test_macros.h"
 #include "../../../test_compare.h"
 
-int main(int, char**)
+int main()
 {
+#ifndef _LIBCPP_HAS_NO_GENERALIZED_INITIALIZERS
     typedef test_compare<std::less<int> > Cmp;
     typedef std::multiset<int, Cmp> C;
     typedef C::value_type V;
@@ -35,6 +34,5 @@ int main(int, char**)
     assert(*++i == V(5));
     assert(*++i == V(6));
     assert(m.key_comp() == Cmp(10));
-
-  return 0;
+#endif  // _LIBCPP_HAS_NO_GENERALIZED_INITIALIZERS
 }

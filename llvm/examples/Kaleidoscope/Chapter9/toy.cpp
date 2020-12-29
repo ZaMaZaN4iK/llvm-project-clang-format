@@ -442,7 +442,7 @@ static std::unique_ptr<ExprAST> ParseExpression();
 
 /// numberexpr ::= number
 static std::unique_ptr<ExprAST> ParseNumberExpr() {
-  auto Result = std::make_unique<NumberExprAST>(NumVal);
+  auto Result = llvm::make_unique<NumberExprAST>(NumVal);
   getNextToken(); // consume the number
   return std::move(Result);
 }
@@ -471,7 +471,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
   getNextToken(); // eat identifier.
 
   if (CurTok != '(') // Simple variable ref.
-    return std::make_unique<VariableExprAST>(LitLoc, IdName);
+    return llvm::make_unique<VariableExprAST>(LitLoc, IdName);
 
   // Call.
   getNextToken(); // eat (
@@ -495,7 +495,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
   // Eat the ')'.
   getNextToken();
 
-  return std::make_unique<CallExprAST>(LitLoc, IdName, std::move(Args));
+  return llvm::make_unique<CallExprAST>(LitLoc, IdName, std::move(Args));
 }
 
 /// ifexpr ::= 'if' expression 'then' expression 'else' expression
@@ -526,7 +526,7 @@ static std::unique_ptr<ExprAST> ParseIfExpr() {
   if (!Else)
     return nullptr;
 
-  return std::make_unique<IfExprAST>(IfLoc, std::move(Cond), std::move(Then),
+  return llvm::make_unique<IfExprAST>(IfLoc, std::move(Cond), std::move(Then),
                                       std::move(Else));
 }
 
@@ -572,7 +572,7 @@ static std::unique_ptr<ExprAST> ParseForExpr() {
   if (!Body)
     return nullptr;
 
-  return std::make_unique<ForExprAST>(IdName, std::move(Start), std::move(End),
+  return llvm::make_unique<ForExprAST>(IdName, std::move(Start), std::move(End),
                                        std::move(Step), std::move(Body));
 }
 
@@ -621,7 +621,7 @@ static std::unique_ptr<ExprAST> ParseVarExpr() {
   if (!Body)
     return nullptr;
 
-  return std::make_unique<VarExprAST>(std::move(VarNames), std::move(Body));
+  return llvm::make_unique<VarExprAST>(std::move(VarNames), std::move(Body));
 }
 
 /// primary
@@ -662,7 +662,7 @@ static std::unique_ptr<ExprAST> ParseUnary() {
   int Opc = CurTok;
   getNextToken();
   if (auto Operand = ParseUnary())
-    return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
+    return llvm::make_unique<UnaryExprAST>(Opc, std::move(Operand));
   return nullptr;
 }
 
@@ -699,7 +699,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     }
 
     // Merge LHS/RHS.
-    LHS = std::make_unique<BinaryExprAST>(BinLoc, BinOp, std::move(LHS),
+    LHS = llvm::make_unique<BinaryExprAST>(BinLoc, BinOp, std::move(LHS),
                                            std::move(RHS));
   }
 }
@@ -756,7 +756,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
     // Read the precedence if present.
     if (CurTok == tok_number) {
       if (NumVal < 1 || NumVal > 100)
-        return LogErrorP("Invalid precedence: must be 1..100");
+        return LogErrorP("Invalid precedecnce: must be 1..100");
       BinaryPrecedence = (unsigned)NumVal;
       getNextToken();
     }
@@ -779,7 +779,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
   if (Kind && ArgNames.size() != Kind)
     return LogErrorP("Invalid number of operands for operator");
 
-  return std::make_unique<PrototypeAST>(FnLoc, FnName, ArgNames, Kind != 0,
+  return llvm::make_unique<PrototypeAST>(FnLoc, FnName, ArgNames, Kind != 0,
                                          BinaryPrecedence);
 }
 
@@ -791,7 +791,7 @@ static std::unique_ptr<FunctionAST> ParseDefinition() {
     return nullptr;
 
   if (auto E = ParseExpression())
-    return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+    return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
   return nullptr;
 }
 
@@ -800,9 +800,9 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
   SourceLocation FnLoc = CurLoc;
   if (auto E = ParseExpression()) {
     // Make an anonymous proto.
-    auto Proto = std::make_unique<PrototypeAST>(FnLoc, "__anon_expr",
+    auto Proto = llvm::make_unique<PrototypeAST>(FnLoc, "__anon_expr",
                                                  std::vector<std::string>());
-    return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
+    return llvm::make_unique<FunctionAST>(std::move(Proto), std::move(E));
   }
   return nullptr;
 }
@@ -823,7 +823,7 @@ DIType *DebugInfo::getDoubleTy() {
   if (DblTy)
     return DblTy;
 
-  DblTy = DBuilder->createBasicType("double", 64, dwarf::DW_ATE_float);
+  DblTy = DBuilder->createBasicType("double", 64, 64, dwarf::DW_ATE_float);
   return DblTy;
 }
 
@@ -1004,7 +1004,7 @@ Value *IfExprAST::codegen() {
   if (!CondV)
     return nullptr;
 
-  // Convert condition to a bool by comparing non-equal to 0.0.
+  // Convert condition to a bool by comparing equal to 0.0.
   CondV = Builder.CreateFCmpONE(
       CondV, ConstantFP::get(TheContext, APFloat(0.0)), "ifcond");
 
@@ -1129,7 +1129,7 @@ Value *ForExprAST::codegen() {
   Value *NextVar = Builder.CreateFAdd(CurVar, StepVal, "nextvar");
   Builder.CreateStore(NextVar, Alloca);
 
-  // Convert condition to a bool by comparing non-equal to 0.0.
+  // Convert condition to a bool by comparing equal to 0.0.
   EndCond = Builder.CreateFCmpONE(
       EndCond, ConstantFP::get(TheContext, APFloat(0.0)), "loopcond");
 
@@ -1245,8 +1245,9 @@ Function *FunctionAST::codegen() {
   unsigned ScopeLine = LineNo;
   DISubprogram *SP = DBuilder->createFunction(
       FContext, P.getName(), StringRef(), Unit, LineNo,
-      CreateFunctionType(TheFunction->arg_size(), Unit), ScopeLine,
-      DINode::FlagPrototyped, DISubprogram::SPFlagDefinition);
+      CreateFunctionType(TheFunction->arg_size(), Unit),
+      false /* internal linkage */, true /* definition */, ScopeLine,
+      DINode::FlagPrototyped, false);
   TheFunction->setSubprogram(SP);
 
   // Push the current scope.
@@ -1314,7 +1315,7 @@ Function *FunctionAST::codegen() {
 
 static void InitializeModule() {
   // Open a new module.
-  TheModule = std::make_unique<Module>("my cool jit", TheContext);
+  TheModule = llvm::make_unique<Module>("my cool jit", TheContext);
   TheModule->setDataLayout(TheJIT->getTargetMachine().createDataLayout());
 }
 
@@ -1378,20 +1379,14 @@ static void MainLoop() {
 // "Library" functions that can be "extern'd" from user code.
 //===----------------------------------------------------------------------===//
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 /// putchard - putchar that takes a double and returns 0.
-extern "C" DLLEXPORT double putchard(double X) {
+extern "C" double putchard(double X) {
   fputc((char)X, stderr);
   return 0;
 }
 
 /// printd - printf that takes a double prints it as "%f\n", returning 0.
-extern "C" DLLEXPORT double printd(double X) {
+extern "C" double printd(double X) {
   fprintf(stderr, "%f\n", X);
   return 0;
 }
@@ -1416,7 +1411,7 @@ int main() {
   // Prime the first token.
   getNextToken();
 
-  TheJIT = std::make_unique<KaleidoscopeJIT>();
+  TheJIT = llvm::make_unique<KaleidoscopeJIT>();
 
   InitializeModule();
 
@@ -1429,14 +1424,13 @@ int main() {
     TheModule->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 2);
 
   // Construct the DIBuilder, we do this here because we need the module.
-  DBuilder = std::make_unique<DIBuilder>(*TheModule);
+  DBuilder = llvm::make_unique<DIBuilder>(*TheModule);
 
   // Create the compile unit for the module.
   // Currently down as "fib.ks" as a filename since we're redirecting stdin
   // but we'd like actual source locations.
   KSDbgInfo.TheCU = DBuilder->createCompileUnit(
-      dwarf::DW_LANG_C, DBuilder->createFile("fib.ks", "."),
-      "Kaleidoscope Compiler", 0, "", 0);
+      dwarf::DW_LANG_C, "fib.ks", ".", "Kaleidoscope Compiler", 0, "", 0);
 
   // Run the main "interpreter loop" now.
   MainLoop();
@@ -1445,7 +1439,7 @@ int main() {
   DBuilder->finalize();
 
   // Print out all of the generated code.
-  TheModule->print(errs(), nullptr);
+  TheModule->dump();
 
   return 0;
 }

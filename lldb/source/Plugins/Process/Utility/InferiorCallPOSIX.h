@@ -1,8 +1,9 @@
 //===-- InferiorCallPOSIX.h -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -29,6 +30,9 @@ bool InferiorCallMmap(Process *proc, lldb::addr_t &allocated_addr,
                       unsigned flags, lldb::addr_t fd, lldb::addr_t offset);
 
 bool InferiorCallMunmap(Process *proc, lldb::addr_t addr, lldb::addr_t length);
+
+bool InferiorCall(Process *proc, const Address *address,
+                  lldb::addr_t &returned_func, bool trap_exceptions = false);
 
 } // namespace lldb_private
 

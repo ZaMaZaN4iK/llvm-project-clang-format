@@ -13,10 +13,7 @@
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu skylake-avx512 -verify %s
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu skx -verify %s
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu cannonlake -verify %s
-// RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu icelake-client -verify %s
-// RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu icelake-server -verify %s
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu knl -verify %s
-// RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu knm -verify %s
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu bonnell -verify %s
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu silvermont -verify %s
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu k8 -verify %s
@@ -35,6 +32,5 @@
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu btver1 -verify %s
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu btver2 -verify %s
 // RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu znver1 -verify %s
-// RUN: %clang_cc1 -triple x86_64-unknown-unknown -target-cpu znver2 -verify %s
 //
 // expected-no-diagnostics

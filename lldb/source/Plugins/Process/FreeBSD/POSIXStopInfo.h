@@ -1,22 +1,29 @@
 //===-- POSIXStopInfo.h -----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_POSIXStopInfo_H_
 #define liblldb_POSIXStopInfo_H_
 
-#include "FreeBSDThread.h"
-#include "Plugins/Process/POSIX/CrashReason.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Target/StopInfo.h"
+
+#include "CrashReason.h"
+#include "FreeBSDThread.h"
+
 #include <string>
 
 //===----------------------------------------------------------------------===//
-/// \class POSIXStopInfo
-/// Simple base class for all POSIX-specific StopInfo objects.
+/// @class POSIXStopInfo
+/// @brief Simple base class for all POSIX-specific StopInfo objects.
 ///
 class POSIXStopInfo : public lldb_private::StopInfo {
 public:
@@ -25,8 +32,8 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
-/// \class POSIXLimboStopInfo
-/// Represents the stop state of a process ready to exit.
+/// @class POSIXLimboStopInfo
+/// @brief Represents the stop state of a process ready to exit.
 ///
 class POSIXLimboStopInfo : public POSIXStopInfo {
 public:
@@ -44,8 +51,21 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
-/// \class POSIXNewThreadStopInfo
-/// Represents the stop state of process when a new thread is spawned.
+/// @class POSIXCrashStopInfo
+/// @brief Represents the stop state of process that is ready to crash.
+///
+class POSIXCrashStopInfo : public POSIXStopInfo {
+public:
+  POSIXCrashStopInfo(FreeBSDThread &thread, uint32_t status, CrashReason reason,
+                     lldb::addr_t fault_addr);
+  ~POSIXCrashStopInfo();
+
+  lldb::StopReason GetStopReason() const;
+};
+
+//===----------------------------------------------------------------------===//
+/// @class POSIXNewThreadStopInfo
+/// @brief Represents the stop state of process when a new thread is spawned.
 ///
 
 class POSIXNewThreadStopInfo : public POSIXStopInfo {

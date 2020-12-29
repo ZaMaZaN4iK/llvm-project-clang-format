@@ -1,8 +1,9 @@
-//===- llvm/MC/MCRelocationInfo.h -------------------------------*- C++ -*-===//
+//==-- llvm/MC/MCRelocationInfo.h --------------------------------*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,23 +16,29 @@
 #ifndef LLVM_MC_MCDISASSEMBLER_MCRELOCATIONINFO_H
 #define LLVM_MC_MCDISASSEMBLER_MCRELOCATIONINFO_H
 
+#include "llvm/Support/Compiler.h"
+
 namespace llvm {
 
-class MCContext;
+namespace object {
+class RelocationRef;
+}
 class MCExpr;
+class MCContext;
 
-/// Create MCExprs from relocations found in an object file.
+/// \brief Create MCExprs from relocations found in an object file.
 class MCRelocationInfo {
+  MCRelocationInfo(const MCRelocationInfo &) = delete;
+  void operator=(const MCRelocationInfo &) = delete;
+
 protected:
   MCContext &Ctx;
 
 public:
   MCRelocationInfo(MCContext &Ctx);
-  MCRelocationInfo(const MCRelocationInfo &) = delete;
-  MCRelocationInfo &operator=(const MCRelocationInfo &) = delete;
   virtual ~MCRelocationInfo();
 
-  /// Create an MCExpr for the target-specific \p VariantKind.
+  /// \brief Create an MCExpr for the target-specific \p VariantKind.
   /// The VariantKinds are defined in llvm-c/Disassembler.h.
   /// Used by MCExternalSymbolizer.
   /// \returns If possible, an MCExpr corresponding to VariantKind, else 0.
@@ -39,6 +46,6 @@ public:
                                                      unsigned VariantKind);
 };
 
-} // end namespace llvm
+}
 
-#endif // LLVM_MC_MCDISASSEMBLER_MCRELOCATIONINFO_H
+#endif

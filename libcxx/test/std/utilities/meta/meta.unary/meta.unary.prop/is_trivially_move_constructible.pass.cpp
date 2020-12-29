@@ -1,14 +1,17 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // type_traits
 
 // is_trivially_move_constructible
+
+// XFAIL: gcc-4.9
 
 #include <type_traits>
 #include "test_macros.h"
@@ -73,7 +76,7 @@ struct MoveOnly2
 
 #endif
 
-int main(int, char**)
+int main()
 {
     test_has_not_trivial_move_constructor<void>();
     test_has_not_trivial_move_constructor<A>();
@@ -92,6 +95,4 @@ int main(int, char**)
     static_assert(!std::is_trivially_move_constructible<MoveOnly1>::value, "");
     static_assert( std::is_trivially_move_constructible<MoveOnly2>::value, "");
 #endif
-
-  return 0;
 }

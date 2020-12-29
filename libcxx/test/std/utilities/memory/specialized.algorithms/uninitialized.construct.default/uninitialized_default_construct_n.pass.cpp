@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -79,7 +80,7 @@ void test_counted()
     It e = std::uninitialized_default_construct_n(It(p), 1);
     assert(e == It(p+1));
     assert(Counted::count == 1);
-    assert(Counted::constructed == 1);
+    assert(Counted::constructed = 1);
     e = std::uninitialized_default_construct_n(It(p+1), 4);
     assert(e == It(p+N));
     assert(Counted::count == 5);
@@ -107,11 +108,9 @@ void test_value_initialized()
 }
 
 
-int main(int, char**)
+int main()
 {
     test_counted();
     test_value_initialized();
     test_ctor_throws();
-
-  return 0;
 }

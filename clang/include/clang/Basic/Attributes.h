@@ -1,8 +1,9 @@
 //===--- Attributes.h - Attributes header -----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -25,13 +26,11 @@ enum class AttrSyntax {
   Microsoft,
   // Is the identifier known as a C++-style attribute?
   CXX,
-  // Is the identifier known as a C-style attribute?
-  C,
   // Is the identifier known as a pragma attribute?
   Pragma
 };
 
-/// Return the version number associated with the attribute if we
+/// \brief Return the version number associated with the attribute if we
 /// recognize and implement the attribute specified by the given information.
 int hasAttribute(AttrSyntax Syntax, const IdentifierInfo *Scope,
                  const IdentifierInfo *Attr, const TargetInfo &Target,

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -32,7 +33,7 @@ test(It l, It r, bool x)
     assert((r1 <= r2) == x);
 }
 
-int main(int, char**)
+int main()
 {
     char s[] = "1234567890";
     test(random_access_iterator<char*>(s), random_access_iterator<char*>(s), true);
@@ -54,6 +55,4 @@ int main(int, char**)
     static_assert(!(it2 <= it3), "");
     }
 #endif
-
-  return 0;
 }

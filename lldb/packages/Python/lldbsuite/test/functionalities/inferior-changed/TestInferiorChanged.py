@@ -1,7 +1,9 @@
 """Test lldb reloads the inferior after it was changed during the session."""
 
+from __future__ import print_function
 
 
+import os
 import time
 import lldb
 from lldbsuite.test.decorators import *
@@ -39,7 +41,7 @@ class ChangedInferiorTestCase(TestBase):
 
     def inferior_crashing(self):
         """Inferior crashes upon launching; lldb should catch the event and stop."""
-        self.exe = self.getBuildArtifact("a.out")
+        self.exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + self.exe, CURRENT_EXECUTABLE_SET)
 
         self.runCmd("run", RUN_SUCCEEDED)

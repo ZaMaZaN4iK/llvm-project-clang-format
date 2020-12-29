@@ -1,8 +1,9 @@
-//===- DWARFDebugMacro.h ----------------------------------------*- C++ -*-===//
+//===-- DWARFDebugMacro.h ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -39,22 +40,18 @@ class DWARFDebugMacro {
     };
   };
 
-  using MacroList = SmallVector<Entry, 4>;
+  typedef SmallVector<Entry, 4> MacroList;
 
   /// A list of all the macro entries in the debug_macinfo section.
-  std::vector<MacroList> MacroLists;
+  MacroList Macros;
 
 public:
   DWARFDebugMacro() = default;
 
   /// Print the macro list found within the debug_macinfo section.
   void dump(raw_ostream &OS) const;
-
   /// Parse the debug_macinfo section accessible via the 'data' parameter.
   void parse(DataExtractor data);
-
-  /// Return whether the section has any entries.
-  bool empty() const { return MacroLists.empty(); }
 };
 
 } // end namespace llvm

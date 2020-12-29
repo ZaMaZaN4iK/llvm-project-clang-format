@@ -1,8 +1,9 @@
 //===-- sanitizer_atomic_clang_x86.h ----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -60,7 +61,8 @@ INLINE typename T::Type atomic_load(
         "emms;"            // Empty mmx state/Reset FP regs
         : "=m" (v)
         : "m" (a->val_dont_use)
-        : // mark the mmx registers as clobbered
+        : // mark the FP stack and mmx registers as clobbered
+          "st", "st(1)", "st(2)", "st(3)", "st(4)", "st(5)", "st(6)", "st(7)",
 #ifdef __MMX__
           "mm0", "mm1", "mm2", "mm3", "mm4", "mm5", "mm6", "mm7",
 #endif  // #ifdef __MMX__
@@ -98,7 +100,8 @@ INLINE void atomic_store(volatile T *a, typename T::Type v, memory_order mo) {
         "emms;"            // Empty mmx state/Reset FP regs
         : "=m" (a->val_dont_use)
         : "m" (v)
-        : // mark the mmx registers as clobbered
+        : // mark the FP stack and mmx registers as clobbered
+          "st", "st(1)", "st(2)", "st(3)", "st(4)", "st(5)", "st(6)", "st(7)",
 #ifdef __MMX__
           "mm0", "mm1", "mm2", "mm3", "mm4", "mm5", "mm6", "mm7",
 #endif  // #ifdef __MMX__

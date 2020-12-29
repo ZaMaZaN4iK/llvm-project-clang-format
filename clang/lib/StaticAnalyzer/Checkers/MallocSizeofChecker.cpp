@@ -1,8 +1,9 @@
 // MallocSizeofChecker.cpp - Check for dubious malloc arguments ---*- C++ -*-=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,7 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
@@ -183,7 +184,7 @@ public:
       QualType CastedType = i->CastedExpr->getType();
       if (!CastedType->isPointerType())
         continue;
-      QualType PointeeType = CastedType->getPointeeType();
+      QualType PointeeType = CastedType->getAs<PointerType>()->getPointeeType();
       if (PointeeType->isVoidType())
         continue;
 
@@ -248,8 +249,4 @@ public:
 
 void ento::registerMallocSizeofChecker(CheckerManager &mgr) {
   mgr.registerChecker<MallocSizeofChecker>();
-}
-
-bool ento::shouldRegisterMallocSizeofChecker(const LangOptions &LO) {
-  return true;
 }

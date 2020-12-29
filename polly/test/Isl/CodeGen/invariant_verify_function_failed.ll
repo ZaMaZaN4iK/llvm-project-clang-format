@@ -1,4 +1,4 @@
-; RUN: opt %loadPolly -polly-detect -polly-codegen -polly-invariant-load-hoisting=true -analyze < %s | FileCheck %s
+; RUN: opt %loadPolly -S -polly-codegen -polly-invariant-load-hoisting=true %s | FileCheck %s
 ;
 ; This crashed at some point as the pointer returned by the call
 ; to @__errno_location is invariant and defined in the SCoP but not
@@ -7,10 +7,7 @@
 ; to hoist %tmp. We don't try to hoist %tmp anymore but this test still
 ; checks that this passes to code generation and produces valid code.
 ;
-; This SCoP is currently rejected because %call9 is not considered a valid
-; base pointer.
-;
-; CHECK-NOT: Valid Region for Scop
+; CHECK: polly.start
 ;
 target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
 
@@ -47,8 +44,8 @@ cleanup:                                          ; preds = %if.end.27, %entry
 ; Function Attrs: nounwind readnone
 declare i32* @__errno_location() #1
 
-attributes #0 = { nounwind uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "frame-pointer"="none" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+mmx,+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { nounwind readnone "disable-tail-calls"="false" "less-precise-fpmad"="false" "frame-pointer"="none" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+mmx,+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { nounwind uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+mmx,+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #1 = { nounwind readnone "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+mmx,+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #2 = { nounwind readnone }
 
 !llvm.ident = !{!0}

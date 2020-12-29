@@ -1,8 +1,9 @@
 //===-- DNBArchImplI386.h ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,6 +16,7 @@
 
 #if defined(__i386__) || defined(__x86_64__)
 
+#include "../HasAVX.h"
 #include "DNBArch.h"
 #include "MachRegisterStatesI386.h"
 
@@ -82,29 +84,22 @@ protected:
   static const size_t k_num_all_registers_avx;
   static const size_t k_num_register_sets;
 
-  typedef __i386_avx512f_state_t AVX512F;
-  static const DNBRegisterInfo g_fpu_registers_avx512f[];
-  static const DNBRegisterSetInfo g_reg_sets_avx512f[];
-  static const size_t k_num_fpu_registers_avx512f;
-  static const size_t k_num_all_registers_avx512f;
-
-  enum RegisterSet {
+  typedef enum RegisterSetTag {
     e_regSetALL = REGISTER_SET_ALL,
     e_regSetGPR,
     e_regSetFPU,
     e_regSetEXC,
     e_regSetDBG,
     kNumRegisterSets
-  };
+  } RegisterSet;
 
-  enum RegisterSetWordSize {
+  typedef enum RegisterSetWordSizeTag {
     e_regSetWordSizeGPR = sizeof(GPR) / sizeof(int),
     e_regSetWordSizeFPU = sizeof(FPU) / sizeof(int),
     e_regSetWordSizeEXC = sizeof(EXC) / sizeof(int),
     e_regSetWordSizeAVX = sizeof(AVX) / sizeof(int),
-    e_regSetWordSizeAVX512f = sizeof(AVX512F) / sizeof(int),
     e_regSetWordSizeDBG = sizeof(DBG) / sizeof(int)
-  };
+  } RegisterSetWordSize;
 
   enum { Read = 0, Write = 1, kNumErrors = 2 };
 
@@ -113,7 +108,6 @@ protected:
     union {
       FPU no_avx;
       AVX avx;
-      AVX512F avx512f;
     } fpu;
     EXC exc;
     DBG dbg;

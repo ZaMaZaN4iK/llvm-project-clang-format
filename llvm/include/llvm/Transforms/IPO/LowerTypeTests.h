@@ -1,8 +1,9 @@
 //===- LowerTypeTests.h - type metadata lowering pass -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,8 +15,11 @@
 #ifndef LLVM_TRANSFORMS_IPO_LOWERTYPETESTS_H
 #define LLVM_TRANSFORMS_IPO_LOWERTYPETESTS_H
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
+
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -24,8 +28,9 @@
 
 namespace llvm {
 
-class Module;
-class ModuleSummaryIndex;
+class DataLayout;
+class GlobalObject;
+class Value;
 class raw_ostream;
 
 namespace lowertypetests {
@@ -60,10 +65,9 @@ struct BitSetInfo {
 
 struct BitSetBuilder {
   SmallVector<uint64_t, 16> Offsets;
-  uint64_t Min = std::numeric_limits<uint64_t>::max();
-  uint64_t Max = 0;
+  uint64_t Min, Max;
 
-  BitSetBuilder() = default;
+  BitSetBuilder() : Min(std::numeric_limits<uint64_t>::max()), Max(0) {}
 
   void addOffset(uint64_t Offset) {
     if (Min > Offset)
@@ -193,17 +197,10 @@ struct ByteArrayBuilder {
                 uint64_t &AllocByteOffset, uint8_t &AllocMask);
 };
 
-bool isJumpTableCanonical(Function *F);
-
 } // end namespace lowertypetests
 
 class LowerTypeTestsPass : public PassInfoMixin<LowerTypeTestsPass> {
 public:
-  ModuleSummaryIndex *ExportSummary;
-  const ModuleSummaryIndex *ImportSummary;
-  LowerTypeTestsPass(ModuleSummaryIndex *ExportSummary,
-                     const ModuleSummaryIndex *ImportSummary)
-      : ExportSummary(ExportSummary), ImportSummary(ImportSummary) {}
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 };
 

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 #ifndef SUPPORT_CONTAINER_TEST_TYPES_H
@@ -32,7 +33,7 @@
 //   the construction of types using an allocator. This type is used to communicate
 //   between the test author, the containers allocator, and the types
 //   being constructed by the container.
-//   The controller's primary functions are:
+//   The controllers primary functions are:
 //     1. Allow calls to 'a.construct(p, args...)' to be checked by a test.
 //        The test uses 'cc->expect<Args...>()' to specify that the allocator
 //        should expect one call to 'a.construct' with the specified argument
@@ -166,10 +167,8 @@ struct AllocatorConstructController {
   // Return true if the construction was expected and false otherwise.
   // This should only be called by 'Allocator.construct'.
   bool check(detail::TypeID const& tid) {
-    if (!m_expected_args) {
+    if (!m_expected_args)
       assert(m_allow_unchecked);
-      return m_allow_unchecked;
-    }
     bool res = *m_expected_args == tid;
     if (m_expected_count == -1 || --m_expected_count == -1)
       m_expected_args = nullptr;
@@ -234,19 +233,6 @@ inline ConstructController* getConstructController() {
   static ConstructController c;
   return &c;
 }
-
-template <class ...Args>
-struct ExpectConstructGuard {
-  ExpectConstructGuard(int N)  {
-    auto CC = getConstructController();
-    assert(!CC->unchecked());
-    CC->expect<Args...>(N);
-  }
-
-  ~ExpectConstructGuard() {
-    assert(!getConstructController()->unchecked());
-  }
-};
 
 //===----------------------------------------------------------------------===//
 //                       ContainerTestAllocator
@@ -380,7 +366,7 @@ struct CopyInsertable {
 
   CopyInsertable(CopyInsertable&& other) : CopyInsertable(other) {}
 
-  // Forgive pair for not downcasting this to an lvalue in its constructors.
+  // Forgive pair for not downcasting this to an lvalue it its constructors.
   CopyInsertable(CopyInsertable const && other) : CopyInsertable(other) {}
 
 
@@ -431,12 +417,7 @@ namespace std {
       return arg.data;
     }
   };
-  template <class T, class Alloc>
-  class vector;
-  template <class T, class Alloc>
-  class deque;
-  template <class T, class Alloc>
-  class list;
+
   template <class _Key, class _Value, class _Less, class _Alloc>
   class map;
   template <class _Key, class _Value, class _Less, class _Alloc>
@@ -462,13 +443,6 @@ _LIBCPP_END_NAMESPACE_STD
 
 // TCT - Test container type
 namespace TCT {
-
-template <class T = CopyInsertable<1>>
-using vector = std::vector<T, ContainerTestAllocator<T, T> >;
-template <class T = CopyInsertable<1>>
-using deque = std::deque<T, ContainerTestAllocator<T, T> >;
-template <class T = CopyInsertable<1>>
-using list = std::list<T, ContainerTestAllocator<T, T> >;
 
 template <class Key = CopyInsertable<1>, class Value = CopyInsertable<2>,
           class ValueTp = std::pair<const Key, Value> >
@@ -513,5 +487,6 @@ using multiset =
     std::multiset<Value, std::less<Value>, ContainerTestAllocator<Value, Value> >;
 
 } // end namespace TCT
+
 
 #endif // SUPPORT_CONTAINER_TEST_TYPES_H

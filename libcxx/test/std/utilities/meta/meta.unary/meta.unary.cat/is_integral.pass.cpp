@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -71,7 +72,7 @@ struct incomplete_type;
 typedef void (*FunctionPtr)();
 
 
-int main(int, char**)
+int main()
 {
     test_is_integral<short>();
     test_is_integral<unsigned short>();
@@ -84,9 +85,6 @@ int main(int, char**)
     test_is_integral<signed char>();
     test_is_integral<unsigned char>();
     test_is_integral<wchar_t>();
-#if defined(__cpp_lib_char8_t) && __cpp_lib_char8_t >= 201811L
-    test_is_integral<char8_t>();
-#endif
 
     test_is_not_integral<std::nullptr_t>();
     test_is_not_integral<void>();
@@ -105,6 +103,4 @@ int main(int, char**)
     test_is_not_integral<NotEmpty>();
     test_is_not_integral<Abstract>();
     test_is_not_integral<incomplete_type>();
-
-  return 0;
 }

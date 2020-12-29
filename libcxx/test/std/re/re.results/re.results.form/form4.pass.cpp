@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,11 +15,13 @@
 //   format(const char_type* fmt,
 //          regex_constants::match_flag_type flags = regex_constants::format_default) const;
 
+#include <iostream>
+
 #include <regex>
 #include <cassert>
 #include "test_macros.h"
 
-int main(int, char**)
+int main()
 {
     {
         std::match_results<const char*> m;
@@ -75,6 +78,4 @@ int main(int, char**)
         std::wstring out = m.format(fmt, std::regex_constants::format_sed);
         assert(out == L"match: cdefghi, m[1]: efg, m[2]: e");
     }
-
-  return 0;
 }

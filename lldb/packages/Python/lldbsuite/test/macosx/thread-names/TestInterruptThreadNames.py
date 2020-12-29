@@ -1,6 +1,8 @@
-"""Test that we get thread names when interrupting a process."""
+"""Test that we get thread names when interrupting a process.""" 
+from __future__ import print_function
 
 
+import os
 import time
 import lldb
 from lldbsuite.test.decorators import *
@@ -12,23 +14,27 @@ class TestInterruptThreadNames(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
+    def setUp(self):
+        # Call super's setUp().
+        TestBase.setUp(self)
+
     @skipUnlessDarwin
     @add_test_categories(['pyapi'])
     def test_with_python_api(self):
         """Test that we get thread names when interrupting a process."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
 
         launch_info = lldb.SBLaunchInfo(None)
         error = lldb.SBError()
-        self.dbg.SetAsync(True)
+        lldb.debugger.SetAsync(True)
         process = target.Launch(launch_info, error)
         self.assertTrue(process, PROCESS_IS_VALID)
 
-        listener = self.dbg.GetListener()
+        listener = lldb.debugger.GetListener()
         broadcaster = process.GetBroadcaster()
         rc = broadcaster.AddListener(listener, lldb.SBProcess.eBroadcastBitStateChanged)
         self.assertTrue(rc != 0, "Unable to add listener to process")
@@ -57,21 +63,14 @@ class TestInterruptThreadNames(TestBase):
         process.Kill()
 
 
-    # The process will set a global variable 'threads_up_and_running' to 1 when
+    # The process will set a global variable 'threads_up_and_running' to 1 when 
     # it has has completed its setup.  Sleep for one second, pause the program,
     # check to see if the global has that value, and continue if it does not.
     def wait_until_program_setup_complete(self, process, listener):
         inferior_set_up = lldb.SBValue()
         retry = 5
         while retry > 0:
-            arch = self.getArchitecture()
-            # when running the testsuite against a remote arm device, it may take
-            # a little longer for the process to start up.  Use a "can't possibly take
-            # longer than this" value.
-            if arch == 'arm64' or arch == 'armv7':
-                time.sleep(10)
-            else:
-                time.sleep(1)
+            time.sleep(1)
             process.SendAsyncInterrupt()
             self.assertTrue(self.wait_for_stop(process, listener), "Check that process is paused")
             inferior_set_up = process.GetTarget().CreateValueFromExpression("threads_up_and_running", "threads_up_and_running")
@@ -101,7 +100,7 @@ class TestInterruptThreadNames(TestBase):
         return False
 
     # Listen to the process events until we get an event saying the process is
-    # stopped.  Retry up to five times in case we get other events that we are
+    # stopped.  Retry up to five times in case we get other events that we are 
     # not looking for.
     def wait_for_stop(self, process, listener):
         retry_count = 5

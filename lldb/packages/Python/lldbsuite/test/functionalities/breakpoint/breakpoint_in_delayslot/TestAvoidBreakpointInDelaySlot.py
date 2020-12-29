@@ -4,6 +4,8 @@ Test specific to MIPS
 
 from __future__ import print_function
 
+import os
+import time
 import re
 import unittest2
 import lldb
@@ -19,7 +21,7 @@ class AvoidBreakpointInDelaySlotAPITestCase(TestBase):
     @skipIf(archs=no_match(re.compile('mips*')))
     def test(self):
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.expect("file " + exe,
                     patterns=["Current executable set to .*a.out.*"])
 

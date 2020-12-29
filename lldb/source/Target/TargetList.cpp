@@ -1,15 +1,25 @@
 //===-- TargetList.cpp ------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "lldb/Target/TargetList.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+#include "llvm/ADT/SmallString.h"
+
+// Project includes
+#include "lldb/Core/Broadcaster.h"
 #include "lldb/Core/Debugger.h"
+#include "lldb/Core/Event.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
+#include "lldb/Core/State.h"
+#include "lldb/Core/Timer.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
@@ -17,14 +27,7 @@
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Target/Platform.h"
 #include "lldb/Target/Process.h"
-#include "lldb/Utility/Broadcaster.h"
-#include "lldb/Utility/Event.h"
-#include "lldb/Utility/State.h"
-#include "lldb/Utility/TildeExpressionResolver.h"
-#include "lldb/Utility/Timer.h"
-
-#include "llvm/ADT/SmallString.h"
-#include "llvm/Support/FileSystem.h"
+#include "lldb/Target/TargetList.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -34,7 +37,9 @@ ConstString &TargetList::GetStaticBroadcasterClass() {
   return class_name;
 }
 
+//----------------------------------------------------------------------
 // TargetList constructor
+//----------------------------------------------------------------------
 TargetList::TargetList(Debugger &debugger)
     : Broadcaster(debugger.GetBroadcasterManager(),
                   TargetList::GetStaticBroadcasterClass().AsCString()),
@@ -42,44 +47,46 @@ TargetList::TargetList(Debugger &debugger)
   CheckInWithManager();
 }
 
+//----------------------------------------------------------------------
 // Destructor
+//----------------------------------------------------------------------
 TargetList::~TargetList() {
   std::lock_guard<std::recursive_mutex> guard(m_target_list_mutex);
   m_target_list.clear();
 }
 
-Status TargetList::CreateTarget(Debugger &debugger,
-                                llvm::StringRef user_exe_path,
-                                llvm::StringRef triple_str,
-                                LoadDependentFiles load_dependent_files,
-                                const OptionGroupPlatform *platform_options,
-                                TargetSP &target_sp) {
+Error TargetList::CreateTarget(Debugger &debugger,
+                               llvm::StringRef user_exe_path,
+                               llvm::StringRef triple_str,
+                               bool get_dependent_files,
+                               const OptionGroupPlatform *platform_options,
+                               TargetSP &target_sp) {
   return CreateTargetInternal(debugger, user_exe_path, triple_str,
-                              load_dependent_files, platform_options, target_sp,
+                              get_dependent_files, platform_options, target_sp,
                               false);
 }
 
-Status TargetList::CreateTarget(Debugger &debugger,
-                                llvm::StringRef user_exe_path,
-                                const ArchSpec &specified_arch,
-                                LoadDependentFiles load_dependent_files,
-                                PlatformSP &platform_sp, TargetSP &target_sp) {
+Error TargetList::CreateTarget(Debugger &debugger,
+                               llvm::StringRef user_exe_path,
+                               const ArchSpec &specified_arch,
+                               bool get_dependent_files,
+                               PlatformSP &platform_sp, TargetSP &target_sp) {
   return CreateTargetInternal(debugger, user_exe_path, specified_arch,
-                              load_dependent_files, platform_sp, target_sp,
+                              get_dependent_files, platform_sp, target_sp,
                               false);
 }
 
-Status TargetList::CreateTargetInternal(
+Error TargetList::CreateTargetInternal(
     Debugger &debugger, llvm::StringRef user_exe_path,
-    llvm::StringRef triple_str, LoadDependentFiles load_dependent_files,
+    llvm::StringRef triple_str, bool get_dependent_files,
     const OptionGroupPlatform *platform_options, TargetSP &target_sp,
     bool is_dummy_target) {
-  Status error;
+  Error error;
   PlatformSP platform_sp;
 
-  // This is purposely left empty unless it is specified by triple_cstr. If not
-  // initialized via triple_cstr, then the currently selected platform will set
-  // the architecture correctly.
+  // This is purposely left empty unless it is specified by triple_cstr.
+  // If not initialized via triple_cstr, then the currently selected platform
+  // will set the architecture correctly.
   const ArchSpec arch(triple_str);
   if (!triple_str.empty()) {
     if (!arch.IsValid()) {
@@ -95,7 +102,7 @@ Status TargetList::CreateTargetInternal(
 
   CommandInterpreter &interpreter = debugger.GetCommandInterpreter();
 
-  // let's see if there is already an existing platform before we go creating
+  // let's see if there is already an existing plaform before we go creating
   // another...
   platform_sp = debugger.GetPlatformList().GetSelectedPlatform();
 
@@ -113,11 +120,11 @@ Status TargetList::CreateTargetInternal(
   if (!user_exe_path.empty()) {
     ModuleSpecList module_specs;
     ModuleSpec module_spec;
-    module_spec.GetFileSpec().SetFile(user_exe_path, FileSpec::Style::native);
-    FileSystem::Instance().Resolve(module_spec.GetFileSpec());
+    module_spec.GetFileSpec().SetFile(user_exe_path, true);
 
     // Resolve the executable in case we are given a path to a application
-    // bundle like a .app bundle on MacOSX
+    // bundle
+    // like a .app bundle on MacOSX
     Host::ResolveExecutableInBundle(module_spec.GetFileSpec());
 
     lldb::offset_t file_offset = 0;
@@ -133,8 +140,7 @@ Status TargetList::CreateTargetInternal(
             if (platform_arch.IsCompatibleMatch(
                     matching_module_spec.GetArchitecture())) {
               // If the OS or vendor weren't specified, then adopt the module's
-              // architecture so that the platform matching can be more
-              // accurate
+              // architecture so that the platform matching can be more accurate
               if (!platform_arch.TripleOSWasSpecified() ||
                   !platform_arch.TripleVendorWasSpecified()) {
                 prefer_platform_arch = true;
@@ -144,9 +150,9 @@ Status TargetList::CreateTargetInternal(
               StreamString platform_arch_strm;
               StreamString module_arch_strm;
 
-              platform_arch.DumpTriple(platform_arch_strm.AsRawOstream());
+              platform_arch.DumpTriple(platform_arch_strm);
               matching_module_spec.GetArchitecture().DumpTriple(
-                  module_arch_strm.AsRawOstream());
+                  module_arch_strm);
               error.SetErrorStringWithFormat(
                   "the specified architecture '%s' is not compatible with '%s' "
                   "in '%s'",
@@ -188,8 +194,7 @@ Status TargetList::CreateTargetInternal(
                 }
               }
 
-              // Next check the host platform it if wasn't already checked
-              // above
+              // Next check the host platform it if wasn't already checked above
               if (host_platform_sp &&
                   (!platform_sp ||
                    host_platform_sp->GetName() != platform_sp->GetName())) {
@@ -226,10 +231,10 @@ Status TargetList::CreateTargetInternal(
           }
 
           if (platform_ptr) {
-            // All platforms for all modules in the executable match, so we can
+            // All platforms for all modules in the exectuable match, so we can
             // select this platform
             platform_sp = platforms.front();
-          } else if (!more_than_one_platforms) {
+          } else if (more_than_one_platforms == false) {
             // No platforms claim to support this file
             error.SetErrorString("No matching platforms found for this file, "
                                  "specify one with the --platform option");
@@ -270,7 +275,8 @@ Status TargetList::CreateTargetInternal(
     }
   } else if (platform_arch.IsValid()) {
     // if "arch" isn't valid, yet "platform_arch" is, it means we have an
-    // executable file with a single architecture which should be used
+    // executable file with
+    // a single architecture which should be used
     ArchSpec fixed_platform_arch;
     if (!platform_sp->IsCompatibleArchitecture(platform_arch, false,
                                                &fixed_platform_arch)) {
@@ -285,7 +291,7 @@ Status TargetList::CreateTargetInternal(
     platform_arch = arch;
 
   error = TargetList::CreateTargetInternal(
-      debugger, user_exe_path, platform_arch, load_dependent_files, platform_sp,
+      debugger, user_exe_path, platform_arch, get_dependent_files, platform_sp,
       target_sp, is_dummy_target);
   return error;
 }
@@ -296,34 +302,34 @@ lldb::TargetSP TargetList::GetDummyTarget(lldb_private::Debugger &debugger) {
     ArchSpec arch(Target::GetDefaultArchitecture());
     if (!arch.IsValid())
       arch = HostInfo::GetArchitecture();
-    Status err = CreateDummyTarget(
+    Error err = CreateDummyTarget(
         debugger, arch.GetTriple().getTriple().c_str(), m_dummy_target_sp);
   }
 
   return m_dummy_target_sp;
 }
 
-Status TargetList::CreateDummyTarget(Debugger &debugger,
-                                     llvm::StringRef specified_arch_name,
-                                     lldb::TargetSP &target_sp) {
+Error TargetList::CreateDummyTarget(Debugger &debugger,
+                                    llvm::StringRef specified_arch_name,
+                                    lldb::TargetSP &target_sp) {
   PlatformSP host_platform_sp(Platform::GetHostPlatform());
   return CreateTargetInternal(
-      debugger, (const char *)nullptr, specified_arch_name, eLoadDependentsNo,
+      debugger, (const char *)nullptr, specified_arch_name, false,
       (const OptionGroupPlatform *)nullptr, target_sp, true);
 }
 
-Status TargetList::CreateTargetInternal(Debugger &debugger,
-                                        llvm::StringRef user_exe_path,
-                                        const ArchSpec &specified_arch,
-                                        LoadDependentFiles load_dependent_files,
-                                        lldb::PlatformSP &platform_sp,
-                                        lldb::TargetSP &target_sp,
-                                        bool is_dummy_target) {
-  static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
-  Timer scoped_timer(
-      func_cat, "TargetList::CreateTarget (file = '%s', arch = '%s')",
-      user_exe_path.str().c_str(), specified_arch.GetArchitectureName());
-  Status error;
+Error TargetList::CreateTargetInternal(Debugger &debugger,
+                                       llvm::StringRef user_exe_path,
+                                       const ArchSpec &specified_arch,
+                                       bool get_dependent_files,
+                                       lldb::PlatformSP &platform_sp,
+                                       lldb::TargetSP &target_sp,
+                                       bool is_dummy_target) {
+  Timer scoped_timer(LLVM_PRETTY_FUNCTION,
+                     "TargetList::CreateTarget (file = '%s', arch = '%s')",
+                     user_exe_path.str().c_str(),
+                     specified_arch.GetArchitectureName());
+  Error error;
 
   ArchSpec arch(specified_arch);
 
@@ -339,34 +345,39 @@ Status TargetList::CreateTargetInternal(Debugger &debugger,
   if (!arch.IsValid())
     arch = specified_arch;
 
-  FileSpec file(user_exe_path);
-  if (!FileSystem::Instance().Exists(file) && user_exe_path.startswith("~")) {
+  FileSpec file(user_exe_path, false);
+  if (!file.Exists() && user_exe_path.startswith("~")) {
     // we want to expand the tilde but we don't want to resolve any symbolic
-    // links so we can't use the FileSpec constructor's resolve flag
-    llvm::SmallString<64> unglobbed_path;
-    StandardTildeExpressionResolver Resolver;
-    Resolver.ResolveFullPath(user_exe_path, unglobbed_path);
+    // links
+    // so we can't use the FileSpec constructor's resolve flag
+    llvm::SmallString<64> unglobbed_path(user_exe_path);
+    FileSpec::ResolveUsername(unglobbed_path);
 
     if (unglobbed_path.empty())
-      file = FileSpec(user_exe_path);
+      file = FileSpec(user_exe_path, false);
     else
-      file = FileSpec(unglobbed_path.c_str());
+      file = FileSpec(unglobbed_path.c_str(), false);
   }
 
   bool user_exe_path_is_bundle = false;
   char resolved_bundle_exe_path[PATH_MAX];
   resolved_bundle_exe_path[0] = '\0';
   if (file) {
-    if (FileSystem::Instance().IsDirectory(file))
+    if (file.GetFileType() == FileSpec::eFileTypeDirectory)
       user_exe_path_is_bundle = true;
 
     if (file.IsRelative() && !user_exe_path.empty()) {
-      llvm::SmallString<64> cwd;
-      if (! llvm::sys::fs::current_path(cwd)) {
-        FileSpec cwd_file(cwd.c_str());
-        cwd_file.AppendPathComponent(file);
-        if (FileSystem::Instance().Exists(cwd_file))
-          file = cwd_file;
+      // Ignore paths that start with "./" and "../"
+      if (!user_exe_path.startswith("./") && !user_exe_path.startswith("../")) {
+        char cwd[PATH_MAX];
+        if (getcwd(cwd, sizeof(cwd))) {
+          std::string cwd_user_exe_path(cwd);
+          cwd_user_exe_path += '/';
+          cwd_user_exe_path += user_exe_path;
+          FileSpec cwd_file(cwd_user_exe_path, false);
+          if (cwd_file.Exists())
+            file = cwd_file;
+        }
       }
     }
 
@@ -394,14 +405,14 @@ Status TargetList::CreateTargetInternal(Debugger &debugger,
         return error;
       }
       target_sp.reset(new Target(debugger, arch, platform_sp, is_dummy_target));
-      target_sp->SetExecutableModule(exe_module_sp, load_dependent_files);
+      target_sp->SetExecutableModule(exe_module_sp, get_dependent_files);
       if (user_exe_path_is_bundle)
         exe_module_sp->GetFileSpec().GetPath(resolved_bundle_exe_path,
                                              sizeof(resolved_bundle_exe_path));
     }
   } else {
-    // No file was specified, just create an empty target with any arch if a
-    // valid arch was specified
+    // No file was specified, just create an empty target with any arch
+    // if a valid arch was specified
     target_sp.reset(new Target(debugger, arch, platform_sp, is_dummy_target));
   }
 
@@ -422,7 +433,7 @@ Status TargetList::CreateTargetInternal(Debugger &debugger,
     if (file.GetDirectory()) {
       FileSpec file_dir;
       file_dir.GetDirectory() = file.GetDirectory();
-      target_sp->AppendExecutableSearchPaths(file_dir);
+      target_sp->GetExecutableSearchPaths().Append(file_dir);
     }
 
     // Don't put the dummy target in the target list, it's held separately.
@@ -457,12 +468,15 @@ TargetSP TargetList::FindTargetWithExecutableAndArchitecture(
     const FileSpec &exe_file_spec, const ArchSpec *exe_arch_ptr) const {
   std::lock_guard<std::recursive_mutex> guard(m_target_list_mutex);
   TargetSP target_sp;
+  bool full_match = (bool)exe_file_spec.GetDirectory();
+
   collection::const_iterator pos, end = m_target_list.end();
   for (pos = m_target_list.begin(); pos != end; ++pos) {
     Module *exe_module = (*pos)->GetExecutableModulePointer();
 
     if (exe_module) {
-      if (FileSpec::Match(exe_file_spec, exe_module->GetFileSpec())) {
+      if (FileSpec::Equal(exe_file_spec, exe_module->GetFileSpec(),
+                          full_match)) {
         if (exe_arch_ptr) {
           if (!exe_arch_ptr->IsCompatibleMatch(exe_module->GetArchitecture()))
             continue;

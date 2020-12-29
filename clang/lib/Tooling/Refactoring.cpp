@@ -1,8 +1,9 @@
 //===--- Refactoring.cpp - Framework for clang refactoring tools ----------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -27,7 +28,7 @@ namespace tooling {
 RefactoringTool::RefactoringTool(
     const CompilationDatabase &Compilations, ArrayRef<std::string> SourcePaths,
     std::shared_ptr<PCHContainerOperations> PCHContainerOps)
-    : ClangTool(Compilations, SourcePaths, std::move(PCHContainerOps)) {}
+    : ClangTool(Compilations, SourcePaths, PCHContainerOps) {}
 
 std::map<std::string, Replacements> &RefactoringTool::getReplacements() {
   return FileToReplaces;
@@ -67,8 +68,8 @@ int RefactoringTool::saveRewrittenFiles(Rewriter &Rewrite) {
 }
 
 bool formatAndApplyAllReplacements(
-    const std::map<std::string, Replacements> &FileToReplaces,
-    Rewriter &Rewrite, StringRef Style) {
+    const std::map<std::string, Replacements> &FileToReplaces, Rewriter &Rewrite,
+    StringRef Style) {
   SourceManager &SM = Rewrite.getSourceMgr();
   FileManager &Files = SM.getFileManager();
 
@@ -78,21 +79,13 @@ bool formatAndApplyAllReplacements(
     const std::string &FilePath = FileAndReplaces.first;
     auto &CurReplaces = FileAndReplaces.second;
 
-    const FileEntry *Entry = nullptr;
-    if (auto File = Files.getFile(FilePath))
-      Entry = *File;
-
+    const FileEntry *Entry = Files.getFile(FilePath);
     FileID ID = SM.getOrCreateFileID(Entry, SrcMgr::C_User);
     StringRef Code = SM.getBufferData(ID);
 
-    auto CurStyle = format::getStyle(Style, FilePath, "LLVM");
-    if (!CurStyle) {
-      llvm::errs() << llvm::toString(CurStyle.takeError()) << "\n";
-      return false;
-    }
-
+    format::FormatStyle CurStyle = format::getStyle(Style, FilePath, "LLVM");
     auto NewReplacements =
-        format::formatReplacements(Code, CurReplaces, *CurStyle);
+        format::formatReplacements(Code, CurReplaces, CurStyle);
     if (!NewReplacements) {
       llvm::errs() << llvm::toString(NewReplacements.takeError()) << "\n";
       return false;

@@ -1,8 +1,9 @@
-//===-- SBExpressionOptions.h -----------------------------------*- C++ -*-===//
+//===-- SBEvent.h -----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -50,8 +51,10 @@ public:
   uint32_t GetOneThreadTimeoutInMicroSeconds() const;
 
   // Set the timeout for running on one thread, 0 means use the default
-  // behavior. If you set this higher than the overall timeout, you'll get an
-  // error when you try to run the expression.
+  // behavior.
+  // If you set this higher than the overall timeout, you'll get an error when
+  // you
+  // try to run the expression.
   void SetOneThreadTimeoutInMicroSeconds(uint32_t timeout = 0);
 
   bool GetTryAllThreads() const;
@@ -90,13 +93,10 @@ public:
 
   void SetTopLevel(bool b = true);
 
-  // Gets whether we will JIT an expression if it cannot be interpreted
-  bool GetAllowJIT();
-
-  // Sets whether we will JIT an expression if it cannot be interpreted
-  void SetAllowJIT(bool allow);
-
 protected:
+  SBExpressionOptions(
+      lldb_private::EvaluateExpressionOptions &expression_options);
+
   lldb_private::EvaluateExpressionOptions *get() const;
 
   lldb_private::EvaluateExpressionOptions &ref() const;
@@ -107,7 +107,7 @@ protected:
 
 private:
   // This auto_pointer is made in the constructor and is always valid.
-  mutable std::unique_ptr<lldb_private::EvaluateExpressionOptions> m_opaque_up;
+  mutable std::unique_ptr<lldb_private::EvaluateExpressionOptions> m_opaque_ap;
 };
 
 } // namespace lldb

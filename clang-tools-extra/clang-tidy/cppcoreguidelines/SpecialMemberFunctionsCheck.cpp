@@ -1,8 +1,9 @@
 //===--- SpecialMemberFunctionsCheck.cpp - clang-tidy----------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,18 +21,6 @@ using namespace clang::ast_matchers;
 namespace clang {
 namespace tidy {
 namespace cppcoreguidelines {
-
-SpecialMemberFunctionsCheck::SpecialMemberFunctionsCheck(
-    StringRef Name, ClangTidyContext *Context)
-    : ClangTidyCheck(Name, Context),
-      AllowMissingMoveFunctions(Options.get("AllowMissingMoveFunctions", 0)),
-      AllowSoleDefaultDtor(Options.get("AllowSoleDefaultDtor", 0)) {}
-
-void SpecialMemberFunctionsCheck::storeOptions(
-    ClangTidyOptions::OptionMap &Opts) {
-  Options.store(Opts, "AllowMissingMoveFunctions", AllowMissingMoveFunctions);
-  Options.store(Opts, "AllowSoleDefaultDtor", AllowSoleDefaultDtor);
-}
 
 void SpecialMemberFunctionsCheck::registerMatchers(MatchFinder *Finder) {
   if (!getLangOpts().CPlusPlus)
@@ -59,12 +48,6 @@ toString(SpecialMemberFunctionsCheck::SpecialMemberFunctionKind K) {
   switch (K) {
   case SpecialMemberFunctionsCheck::SpecialMemberFunctionKind::Destructor:
     return "a destructor";
-  case SpecialMemberFunctionsCheck::SpecialMemberFunctionKind::
-      DefaultDestructor:
-    return "a default destructor";
-  case SpecialMemberFunctionsCheck::SpecialMemberFunctionKind::
-      NonDefaultDestructor:
-    return "a non-default destructor";
   case SpecialMemberFunctionsCheck::SpecialMemberFunctionKind::CopyConstructor:
     return "a copy constructor";
   case SpecialMemberFunctionsCheck::SpecialMemberFunctionKind::CopyAssignment:
@@ -105,86 +88,51 @@ void SpecialMemberFunctionsCheck::check(
 
   ClassDefId ID(MatchedDecl->getLocation(), MatchedDecl->getName());
 
-  auto StoreMember = [this, &ID](SpecialMemberFunctionKind Kind) {
-    llvm::SmallVectorImpl<SpecialMemberFunctionKind> &Members =
-        ClassWithSpecialMembers[ID];
-    if (!llvm::is_contained(Members, Kind))
-      Members.push_back(Kind);
-  };
-
-  if (const auto *Dtor = Result.Nodes.getNodeAs<CXXMethodDecl>("dtor")) {
-    StoreMember(Dtor->isDefaulted()
-                    ? SpecialMemberFunctionKind::DefaultDestructor
-                    : SpecialMemberFunctionKind::NonDefaultDestructor);
-  }
-
   std::initializer_list<std::pair<std::string, SpecialMemberFunctionKind>>
-      Matchers = {{"copy-ctor", SpecialMemberFunctionKind::CopyConstructor},
+      Matchers = {{"dtor", SpecialMemberFunctionKind::Destructor},
+                  {"copy-ctor", SpecialMemberFunctionKind::CopyConstructor},
                   {"copy-assign", SpecialMemberFunctionKind::CopyAssignment},
                   {"move-ctor", SpecialMemberFunctionKind::MoveConstructor},
                   {"move-assign", SpecialMemberFunctionKind::MoveAssignment}};
 
   for (const auto &KV : Matchers)
     if (Result.Nodes.getNodeAs<CXXMethodDecl>(KV.first)) {
-      StoreMember(KV.second);
+      SpecialMemberFunctionKind Kind = KV.second;
+      llvm::SmallVectorImpl<SpecialMemberFunctionKind> &Members =
+          ClassWithSpecialMembers[ID];
+      if (find(Members, Kind) == Members.end())
+        Members.push_back(Kind);
     }
 }
 
 void SpecialMemberFunctionsCheck::onEndOfTranslationUnit() {
+  llvm::SmallVector<SpecialMemberFunctionKind, 5> AllSpecialMembers = {
+      SpecialMemberFunctionKind::Destructor,
+      SpecialMemberFunctionKind::CopyConstructor,
+      SpecialMemberFunctionKind::CopyAssignment};
+
+  if (getLangOpts().CPlusPlus11) {
+    AllSpecialMembers.push_back(SpecialMemberFunctionKind::MoveConstructor);
+    AllSpecialMembers.push_back(SpecialMemberFunctionKind::MoveAssignment);
+  }
+
   for (const auto &C : ClassWithSpecialMembers) {
-    checkForMissingMembers(C.first, C.second);
+    const auto &DefinedSpecialMembers = C.second;
+
+    if (DefinedSpecialMembers.size() == AllSpecialMembers.size())
+      continue;
+
+    llvm::SmallVector<SpecialMemberFunctionKind, 5> UndefinedSpecialMembers;
+    std::set_difference(AllSpecialMembers.begin(), AllSpecialMembers.end(),
+                        DefinedSpecialMembers.begin(),
+                        DefinedSpecialMembers.end(),
+                        std::back_inserter(UndefinedSpecialMembers));
+
+    diag(C.first.first, "class '%0' defines %1 but does not define %2")
+        << C.first.second << join(DefinedSpecialMembers, " and ")
+        << join(UndefinedSpecialMembers, " or ");
   }
 }
-
-void SpecialMemberFunctionsCheck::checkForMissingMembers(
-    const ClassDefId &ID,
-    llvm::ArrayRef<SpecialMemberFunctionKind> DefinedMembers) {
-  llvm::SmallVector<SpecialMemberFunctionKind, 5> MissingMembers;
-
-  auto HasMember = [&](SpecialMemberFunctionKind Kind) {
-    return llvm::is_contained(DefinedMembers, Kind);
-  };
-
-  auto RequireMember = [&](SpecialMemberFunctionKind Kind) {
-    if (!HasMember(Kind))
-      MissingMembers.push_back(Kind);
-  };
-
-  bool RequireThree =
-      HasMember(SpecialMemberFunctionKind::NonDefaultDestructor) ||
-      (!AllowSoleDefaultDtor &&
-       HasMember(SpecialMemberFunctionKind::DefaultDestructor)) ||
-      HasMember(SpecialMemberFunctionKind::CopyConstructor) ||
-      HasMember(SpecialMemberFunctionKind::CopyAssignment) ||
-      HasMember(SpecialMemberFunctionKind::MoveConstructor) ||
-      HasMember(SpecialMemberFunctionKind::MoveAssignment);
-
-  bool RequireFive = (!AllowMissingMoveFunctions && RequireThree &&
-                      getLangOpts().CPlusPlus11) ||
-                     HasMember(SpecialMemberFunctionKind::MoveConstructor) ||
-                     HasMember(SpecialMemberFunctionKind::MoveAssignment);
-
-  if (RequireThree) {
-    if (!HasMember(SpecialMemberFunctionKind::DefaultDestructor) &&
-        !HasMember(SpecialMemberFunctionKind::NonDefaultDestructor))
-      MissingMembers.push_back(SpecialMemberFunctionKind::Destructor);
-
-    RequireMember(SpecialMemberFunctionKind::CopyConstructor);
-    RequireMember(SpecialMemberFunctionKind::CopyAssignment);
-  }
-
-  if (RequireFive) {
-    assert(RequireThree);
-    RequireMember(SpecialMemberFunctionKind::MoveConstructor);
-    RequireMember(SpecialMemberFunctionKind::MoveAssignment);
-  }
-
-  if (!MissingMembers.empty())
-    diag(ID.first, "class '%0' defines %1 but does not define %2")
-        << ID.second << cppcoreguidelines::join(DefinedMembers, " and ")
-        << cppcoreguidelines::join(MissingMembers, " or ");
-}
-
 } // namespace cppcoreguidelines
 } // namespace tidy
 } // namespace clang

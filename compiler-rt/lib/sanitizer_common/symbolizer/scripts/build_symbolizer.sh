@@ -2,7 +2,7 @@
 #
 # Run as: CLANG=bin/clang ZLIB_SRC=src/zlib \
 #             build_symbolizer.sh runtime_build/lib/clang/4.0.0/lib/linux/
-# zlib can be downloaded from http://www.zlib.net.
+# zlib can be downloaded from from http://www.zlib.net.
 #
 # Script compiles self-contained object file with symbolization code and injects
 # it into the given set of runtime libraries. Script updates only libraries
@@ -25,25 +25,15 @@
 # object file with only our entry points exposed. However, this does not work at
 # present, see PR30750.
 
-set -x
-set -e
-set -u
-
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SRC_DIR=$(readlink -f $SCRIPT_DIR/..)
 TARGE_DIR=$(readlink -f $1)
-COMPILER_RT_SRC=$(readlink -f ${SCRIPT_DIR}/../../../..)
-LLVM_SRC=${LLVM_SRC:-${COMPILER_RT_SRC}/../llvm}
-LLVM_SRC=$(readlink -f $LLVM_SRC)
-if [[ ! -d "${LLVM_SRC}/../llvm" ]] ; then
-  LLVM_SRC=$(readlink -f ${COMPILER_RT_SRC}/../../../llvm)
-fi
-LIBCXX_SRC=$(readlink -f ${COMPILER_RT_SRC}/../libcxx)
-LIBCXXABI_SRC=$(readlink -f ${COMPILER_RT_SRC}/../libcxxabi)
 
-if [[ ! -d "${LLVM_SRC}/../llvm" ||
-      ! -d "${LIBCXX_SRC}" ||
-      ! -d "${LIBCXXABI_SRC}" ]]; then
+LLVM_SRC="${LLVM_SRC:-$SCRIPT_DIR/../../../../../..}"
+LLVM_SRC=$(readlink -f $LLVM_SRC)
+
+if [[ ! -d "${LLVM_SRC}/projects/libcxxabi" ||
+      ! -d "${LLVM_SRC}/projects/libcxx" ]]; then
   echo "Missing or incomplete LLVM_SRC"
   exit 1
 fi
@@ -68,9 +58,9 @@ cd $BUILD_DIR
 CC=$CLANG_DIR/clang
 CXX=$CLANG_DIR/clang++
 TBLGEN=$CLANG_DIR/llvm-tblgen
+LINK=$CLANG_DIR/llvm-link
 OPT=$CLANG_DIR/opt
-export AR=$CLANG_DIR/llvm-ar
-export LINK=$CLANG_DIR/llvm-link
+AR=$CLANG_DIR/llvm-ar
 
 for F in $CC $CXX $TBLGEN $LINK $OPT $AR; do
   if [[ ! -x "$F" ]]; then
@@ -98,13 +88,8 @@ make -j${J} libz.a
 if [[ ! -d ${LIBCXX_BUILD} ]]; then
   mkdir -p ${LIBCXX_BUILD}
   cd ${LIBCXX_BUILD}
-  LIBCXX_FLAGS="${FLAGS} -Wno-macro-redefined -I${LIBCXX_SRC}/include"
-  PROJECTS=
-  if [[ ! -d $LLVM_SRC/projects/libcxxabi ]] ; then
-    PROJECTS="-DLLVM_ENABLE_PROJECTS='libcxx;libcxxabi'"
-  fi
+  LIBCXX_FLAGS="${FLAGS} -Wno-macro-redefined -I${LLVM_SRC}/projects/libcxxabi/include"
   cmake -GNinja \
-    ${PROJECTS} \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=$CC \
     -DCMAKE_CXX_COMPILER=$CXX \
@@ -113,22 +98,24 @@ if [[ ! -d ${LIBCXX_BUILD} ]]; then
     -DLIBCXXABI_ENABLE_ASSERTIONS=OFF \
     -DLIBCXXABI_ENABLE_EXCEPTIONS=OFF \
     -DLIBCXXABI_ENABLE_SHARED=OFF \
+    -DLIBCXXABI_ENABLE_THREADS=OFF \
     -DLIBCXX_ENABLE_ASSERTIONS=OFF \
     -DLIBCXX_ENABLE_EXCEPTIONS=OFF \
     -DLIBCXX_ENABLE_RTTI=OFF \
     -DLIBCXX_ENABLE_SHARED=OFF \
+    -DLIBCXX_ENABLE_THREADS=OFF \
   $LLVM_SRC
 fi
 cd ${LIBCXX_BUILD}
 ninja cxx cxxabi
 
 FLAGS="${FLAGS} -fno-rtti -fno-exceptions"
-LLVM_FLAGS="${FLAGS} -nostdinc++ -I${ZLIB_BUILD} -I${LIBCXX_BUILD}/include/c++/v1"
 
 # Build LLVM.
 if [[ ! -d ${LLVM_BUILD} ]]; then
   mkdir -p ${LLVM_BUILD}
   cd ${LLVM_BUILD}
+  LLVM_FLAGS="${FLAGS} -I${ZLIB_BUILD} -I${LIBCXX_BUILD}/include/c++/v1"
   cmake -GNinja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=$CC \
@@ -142,36 +129,36 @@ if [[ ! -d ${LLVM_BUILD} ]]; then
   $LLVM_SRC
 fi
 cd ${LLVM_BUILD}
-ninja LLVMSymbolize LLVMObject LLVMBinaryFormat LLVMDebugInfoDWARF LLVMSupport LLVMDebugInfoPDB LLVMMC LLVMDemangle LLVMTextAPI
+ninja LLVMSymbolize LLVMObject LLVMDebugInfoDWARF LLVMSupport LLVMDebugInfoPDB LLVMMC
 
 cd ${BUILD_DIR}
 rm -rf ${SYMBOLIZER_BUILD}
 mkdir ${SYMBOLIZER_BUILD}
 cd ${SYMBOLIZER_BUILD}
 
+for A in $LIBCXX_BUILD/lib/libc++.a \
+         $LIBCXX_BUILD/lib/libc++abi.a \
+         $LLVM_BUILD/lib/libLLVMSymbolize.a \
+         $LLVM_BUILD/lib/libLLVMObject.a \
+         $LLVM_BUILD/lib/libLLVMDebugInfoDWARF.a \
+         $LLVM_BUILD/lib/libLLVMSupport.a \
+         $LLVM_BUILD/lib/libLLVMDebugInfoPDB.a \
+         $LLVM_BUILD/lib/libLLVMMC.a \
+         $ZLIB_BUILD/libz.a ; do
+  for O in $($AR t $A); do
+    $AR x $A $O
+    mv -f $O "$(basename $A).$O" # Rename to avoid collisions between libs.
+  done
+done
+
 echo "Compiling..."
-SYMBOLIZER_FLAGS="$LLVM_FLAGS -I${LLVM_SRC}/include -I${LLVM_BUILD}/include -std=c++14"
-$CXX $SYMBOLIZER_FLAGS ${SRC_DIR}/sanitizer_symbolize.cpp ${SRC_DIR}/sanitizer_wrappers.cpp -c
-$AR rc symbolizer.a sanitizer_symbolize.o sanitizer_wrappers.o
+SYMBOLIZER_FLAGS="$FLAGS -std=c++11 -I${LLVM_SRC}/include -I${LLVM_BUILD}/include -I${LIBCXX_BUILD}/include/c++/v1"
+$CXX $SYMBOLIZER_FLAGS ${SRC_DIR}/sanitizer_symbolize.cc ${SRC_DIR}/sanitizer_wrappers.cc -c
 
 SYMBOLIZER_API_LIST=__sanitizer_symbolize_code,__sanitizer_symbolize_data,__sanitizer_symbolize_flush,__sanitizer_symbolize_demangle
 
 # Merge all the object files together and copy the resulting library back.
-$SCRIPT_DIR/ar_to_bc.sh $LIBCXX_BUILD/lib/libc++.a \
-                        $LIBCXX_BUILD/lib/libc++abi.a \
-                        $LLVM_BUILD/lib/libLLVMSymbolize.a \
-                        $LLVM_BUILD/lib/libLLVMObject.a \
-                        $LLVM_BUILD/lib/libLLVMBinaryFormat.a \
-                        $LLVM_BUILD/lib/libLLVMDebugInfoDWARF.a \
-                        $LLVM_BUILD/lib/libLLVMSupport.a \
-                        $LLVM_BUILD/lib/libLLVMDebugInfoPDB.a \
-                        $LLVM_BUILD/lib/libLLVMDemangle.a \
-                        $LLVM_BUILD/lib/libLLVMMC.a \
-                        $LLVM_BUILD/lib/libLLVMTextAPI.a \
-                        $ZLIB_BUILD/libz.a \
-                        symbolizer.a \
-                        all.bc
-
+$LINK *.o -o all.bc
 echo "Optimizing..."
 $OPT -internalize -internalize-public-api-list=${SYMBOLIZER_API_LIST} all.bc -o opt.bc
 $CC $FLAGS -fno-lto -c opt.bc -o symbolizer.o

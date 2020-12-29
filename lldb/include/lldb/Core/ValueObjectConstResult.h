@@ -1,35 +1,28 @@
 //===-- ValueObjectConstResult.h --------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ValueObjectConstResult_h_
 #define liblldb_ValueObjectConstResult_h_
 
-#include "lldb/Core/Value.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Core/ValueObject.h"
-#include "lldb/Core/ValueObjectConstResultImpl.h"
-#include "lldb/Symbol/CompilerType.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/lldb-defines.h"
-#include "lldb/lldb-enumerations.h"
-#include "lldb/lldb-forward.h"
-#include "lldb/lldb-private-enumerations.h"
-#include "lldb/lldb-types.h"
 
-#include <stddef.h>
-#include <stdint.h>
+#include "lldb/Core/ValueObjectConstResultImpl.h"
 
 namespace lldb_private {
-class DataExtractor;
-class ExecutionContextScope;
-class Module;
 
+//----------------------------------------------------------------------
 // A frozen ValueObject copied into host memory
+//----------------------------------------------------------------------
 class ValueObjectConstResult : public ValueObject {
 public:
   ~ValueObjectConstResult() override;
@@ -40,27 +33,27 @@ public:
 
   static lldb::ValueObjectSP
   Create(ExecutionContextScope *exe_scope, const CompilerType &compiler_type,
-         ConstString name, const DataExtractor &data,
+         const ConstString &name, const DataExtractor &data,
          lldb::addr_t address = LLDB_INVALID_ADDRESS);
 
   static lldb::ValueObjectSP
   Create(ExecutionContextScope *exe_scope, const CompilerType &compiler_type,
-         ConstString name, const lldb::DataBufferSP &result_data_sp,
+         const ConstString &name, const lldb::DataBufferSP &result_data_sp,
          lldb::ByteOrder byte_order, uint32_t addr_size,
          lldb::addr_t address = LLDB_INVALID_ADDRESS);
 
   static lldb::ValueObjectSP
   Create(ExecutionContextScope *exe_scope, const CompilerType &compiler_type,
-         ConstString name, lldb::addr_t address,
+         const ConstString &name, lldb::addr_t address,
          AddressType address_type, uint32_t addr_byte_size);
 
   static lldb::ValueObjectSP Create(ExecutionContextScope *exe_scope,
-                                    Value &value, ConstString name,
+                                    Value &value, const ConstString &name,
                                     Module *module = nullptr);
 
   // When an expression fails to evaluate, we return an error
   static lldb::ValueObjectSP Create(ExecutionContextScope *exe_scope,
-                                    const Status &error);
+                                    const Error &error);
 
   uint64_t GetByteSize() override;
 
@@ -76,7 +69,7 @@ public:
 
   void SetByteSize(size_t size);
 
-  lldb::ValueObjectSP Dereference(Status &error) override;
+  lldb::ValueObjectSP Dereference(Error &error) override;
 
   ValueObject *CreateChildAtIndex(size_t idx, bool synthetic_array_member,
                                   int32_t synthetic_index) override;
@@ -85,7 +78,7 @@ public:
       uint32_t offset, const CompilerType &type, bool can_create,
       ConstString name_const_str = ConstString()) override;
 
-  lldb::ValueObjectSP AddressOf(Status &error) override;
+  lldb::ValueObjectSP AddressOf(Error &error) override;
 
   lldb::addr_t GetAddressOf(bool scalar_is_load_address = true,
                             AddressType *address_type = nullptr) override;
@@ -126,25 +119,25 @@ private:
 
   ValueObjectConstResult(ExecutionContextScope *exe_scope,
                          const CompilerType &compiler_type,
-                         ConstString name, const DataExtractor &data,
+                         const ConstString &name, const DataExtractor &data,
                          lldb::addr_t address);
 
   ValueObjectConstResult(ExecutionContextScope *exe_scope,
                          const CompilerType &compiler_type,
-                         ConstString name,
+                         const ConstString &name,
                          const lldb::DataBufferSP &result_data_sp,
                          lldb::ByteOrder byte_order, uint32_t addr_size,
                          lldb::addr_t address);
 
   ValueObjectConstResult(ExecutionContextScope *exe_scope,
                          const CompilerType &compiler_type,
-                         ConstString name, lldb::addr_t address,
+                         const ConstString &name, lldb::addr_t address,
                          AddressType address_type, uint32_t addr_byte_size);
 
   ValueObjectConstResult(ExecutionContextScope *exe_scope, const Value &value,
-                         ConstString name, Module *module = nullptr);
+                         const ConstString &name, Module *module = nullptr);
 
-  ValueObjectConstResult(ExecutionContextScope *exe_scope, const Status &error);
+  ValueObjectConstResult(ExecutionContextScope *exe_scope, const Error &error);
 
   DISALLOW_COPY_AND_ASSIGN(ValueObjectConstResult);
 };

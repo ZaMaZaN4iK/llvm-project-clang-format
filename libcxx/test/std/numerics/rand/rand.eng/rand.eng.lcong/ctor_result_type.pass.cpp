@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,8 +17,6 @@
 #include <random>
 #include <sstream>
 #include <cassert>
-
-#include "test_macros.h"
 
 template <class T>
 void
@@ -131,7 +130,7 @@ test4()
     }
 }
 
-int main(int, char**)
+int main()
 {
     test1<unsigned short>();
     test1<unsigned int>();
@@ -152,6 +151,4 @@ int main(int, char**)
     test4<unsigned int>();
     test4<unsigned long>();
     test4<unsigned long long>();
-
-  return 0;
 }

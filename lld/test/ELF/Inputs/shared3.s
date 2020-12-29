@@ -1,3 +1,3 @@
 .global baz
-.type baz, @function
+.type barz, @function
 baz:

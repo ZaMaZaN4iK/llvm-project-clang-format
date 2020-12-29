@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -33,13 +34,8 @@ void check_allocator(unsigned n, Allocator const &alloc = Allocator())
 #endif
 }
 
-int main(int, char**)
+int main()
 {
-    { // test that the ctor is explicit
-      typedef std::forward_list<DefaultOnly> C;
-      static_assert((std::is_constructible<C, size_t>::value), "");
-      static_assert((!std::is_convertible<size_t, C>::value), "");
-    }
     {
         typedef DefaultOnly T;
         typedef std::forward_list<T> C;
@@ -70,6 +66,4 @@ int main(int, char**)
         check_allocator<T, min_allocator<T>> ( 3 );
     }
 #endif
-
-  return 0;
 }

@@ -1,8 +1,9 @@
 //===- llvm/Support/Errc.h - Defines the llvm::errc enum --------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -62,7 +63,6 @@ enum class errc {
   no_such_process = int(std::errc::no_such_process),
   not_a_directory = int(std::errc::not_a_directory),
   not_enough_memory = int(std::errc::not_enough_memory),
-  not_supported = int(std::errc::not_supported),
   operation_not_permitted = int(std::errc::operation_not_permitted),
   permission_denied = int(std::errc::permission_denied),
   read_only_file_system = int(std::errc::read_only_file_system),

@@ -1,29 +1,28 @@
 /*===- InstrProfilingValue.c - Support library for PGO instrumentation ----===*\
 |*
-|* Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-|* See https://llvm.org/LICENSE.txt for license information.
-|* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+|*                     The LLVM Compiler Infrastructure
+|*
+|* This file is distributed under the University of Illinois Open Source
+|* License. See LICENSE.TXT for details.
 |*
 \*===----------------------------------------------------------------------===*/
 
+#include "InstrProfiling.h"
+#include "InstrProfilingInternal.h"
+#include "InstrProfilingUtil.h" /* For PS4 getenv shim. */
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "InstrProfiling.h"
-#include "InstrProfilingInternal.h"
-#include "InstrProfilingUtil.h"
-
 #define INSTR_PROF_VALUE_PROF_DATA
 #define INSTR_PROF_COMMON_API_IMPL
-#include "profile/InstrProfData.inc"
+#include "InstrProfData.inc"
 
 static int hasStaticCounters = 1;
 static int OutOfNodesWarnings = 0;
 static int hasNonDefaultValsPerSite = 0;
 #define INSTR_PROF_MAX_VP_WARNS 10
-#define INSTR_PROF_DEFAULT_NUM_VAL_PER_SITE 16
+#define INSTR_PROF_DEFAULT_NUM_VAL_PER_SITE 8
 #define INSTR_PROF_VNODE_POOL_SIZE 1024
 
 #ifndef _MSC_VER
@@ -31,7 +30,7 @@ static int hasNonDefaultValsPerSite = 0;
  * allocated by the compiler.  */
 COMPILER_RT_VISIBILITY ValueProfNode
     lprofValueProfNodes[INSTR_PROF_VNODE_POOL_SIZE] COMPILER_RT_SECTION(
-       COMPILER_RT_SEG INSTR_PROF_VNODES_SECT_NAME);
+       COMPILER_RT_SEG INSTR_PROF_VNODES_SECT_NAME_STR);
 #endif
 
 COMPILER_RT_VISIBILITY uint32_t VPMaxNumValsPerSite =
@@ -104,7 +103,8 @@ static int allocateValueProfileCounters(__llvm_profile_data *Data) {
   return 1;
 }
 
-static ValueProfNode *allocateOneNode(void) {
+static ValueProfNode *allocateOneNode(__llvm_profile_data *Data, uint32_t Index,
+                                      uint64_t Value) {
   ValueProfNode *Node;
 
   if (!hasStaticCounters)
@@ -130,14 +130,13 @@ static ValueProfNode *allocateOneNode(void) {
   return Node;
 }
 
-static COMPILER_RT_ALWAYS_INLINE void
-instrumentTargetValueImpl(uint64_t TargetValue, void *Data,
-                          uint32_t CounterIndex, uint64_t CountValue) {
+COMPILER_RT_VISIBILITY void
+__llvm_profile_instrument_target(uint64_t TargetValue, void *Data,
+                                 uint32_t CounterIndex) {
   __llvm_profile_data *PData = (__llvm_profile_data *)Data;
   if (!PData)
     return;
-  if (!CountValue)
-    return;
+
   if (!PData->Values) {
     if (!allocateValueProfileCounters(PData))
       return;
@@ -152,7 +151,7 @@ instrumentTargetValueImpl(uint64_t TargetValue, void *Data,
   uint8_t VDataCount = 0;
   while (CurVNode) {
     if (TargetValue == CurVNode->Value) {
-      CurVNode->Count += CountValue;
+      CurVNode->Count++;
       return;
     }
     if (CurVNode->Count < MinCount) {
@@ -193,21 +192,19 @@ instrumentTargetValueImpl(uint64_t TargetValue, void *Data,
      * the runtime can wipe out more than one lowest count entries
      * to give space for hot targets.
      */
-    if (MinCountVNode->Count <= CountValue) {
+    if (!MinCountVNode->Count || !(--MinCountVNode->Count)) {
       CurVNode = MinCountVNode;
       CurVNode->Value = TargetValue;
-      CurVNode->Count = CountValue;
-    } else
-      MinCountVNode->Count -= CountValue;
-
+      CurVNode->Count++;
+    }
     return;
   }
 
-  CurVNode = allocateOneNode();
+  CurVNode = allocateOneNode(PData, CounterIndex, TargetValue);
   if (!CurVNode)
     return;
   CurVNode->Value = TargetValue;
-  CurVNode->Count += CountValue;
+  CurVNode->Count++;
 
   uint32_t Success = 0;
   if (!ValueCounters[CounterIndex])
@@ -220,47 +217,6 @@ instrumentTargetValueImpl(uint64_t TargetValue, void *Data,
     free(CurVNode);
     return;
   }
-}
-
-COMPILER_RT_VISIBILITY void
-__llvm_profile_instrument_target(uint64_t TargetValue, void *Data,
-                                 uint32_t CounterIndex) {
-  instrumentTargetValueImpl(TargetValue, Data, CounterIndex, 1);
-}
-COMPILER_RT_VISIBILITY void
-__llvm_profile_instrument_target_value(uint64_t TargetValue, void *Data,
-                                       uint32_t CounterIndex,
-                                       uint64_t CountValue) {
-  instrumentTargetValueImpl(TargetValue, Data, CounterIndex, CountValue);
-}
-
-/*
- * The target values are partitioned into multiple regions/ranges. There is one
- * contiguous region which is precise -- every value in the range is tracked
- * individually. A value outside the precise region will be collapsed into one
- * value depending on the region it falls in.
- *
- * There are three regions:
- * 1. (-inf, PreciseRangeStart) and (PreciseRangeLast, LargeRangeValue) belong
- * to one region -- all values here should be mapped to one value of
- * "PreciseRangeLast + 1".
- * 2. [PreciseRangeStart, PreciseRangeLast]
- * 3. Large values: [LargeValue, +inf) maps to one value of LargeValue.
- *
- * The range for large values is optional. The default value of INT64_MIN
- * indicates it is not specified.
- */
-COMPILER_RT_VISIBILITY void __llvm_profile_instrument_range(
-    uint64_t TargetValue, void *Data, uint32_t CounterIndex,
-    int64_t PreciseRangeStart, int64_t PreciseRangeLast, int64_t LargeValue) {
-
-  if (LargeValue != INT64_MIN && (int64_t)TargetValue >= LargeValue)
-    TargetValue = LargeValue;
-  else if ((int64_t)TargetValue < PreciseRangeStart ||
-           (int64_t)TargetValue > PreciseRangeLast)
-    TargetValue = PreciseRangeLast + 1;
-
-  __llvm_profile_instrument_target(TargetValue, Data, CounterIndex);
 }
 
 /*

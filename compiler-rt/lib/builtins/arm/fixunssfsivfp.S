@@ -1,8 +1,9 @@
 //===-- fixunssfsivfp.S - Implement fixunssfsivfp -------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,9 +12,9 @@
 //
 // extern unsigned int __fixunssfsivfp(float a);
 //
-// Converts single precision float to a 32-bit unsigned int rounding towards
+// Converts single precision float to a 32-bit unsigned int rounding towards 
 // zero. All negative values become zero.
-// Uses Darwin calling convention where a single precision parameter is
+// Uses Darwin calling convention where a single precision parameter is 
 // passed in a GPR..
 //
 	.syntax unified

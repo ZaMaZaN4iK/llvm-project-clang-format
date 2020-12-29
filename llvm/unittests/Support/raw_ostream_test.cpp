@@ -1,16 +1,16 @@
 //===- llvm/unittest/Support/raw_ostream_test.cpp - raw_ostream tests -----===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+#include "gtest/gtest.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
-#include "gtest/gtest.h"
 
 using namespace llvm;
 
@@ -18,7 +18,8 @@ namespace {
 
 template<typename T> std::string printToString(const T &Value) {
   std::string res;
-  return (llvm::raw_string_ostream(res) << Value).str();
+  llvm::raw_string_ostream(res) << Value;
+  return res;    
 }
 
 /// printToString - Print the given value to a stream which only has \arg
@@ -45,10 +46,6 @@ template<typename T> std::string printToStringUnbuffered(const T &Value) {
   OS << Value;
   return res;
 }
-
-struct X {};
-
-raw_ostream &operator<<(raw_ostream &OS, const X &) { return OS << 'X'; }
 
 TEST(raw_ostreamTest, Types_Buffered) {
   // Char
@@ -79,9 +76,6 @@ TEST(raw_ostreamTest, Types_Buffered) {
   // Min and max.
   EXPECT_EQ("18446744073709551615", printToString(UINT64_MAX));
   EXPECT_EQ("-9223372036854775808", printToString(INT64_MIN));
-
-  // X, checking free operator<<().
-  EXPECT_EQ("X", printToString(X{}));
 }
 
 TEST(raw_ostreamTest, Types_Unbuffered) {  
@@ -113,9 +107,6 @@ TEST(raw_ostreamTest, Types_Unbuffered) {
   // Min and max.
   EXPECT_EQ("18446744073709551615", printToStringUnbuffered(UINT64_MAX));
   EXPECT_EQ("-9223372036854775808", printToStringUnbuffered(INT64_MIN));
-
-  // X, checking free operator<<().
-  EXPECT_EQ("X", printToString(X{}));
 }
 
 TEST(raw_ostreamTest, BufferEdge) {  
@@ -159,11 +150,6 @@ TEST(raw_ostreamTest, Justify) {
   EXPECT_EQ("   xyz", printToString(right_justify("xyz", 6), 6));
   EXPECT_EQ("abc",    printToString(right_justify("abc", 3), 3));
   EXPECT_EQ("big",    printToString(right_justify("big", 1), 3));
-  EXPECT_EQ("   on    ",    printToString(center_justify("on", 9), 9));
-  EXPECT_EQ("   off    ",    printToString(center_justify("off", 10), 10));
-  EXPECT_EQ("single ",    printToString(center_justify("single", 7), 7));
-  EXPECT_EQ("none",    printToString(center_justify("none", 1), 4));
-  EXPECT_EQ("none",    printToString(center_justify("none", 1), 1));
 }
 
 TEST(raw_ostreamTest, FormatHex) {  
@@ -343,12 +329,5 @@ TEST(raw_ostreamTest, FormattedHexBytes) {
   EXPECT_EQ("0000: 61 62 63 64 65 66 67  |abcdefg|\n"
             "0007: 68 69 6a 6b 6c        |hijkl|",
             format_bytes_with_ascii_str(B.take_front(12), 0, 7, 1));
-}
-
-TEST(raw_fd_ostreamTest, multiple_raw_fd_ostream_to_stdout) {
-  std::error_code EC;
-
-  { raw_fd_ostream("-", EC, sys::fs::OpenFlags::OF_None); }
-  { raw_fd_ostream("-", EC, sys::fs::OpenFlags::OF_None); }
 }
 }

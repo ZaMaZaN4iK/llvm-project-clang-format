@@ -1,8 +1,9 @@
 //===- ScopedHashTable.h - A simple scoped hash table -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -108,7 +109,6 @@ private:
   ScopedHashTableVal<K, V> *getLastValInScope() {
     return LastValInScope;
   }
-
   void setLastValInScope(ScopedHashTableVal<K, V> *Val) {
     LastValInScope = Val;
   }
@@ -151,14 +151,13 @@ class ScopedHashTable {
 public:
   /// ScopeTy - This is a helpful typedef that allows clients to get easy access
   /// to the name of the scope for this hash table.
-  using ScopeTy = ScopedHashTableScope<K, V, KInfo, AllocatorTy>;
-  using size_type = unsigned;
+  typedef ScopedHashTableScope<K, V, KInfo, AllocatorTy> ScopeTy;
+  typedef unsigned size_type;
 
 private:
   friend class ScopedHashTableScope<K, V, KInfo, AllocatorTy>;
 
-  using ValTy = ScopedHashTableVal<K, V>;
-
+  typedef ScopedHashTableVal<K, V> ValTy;
   DenseMap<K, ValTy*, KInfo> TopLevelMap;
   ScopeTy *CurScope = nullptr;
 
@@ -166,7 +165,7 @@ private:
 
 public:
   ScopedHashTable() = default;
-  ScopedHashTable(AllocatorTy A) : Allocator(A) {}
+  ScopedHashTable(AllocatorTy A) : CurScope(0), Allocator(A) {}
   ScopedHashTable(const ScopedHashTable &) = delete;
   ScopedHashTable &operator=(const ScopedHashTable &) = delete;
 
@@ -183,8 +182,8 @@ public:
     return TopLevelMap.count(Key);
   }
 
-  V lookup(const K &Key) const {
-    auto I = TopLevelMap.find(Key);
+  V lookup(const K &Key) {
+    typename DenseMap<K, ValTy*, KInfo>::iterator I = TopLevelMap.find(Key);
     if (I != TopLevelMap.end())
       return I->second->getValue();
 
@@ -195,7 +194,7 @@ public:
     insertIntoScope(CurScope, Key, Val);
   }
 
-  using iterator = ScopedHashTableIterator<K, V, KInfo>;
+  typedef ScopedHashTableIterator<K, V, KInfo> iterator;
 
   iterator end() { return iterator(0); }
 

@@ -1,8 +1,9 @@
 //===-- CFCData.h -----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,7 +14,9 @@
 
 class CFCData : public CFCReleaser<CFDataRef> {
 public:
+  //------------------------------------------------------------------
   // Constructors and Destructors
+  //------------------------------------------------------------------
   CFCData(CFDataRef data = NULL);
   CFCData(const CFCData &rhs);
   CFCData &operator=(const CFCData &rhs);
@@ -24,7 +27,9 @@ public:
   CFIndex GetLength() const;
 
 protected:
+  //------------------------------------------------------------------
   // Classes that inherit from CFCData can see and modify these
+  //------------------------------------------------------------------
 };
 
 #endif // #ifndef CoreFoundationCPP_CFData_h_

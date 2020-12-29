@@ -1,5 +1,5 @@
 This file is a partial list of people who have contributed to the LLVM
-project. If you have contributed a patch or made some other contribution to
+project.  If you have contributed a patch or made some other contribution to
 LLVM, please submit a patch to this file to add yourself, and it will be
 done!
 
@@ -23,8 +23,7 @@ D: MingW Win32 API portability layer
 
 N: Aaron Ballman
 E: aaron@aaronballman.com
-D: Clang frontend, frontend attributes, Windows support, general bug fixing
-I: AaronBallman
+D: __declspec attributes, Windows support, general bug fixing
 
 N: Nate Begeman
 E: natebegeman@mac.com
@@ -36,13 +35,6 @@ E: dberlin@dberlin.org
 D: ET-Forest implementation.
 D: Sparse bitmap
 
-N: Geoff Berry
-E: gberry@codeaurora.org
-E: gcb@acm.org
-D: AArch64 backend improvements
-D: Added EarlyCSE MemorySSA support
-D: CodeGen improvements
-
 N: David Blaikie
 E: dblaikie@gmail.com
 D: General bug fixing/fit & finish, mostly in Clang
@@ -50,10 +42,6 @@ D: General bug fixing/fit & finish, mostly in Clang
 N: Neil Booth
 E: neil@daikokuya.co.uk
 D: APFloat implementation.
-
-N: Alex Bradbury
-E: asb@lowrisc.org
-D: RISC-V backend
 
 N: Misha Brukman
 E: brukman+llvm@uiuc.edu
@@ -115,8 +103,8 @@ E: stefanus.du.toit@intel.com
 D: Bug fixes and minor improvements
 
 N: Rafael Avila de Espindola
-E: rafael@espindo.la
-D: MC and LLD work
+E: rafael.espindola@gmail.com
+D: The ARM backend
 
 N: Dave Estes
 E: cestes@codeaurora.org
@@ -132,7 +120,7 @@ D: Basic-block autovectorization, PowerPC backend improvements
 
 N: Eric Fiselier
 E: eric@efcs.ca
-D: LIT patches and documentation
+D: LIT patches and documentation.
 
 N: Ryan Flynn
 E: pizza@parseerror.com
@@ -166,17 +154,6 @@ N: Dan Gohman
 E: sunfish@mozilla.com
 D: Miscellaneous bug fixes
 D: WebAssembly Backend
-
-N: Renato Golin
-E: rengolin@systemcall.eu
-E: renato.golin@linaro.org
-E: rengolin@gmail.com
-D: ARM/AArch64 back-end improvements
-D: Loop Vectorizer improvements
-D: Regression and Test Suite improvements
-D: Linux compatibility (GNU, musl, etc)
-D: Initial Linux kernel / Android support effort
-I: rengolin
 
 N: David Goodwin
 E: david@goodwinz.net
@@ -222,11 +199,6 @@ N: Patrick Jenkins
 E: patjenk@wam.umd.edu
 D: Nightly Tester
 
-N: Tony(Yanjun) Jiang
-E: jtony@ca.ibm.com
-D: PowerPC Backend Developer
-D: Improvements to the PPC backend and miscellaneous bug fixes
-
 N: Dale Johannesen
 E: dalej@apple.com
 D: ARM constant islands improvements
@@ -243,17 +215,12 @@ N: Rod Kay
 E: rkay@auroraux.org
 D: Author of LLVM Ada bindings
 
-N: Erich Keane
-E: erich.keane@intel.com
-D: A variety of Clang contributions including function multiversioning, regcall/vectorcall.
-I: ErichKeane
-
 N: Eric Kidd
 W: http://randomhacks.net/
 D: llvm-config script
 
 N: Anton Korobeynikov
-E: anton at korobeynikov dot info
+E: asl@math.spbu.ru
 D: Mingw32 fixes, cross-compiling support, stdcall/fastcall calling conv.
 D: x86/linux PIC codegen, aliases, regparm/visibility attributes
 D: Switch lowering refactoring
@@ -298,7 +265,7 @@ D: Release manager (1.7+)
 N: Sylvestre Ledru
 E: sylvestre@debian.org
 W: http://sylvestre.ledru.info/
-W: https://apt.llvm.org/
+W: http://llvm.org/apt/
 D: Debian and Ubuntu packaging
 D: Continuous integration with jenkins
 
@@ -351,12 +318,11 @@ D: Support for implicit TLS model used with MS VC runtime
 D: Dumping of Win64 EH structures
 
 N: Takumi Nakamura
-I: chapuni
 E: geek4civic@gmail.com
 E: chapuni@hf.rim.or.jp
-D: Maintaining the Git monorepo
-W: https://github.com/llvm-project/
-S: Ebina, Japan
+D: Cygwin and MinGW support.
+D: Win32 tweaks.
+S: Yokohama, Japan
 
 N: Edward O'Callaghan
 E: eocallaghan@auroraux.org
@@ -411,10 +377,6 @@ N: Vladimir Prus
 W: http://vladimir_prus.blogspot.com
 E: ghost@cs.msu.su
 D: Made inst_iterator behave like a proper iterator, LowerConstantExprs pass
-
-N: QIU Chaofan
-E: qiucofan@cn.ibm.com
-D: PowerPC Backend Developer
 
 N: Kalle Raiskila
 E: kalle.rasikila@nokia.com
@@ -495,10 +457,6 @@ N: Adam Treat
 E: manyoso@yahoo.com
 D: C++ bugs filed, and C++ front-end bug fixes.
 
-N: Andrew Trick
-E: atrick@apple.com
-D: Instruction Scheduling, ...
-
 N: Lauro Ramos Venancio
 E: lauro.venancio@indt.org.br
 D: ARM backend improvements
@@ -507,33 +465,9 @@ D: Thread Local Storage implementation
 N: Bill Wendling
 I: wendling
 E: isanbard@gmail.com
-D: Release manager, IR Linker, LTO.
-D: Bunches of stuff.
+D: Release manager, IR Linker, LTO
+D: Bunches of stuff
 
 N: Bob Wilson
 E: bob.wilson@acm.org
 D: Advanced SIMD (NEON) support in the ARM backend.
-
-N: QingShan Zhang
-E: qshanz@cn.ibm.com
-D: PowerPC Backend Developer
-
-N: Li Jia He
-E: hljhehlj@cn.ibm.com
-D: PowerPC Backend Developer
-
-N: Zixuan Wu
-E: wuzish@cn.ibm.com
-D: PowerPC Backend Developer
-
-N: Kang Zhang
-E: shkzhang@cn.ibm.com
-D: PowerPC Backend Developer
-
-N: Zheng Chen
-E: czhengsz@cn.ibm.com
-D: PowerPC Backend Developer
-
-N: Djordje Todorovic
-E: djordje.todorovic@rt-rk.com
-D: Debug Information

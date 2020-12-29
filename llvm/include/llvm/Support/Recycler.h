@@ -1,8 +1,9 @@
 //==- llvm/Support/Recycler.h - Recycling Allocator --------------*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -41,16 +42,13 @@ class Recycler {
 
   FreeNode *pop_val() {
     auto *Val = FreeList;
-    __asan_unpoison_memory_region(Val, Size);
     FreeList = FreeList->Next;
-    __msan_allocated_memory(Val, Size);
     return Val;
   }
 
   void push(FreeNode *N) {
     N->Next = FreeList;
     FreeList = N;
-    __asan_poison_memory_region(N, Size);
   }
 
 public:

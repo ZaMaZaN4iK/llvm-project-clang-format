@@ -1,11 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// REQUIRES: c++experimental
 // UNSUPPORTED: c++98, c++03
 
 // <experimental/memory_resource>
@@ -21,9 +23,7 @@
 #include <tuple>
 #include <cassert>
 #include <cstdlib>
-#include "uses_alloc_types.h"
-
-#include "test_macros.h"
+#include "uses_alloc_types.hpp"
 
 namespace ex = std::experimental::pmr;
 
@@ -35,7 +35,7 @@ struct default_constructible
     int x{0};
 };
 
-int main(int, char**)
+int main()
 {
     // pair<default_constructible, default_constructible> as T()
     {
@@ -50,6 +50,4 @@ int main(int, char**)
         assert(ptr->second.x == 42);
         std::free(ptr);
     }
-
-  return 0;
 }

@@ -1,8 +1,9 @@
-//===-- EmulateInstructionARM.h ---------------------------------*- C++ -*-===//
+//===-- lldb_EmulateInstructionARM.h ----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,9 +11,9 @@
 #define lldb_EmulateInstructionARM_h_
 
 #include "Plugins/Process/Utility/ARMDefines.h"
+#include "lldb/Core/ConstString.h"
 #include "lldb/Core/EmulateInstruction.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/Status.h"
+#include "lldb/Core/Error.h"
 
 namespace lldb_private {
 
@@ -45,7 +46,7 @@ private:
 
 class EmulateInstructionARM : public EmulateInstruction {
 public:
-  enum ARMEncoding {
+  typedef enum {
     eEncodingA1,
     eEncodingA2,
     eEncodingA3,
@@ -56,7 +57,7 @@ public:
     eEncodingT3,
     eEncodingT4,
     eEncodingT5
-  };
+  } ARMEncoding;
 
   static void Initialize();
 
@@ -291,7 +292,7 @@ public:
 protected:
   // Typedef for the callback function used during the emulation.
   // Pass along (ARMEncoding)encoding as the callback data.
-  enum ARMInstrSize { eSize16, eSize32 };
+  typedef enum { eSize16, eSize32 } ARMInstrSize;
 
   typedef struct {
     uint32_t mask;

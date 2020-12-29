@@ -1,8 +1,9 @@
-//===-- TransformActions.cpp - Migration to ARC mode ----------------------===//
+//===--- ARCMT.cpp - Migration to ARC mode --------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,7 +19,7 @@ using namespace arcmt;
 
 namespace {
 
-/// Collects transformations and merges them before applying them with
+/// \brief Collects transformations and merges them before applying them with
 /// with applyRewrites(). E.g. if the same source range
 /// is requested to be removed twice, only one rewriter remove will be invoked.
 /// Rewrites happen in "transactions"; if one rewrite in the transaction cannot
@@ -60,7 +61,7 @@ class TransformActionsImpl {
     Range_ExtendsEnd
   };
 
-  /// A range to remove. It is a character range.
+  /// \brief A range to remove. It is a character range.
   struct CharRange {
     FullSourceLoc Begin, End;
 
@@ -75,7 +76,7 @@ class TransformActionsImpl {
         End = FullSourceLoc(srcMgr.getExpansionLoc(endLoc), srcMgr);
       }
       assert(Begin.isValid() && End.isValid());
-    }
+    } 
 
     RangeComparison compareWith(const CharRange &RHS) const {
       if (End.isBeforeInTranslationUnitThan(RHS.Begin))
@@ -93,7 +94,7 @@ class TransformActionsImpl {
       else
         return Range_ExtendsEnd;
     }
-
+    
     static RangeComparison compare(SourceRange LHS, SourceRange RHS,
                                    SourceManager &SrcMgr, Preprocessor &PP) {
       return CharRange(CharSourceRange::getTokenRange(LHS), SrcMgr, PP)
@@ -106,7 +107,7 @@ class TransformActionsImpl {
   typedef std::map<FullSourceLoc, TextsVec, FullSourceLoc::BeforeThanCompare>
       InsertsMap;
   InsertsMap Inserts;
-  /// A list of ranges to remove. They are always sorted and they never
+  /// \brief A list of ranges to remove. They are always sorted and they never
   /// intersect with each other.
   std::list<CharRange> Removals;
 
@@ -114,7 +115,7 @@ class TransformActionsImpl {
 
   std::vector<std::pair<CharRange, SourceLocation> > IndentationRanges;
 
-  /// Keeps text passed to transformation methods.
+  /// \brief Keeps text passed to transformation methods.
   llvm::StringMap<bool> UniqueText;
 
 public:
@@ -166,12 +167,12 @@ private:
   void addRemoval(CharSourceRange range);
   void addInsertion(SourceLocation loc, StringRef text);
 
-  /// Stores text passed to the transformation methods to keep the string
+  /// \brief Stores text passed to the transformation methods to keep the string
   /// "alive". Since the vast majority of text will be the same, we also unique
   /// the strings using a StringMap.
   StringRef getUniqueText(StringRef text);
 
-  /// Computes the source location just past the end of the token at
+  /// \brief Computes the source location just past the end of the token at
   /// the given source location. If the location points at a macro, the whole
   /// macro expansion is skipped.
   static SourceLocation getLocForEndOfToken(SourceLocation loc,
@@ -313,9 +314,7 @@ void TransformActionsImpl::removeStmt(Stmt *S) {
   assert(IsInTransaction && "Actions only allowed during a transaction");
   ActionData data;
   data.Kind = Act_RemoveStmt;
-  if (auto *E = dyn_cast<Expr>(S))
-    S = E->IgnoreImplicit(); // important for uniquing
-  data.S = S;
+  data.S = S->IgnoreImplicit(); // important for uniquing
   CachedActions.push_back(data);
 }
 
@@ -351,7 +350,7 @@ void TransformActionsImpl::replaceText(SourceLocation loc, StringRef text,
 void TransformActionsImpl::replaceStmt(Stmt *S, StringRef text) {
   assert(IsInTransaction && "Actions only allowed during a transaction");
   text = getUniqueText(text);
-  insert(S->getBeginLoc(), text);
+  insert(S->getLocStart(), text);
   removeStmt(S);
 }
 
@@ -486,7 +485,7 @@ void TransformActionsImpl::commitReplaceText(SourceLocation loc,
   SourceLocation afterText = loc.getLocWithOffset(text.size());
 
   addRemoval(CharSourceRange::getCharRange(loc, afterText));
-  commitInsert(loc, replacementText);
+  commitInsert(loc, replacementText);  
 }
 
 void TransformActionsImpl::commitIncreaseIndentation(SourceRange range,
@@ -540,7 +539,6 @@ void TransformActionsImpl::addRemoval(CharSourceRange range) {
       return;
     case Range_Contains:
       RI->End = newRange.End;
-      LLVM_FALLTHROUGH;
     case Range_ExtendsBegin:
       newRange.End = RI->End;
       Removals.erase(RI);
@@ -578,25 +576,21 @@ void TransformActionsImpl::applyRewrites(
   }
 }
 
-/// Stores text passed to the transformation methods to keep the string
+/// \brief Stores text passed to the transformation methods to keep the string
 /// "alive". Since the vast majority of text will be the same, we also unique
 /// the strings using a StringMap.
 StringRef TransformActionsImpl::getUniqueText(StringRef text) {
   return UniqueText.insert(std::make_pair(text, false)).first->first();
 }
 
-/// Computes the source location just past the end of the token at
+/// \brief Computes the source location just past the end of the token at
 /// the given source location. If the location points at a macro, the whole
 /// macro expansion is skipped.
 SourceLocation TransformActionsImpl::getLocForEndOfToken(SourceLocation loc,
                                                          SourceManager &SM,
                                                          Preprocessor &PP) {
-  if (loc.isMacroID()) {
-    CharSourceRange Exp = SM.getExpansionRange(loc);
-    if (Exp.isCharRange())
-      return Exp.getEnd();
-    loc = Exp.getEnd();
-  }
+  if (loc.isMacroID())
+    loc = SM.getExpansionRange(loc).second;
   return PP.getLocForEndOfToken(loc);
 }
 

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,13 +16,11 @@
 #include <valarray>
 #include <cassert>
 
-#include "test_macros.h"
-
 typedef int T;
 
 T f(const T& t) {return t + 5;}
 
-int main(int, char**)
+int main()
 {
     {
         T a1[] = {1, 2, 3, 4,  5,  6,  7,  8,  9, 10};
@@ -49,6 +48,4 @@ int main(int, char**)
         for (unsigned i = 0; i < N1; ++i)
             assert(v2[i] == a2[i]);
     }
-
-  return 0;
 }

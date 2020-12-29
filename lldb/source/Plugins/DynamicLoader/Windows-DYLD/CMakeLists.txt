@@ -1,9 +1,3 @@
-add_lldb_library(lldbPluginDynamicLoaderWindowsDYLD PLUGIN
+add_lldb_library(lldbPluginDynamicLoaderWindowsDYLD
   DynamicLoaderWindowsDYLD.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbTarget
-  LINK_COMPONENTS
-    Support
   )

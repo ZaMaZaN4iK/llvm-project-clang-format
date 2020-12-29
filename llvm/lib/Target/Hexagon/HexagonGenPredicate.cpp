@@ -1,10 +1,13 @@
-//===- HexagonGenPredicate.cpp --------------------------------------------===//
+//===--- HexagonGenPredicate.cpp ------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
+
+#define DEBUG_TYPE "gen-pred"
 
 #include "HexagonInstrInfo.h"
 #include "HexagonSubtarget.h"
@@ -18,22 +21,19 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/DebugLoc.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetRegisterInfo.h"
 #include <cassert>
 #include <iterator>
 #include <map>
 #include <queue>
 #include <set>
 #include <utility>
-
-#define DEBUG_TYPE "gen-pred"
 
 using namespace llvm;
 
@@ -46,19 +46,17 @@ namespace llvm {
 
 namespace {
 
-  // FIXME: Use TargetInstrInfo::RegSubRegPair
-  struct RegisterSubReg {
+  struct Register {
     unsigned R, S;
 
-    RegisterSubReg(unsigned r = 0, unsigned s = 0) : R(r), S(s) {}
-    RegisterSubReg(const MachineOperand &MO) : R(MO.getReg()), S(MO.getSubReg()) {}
-    RegisterSubReg(const Register &Reg) : R(Reg), S(0) {}
+    Register(unsigned r = 0, unsigned s = 0) : R(r), S(s) {}
+    Register(const MachineOperand &MO) : R(MO.getReg()), S(MO.getSubReg()) {}
 
-    bool operator== (const RegisterSubReg &Reg) const {
+    bool operator== (const Register &Reg) const {
       return R == Reg.R && S == Reg.S;
     }
 
-    bool operator< (const RegisterSubReg &Reg) const {
+    bool operator< (const Register &Reg) const {
       return R < Reg.R || (R == Reg.R && S < Reg.S);
     }
   };
@@ -66,24 +64,25 @@ namespace {
   struct PrintRegister {
     friend raw_ostream &operator<< (raw_ostream &OS, const PrintRegister &PR);
 
-    PrintRegister(RegisterSubReg R, const TargetRegisterInfo &I) : Reg(R), TRI(I) {}
+    PrintRegister(Register R, const TargetRegisterInfo &I) : Reg(R), TRI(I) {}
 
   private:
-    RegisterSubReg Reg;
+    Register Reg;
     const TargetRegisterInfo &TRI;
   };
 
   raw_ostream &operator<< (raw_ostream &OS, const PrintRegister &PR)
     LLVM_ATTRIBUTE_UNUSED;
   raw_ostream &operator<< (raw_ostream &OS, const PrintRegister &PR) {
-    return OS << printReg(PR.Reg.R, &PR.TRI, PR.Reg.S);
+    return OS << PrintReg(PR.Reg.R, &PR.TRI, PR.Reg.S);
   }
 
   class HexagonGenPredicate : public MachineFunctionPass {
   public:
     static char ID;
 
-    HexagonGenPredicate() : MachineFunctionPass(ID) {
+    HexagonGenPredicate() : MachineFunctionPass(ID), TII(nullptr), TRI(nullptr),
+        MRI(nullptr) {
       initializeHexagonGenPredicatePass(*PassRegistry::getPassRegistry());
     }
 
@@ -100,32 +99,32 @@ namespace {
     bool runOnMachineFunction(MachineFunction &MF) override;
 
   private:
-    using VectOfInst = SetVector<MachineInstr *>;
-    using SetOfReg = std::set<RegisterSubReg>;
-    using RegToRegMap = std::map<RegisterSubReg, RegisterSubReg>;
+    typedef SetVector<MachineInstr*> VectOfInst;
+    typedef std::set<Register> SetOfReg;
+    typedef std::map<Register,Register> RegToRegMap;
 
-    const HexagonInstrInfo *TII = nullptr;
-    const HexagonRegisterInfo *TRI = nullptr;
-    MachineRegisterInfo *MRI = nullptr;
+    const HexagonInstrInfo *TII;
+    const HexagonRegisterInfo *TRI;
+    MachineRegisterInfo *MRI;
     SetOfReg PredGPRs;
     VectOfInst PUsers;
     RegToRegMap G2P;
 
     bool isPredReg(unsigned R);
     void collectPredicateGPR(MachineFunction &MF);
-    void processPredicateGPR(const RegisterSubReg &Reg);
+    void processPredicateGPR(const Register &Reg);
     unsigned getPredForm(unsigned Opc);
     bool isConvertibleToPredForm(const MachineInstr *MI);
     bool isScalarCmp(unsigned Opc);
-    bool isScalarPred(RegisterSubReg PredReg);
-    RegisterSubReg getPredRegFor(const RegisterSubReg &Reg);
+    bool isScalarPred(Register PredReg);
+    Register getPredRegFor(const Register &Reg);
     bool convertToPredForm(MachineInstr *MI);
     bool eliminatePredCopies(MachineFunction &MF);
   };
 
-} // end anonymous namespace
+  char HexagonGenPredicate::ID = 0;
 
-char HexagonGenPredicate::ID = 0;
+} // end anonymous namespace
 
 INITIALIZE_PASS_BEGIN(HexagonGenPredicate, "hexagon-gen-pred",
   "Hexagon generate predicate operations", false, false)
@@ -134,7 +133,7 @@ INITIALIZE_PASS_END(HexagonGenPredicate, "hexagon-gen-pred",
   "Hexagon generate predicate operations", false, false)
 
 bool HexagonGenPredicate::isPredReg(unsigned R) {
-  if (!Register::isVirtualRegister(R))
+  if (!TargetRegisterInfo::isVirtualRegister(R))
     return false;
   const TargetRegisterClass *RC = MRI->getRegClass(R);
   return RC == &Hexagon::PredRegsRegClass;
@@ -213,8 +212,8 @@ void HexagonGenPredicate::collectPredicateGPR(MachineFunction &MF) {
         case Hexagon::C2_tfrpr:
         case TargetOpcode::COPY:
           if (isPredReg(MI->getOperand(1).getReg())) {
-            RegisterSubReg RD = MI->getOperand(0);
-            if (Register::isVirtualRegister(RD.R))
+            Register RD = MI->getOperand(0);
+            if (TargetRegisterInfo::isVirtualRegister(RD.R))
               PredGPRs.insert(RD);
           }
           break;
@@ -223,13 +222,13 @@ void HexagonGenPredicate::collectPredicateGPR(MachineFunction &MF) {
   }
 }
 
-void HexagonGenPredicate::processPredicateGPR(const RegisterSubReg &Reg) {
-  LLVM_DEBUG(dbgs() << __func__ << ": " << printReg(Reg.R, TRI, Reg.S) << "\n");
-  using use_iterator = MachineRegisterInfo::use_iterator;
-
+void HexagonGenPredicate::processPredicateGPR(const Register &Reg) {
+  DEBUG(dbgs() << __func__ << ": "
+               << PrintReg(Reg.R, TRI, Reg.S) << "\n");
+  typedef MachineRegisterInfo::use_iterator use_iterator;
   use_iterator I = MRI->use_begin(Reg.R), E = MRI->use_end();
   if (I == E) {
-    LLVM_DEBUG(dbgs() << "Dead reg: " << printReg(Reg.R, TRI, Reg.S) << '\n');
+    DEBUG(dbgs() << "Dead reg: " << PrintReg(Reg.R, TRI, Reg.S) << '\n');
     MachineInstr *DefI = MRI->getVRegDef(Reg.R);
     DefI->eraseFromParent();
     return;
@@ -242,31 +241,31 @@ void HexagonGenPredicate::processPredicateGPR(const RegisterSubReg &Reg) {
   }
 }
 
-RegisterSubReg HexagonGenPredicate::getPredRegFor(const RegisterSubReg &Reg) {
+Register HexagonGenPredicate::getPredRegFor(const Register &Reg) {
   // Create a predicate register for a given Reg. The newly created register
   // will have its value copied from Reg, so that it can be later used as
   // an operand in other instructions.
-  assert(Register::isVirtualRegister(Reg.R));
+  assert(TargetRegisterInfo::isVirtualRegister(Reg.R));
   RegToRegMap::iterator F = G2P.find(Reg);
   if (F != G2P.end())
     return F->second;
 
-  LLVM_DEBUG(dbgs() << __func__ << ": " << PrintRegister(Reg, *TRI));
+  DEBUG(dbgs() << __func__ << ": " << PrintRegister(Reg, *TRI));
   MachineInstr *DefI = MRI->getVRegDef(Reg.R);
   assert(DefI);
   unsigned Opc = DefI->getOpcode();
   if (Opc == Hexagon::C2_tfrpr || Opc == TargetOpcode::COPY) {
     assert(DefI->getOperand(0).isDef() && DefI->getOperand(1).isUse());
-    RegisterSubReg PR = DefI->getOperand(1);
+    Register PR = DefI->getOperand(1);
     G2P.insert(std::make_pair(Reg, PR));
-    LLVM_DEBUG(dbgs() << " -> " << PrintRegister(PR, *TRI) << '\n');
+    DEBUG(dbgs() << " -> " << PrintRegister(PR, *TRI) << '\n');
     return PR;
   }
 
   MachineBasicBlock &B = *DefI->getParent();
   DebugLoc DL = DefI->getDebugLoc();
   const TargetRegisterClass *PredRC = &Hexagon::PredRegsRegClass;
-  Register NewPR = MRI->createVirtualRegister(PredRC);
+  unsigned NewPR = MRI->createVirtualRegister(PredRC);
 
   // For convertible instructions, do not modify them, so that they can
   // be converted later.  Generate a copy from Reg to NewPR.
@@ -274,10 +273,9 @@ RegisterSubReg HexagonGenPredicate::getPredRegFor(const RegisterSubReg &Reg) {
     MachineBasicBlock::iterator DefIt = DefI;
     BuildMI(B, std::next(DefIt), DL, TII->get(TargetOpcode::COPY), NewPR)
       .addReg(Reg.R, 0, Reg.S);
-    G2P.insert(std::make_pair(Reg, RegisterSubReg(NewPR)));
-    LLVM_DEBUG(dbgs() << " -> !" << PrintRegister(RegisterSubReg(NewPR), *TRI)
-                      << '\n');
-    return RegisterSubReg(NewPR);
+    G2P.insert(std::make_pair(Reg, Register(NewPR)));
+    DEBUG(dbgs() << " -> !" << PrintRegister(Register(NewPR), *TRI) << '\n');
+    return Register(NewPR);
   }
 
   llvm_unreachable("Invalid argument");
@@ -319,12 +317,12 @@ bool HexagonGenPredicate::isScalarCmp(unsigned Opc) {
   return false;
 }
 
-bool HexagonGenPredicate::isScalarPred(RegisterSubReg PredReg) {
-  std::queue<RegisterSubReg> WorkQ;
+bool HexagonGenPredicate::isScalarPred(Register PredReg) {
+  std::queue<Register> WorkQ;
   WorkQ.push(PredReg);
 
   while (!WorkQ.empty()) {
-    RegisterSubReg PR = WorkQ.front();
+    Register PR = WorkQ.front();
     WorkQ.pop();
     const MachineInstr *DefI = MRI->getVRegDef(PR.R);
     if (!DefI)
@@ -336,7 +334,6 @@ bool HexagonGenPredicate::isScalarPred(RegisterSubReg PredReg) {
         if (MRI->getRegClass(PR.R) != PredRC)
           return false;
         // If it is a copy between two predicate registers, fall through.
-        LLVM_FALLTHROUGH;
       }
       case Hexagon::C2_and:
       case Hexagon::C2_andn:
@@ -353,7 +350,7 @@ bool HexagonGenPredicate::isScalarPred(RegisterSubReg PredReg) {
         // Add operands to the queue.
         for (const MachineOperand &MO : DefI->operands())
           if (MO.isReg() && MO.isUse())
-            WorkQ.push(RegisterSubReg(MO.getReg()));
+            WorkQ.push(Register(MO.getReg()));
         break;
 
       // All non-vector compares are ok, everything else is bad.
@@ -366,7 +363,7 @@ bool HexagonGenPredicate::isScalarPred(RegisterSubReg PredReg) {
 }
 
 bool HexagonGenPredicate::convertToPredForm(MachineInstr *MI) {
-  LLVM_DEBUG(dbgs() << __func__ << ": " << MI << " " << *MI);
+  DEBUG(dbgs() << __func__ << ": " << MI << " " << *MI);
 
   unsigned Opc = MI->getOpcode();
   assert(isConvertibleToPredForm(MI));
@@ -375,7 +372,7 @@ bool HexagonGenPredicate::convertToPredForm(MachineInstr *MI) {
     MachineOperand &MO = MI->getOperand(i);
     if (!MO.isReg() || !MO.isUse())
       continue;
-    RegisterSubReg Reg(MO);
+    Register Reg(MO);
     if (Reg.S && Reg.S != Hexagon::isub_lo)
       return false;
     if (!PredGPRs.count(Reg))
@@ -402,7 +399,7 @@ bool HexagonGenPredicate::convertToPredForm(MachineInstr *MI) {
     // If it's a scalar predicate register, then all bits in it are
     // the same. Otherwise, to determine whether all bits are 0 or not
     // we would need to use any8.
-    RegisterSubReg PR = getPredRegFor(MI->getOperand(1));
+    Register PR = getPredRegFor(MI->getOperand(1));
     if (!isScalarPred(PR))
       return false;
     // This will skip the immediate argument when creating the predicate
@@ -413,27 +410,27 @@ bool HexagonGenPredicate::convertToPredForm(MachineInstr *MI) {
   // Some sanity: check that def is in operand #0.
   MachineOperand &Op0 = MI->getOperand(0);
   assert(Op0.isDef());
-  RegisterSubReg OutR(Op0);
+  Register OutR(Op0);
 
   // Don't use getPredRegFor, since it will create an association between
   // the argument and a created predicate register (i.e. it will insert a
   // copy if a new predicate register is created).
   const TargetRegisterClass *PredRC = &Hexagon::PredRegsRegClass;
-  RegisterSubReg NewPR = MRI->createVirtualRegister(PredRC);
+  Register NewPR = MRI->createVirtualRegister(PredRC);
   MachineInstrBuilder MIB = BuildMI(B, MI, DL, TII->get(NewOpc), NewPR.R);
 
   // Add predicate counterparts of the GPRs.
   for (unsigned i = 1; i < NumOps; ++i) {
-    RegisterSubReg GPR = MI->getOperand(i);
-    RegisterSubReg Pred = getPredRegFor(GPR);
+    Register GPR = MI->getOperand(i);
+    Register Pred = getPredRegFor(GPR);
     MIB.addReg(Pred.R, 0, Pred.S);
   }
-  LLVM_DEBUG(dbgs() << "generated: " << *MIB);
+  DEBUG(dbgs() << "generated: " << *MIB);
 
   // Generate a copy-out: NewGPR = NewPR, and replace all uses of OutR
   // with NewGPR.
   const TargetRegisterClass *RC = MRI->getRegClass(OutR.R);
-  Register NewOutR = MRI->createVirtualRegister(RC);
+  unsigned NewOutR = MRI->createVirtualRegister(RC);
   BuildMI(B, MI, DL, TII->get(TargetOpcode::COPY), NewOutR)
     .addReg(NewPR.R, 0, NewPR.S);
   MRI->replaceRegWith(OutR.R, NewOutR);
@@ -443,7 +440,7 @@ bool HexagonGenPredicate::convertToPredForm(MachineInstr *MI) {
   // then the output will be a predicate register.  Do not visit the
   // users of it.
   if (!isPredReg(NewOutR)) {
-    RegisterSubReg R(NewOutR);
+    Register R(NewOutR);
     PredGPRs.insert(R);
     processPredicateGPR(R);
   }
@@ -451,7 +448,7 @@ bool HexagonGenPredicate::convertToPredForm(MachineInstr *MI) {
 }
 
 bool HexagonGenPredicate::eliminatePredCopies(MachineFunction &MF) {
-  LLVM_DEBUG(dbgs() << __func__ << "\n");
+  DEBUG(dbgs() << __func__ << "\n");
   const TargetRegisterClass *PredRC = &Hexagon::PredRegsRegClass;
   bool Changed = false;
   VectOfInst Erase;
@@ -470,11 +467,11 @@ bool HexagonGenPredicate::eliminatePredCopies(MachineFunction &MF) {
     for (MachineInstr &MI : MBB) {
       if (MI.getOpcode() != TargetOpcode::COPY)
         continue;
-      RegisterSubReg DR = MI.getOperand(0);
-      RegisterSubReg SR = MI.getOperand(1);
-      if (!Register::isVirtualRegister(DR.R))
+      Register DR = MI.getOperand(0);
+      Register SR = MI.getOperand(1);
+      if (!TargetRegisterInfo::isVirtualRegister(DR.R))
         continue;
-      if (!Register::isVirtualRegister(SR.R))
+      if (!TargetRegisterInfo::isVirtualRegister(SR.R))
         continue;
       if (MRI->getRegClass(DR.R) != PredRC)
         continue;
@@ -494,7 +491,7 @@ bool HexagonGenPredicate::eliminatePredCopies(MachineFunction &MF) {
 }
 
 bool HexagonGenPredicate::runOnMachineFunction(MachineFunction &MF) {
-  if (skipFunction(MF.getFunction()))
+  if (skipFunction(*MF.getFunction()))
     return false;
 
   TII = MF.getSubtarget<HexagonSubtarget>().getInstrInfo();
@@ -514,8 +511,7 @@ bool HexagonGenPredicate::runOnMachineFunction(MachineFunction &MF) {
     Again = false;
     VectOfInst Processed, Copy;
 
-    using iterator = VectOfInst::iterator;
-
+    typedef VectOfInst::iterator iterator;
     Copy = PUsers;
     for (iterator I = Copy.begin(), E = Copy.end(); I != E; ++I) {
       MachineInstr *MI = *I;

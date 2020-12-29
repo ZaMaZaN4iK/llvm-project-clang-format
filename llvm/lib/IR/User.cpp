@@ -1,14 +1,16 @@
 //===-- User.cpp - Implement the User class -------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/IR/User.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/Operator.h"
 
 namespace llvm {
 class BasicBlock;
@@ -16,6 +18,8 @@ class BasicBlock;
 //===----------------------------------------------------------------------===//
 //                                 User Class
 //===----------------------------------------------------------------------===//
+
+void User::anchor() {}
 
 void User::replaceUsesOfWith(Value *From, Value *To) {
   if (From == To) return;   // Duh what?
@@ -162,9 +166,7 @@ void *User::operator new(size_t Size) {
 //                         User operator delete Implementation
 //===----------------------------------------------------------------------===//
 
-// Repress memory sanitization, due to use-after-destroy by operator
-// delete. Bug report 24578 identifies this issue.
-LLVM_NO_SANITIZE_MEMORY_ATTRIBUTE void User::operator delete(void *Usr) {
+void User::operator delete(void *Usr) {
   // Hung off uses use a single Use* before the User, while other subclasses
   // use a Use[] allocated prior to the user.
   User *Obj = static_cast<User *>(Usr);
@@ -189,6 +191,14 @@ LLVM_NO_SANITIZE_MEMORY_ATTRIBUTE void User::operator delete(void *Usr) {
              /* Delete */ false);
     ::operator delete(Storage);
   }
+}
+
+//===----------------------------------------------------------------------===//
+//                             Operator Class
+//===----------------------------------------------------------------------===//
+
+Operator::~Operator() {
+  llvm_unreachable("should never destroy an Operator");
 }
 
 } // End llvm namespace

@@ -1,17 +1,22 @@
 //===-- GDBRemoteCommunicationServerCommon.h --------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_GDBRemoteCommunicationServerCommon_h_
 #define liblldb_GDBRemoteCommunicationServerCommon_h_
 
+// C Includes
+// C++ Includes
 #include <string>
 
-#include "lldb/Host/ProcessLaunchInfo.h"
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Target/Process.h"
 #include "lldb/lldb-private-forward.h"
 
 #include "GDBRemoteCommunicationServer.h"
@@ -33,7 +38,7 @@ public:
 
 protected:
   ProcessLaunchInfo m_process_launch_info;
-  Status m_process_launch_error;
+  Error m_process_launch_error;
   ProcessInstanceInfoList m_proc_infos;
   uint32_t m_proc_infos_index;
   bool m_thread_suffix_supported;
@@ -125,28 +130,31 @@ protected:
       PacketResult (T::*handler)(StringExtractorGDBRemote &packet)) {
     RegisterPacketHandler(packet_type,
                           [this, handler](StringExtractorGDBRemote packet,
-                                          Status &error, bool &interrupt,
+                                          Error &error, bool &interrupt,
                                           bool &quit) {
                             return (static_cast<T *>(this)->*handler)(packet);
                           });
   }
 
+  //------------------------------------------------------------------
   /// Launch a process with the current launch settings.
   ///
   /// This method supports running an lldb-gdbserver or similar
   /// server in a situation where the startup code has been provided
   /// with all the information for a child process to be launched.
   ///
-  /// \return
-  ///     An Status object indicating the success or failure of the
+  /// @return
+  ///     An Error object indicating the success or failure of the
   ///     launch.
-  virtual Status LaunchProcess() = 0;
+  //------------------------------------------------------------------
+  virtual Error LaunchProcess() = 0;
 
   virtual FileSpec FindModuleFile(const std::string &module_path,
                                   const ArchSpec &arch);
 
 private:
-  ModuleSpec GetModuleInfo(llvm::StringRef module_path, llvm::StringRef triple);
+  ModuleSpec GetModuleInfo(const std::string &module_path,
+                           const std::string &triple);
 };
 
 } // namespace process_gdb_remote

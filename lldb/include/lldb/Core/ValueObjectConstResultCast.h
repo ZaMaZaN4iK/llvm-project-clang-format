@@ -1,39 +1,33 @@
 //===-- ValueObjectConstResultCast.h ----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ValueObjectConstResultCast_h_
 #define liblldb_ValueObjectConstResultCast_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Core/ValueObjectCast.h"
 #include "lldb/Core/ValueObjectConstResultImpl.h"
-#include "lldb/Symbol/CompilerType.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/lldb-defines.h"
-#include "lldb/lldb-forward.h"
-#include "lldb/lldb-types.h"
-
-#include <stddef.h>
-#include <stdint.h>
 
 namespace lldb_private {
-class DataExtractor;
-class Status;
-class ValueObject;
 
 class ValueObjectConstResultCast : public ValueObjectCast {
 public:
-  ValueObjectConstResultCast(ValueObject &parent, ConstString name,
+  ValueObjectConstResultCast(ValueObject &parent, const ConstString &name,
                              const CompilerType &cast_type,
                              lldb::addr_t live_address = LLDB_INVALID_ADDRESS);
 
   ~ValueObjectConstResultCast() override;
 
-  lldb::ValueObjectSP Dereference(Status &error) override;
+  lldb::ValueObjectSP Dereference(Error &error) override;
 
   ValueObject *CreateChildAtIndex(size_t idx, bool synthetic_array_member,
                                   int32_t synthetic_index) override;
@@ -46,7 +40,7 @@ public:
       uint32_t offset, const CompilerType &type, bool can_create,
       ConstString name_const_str = ConstString()) override;
 
-  lldb::ValueObjectSP AddressOf(Status &error) override;
+  lldb::ValueObjectSP AddressOf(Error &error) override;
 
   size_t GetPointeeData(DataExtractor &data, uint32_t item_idx = 0,
                         uint32_t item_count = 1) override;

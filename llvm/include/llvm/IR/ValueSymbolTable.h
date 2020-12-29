@@ -1,8 +1,9 @@
-//===- llvm/ValueSymbolTable.h - Implement a Value Symtab -------*- C++ -*-===//
+//===-- llvm/ValueSymbolTable.h - Implement a Value Symtab ------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,91 +15,86 @@
 #define LLVM_IR_VALUESYMBOLTABLE_H
 
 #include "llvm/ADT/StringMap.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/IR/Value.h"
-#include <cstdint>
+#include "llvm/Support/DataTypes.h"
 
 namespace llvm {
-
-class Argument;
-class BasicBlock;
-class Function;
-class GlobalAlias;
-class GlobalIFunc;
-class GlobalVariable;
-class Instruction;
-template <unsigned InternalLen> class SmallString;
-template <typename ValueSubClass> class SymbolTableListTraits;
+  template <typename ValueSubClass> class SymbolTableListTraits;
+  template <unsigned InternalLen> class SmallString;
+  class BasicBlock;
+  class Function;
+  class NamedMDNode;
+  class Module;
+  class StringRef;
 
 /// This class provides a symbol table of name/value pairs. It is essentially
 /// a std::map<std::string,Value*> but has a controlled interface provided by
 /// LLVM as well as ensuring uniqueness of names.
 ///
 class ValueSymbolTable {
+  friend class Value;
   friend class SymbolTableListTraits<Argument>;
   friend class SymbolTableListTraits<BasicBlock>;
+  friend class SymbolTableListTraits<Instruction>;
   friend class SymbolTableListTraits<Function>;
+  friend class SymbolTableListTraits<GlobalVariable>;
   friend class SymbolTableListTraits<GlobalAlias>;
   friend class SymbolTableListTraits<GlobalIFunc>;
-  friend class SymbolTableListTraits<GlobalVariable>;
-  friend class SymbolTableListTraits<Instruction>;
-  friend class Value;
-
 /// @name Types
 /// @{
 public:
-  /// A mapping of names to values.
-  using ValueMap = StringMap<Value*>;
+  /// @brief A mapping of names to values.
+  typedef StringMap<Value*> ValueMap;
 
-  /// An iterator over a ValueMap.
-  using iterator = ValueMap::iterator;
+  /// @brief An iterator over a ValueMap.
+  typedef ValueMap::iterator iterator;
 
-  /// A const_iterator over a ValueMap.
-  using const_iterator = ValueMap::const_iterator;
+  /// @brief A const_iterator over a ValueMap.
+  typedef ValueMap::const_iterator const_iterator;
 
 /// @}
 /// @name Constructors
 /// @{
-
-  ValueSymbolTable() : vmap(0) {}
+public:
+  ValueSymbolTable() : vmap(0), LastUnique(0) {}
   ~ValueSymbolTable();
 
 /// @}
 /// @name Accessors
 /// @{
-
+public:
   /// This method finds the value with the given \p Name in the
   /// the symbol table.
   /// @returns the value associated with the \p Name
-  /// Lookup a named Value.
+  /// @brief Lookup a named Value.
   Value *lookup(StringRef Name) const { return vmap.lookup(Name); }
 
   /// @returns true iff the symbol table is empty
-  /// Determine if the symbol table is empty
+  /// @brief Determine if the symbol table is empty
   inline bool empty() const { return vmap.empty(); }
 
-  /// The number of name/type pairs is returned.
+  /// @brief The number of name/type pairs is returned.
   inline unsigned size() const { return unsigned(vmap.size()); }
 
   /// This function can be used from the debugger to display the
   /// content of the symbol table while debugging.
-  /// Print out symbol table on stderr
+  /// @brief Print out symbol table on stderr
   void dump() const;
 
 /// @}
 /// @name Iteration
 /// @{
-
-  /// Get an iterator that from the beginning of the symbol table.
+public:
+  /// @brief Get an iterator that from the beginning of the symbol table.
   inline iterator begin() { return vmap.begin(); }
 
-  /// Get a const_iterator that from the beginning of the symbol table.
+  /// @brief Get a const_iterator that from the beginning of the symbol table.
   inline const_iterator begin() const { return vmap.begin(); }
 
-  /// Get an iterator to the end of the symbol table.
+  /// @brief Get an iterator to the end of the symbol table.
   inline iterator end() { return vmap.end(); }
 
-  /// Get a const_iterator to the end of the symbol table.
+  /// @brief Get a const_iterator to the end of the symbol table.
   inline const_iterator end() const { return vmap.end(); }
 
   /// @}
@@ -110,7 +106,7 @@ private:
   /// This method adds the provided value \p N to the symbol table.  The Value
   /// must have a name which is used to place the value in the symbol table.
   /// If the inserted name conflicts, this renames the value.
-  /// Add a named value to the symbol table
+  /// @brief Add a named value to the symbol table
   void reinsertValue(Value *V);
 
   /// createValueName - This method attempts to create a value name and insert
@@ -126,13 +122,13 @@ private:
   /// @}
   /// @name Internal Data
   /// @{
-
+private:
   ValueMap vmap;                    ///< The map that holds the symbol table.
-  mutable uint32_t LastUnique = 0;  ///< Counter for tracking unique names
+  mutable uint32_t LastUnique; ///< Counter for tracking unique names
 
 /// @}
 };
 
-} // end namespace llvm
+} // End llvm namespace
 
-#endif // LLVM_IR_VALUESYMBOLTABLE_H
+#endif

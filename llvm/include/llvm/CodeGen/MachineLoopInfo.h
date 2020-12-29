@@ -1,8 +1,9 @@
 //===- llvm/CodeGen/MachineLoopInfo.h - Natural Loop Calculator -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -32,18 +33,17 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/IR/DebugLoc.h"
-#include "llvm/Pass.h"
 
 namespace llvm {
 
-class MachineDominatorTree;
 // Implementation in LoopInfoImpl.h
 class MachineLoop;
 extern template class LoopBase<MachineBasicBlock, MachineLoop>;
 
 class MachineLoop : public LoopBase<MachineBasicBlock, MachineLoop> {
 public:
+  MachineLoop();
+
   /// Return the "top" block in the loop, which is the first block in the linear
   /// layout, ignoring any parts of the loop not contiguous with the part that
   /// contains the header.
@@ -54,52 +54,40 @@ public:
   /// that contains the header.
   MachineBasicBlock *getBottomBlock();
 
-  /// Find the block that contains the loop control variable and the
+  /// \brief Find the block that contains the loop control variable and the
   /// loop test. This will return the latch block if it's one of the exiting
   /// blocks. Otherwise, return the exiting block. Return 'null' when
   /// multiple exiting blocks are present.
   MachineBasicBlock *findLoopControlBlock();
 
-  /// Return the debug location of the start of this loop.
-  /// This looks for a BB terminating instruction with a known debug
-  /// location by looking at the preheader and header blocks. If it
-  /// cannot find a terminating instruction with location information,
-  /// it returns an unknown location.
-  DebugLoc getStartLoc() const;
-
   void dump() const;
 
 private:
   friend class LoopInfoBase<MachineBasicBlock, MachineLoop>;
-
   explicit MachineLoop(MachineBasicBlock *MBB)
     : LoopBase<MachineBasicBlock, MachineLoop>(MBB) {}
-
-  MachineLoop() = default;
 };
 
 // Implementation in LoopInfoImpl.h
 extern template class LoopInfoBase<MachineBasicBlock, MachineLoop>;
 
 class MachineLoopInfo : public MachineFunctionPass {
+  LoopInfoBase<MachineBasicBlock, MachineLoop> LI;
   friend class LoopBase<MachineBasicBlock, MachineLoop>;
 
-  LoopInfoBase<MachineBasicBlock, MachineLoop> LI;
+  void operator=(const MachineLoopInfo &) = delete;
+  MachineLoopInfo(const MachineLoopInfo &) = delete;
 
 public:
   static char ID; // Pass identification, replacement for typeid
 
-  MachineLoopInfo();
-  explicit MachineLoopInfo(MachineDominatorTree &MDT)
-      : MachineFunctionPass(ID) {
-    calculate(MDT);
+  MachineLoopInfo() : MachineFunctionPass(ID) {
+    initializeMachineLoopInfoPass(*PassRegistry::getPassRegistry());
   }
-  MachineLoopInfo(const MachineLoopInfo &) = delete;
-  MachineLoopInfo &operator=(const MachineLoopInfo &) = delete;
 
   LoopInfoBase<MachineBasicBlock, MachineLoop>& getBase() { return LI; }
 
-  /// Find the block that either is the loop preheader, or could
+  /// \brief Find the block that either is the loop preheader, or could
   /// speculatively be used as the preheader. This is e.g. useful to place
   /// loop setup code. Code that cannot be speculated should not be placed
   /// here. SpeculativePreheader is controlling whether it also tries to
@@ -108,7 +96,7 @@ public:
                                        bool SpeculativePreheader = false) const;
 
   /// The iterator interface to the top-level loops in the current function.
-  using iterator = LoopInfoBase<MachineBasicBlock, MachineLoop>::iterator;
+  typedef LoopInfoBase<MachineBasicBlock, MachineLoop>::iterator iterator;
   inline iterator begin() const { return LI.begin(); }
   inline iterator end() const { return LI.end(); }
   bool empty() const { return LI.empty(); }
@@ -136,7 +124,6 @@ public:
 
   /// Calculate the natural loop information.
   bool runOnMachineFunction(MachineFunction &F) override;
-  void calculate(MachineDominatorTree &MDT);
 
   void releaseMemory() override { LI.releaseMemory(); }
 
@@ -172,10 +159,11 @@ public:
   }
 };
 
+
 // Allow clients to walk the list of nested loops...
 template <> struct GraphTraits<const MachineLoop*> {
-  using NodeRef = const MachineLoop *;
-  using ChildIteratorType = MachineLoopInfo::iterator;
+  typedef const MachineLoop *NodeRef;
+  typedef MachineLoopInfo::iterator ChildIteratorType;
 
   static NodeRef getEntryNode(const MachineLoop *L) { return L; }
   static ChildIteratorType child_begin(NodeRef N) { return N->begin(); }
@@ -183,14 +171,14 @@ template <> struct GraphTraits<const MachineLoop*> {
 };
 
 template <> struct GraphTraits<MachineLoop*> {
-  using NodeRef = MachineLoop *;
-  using ChildIteratorType = MachineLoopInfo::iterator;
+  typedef MachineLoop *NodeRef;
+  typedef MachineLoopInfo::iterator ChildIteratorType;
 
   static NodeRef getEntryNode(MachineLoop *L) { return L; }
   static ChildIteratorType child_begin(NodeRef N) { return N->begin(); }
   static ChildIteratorType child_end(NodeRef N) { return N->end(); }
 };
 
-} // end namespace llvm
+} // End llvm namespace
 
-#endif // LLVM_CODEGEN_MACHINELOOPINFO_H
+#endif

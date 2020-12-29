@@ -1,13 +1,14 @@
 //===--- TokenAnnotator.h - Format C++ code ---------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file implements a token annotator, i.e. creates
+/// \brief This file implements a token annotator, i.e. creates
 /// \c AnnotatedTokens out of \c FormatTokens with required extra information.
 ///
 //===----------------------------------------------------------------------===//
@@ -38,13 +39,10 @@ class AnnotatedLine {
 public:
   AnnotatedLine(const UnwrappedLine &Line)
       : First(Line.Tokens.front().Tok), Level(Line.Level),
-        MatchingOpeningBlockLineIndex(Line.MatchingOpeningBlockLineIndex),
-        MatchingClosingBlockLineIndex(Line.MatchingClosingBlockLineIndex),
         InPPDirective(Line.InPPDirective),
         MustBeDeclaration(Line.MustBeDeclaration), MightBeFunctionDecl(false),
         IsMultiVariableDeclStmt(false), Affected(false),
-        LeadingEmptyLinesAffected(false), ChildrenAffected(false),
-        FirstStartColumn(Line.FirstStartColumn) {
+        LeadingEmptyLinesAffected(false), ChildrenAffected(false) {
     assert(!Line.Tokens.empty());
 
     // Calculate Next and Previous for all tokens. Note that we must overwrite
@@ -99,24 +97,9 @@ public:
   /// function declaration. Asserts MightBeFunctionDecl.
   bool mightBeFunctionDefinition() const {
     assert(MightBeFunctionDecl);
-    // Try to determine if the end of a stream of tokens is either the
-    // Definition or the Declaration for a function. It does this by looking for
-    // the ';' in foo(); and using that it ends with a ; to know this is the
-    // Definition, however the line could end with
-    //    foo(); /* comment */
-    // or
-    //    foo(); // comment
-    // or
-    //    foo() // comment
-    // endsWith() ignores the comment.
-    return !endsWith(tok::semi);
-  }
-
-  /// \c true if this line starts a namespace definition.
-  bool startsWithNamespace() const {
-    return startsWith(tok::kw_namespace) || startsWith(TT_NamespaceMacro) ||
-           startsWith(tok::kw_inline, tok::kw_namespace) ||
-           startsWith(tok::kw_export, tok::kw_namespace);
+    // FIXME: Line.Last points to other characters than tok::semi
+    // and tok::lbrace.
+    return !Last->isOneOf(tok::semi, tok::comment);
   }
 
   FormatToken *First;
@@ -126,8 +109,6 @@ public:
 
   LineType Type;
   unsigned Level;
-  size_t MatchingOpeningBlockLineIndex;
-  size_t MatchingClosingBlockLineIndex;
   bool InPPDirective;
   bool MustBeDeclaration;
   bool MightBeFunctionDecl;
@@ -141,10 +122,8 @@ public:
   /// input ranges.
   bool LeadingEmptyLinesAffected;
 
-  /// \c True if one of this line's children intersects with an input range.
+  /// \c True if a one of this line's children intersects with an input range.
   bool ChildrenAffected;
-
-  unsigned FirstStartColumn;
 
 private:
   // Disallow copying.
@@ -152,14 +131,14 @@ private:
   void operator=(const AnnotatedLine &) = delete;
 };
 
-/// Determines extra information about the tokens comprising an
+/// \brief Determines extra information about the tokens comprising an
 /// \c UnwrappedLine.
 class TokenAnnotator {
 public:
   TokenAnnotator(const FormatStyle &Style, const AdditionalKeywords &Keywords)
       : Style(Style), Keywords(Keywords) {}
 
-  /// Adapts the indent levels of comment lines to the indent of the
+  /// \brief Adapts the indent levels of comment lines to the indent of the
   /// subsequent line.
   // FIXME: Can/should this be done in the UnwrappedLineParser?
   void setCommentLineLevels(SmallVectorImpl<AnnotatedLine *> &Lines);
@@ -168,16 +147,14 @@ public:
   void calculateFormattingInformation(AnnotatedLine &Line);
 
 private:
-  /// Calculate the penalty for splitting before \c Tok.
+  /// \brief Calculate the penalty for splitting before \c Tok.
   unsigned splitPenalty(const AnnotatedLine &Line, const FormatToken &Tok,
                         bool InFunctionDecl);
-
-  bool spaceRequiredBeforeParens(const FormatToken &Right) const;
 
   bool spaceRequiredBetween(const AnnotatedLine &Line, const FormatToken &Left,
                             const FormatToken &Right);
 
-  bool spaceRequiredBefore(const AnnotatedLine &Line, const FormatToken &Right);
+  bool spaceRequiredBefore(const AnnotatedLine &Line, const FormatToken &Tok);
 
   bool mustBreakBefore(const AnnotatedLine &Line, const FormatToken &Right);
 

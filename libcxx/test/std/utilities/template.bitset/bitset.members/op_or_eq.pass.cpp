@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,12 +13,8 @@
 #include <cstdlib>
 #include <cassert>
 
-#include "test_macros.h"
-
-#if defined(TEST_COMPILER_CLANG)
+#if defined(__clang__)
 #pragma clang diagnostic ignored "-Wtautological-compare"
-#elif defined(TEST_COMPILER_C1XX)
-#pragma warning(disable: 6294) // Ill-defined for-loop:  initial condition does not satisfy test.  Loop body not executed.
 #endif
 
 template <std::size_t N>
@@ -41,7 +38,7 @@ void test_op_or_eq()
         assert(v1[i] == (v3[i] || v2[i]));
 }
 
-int main(int, char**)
+int main()
 {
     test_op_or_eq<0>();
     test_op_or_eq<1>();
@@ -52,6 +49,4 @@ int main(int, char**)
     test_op_or_eq<64>();
     test_op_or_eq<65>();
     test_op_or_eq<1000>();
-
-  return 0;
 }

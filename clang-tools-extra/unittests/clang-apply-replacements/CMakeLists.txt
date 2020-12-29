@@ -8,16 +8,10 @@ include_directories(
   )
 
 add_extra_unittest(ClangApplyReplacementsTests
-  ApplyReplacementsTest.cpp
+  ReformattingTest.cpp
   )
 
-clang_target_link_libraries(ClangApplyReplacementsTests
-  PRIVATE
-  clangBasic
-  clangToolingCore
-  clangToolingRefactoring
-  )
 target_link_libraries(ClangApplyReplacementsTests
-  PRIVATE
   clangApplyReplacements
+  clangToolingCore
   )

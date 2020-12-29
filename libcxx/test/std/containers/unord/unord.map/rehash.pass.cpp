@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,7 +25,7 @@
 template <class C>
 void rehash_postcondition(const C& c, size_t n)
 {
-    assert(c.bucket_count() >= c.size() / c.max_load_factor() && c.bucket_count() >= n);
+	assert(c.bucket_count() >= c.size() / c.max_load_factor() && c.bucket_count() >= n);
 }
 
 template <class C>
@@ -37,7 +38,7 @@ void test(const C& c)
     assert(c.at(4) == "four");
 }
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::unordered_map<int, std::string> C;
@@ -100,6 +101,4 @@ int main(int, char**)
         test(c);
     }
 #endif
-
-  return 0;
 }

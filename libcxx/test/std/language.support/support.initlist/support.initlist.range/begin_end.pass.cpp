@@ -1,12 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// UNSUPPORTED: c++98, c++03
 
 // <initializer_list>
 
@@ -17,6 +16,8 @@
 #include <cstddef>
 
 #include "test_macros.h"
+
+#ifndef _LIBCPP_HAS_NO_GENERALIZED_INITIALIZERS
 
 struct A
 {
@@ -48,14 +49,14 @@ struct B
 };
 
 #endif  // TEST_STD_VER > 11
+#endif  // _LIBCPP_HAS_NO_GENERALIZED_INITIALIZERS
 
-int main(int, char**)
+int main()
 {
+#ifndef _LIBCPP_HAS_NO_GENERALIZED_INITIALIZERS
     A test1 = {3, 2, 1};
+#endif
 #if TEST_STD_VER > 11
     constexpr B test2 = {3, 2, 1};
-    (void)test2;
 #endif  // TEST_STD_VER > 11
-
-  return 0;
 }

@@ -1,7 +1,8 @@
 """
-Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-See https://llvm.org/LICENSE.txt for license information.
-SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+                     The LLVM Compiler Infrastructure
+
+This file is distributed under the University of Illinois Open Source
+License. See LICENSE.TXT for details.
 
 Provides an xUnit ResultsFormatter for integrating the LLDB
 test suite with the Jenkins xUnit aggregator and other xUnit-compliant
@@ -83,9 +84,7 @@ class XunitFormatter(ResultsFormatter):
         """
         # Get the content into unicode
         if isinstance(str_or_unicode, str):
-            # If we hit decoding errors due to data corruption, replace the
-            # invalid characters with U+FFFD REPLACEMENT CHARACTER.
-            unicode_content = str_or_unicode.decode('utf-8', 'replace')
+            unicode_content = str_or_unicode.decode('utf-8')
         else:
             unicode_content = str_or_unicode
         return self.invalid_xml_re.sub(
@@ -155,14 +154,14 @@ class XunitFormatter(ResultsFormatter):
                 regex_list.append(re.compile(pattern))
         return regex_list
 
-    def __init__(self, out_file, options):
+    def __init__(self, out_file, options, file_is_stream):
         """Initializes the XunitFormatter instance.
         @param out_file file-like object where formatted output is written.
         @param options specifies a dictionary of options for the
         formatter.
         """
         # Initialize the parent
-        super(XunitFormatter, self).__init__(out_file, options)
+        super(XunitFormatter, self).__init__(out_file, options, file_is_stream)
         self.text_encoding = "UTF-8"
         self.invalid_xml_re = XunitFormatter._build_illegal_xml_regex()
         self.total_test_count = 0
@@ -337,7 +336,7 @@ class XunitFormatter(ResultsFormatter):
             test_event,
             inner_content=(
                 '<error type={} message={}></error>'.format(
-                    XunitFormatter._quote_attribute("timeout"),
+                    "timeout",
                     XunitFormatter._quote_attribute(message))
             ))
         with self.lock:

@@ -1,8 +1,9 @@
 //===-- scudo_utils.h -------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -13,14 +14,14 @@
 #ifndef SCUDO_UTILS_H_
 #define SCUDO_UTILS_H_
 
-#include "sanitizer_common/sanitizer_common.h"
-
 #include <string.h>
+
+#include "sanitizer_common/sanitizer_common.h"
 
 namespace __scudo {
 
 template <class Dest, class Source>
-INLINE Dest bit_cast(const Source& source) {
+inline Dest bit_cast(const Source& source) {
   static_assert(sizeof(Dest) == sizeof(Source), "Sizes are not equal!");
   Dest dest;
   memcpy(&dest, &source, sizeof(dest));
@@ -29,7 +30,31 @@ INLINE Dest bit_cast(const Source& source) {
 
 void NORETURN dieWithMessage(const char *Format, ...);
 
-bool hasHardwareCRC32();
+enum CPUFeature {
+  CRC32CPUFeature = 0,
+  MaxCPUFeature,
+};
+bool testCPUFeature(CPUFeature feature);
+
+// Tiny PRNG based on https://en.wikipedia.org/wiki/Xorshift#xorshift.2B
+// The state (128 bits) will be stored in thread local storage.
+struct Xorshift128Plus {
+ public:
+  Xorshift128Plus();
+  u64 Next() {
+    u64 x = State[0];
+    const u64 y = State[1];
+    State[0] = y;
+    x ^= x << 23;
+    State[1] = x ^ y ^ (x >> 17) ^ (y >> 26);
+    return State[1] + y;
+  }
+ private:
+  u64 State[2];
+};
+
+// Software CRC32 functions, to be used when hardware support is not detected.
+u32 computeSoftwareCRC32(u32 Crc, uptr Data);
 
 }  // namespace __scudo
 

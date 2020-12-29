@@ -1,12 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// XFAIL: with_system_cxx_lib=macosx10.12
 
 // <ostream>
 
@@ -24,12 +23,9 @@
 
 #include <sstream>
 #include <ios>
-#include <type_traits>
 #include <cctype>
 #include <cstdint>
 #include <cassert>
-
-#include "test_macros.h"
 
 template <typename T>
 void test_octal(const char *expected)
@@ -60,7 +56,7 @@ void test_hex(const char *expected)
     assert(str == expected);
 }
 
-int main(int, char**)
+int main()
 {
 
     test_octal<uint16_t>(                "177777");
@@ -70,15 +66,11 @@ int main(int, char**)
     test_octal<uint64_t>("1777777777777777777777");
     test_octal< int64_t>("1777777777777777777777");
     test_octal<uint64_t>("1777777777777777777777");
-
-    const bool long_is_64 = std::integral_constant<bool, sizeof(long) == sizeof(int64_t)>::value; // avoid compiler warnings
-    const bool long_long_is_64 = std::integral_constant<bool, sizeof(long long) == sizeof(int64_t)>::value; // avoid compiler warnings
-
-    if (long_is_64) {
+    if (sizeof(long) == sizeof(int64_t)) {
         test_octal< unsigned long>("1777777777777777777777");
         test_octal<          long>("1777777777777777777777");
     }
-    if (long_long_is_64) {
+    if (sizeof(long long) == sizeof(int64_t)) {
         test_octal< unsigned long long>("1777777777777777777777");
         test_octal<          long long>("1777777777777777777777");
     }
@@ -89,11 +81,11 @@ int main(int, char**)
     test_dec< int32_t>(                  "-1");
     test_dec<uint64_t>("18446744073709551615");
     test_dec< int64_t>(                  "-1");
-    if (long_is_64) {
+    if (sizeof(long) == sizeof(int64_t)) {
         test_dec<unsigned long>("18446744073709551615");
         test_dec<         long>(                  "-1");
     }
-    if (long_long_is_64) {
+    if (sizeof(long long) == sizeof(int64_t)) {
         test_dec<unsigned long long>("18446744073709551615");
         test_dec<         long long>(                  "-1");
     }
@@ -104,14 +96,12 @@ int main(int, char**)
     test_hex< int32_t>(        "FFFFFFFF");
     test_hex<uint64_t>("FFFFFFFFFFFFFFFF");
     test_hex< int64_t>("FFFFFFFFFFFFFFFF");
-    if (long_is_64) {
+    if (sizeof(long) == sizeof(int64_t)) {
         test_hex<unsigned long>("FFFFFFFFFFFFFFFF");
         test_hex<         long>("FFFFFFFFFFFFFFFF");
     }
-    if (long_long_is_64) {
+    if (sizeof(long long) == sizeof(int64_t)) {
         test_hex<unsigned long long>("FFFFFFFFFFFFFFFF");
         test_hex<         long long>("FFFFFFFFFFFFFFFF");
     }
-
-  return 0;
 }

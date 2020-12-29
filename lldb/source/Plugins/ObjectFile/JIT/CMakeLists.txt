@@ -1,11 +1,3 @@
-add_lldb_library(lldbPluginObjectFileJIT PLUGIN
+add_lldb_library(lldbPluginObjectFileJIT
   ObjectFileJIT.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbHost
-    lldbSymbol
-    lldbTarget
-  LINK_COMPONENTS
-    Support
   )

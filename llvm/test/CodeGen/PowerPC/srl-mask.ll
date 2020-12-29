@@ -12,16 +12,5 @@ entry:
 ; CHECK: blr
 }
 
-; for AND with an immediate like (x & ~0xFFFF)
-; we should use rldicl instruction
-define i64 @bar(i64 %x) #0 {
-entry:
-; CHECK-LABEL: @bar
-  %a = and i64 %x, 18446744073709486080
-; CHECK: rldicr 3, 3, 0, 47
-  ret i64 %a
-; CHECK: blr
-}
-
 attributes #0 = { nounwind }
 

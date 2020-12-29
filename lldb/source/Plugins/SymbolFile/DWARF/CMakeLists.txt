@@ -1,66 +1,35 @@
-lldb_tablegen(SymbolFileDWARFProperties.inc -gen-lldb-property-defs
-  SOURCE SymbolFileDWARFProperties.td
-  TARGET LLDBPluginSymbolFileDWARFPropertiesGen)
-
-lldb_tablegen(SymbolFileDWARFPropertiesEnum.inc -gen-lldb-property-enum-defs
-  SOURCE SymbolFileDWARFProperties.td
-  TARGET LLDBPluginSymbolFileDWARFPropertiesEnumGen)
-
-add_lldb_library(lldbPluginSymbolFileDWARF PLUGIN
-  AppleDWARFIndex.cpp
-  DebugNamesDWARFIndex.cpp
+add_lldb_library(lldbPluginSymbolFileDWARF
   DIERef.cpp
   DWARFAbbreviationDeclaration.cpp
   DWARFASTParserClang.cpp
+  DWARFASTParserGo.cpp
+  DWARFASTParserJava.cpp
+  DWARFASTParserOCaml.cpp
   DWARFAttribute.cpp
-  DWARFBaseDIE.cpp
   DWARFCompileUnit.cpp
-  DWARFContext.cpp
   DWARFDataExtractor.cpp
   DWARFDebugAbbrev.cpp
   DWARFDebugAranges.cpp
   DWARFDebugArangeSet.cpp
   DWARFDebugInfo.cpp
   DWARFDebugInfoEntry.cpp
+  DWARFDebugLine.cpp
   DWARFDebugMacro.cpp
+  DWARFDebugMacinfo.cpp
+  DWARFDebugMacinfoEntry.cpp
+  DWARFDebugPubnames.cpp
+  DWARFDebugPubnamesSet.cpp
   DWARFDebugRanges.cpp
   DWARFDeclContext.cpp
   DWARFDefines.cpp
   DWARFDIE.cpp
+  DWARFDIECollection.cpp
   DWARFFormValue.cpp
-  DWARFIndex.cpp
-  DWARFTypeUnit.cpp
-  DWARFUnit.cpp
   HashedNameToDIE.cpp
   LogChannelDWARF.cpp
-  ManualDWARFIndex.cpp
   NameToDIE.cpp
   SymbolFileDWARF.cpp
   SymbolFileDWARFDwo.cpp
-  SymbolFileDWARFDwoDwp.cpp
-  SymbolFileDWARFDwp.cpp
   SymbolFileDWARFDebugMap.cpp
   UniqueDWARFASTType.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbExpression
-    lldbHost
-    lldbInterpreter
-    lldbSymbol
-    lldbTarget
-    lldbUtility
-    lldbPluginObjCLanguage
-    lldbPluginCPlusPlusLanguage
-    lldbPluginExpressionParserClang
-  CLANG_LIBS
-    clangAST
-    clangBasic
-  LINK_COMPONENTS
-    DebugInfoDWARF
-    Support
   )
-
-add_dependencies(lldbPluginSymbolFileDWARF
-  LLDBPluginSymbolFileDWARFPropertiesGen
-  LLDBPluginSymbolFileDWARFPropertiesEnumGen)

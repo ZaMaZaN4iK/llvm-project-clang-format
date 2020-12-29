@@ -1,8 +1,8 @@
 ; RUN: llc -march=hexagon < %s | FileCheck %s
 ;
 ; Check that we no longer generate 4 inserts.
-; CHECK: combine(r{{[0-9]+}}.l,r{{[0-9]+}}.l)
-; CHECK: combine(r{{[0-9]+}}.l,r{{[0-9]+}}.l)
+; CHECK: combine(r{{[0-9]+}}.l, r{{[0-9]+}}.l)
+; CHECK: combine(r{{[0-9]+}}.l, r{{[0-9]+}}.l)
 ; CHECK-NOT: insert
 
 target datalayout = "e-p:32:32:32-i64:64:64-i32:32:32-i16:16:16-i1:32:32-f64:64:64-f32:32:32-v64:64:64-v32:32:32-a0:0-n16:32"
@@ -104,7 +104,7 @@ declare i64 @llvm.hexagon.M2.dpmpyss.s0(i32, i32) #1
 
 declare i64 @llvm.hexagon.A2.vaddhs(i64, i64) #1
 
-attributes #0 = { nounwind "fp-contract-model"="standard" "frame-pointer"="non-leaf" "realign-stack" "relocation-model"="static" "ssp-buffers-size"="8" }
+attributes #0 = { nounwind "fp-contract-model"="standard" "no-frame-pointer-elim-non-leaf" "realign-stack" "relocation-model"="static" "ssp-buffers-size"="8" }
 attributes #1 = { nounwind readnone }
 
 !0 = !{!"short", !1}

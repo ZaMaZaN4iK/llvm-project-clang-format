@@ -1,8 +1,9 @@
-//===- HexagonAsmPrinter.h - Print machine code to an Hexagon .s file -----===//
+//===-- HexagonAsmPrinter.h - Print machine code to an Hexagon .s file ----===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,26 +14,19 @@
 #ifndef LLVM_LIB_TARGET_HEXAGON_HEXAGONASMPRINTER_H
 #define LLVM_LIB_TARGET_HEXAGON_HEXAGONASMPRINTER_H
 
-#include "HexagonSubtarget.h"
+#include "Hexagon.h"
+#include "HexagonTargetMachine.h"
 #include "llvm/CodeGen/AsmPrinter.h"
-#include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/MC/MCStreamer.h"
-#include <utility>
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
-
-class MachineInstr;
-class MCInst;
-class raw_ostream;
-class TargetMachine;
-
   class HexagonAsmPrinter : public AsmPrinter {
-    const HexagonSubtarget *Subtarget = nullptr;
+    const HexagonSubtarget *Subtarget;
 
   public:
     explicit HexagonAsmPrinter(TargetMachine &TM,
-                               std::unique_ptr<MCStreamer> Streamer)
-      : AsmPrinter(TM, std::move(Streamer)) {}
+                               std::unique_ptr<MCStreamer> Streamer);
 
     bool runOnMachineFunction(MachineFunction &Fn) override {
       Subtarget = &Fn.getSubtarget<HexagonSubtarget>();
@@ -43,19 +37,26 @@ class TargetMachine;
       return "Hexagon Assembly Printer";
     }
 
-    bool isBlockOnlyReachableByFallthrough(const MachineBasicBlock *MBB)
-          const override;
+    bool isBlockOnlyReachableByFallthrough(
+                                   const MachineBasicBlock *MBB) const override;
 
     void EmitInstruction(const MachineInstr *MI) override;
-    void HexagonProcessInstruction(MCInst &Inst, const MachineInstr &MBB);
+
+    void HexagonProcessInstruction(MCInst &Inst,
+                                   const MachineInstr &MBB);
+
 
     void printOperand(const MachineInstr *MI, unsigned OpNo, raw_ostream &O);
     bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
-                         const char *ExtraCode, raw_ostream &OS) override;
+                         unsigned AsmVariant, const char *ExtraCode,
+                         raw_ostream &OS) override;
     bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
-                               const char *ExtraCode, raw_ostream &OS) override;
+                               unsigned AsmVariant, const char *ExtraCode,
+                               raw_ostream &OS) override;
+
+    static const char *getRegisterName(unsigned RegNo);
   };
 
-} // end namespace llvm
+} // end of llvm namespace
 
-#endif // LLVM_LIB_TARGET_HEXAGON_HEXAGONASMPRINTER_H
+#endif

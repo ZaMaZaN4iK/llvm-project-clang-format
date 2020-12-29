@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,6 +13,9 @@
 
 // pair(pair const&) = default;
 // pair(pair&&) = default;
+
+// Doesn't pass due to use of is_trivially_* trait.
+// XFAIL: gcc-4.9
 
 #include <utility>
 #include <cassert>
@@ -23,7 +27,7 @@ struct Dummy {
   Dummy(Dummy &&) = default;
 };
 
-int main(int, char**)
+int main()
 {
     typedef std::pair<int, short> P;
     {
@@ -49,6 +53,4 @@ int main(int, char**)
 #endif
     }
 #endif
-
-  return 0;
 }

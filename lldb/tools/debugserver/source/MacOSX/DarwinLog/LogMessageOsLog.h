@@ -1,8 +1,9 @@
 //===-- LogMessageOsLog.h ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,11 +17,13 @@
 
 using ActivityStreamEntry = struct os_activity_stream_entry_s;
 
+// -----------------------------------------------------------------------------
 /// Provides a unified wrapper around os_log()-style log messages.
 ///
 /// The lifetime of this class is intended to be very short.  The caller
 /// must ensure that the passed in ActivityStore and ActivityStreamEntry
 /// outlive this LogMessageOsLog entry.
+// -----------------------------------------------------------------------------
 
 class LogMessageOsLog : public LogMessage {
 public:

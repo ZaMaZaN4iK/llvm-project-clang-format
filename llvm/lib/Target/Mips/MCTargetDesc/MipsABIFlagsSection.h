@@ -1,18 +1,18 @@
-//===- MipsABIFlagsSection.h - Mips ELF ABI Flags Section -------*- C++ -*-===//
+//===-- MipsABIFlagsSection.h - Mips ELF ABI Flags Section -----*- C++ -*--===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_MIPS_MCTARGETDESC_MIPSABIFLAGSSECTION_H
 #define LLVM_LIB_TARGET_MIPS_MCTARGETDESC_MIPSABIFLAGSSECTION_H
 
-#include "llvm/ADT/StringRef.h"
+#include "llvm/MC/MCStreamer.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MipsABIFlags.h"
-#include <cstdint>
 
 namespace llvm {
 
@@ -23,32 +23,36 @@ struct MipsABIFlagsSection {
   enum class FpABIKind { ANY, XX, S32, S64, SOFT };
 
   // Version of flags structure.
-  uint16_t Version = 0;
+  uint16_t Version;
   // The level of the ISA: 1-5, 32, 64.
-  uint8_t ISALevel = 0;
+  uint8_t ISALevel;
   // The revision of ISA: 0 for MIPS V and below, 1-n otherwise.
-  uint8_t ISARevision = 0;
+  uint8_t ISARevision;
   // The size of general purpose registers.
-  Mips::AFL_REG GPRSize = Mips::AFL_REG_NONE;
+  Mips::AFL_REG GPRSize;
   // The size of co-processor 1 registers.
-  Mips::AFL_REG CPR1Size = Mips::AFL_REG_NONE;
+  Mips::AFL_REG CPR1Size;
   // The size of co-processor 2 registers.
-  Mips::AFL_REG CPR2Size = Mips::AFL_REG_NONE;
+  Mips::AFL_REG CPR2Size;
   // Processor-specific extension.
-  Mips::AFL_EXT ISAExtension = Mips::AFL_EXT_NONE;
+  Mips::AFL_EXT ISAExtension;
   // Mask of ASEs used.
-  uint32_t ASESet = 0;
+  uint32_t ASESet;
 
-  bool OddSPReg = false;
+  bool OddSPReg;
 
-  bool Is32BitABI = false;
+  bool Is32BitABI;
 
 protected:
   // The floating-point ABI.
-  FpABIKind FpABI = FpABIKind::ANY;
+  FpABIKind FpABI;
 
 public:
-  MipsABIFlagsSection() = default;
+  MipsABIFlagsSection()
+      : Version(0), ISALevel(0), ISARevision(0), GPRSize(Mips::AFL_REG_NONE),
+        CPR1Size(Mips::AFL_REG_NONE), CPR2Size(Mips::AFL_REG_NONE),
+        ISAExtension(Mips::AFL_EXT_NONE), ASESet(0), OddSPReg(false),
+        Is32BitABI(false), FpABI(FpABIKind::ANY) {}
 
   uint16_t getVersionValue() { return (uint16_t)Version; }
   uint8_t getISALevelValue() { return (uint8_t)ISALevel; }
@@ -76,7 +80,6 @@ public:
     FpABI = Value;
     Is32BitABI = IsABI32Bit;
   }
-
   StringRef getFpABIString(FpABIKind Value);
 
   template <class PredicateLibrary>
@@ -139,9 +142,7 @@ public:
 
   template <class PredicateLibrary>
   void setISAExtensionFromPredicates(const PredicateLibrary &P) {
-    if (P.hasCnMipsP())
-      ISAExtension = Mips::AFL_EXT_OCTEONP;
-    else if (P.hasCnMips())
+    if (P.hasCnMips())
       ISAExtension = Mips::AFL_EXT_OCTEON;
     else
       ISAExtension = Mips::AFL_EXT_NONE;
@@ -160,14 +161,6 @@ public:
       ASESet |= Mips::AFL_ASE_MICROMIPS;
     if (P.inMips16Mode())
       ASESet |= Mips::AFL_ASE_MIPS16;
-    if (P.hasMT())
-      ASESet |= Mips::AFL_ASE_MT;
-    if (P.hasCRC())
-      ASESet |= Mips::AFL_ASE_CRC;
-    if (P.hasVirt())
-      ASESet |= Mips::AFL_ASE_VIRT;
-    if (P.hasGINV())
-      ASESet |= Mips::AFL_ASE_GINV;
   }
 
   template <class PredicateLibrary>
@@ -202,7 +195,6 @@ public:
 };
 
 MCStreamer &operator<<(MCStreamer &OS, MipsABIFlagsSection &ABIFlagsSection);
+}
 
-} // end namespace llvm
-
-#endif // LLVM_LIB_TARGET_MIPS_MCTARGETDESC_MIPSABIFLAGSSECTION_H
+#endif

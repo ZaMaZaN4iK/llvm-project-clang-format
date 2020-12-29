@@ -1,80 +1,73 @@
 //===-- AMDGPUMachineFunctionInfo.h -------------------------------*- C++ -*-=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_AMDGPU_AMDGPUMACHINEFUNCTION_H
 #define LLVM_LIB_TARGET_AMDGPU_AMDGPUMACHINEFUNCTION_H
 
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include "Utils/AMDGPUBaseInfo.h"
+#include "llvm/ADT/DenseMap.h"
 
 namespace llvm {
-
-class GCNSubtarget;
 
 class AMDGPUMachineFunction : public MachineFunctionInfo {
   /// A map to keep track of local memory objects and their offsets within the
   /// local memory space.
   SmallDenseMap<const GlobalValue *, unsigned, 4> LocalMemoryObjects;
 
-protected:
-  uint64_t ExplicitKernArgSize; // Cache for this.
-  Align MaxKernArgAlign;        // Cache for this.
+  uint64_t KernArgSize;
+  unsigned MaxKernArgAlign;
 
   /// Number of bytes in the LDS that are being used.
   unsigned LDSSize;
 
-  // State of MODE register, assumed FP mode.
-  AMDGPU::SIModeRegisterDefaults Mode;
+  // FIXME: This should probably be removed.
+  /// Start of implicit kernel args
+  unsigned ABIArgOffset;
 
-  // Kernels + shaders. i.e. functions called by the driver and not called
-  // by other functions.
-  bool IsEntryFunction;
-
-  bool NoSignedZerosFPMath;
-
-  // Function may be memory bound.
-  bool MemoryBound;
-
-  // Kernel may need limited waves per EU for better performance.
-  bool WaveLimiter;
+  bool IsKernel;
 
 public:
   AMDGPUMachineFunction(const MachineFunction &MF);
 
-  uint64_t getExplicitKernArgSize() const {
-    return ExplicitKernArgSize;
+  uint64_t allocateKernArg(uint64_t Size, unsigned Align) {
+    assert(isPowerOf2_32(Align));
+    KernArgSize = alignTo(KernArgSize, Align);
+
+    uint64_t Result = KernArgSize;
+    KernArgSize += Size;
+
+    MaxKernArgAlign = std::max(Align, MaxKernArgAlign);
+    return Result;
   }
 
-  unsigned getMaxKernArgAlign() const { return MaxKernArgAlign.value(); }
+  uint64_t getKernArgSize() const {
+    return KernArgSize;
+  }
+
+  unsigned getMaxKernArgAlign() const {
+    return MaxKernArgAlign;
+  }
+
+  void setABIArgOffset(unsigned NewOffset) {
+    ABIArgOffset = NewOffset;
+  }
+
+  unsigned getABIArgOffset() const {
+    return ABIArgOffset;
+  }
 
   unsigned getLDSSize() const {
     return LDSSize;
   }
 
-  AMDGPU::SIModeRegisterDefaults getMode() const {
-    return Mode;
-  }
-
-  bool isEntryFunction() const {
-    return IsEntryFunction;
-  }
-
-  bool hasNoSignedZerosFPMath() const {
-    return NoSignedZerosFPMath;
-  }
-
-  bool isMemoryBound() const {
-    return MemoryBound;
-  }
-
-  bool needsWaveLimiter() const {
-    return WaveLimiter;
+  bool isKernel() const {
+    return IsKernel;
   }
 
   unsigned allocateLDSGlobal(const DataLayout &DL, const GlobalValue &GV);

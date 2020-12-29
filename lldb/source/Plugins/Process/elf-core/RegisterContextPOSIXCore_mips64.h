@@ -1,18 +1,22 @@
 //===-- RegisterContextPOSIXCore_mips64.h -----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_RegisterContextCorePOSIX_mips64_h_
 #define liblldb_RegisterContextCorePOSIX_mips64_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "Plugins/Process/Utility/RegisterContextPOSIX_mips64.h"
-#include "Plugins/Process/elf-core/RegisterUtilities.h"
-#include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/DataExtractor.h"
+#include "lldb/Core/DataBufferHeap.h"
+#include "lldb/Core/DataExtractor.h"
 
 class RegisterContextCorePOSIX_mips64 : public RegisterContextPOSIX_mips64 {
 public:
@@ -20,7 +24,7 @@ public:
       lldb_private::Thread &thread,
       lldb_private::RegisterInfoInterface *register_info,
       const lldb_private::DataExtractor &gpregset,
-      llvm::ArrayRef<lldb_private::CoreNote> notes);
+      const lldb_private::DataExtractor &fpregset);
 
   ~RegisterContextCorePOSIX_mips64() override;
 
@@ -47,9 +51,7 @@ protected:
 
 private:
   lldb::DataBufferSP m_gpr_buffer;
-  lldb::DataBufferSP m_fpr_buffer;
   lldb_private::DataExtractor m_gpr;
-  lldb_private::DataExtractor m_fpr;
 };
 
 #endif // liblldb_RegisterContextCorePOSIX_mips64_h_

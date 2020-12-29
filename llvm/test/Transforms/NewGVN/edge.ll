@@ -1,3 +1,4 @@
+; XFAIL: *
 ; RUN: opt -newgvn -S < %s | FileCheck %s
 
 define i32 @f1(i32 %x) {

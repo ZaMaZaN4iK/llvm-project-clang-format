@@ -1,7 +1,10 @@
 """Test calling functions in static methods with a stripped binary."""
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -31,7 +34,7 @@ class TestObjCStaticMethodStripped(TestBase):
         if self.getArchitecture() == 'i386':
             self.skipTest("requires modern objc runtime")
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)

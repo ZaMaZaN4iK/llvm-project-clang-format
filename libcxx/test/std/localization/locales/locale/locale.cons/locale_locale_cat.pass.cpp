@@ -1,17 +1,14 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // REQUIRES: locale.en_US.UTF-8
 // REQUIRES: locale.ru_RU.UTF-8
-// UNSUPPORTED: sanitizer-new-delete
-
-// XFAIL: availability=macosx10.8
-// XFAIL: availability=macosx10.7
 
 // <locale>
 
@@ -21,8 +18,7 @@
 #include <new>
 #include <cassert>
 
-#include "count_new.h"
-#include "test_macros.h"
+#include "count_new.hpp"
 #include "platform_support.h" // locale name macros
 
 void check(const std::locale& loc)
@@ -60,7 +56,7 @@ void check(const std::locale& loc)
     assert((std::has_facet<std::messages<wchar_t> >(loc)));
 }
 
-int main(int, char**)
+int main()
 {
     {
         std::locale loc(LOCALE_ru_RU_UTF_8);
@@ -69,6 +65,4 @@ int main(int, char**)
         check(loc2);
     }
     assert(globalMemCounter.checkOutstandingNewEq(0));
-
-  return 0;
 }

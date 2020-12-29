@@ -1,15 +1,16 @@
 //===-- StreamBuffer.h ------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_StreamBuffer_h_
 #define liblldb_StreamBuffer_h_
 
-#include "lldb/Utility/Stream.h"
+#include "lldb/Core/Stream.h"
 #include "llvm/ADT/SmallVector.h"
 #include <stdio.h>
 #include <string>
@@ -23,17 +24,24 @@ public:
   StreamBuffer(uint32_t flags, uint32_t addr_size, lldb::ByteOrder byte_order)
       : Stream(flags, addr_size, byte_order), m_packet() {}
 
-  ~StreamBuffer() override {}
+  virtual ~StreamBuffer() {}
 
-  void Flush() override {
+  virtual void Flush() {
     // Nothing to do when flushing a buffer based stream...
+  }
+
+  virtual size_t Write(const void *s, size_t length) {
+    if (s && length)
+      m_packet.append((const char *)s, ((const char *)s) + length);
+    return length;
   }
 
   void Clear() { m_packet.clear(); }
 
   // Beware, this might not be NULL terminated as you can expect from
-  // StringString as there may be random bits in the llvm::SmallVector. If you
-  // are using this class to create a C string, be sure the call PutChar ('\0')
+  // StringString as there may be random bits in the llvm::SmallVector. If
+  // you are using this class to create a C string, be sure the call PutChar
+  // ('\0')
   // after you have created your string, or use StreamString.
   const char *GetData() const { return m_packet.data(); }
 
@@ -41,12 +49,6 @@ public:
 
 protected:
   llvm::SmallVector<char, N> m_packet;
-
-  size_t WriteImpl(const void *s, size_t length) override {
-    if (s && length)
-      m_packet.append((const char *)s, ((const char *)s) + length);
-    return length;
-  }
 };
 
 } // namespace lldb_private

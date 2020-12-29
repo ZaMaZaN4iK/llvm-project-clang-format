@@ -1,8 +1,9 @@
 //===-ThinLTOCodeGenerator.h - LLVM Link Time Optimizer -------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -19,8 +20,6 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/IR/ModuleSummaryIndex.h"
-#include "llvm/LTO/LTO.h"
-#include "llvm/Support/CachePruning.h"
 #include "llvm/Support/CodeGen.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Target/TargetOptions.h"
@@ -31,6 +30,23 @@ namespace llvm {
 class StringRef;
 class LLVMContext;
 class TargetMachine;
+
+/// Wrapper around MemoryBufferRef, owning the identifier
+class ThinLTOBuffer {
+  std::string OwnedIdentifier;
+  StringRef Buffer;
+
+public:
+  ThinLTOBuffer(StringRef Buffer, StringRef Identifier)
+      : OwnedIdentifier(Identifier), Buffer(Buffer) {}
+
+  MemoryBufferRef getMemBuffer() const {
+    return MemoryBufferRef(Buffer,
+                           {OwnedIdentifier.c_str(), OwnedIdentifier.size()});
+  }
+  StringRef getBuffer() const { return Buffer; }
+  StringRef getBufferIdentifier() const { return OwnedIdentifier; }
+};
 
 /// Helper to gather options relevant to the target machine creation
 struct TargetMachineBuilder {
@@ -114,8 +130,7 @@ public:
    * To avoid filling the disk space, a few knobs are provided:
    *  - The pruning interval limit the frequency at which the garbage collector
    *    will try to scan the cache directory to prune it from expired entries.
-   *    Setting to -1 disable the pruning (default). Setting to 0 will force
-   *    pruning to occur.
+   *    Setting to -1 disable the pruning (default).
    *  - The pruning expiration time indicates to the garbage collector how old
    *    an entry needs to be to be removed.
    *  - Finally, the garbage collector can be instructed to prune the cache till
@@ -125,34 +140,33 @@ public:
 
   struct CachingOptions {
     std::string Path;                    // Path to the cache, empty to disable.
-    CachePruningPolicy Policy;
+    int PruningInterval = 1200;          // seconds, -1 to disable pruning.
+    unsigned int Expiration = 7 * 24 * 3600;     // seconds (1w default).
+    unsigned MaxPercentageOfAvailableSpace = 75; // percentage.
   };
 
   /// Provide a path to a directory where to store the cached files for
   /// incremental build.
   void setCacheDir(std::string Path) { CacheOptions.Path = std::move(Path); }
 
-  /// Cache policy: interval (seconds) between two prunes of the cache. Set to a
-  /// negative value to disable pruning. A value of 0 will force pruning to
-  /// occur.
+  /// Cache policy: interval (seconds) between two prune of the cache. Set to a
+  /// negative value (default) to disable pruning. A value of 0 will be ignored.
   void setCachePruningInterval(int Interval) {
-    if(Interval < 0)
-      CacheOptions.Policy.Interval.reset();
-    else
-      CacheOptions.Policy.Interval = std::chrono::seconds(Interval);
+    if (Interval)
+      CacheOptions.PruningInterval = Interval;
   }
 
   /// Cache policy: expiration (in seconds) for an entry.
   /// A value of 0 will be ignored.
   void setCacheEntryExpiration(unsigned Expiration) {
     if (Expiration)
-      CacheOptions.Policy.Expiration = std::chrono::seconds(Expiration);
+      CacheOptions.Expiration = Expiration;
   }
 
   /**
    * Sets the maximum cache size that can be persistent across build, in terms
-   * of percentage of the available space on the disk. Set to 100 to indicate
-   * no limit, 50 to indicate that the cache size will not be left over
+   * of percentage of the available space on the the disk. Set to 100 to
+   * indicate no limit, 50 to indicate that the cache size will not be left over
    * half the available space. A value over 100 will be reduced to 100, and a
    * value of 0 will be ignored.
    *
@@ -164,22 +178,7 @@ public:
    */
   void setMaxCacheSizeRelativeToAvailableSpace(unsigned Percentage) {
     if (Percentage)
-      CacheOptions.Policy.MaxSizePercentageOfAvailableSpace = Percentage;
-  }
-
-  /// Cache policy: the maximum size for the cache directory in bytes. A value
-  /// over the amount of available space on the disk will be reduced to the
-  /// amount of available space. A value of 0 will be ignored.
-  void setCacheMaxSizeBytes(uint64_t MaxSizeBytes) {
-    if (MaxSizeBytes)
-      CacheOptions.Policy.MaxSizeBytes = MaxSizeBytes;
-  }
-
-  /// Cache policy: the maximum number of files in the cache directory. A value
-  /// of 0 will be ignored.
-  void setCacheMaxSizeFiles(unsigned MaxSizeFiles) {
-    if (MaxSizeFiles)
-      CacheOptions.Policy.MaxSizeFiles = MaxSizeFiles;
+      CacheOptions.MaxPercentageOfAvailableSpace = Percentage;
   }
 
   /**@}*/
@@ -206,10 +205,6 @@ public:
   void setTargetOptions(TargetOptions Options) {
     TMBuilder.Options = std::move(Options);
   }
-
-  /// Enable the Freestanding mode: indicate that the optimizer should not
-  /// assume builtins are present on the target.
-  void setFreestanding(bool Enabled) { Freestanding = Enabled; }
 
   /// CodeModel
   void setCodePICModel(Optional<Reloc::Model> Model) {
@@ -251,36 +246,31 @@ public:
    * and additionally resolve weak and linkonce symbols.
    * Index is updated to reflect linkage changes from weak resolution.
    */
-  void promote(Module &Module, ModuleSummaryIndex &Index,
-               const lto::InputFile &File);
+  void promote(Module &Module, ModuleSummaryIndex &Index);
 
   /**
    * Compute and emit the imported files for module at \p ModulePath.
    */
-  void emitImports(Module &Module, StringRef OutputName,
-                   ModuleSummaryIndex &Index,
-                   const lto::InputFile &File);
+  static void emitImports(StringRef ModulePath, StringRef OutputName,
+                          ModuleSummaryIndex &Index);
 
   /**
    * Perform cross-module importing for the module identified by
    * ModuleIdentifier.
    */
-  void crossModuleImport(Module &Module, ModuleSummaryIndex &Index,
-                         const lto::InputFile &File);
+  void crossModuleImport(Module &Module, ModuleSummaryIndex &Index);
 
   /**
    * Compute the list of summaries needed for importing into module.
    */
-  void gatherImportedSummariesForModule(
-      Module &Module, ModuleSummaryIndex &Index,
-      std::map<std::string, GVSummaryMapTy> &ModuleToSummariesForIndex,
-      const lto::InputFile &File);
+  static void gatherImportedSummariesForModule(
+      StringRef ModulePath, ModuleSummaryIndex &Index,
+      std::map<std::string, GVSummaryMapTy> &ModuleToSummariesForIndex);
 
   /**
    * Perform internalization. Index is updated to reflect linkage changes.
    */
-  void internalize(Module &Module, ModuleSummaryIndex &Index,
-                   const lto::InputFile &File);
+  void internalize(Module &Module, ModuleSummaryIndex &Index);
 
   /**
    * Perform post-importing ThinLTO optimizations.
@@ -288,12 +278,10 @@ public:
   void optimize(Module &Module);
 
   /**
-   * Write temporary object file to SavedObjectDirectoryPath, write symlink
-   * to Cache directory if needed. Returns the path to the generated file in
-   * SavedObjectsDirectoryPath.
+   * Perform ThinLTO CodeGen.
    */
-  std::string writeGeneratedObject(int count, StringRef CacheEntryPath,
-                                   const MemoryBuffer &OutputBuffer);
+  std::unique_ptr<MemoryBuffer> codegen(Module &Module);
+
   /**@}*/
 
 private:
@@ -309,7 +297,7 @@ private:
 
   /// Vector holding the input buffers containing the bitcode modules to
   /// process.
-  std::vector<std::unique_ptr<lto::InputFile>> Modules;
+  std::vector<ThinLTOBuffer> Modules;
 
   /// Set of symbols that need to be preserved outside of the set of bitcode
   /// files.
@@ -334,10 +322,6 @@ private:
   /// Flag to indicate that only the CodeGen will be performed, no cross-module
   /// importing or optimization.
   bool CodeGenOnly = false;
-
-  /// Flag to indicate that the optimizer should not assume builtins are present
-  /// on the target.
-  bool Freestanding = false;
 
   /// IR Optimization Level [0-3].
   unsigned OptLevel = 3;

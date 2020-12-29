@@ -6,6 +6,7 @@ from __future__ import print_function
 
 
 import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -77,7 +78,7 @@ class IterateFrameAndDisassembleTestCase(TestBase):
 
     def breakOnCtor(self):
         """Setup/run the program so it stops on C's constructor."""
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Break on the ctor function of class C.

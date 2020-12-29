@@ -1,8 +1,9 @@
 //===-------- AMDGPUELFStreamer.h - ELF Object Output -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -22,11 +23,17 @@ class MCCodeEmitter;
 class MCContext;
 class MCSubtargetInfo;
 
-MCELFStreamer *createAMDGPUELFStreamer(const Triple &T, MCContext &Context,
-                                       std::unique_ptr<MCAsmBackend> MAB,
-                                       std::unique_ptr<MCObjectWriter> OW,
-                                       std::unique_ptr<MCCodeEmitter> Emitter,
-                                       bool RelaxAll);
+class AMDGPUELFStreamer : public MCELFStreamer {
+public:
+  AMDGPUELFStreamer(MCContext &Context, MCAsmBackend &MAB, raw_pwrite_stream &OS,
+                  MCCodeEmitter *Emitter)
+      : MCELFStreamer(Context, MAB, OS, Emitter) { }
+
+};
+
+MCELFStreamer *createAMDGPUELFStreamer(MCContext &Context, MCAsmBackend &MAB,
+                                     raw_pwrite_stream &OS,
+                                     MCCodeEmitter *Emitter, bool RelaxAll);
 } // namespace llvm.
 
 #endif

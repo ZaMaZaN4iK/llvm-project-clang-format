@@ -1,20 +1,25 @@
 //===-- WatchpointOptions.cpp -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Breakpoint/WatchpointOptions.h"
 
 #include "lldb/Breakpoint/StoppointCallbackContext.h"
+#include "lldb/Core/Stream.h"
+#include "lldb/Core/StringList.h"
 #include "lldb/Core/Value.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/ThreadSpec.h"
-#include "lldb/Utility/Stream.h"
-#include "lldb/Utility/StringList.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -25,28 +30,34 @@ bool WatchpointOptions::NullCallback(void *baton,
   return true;
 }
 
+//----------------------------------------------------------------------
 // WatchpointOptions constructor
+//----------------------------------------------------------------------
 WatchpointOptions::WatchpointOptions()
     : m_callback(WatchpointOptions::NullCallback), m_callback_baton_sp(),
-      m_callback_is_synchronous(false), m_thread_spec_up() {}
+      m_callback_is_synchronous(false), m_thread_spec_ap() {}
 
+//----------------------------------------------------------------------
 // WatchpointOptions copy constructor
+//----------------------------------------------------------------------
 WatchpointOptions::WatchpointOptions(const WatchpointOptions &rhs)
     : m_callback(rhs.m_callback), m_callback_baton_sp(rhs.m_callback_baton_sp),
       m_callback_is_synchronous(rhs.m_callback_is_synchronous),
-      m_thread_spec_up() {
-  if (rhs.m_thread_spec_up != nullptr)
-    m_thread_spec_up.reset(new ThreadSpec(*rhs.m_thread_spec_up));
+      m_thread_spec_ap() {
+  if (rhs.m_thread_spec_ap.get() != nullptr)
+    m_thread_spec_ap.reset(new ThreadSpec(*rhs.m_thread_spec_ap.get()));
 }
 
+//----------------------------------------------------------------------
 // WatchpointOptions assignment operator
+//----------------------------------------------------------------------
 const WatchpointOptions &WatchpointOptions::
 operator=(const WatchpointOptions &rhs) {
   m_callback = rhs.m_callback;
   m_callback_baton_sp = rhs.m_callback_baton_sp;
   m_callback_is_synchronous = rhs.m_callback_is_synchronous;
-  if (rhs.m_thread_spec_up != nullptr)
-    m_thread_spec_up.reset(new ThreadSpec(*rhs.m_thread_spec_up));
+  if (rhs.m_thread_spec_ap.get() != nullptr)
+    m_thread_spec_ap.reset(new ThreadSpec(*rhs.m_thread_spec_ap.get()));
   return *this;
 }
 
@@ -64,10 +75,14 @@ WatchpointOptions::CopyOptionsNoCallback(WatchpointOptions &orig) {
   return ret_val;
 }
 
+//----------------------------------------------------------------------
 // Destructor
+//----------------------------------------------------------------------
 WatchpointOptions::~WatchpointOptions() = default;
 
+//------------------------------------------------------------------
 // Callbacks
+//------------------------------------------------------------------
 void WatchpointOptions::SetCallback(WatchpointHitCallback callback,
                                     const BatonSP &callback_baton_sp,
                                     bool callback_is_synchronous) {
@@ -103,14 +118,14 @@ bool WatchpointOptions::HasCallback() {
 }
 
 const ThreadSpec *WatchpointOptions::GetThreadSpecNoCreate() const {
-  return m_thread_spec_up.get();
+  return m_thread_spec_ap.get();
 }
 
 ThreadSpec *WatchpointOptions::GetThreadSpec() {
-  if (m_thread_spec_up == nullptr)
-    m_thread_spec_up.reset(new ThreadSpec());
+  if (m_thread_spec_ap.get() == nullptr)
+    m_thread_spec_ap.reset(new ThreadSpec());
 
-  return m_thread_spec_up.get();
+  return m_thread_spec_ap.get();
 }
 
 void WatchpointOptions::SetThreadID(lldb::tid_t thread_id) {
@@ -121,15 +136,15 @@ void WatchpointOptions::GetCallbackDescription(
     Stream *s, lldb::DescriptionLevel level) const {
   if (m_callback_baton_sp.get()) {
     s->EOL();
-    m_callback_baton_sp->GetDescription(s->AsRawOstream(), level,
-                                        s->GetIndentLevel());
+    m_callback_baton_sp->GetDescription(s, level);
   }
 }
 
 void WatchpointOptions::GetDescription(Stream *s,
                                        lldb::DescriptionLevel level) const {
   // Figure out if there are any options not at their default value, and only
-  // print anything if there are:
+  // print
+  // anything if there are:
 
   if ((GetThreadSpecNoCreate() != nullptr &&
        GetThreadSpecNoCreate()->HasSpecification())) {
@@ -143,8 +158,8 @@ void WatchpointOptions::GetDescription(Stream *s,
     } else
       s->PutCString(" Options: ");
 
-    if (m_thread_spec_up)
-      m_thread_spec_up->GetDescription(s, level);
+    if (m_thread_spec_ap.get())
+      m_thread_spec_ap->GetDescription(s, level);
     else if (level == eDescriptionLevelBrief)
       s->PutCString("thread spec: no ");
     if (level == lldb::eDescriptionLevelFull) {
@@ -157,26 +172,28 @@ void WatchpointOptions::GetDescription(Stream *s,
 }
 
 void WatchpointOptions::CommandBaton::GetDescription(
-    llvm::raw_ostream &s, lldb::DescriptionLevel level,
-    unsigned indentation) const {
+    Stream *s, lldb::DescriptionLevel level) const {
   const CommandData *data = getItem();
 
   if (level == eDescriptionLevelBrief) {
-    s << ", commands = %s"
-      << ((data && data->user_source.GetSize() > 0) ? "yes" : "no");
+    s->Printf(", commands = %s",
+              (data && data->user_source.GetSize() > 0) ? "yes" : "no");
     return;
   }
 
-  indentation += 2;
-  s.indent(indentation);
-  s << "watchpoint commands:\n";
+  s->IndentMore();
+  s->Indent("watchpoint commands:\n");
 
-  indentation += 2;
+  s->IndentMore();
   if (data && data->user_source.GetSize() > 0) {
-    for (const std::string &line : data->user_source) {
-      s.indent(indentation);
-      s << line << "\n";
+    const size_t num_strings = data->user_source.GetSize();
+    for (size_t i = 0; i < num_strings; ++i) {
+      s->Indent(data->user_source.GetStringAtIndex(i));
+      s->EOL();
     }
-  } else
-    s << "No commands.\n";
+  } else {
+    s->PutCString("No commands.\n");
+  }
+  s->IndentLess();
+  s->IndentLess();
 }

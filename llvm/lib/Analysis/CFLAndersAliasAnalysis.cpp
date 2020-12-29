@@ -1,8 +1,9 @@
-//===- CFLAndersAliasAnalysis.cpp - Unification-based Alias Analysis ------===//
+//- CFLAndersAliasAnalysis.cpp - Unification-based Alias Analysis ---*- C++-*-//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,7 +18,7 @@
 //
 // The algorithm used here is based on recursive state machine matching scheme
 // proposed in "Demand-driven alias analysis for C" by Xin Zheng and Radu
-// Rugina. The general idea is to extend the traditional transitive closure
+// Rugina. The general idea is to extend the tranditional transitive closure
 // algorithm to perform CFL matching along the way: instead of recording
 // "whether X is reachable from Y", we keep track of "whether X is reachable
 // from Y at state Z", where the "state" field indicates where we are in the CFL
@@ -53,48 +54,30 @@
 // FunctionPasses to run concurrently.
 
 #include "llvm/Analysis/CFLAndersAliasAnalysis.h"
-#include "AliasAnalysisSummary.h"
 #include "CFLGraph.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/None.h"
-#include "llvm/ADT/Optional.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/iterator_range.h"
-#include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Analysis/MemoryLocation.h"
-#include "llvm/IR/Argument.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/PassManager.h"
-#include "llvm/IR/Type.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/Compiler.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
-#include <algorithm>
-#include <bitset>
-#include <cassert>
-#include <cstddef>
-#include <cstdint>
-#include <functional>
-#include <utility>
-#include <vector>
 
 using namespace llvm;
 using namespace llvm::cflaa;
 
 #define DEBUG_TYPE "cfl-anders-aa"
 
-CFLAndersAAResult::CFLAndersAAResult(
-    std::function<const TargetLibraryInfo &(Function &F)> GetTLI)
-    : GetTLI(std::move(GetTLI)) {}
+CFLAndersAAResult::CFLAndersAAResult(const TargetLibraryInfo &TLI) : TLI(TLI) {}
 CFLAndersAAResult::CFLAndersAAResult(CFLAndersAAResult &&RHS)
-    : AAResultBase(std::move(RHS)), GetTLI(std::move(RHS.GetTLI)) {}
-CFLAndersAAResult::~CFLAndersAAResult() = default;
+    : AAResultBase(std::move(RHS)), TLI(RHS.TLI) {}
+CFLAndersAAResult::~CFLAndersAAResult() {}
+
+static const Function *parentFunctionOfValue(const Value *Val) {
+  if (auto *Inst = dyn_cast<Instruction>(Val)) {
+    auto *Bb = Inst->getParent();
+    return Bb->getParent();
+  }
+
+  if (auto *Arg = dyn_cast<Argument>(Val))
+    return Arg->getParent();
+  return nullptr;
+}
 
 namespace {
 
@@ -123,8 +106,7 @@ enum class MatchState : uint8_t {
   FlowToMemAliasReadWrite,
 };
 
-using StateSet = std::bitset<7>;
-
+typedef std::bitset<7> StateSet;
 const unsigned ReadOnlyStateMask =
     (1U << static_cast<uint8_t>(MatchState::FlowFromReadOnly)) |
     (1U << static_cast<uint8_t>(MatchState::FlowFromMemAliasReadOnly));
@@ -159,14 +141,13 @@ bool operator==(OffsetInstantiatedValue LHS, OffsetInstantiatedValue RHS) {
 // We use ReachabilitySet to keep track of value aliases (The nonterminal "V" in
 // the paper) during the analysis.
 class ReachabilitySet {
-  using ValueStateMap = DenseMap<InstantiatedValue, StateSet>;
-  using ValueReachMap = DenseMap<InstantiatedValue, ValueStateMap>;
-
+  typedef DenseMap<InstantiatedValue, StateSet> ValueStateMap;
+  typedef DenseMap<InstantiatedValue, ValueStateMap> ValueReachMap;
   ValueReachMap ReachMap;
 
 public:
-  using const_valuestate_iterator = ValueStateMap::const_iterator;
-  using const_value_iterator = ValueReachMap::const_iterator;
+  typedef ValueStateMap::const_iterator const_valuestate_iterator;
+  typedef ValueReachMap::const_iterator const_value_iterator;
 
   // Insert edge 'From->To' at state 'State'
   bool insert(InstantiatedValue From, InstantiatedValue To, MatchState State) {
@@ -199,13 +180,12 @@ public:
 // We use AliasMemSet to keep track of all memory aliases (the nonterminal "M"
 // in the paper) during the analysis.
 class AliasMemSet {
-  using MemSet = DenseSet<InstantiatedValue>;
-  using MemMapType = DenseMap<InstantiatedValue, MemSet>;
-
+  typedef DenseSet<InstantiatedValue> MemSet;
+  typedef DenseMap<InstantiatedValue, MemSet> MemMapType;
   MemMapType MemMap;
 
 public:
-  using const_mem_iterator = MemSet::const_iterator;
+  typedef MemSet::const_iterator const_mem_iterator;
 
   bool insert(InstantiatedValue LHS, InstantiatedValue RHS) {
     // Top-level values can never be memory aliases because one cannot take the
@@ -224,12 +204,11 @@ public:
 
 // We use AliasAttrMap to keep track of the AliasAttr of each node.
 class AliasAttrMap {
-  using MapType = DenseMap<InstantiatedValue, AliasAttrs>;
-
+  typedef DenseMap<InstantiatedValue, AliasAttrs> MapType;
   MapType AttrMap;
 
 public:
-  using const_iterator = MapType::const_iterator;
+  typedef MapType::const_iterator const_iterator;
 
   bool add(InstantiatedValue V, AliasAttrs Attr) {
     auto &OldAttr = AttrMap[V];
@@ -266,28 +245,23 @@ struct ValueSummary {
   };
   SmallVector<Record, 4> FromRecords, ToRecords;
 };
-
-} // end anonymous namespace
+}
 
 namespace llvm {
-
 // Specialize DenseMapInfo for OffsetValue.
 template <> struct DenseMapInfo<OffsetValue> {
   static OffsetValue getEmptyKey() {
     return OffsetValue{DenseMapInfo<const Value *>::getEmptyKey(),
                        DenseMapInfo<int64_t>::getEmptyKey()};
   }
-
   static OffsetValue getTombstoneKey() {
     return OffsetValue{DenseMapInfo<const Value *>::getTombstoneKey(),
                        DenseMapInfo<int64_t>::getEmptyKey()};
   }
-
   static unsigned getHashValue(const OffsetValue &OVal) {
     return DenseMapInfo<std::pair<const Value *, int64_t>>::getHashValue(
         std::make_pair(OVal.Val, OVal.Offset));
   }
-
   static bool isEqual(const OffsetValue &LHS, const OffsetValue &RHS) {
     return LHS == RHS;
   }
@@ -300,25 +274,21 @@ template <> struct DenseMapInfo<OffsetInstantiatedValue> {
         DenseMapInfo<InstantiatedValue>::getEmptyKey(),
         DenseMapInfo<int64_t>::getEmptyKey()};
   }
-
   static OffsetInstantiatedValue getTombstoneKey() {
     return OffsetInstantiatedValue{
         DenseMapInfo<InstantiatedValue>::getTombstoneKey(),
         DenseMapInfo<int64_t>::getEmptyKey()};
   }
-
   static unsigned getHashValue(const OffsetInstantiatedValue &OVal) {
     return DenseMapInfo<std::pair<InstantiatedValue, int64_t>>::getHashValue(
         std::make_pair(OVal.IVal, OVal.Offset));
   }
-
   static bool isEqual(const OffsetInstantiatedValue &LHS,
                       const OffsetInstantiatedValue &RHS) {
     return LHS == RHS;
   }
 };
-
-} // end namespace llvm
+}
 
 class CFLAndersAAResult::FunctionInfo {
   /// Map a value to other values that may alias it
@@ -337,9 +307,9 @@ class CFLAndersAAResult::FunctionInfo {
 
 public:
   FunctionInfo(const Function &, const SmallVectorImpl<Value *> &,
-               const ReachabilitySet &, const AliasAttrMap &);
+               const ReachabilitySet &, AliasAttrMap);
 
-  bool mayAlias(const Value *, LocationSize, const Value *, LocationSize) const;
+  bool mayAlias(const Value *, uint64_t, const Value *, uint64_t) const;
   const AliasSummary &getAliasSummary() const { return Summary; }
 };
 
@@ -397,7 +367,7 @@ populateAliasMap(DenseMap<const Value *, std::vector<OffsetValue>> &AliasMap,
     }
 
     // Sort AliasList for faster lookup
-    llvm::sort(AliasList);
+    std::sort(AliasList.begin(), AliasList.end());
   }
 }
 
@@ -481,7 +451,7 @@ static void populateExternalRelations(
   }
 
   // Remove duplicates in ExtRelations
-  llvm::sort(ExtRelations);
+  std::sort(ExtRelations.begin(), ExtRelations.end());
   ExtRelations.erase(std::unique(ExtRelations.begin(), ExtRelations.end()),
                      ExtRelations.end());
 }
@@ -500,7 +470,7 @@ static void populateExternalAttributes(
 
 CFLAndersAAResult::FunctionInfo::FunctionInfo(
     const Function &Fn, const SmallVectorImpl<Value *> &RetVals,
-    const ReachabilitySet &ReachSet, const AliasAttrMap &AMap) {
+    const ReachabilitySet &ReachSet, AliasAttrMap AMap) {
   populateAttrMap(AttrMap, AMap);
   populateExternalAttributes(Summary.RetParamAttributes, Fn, RetVals, AMap);
   populateAliasMap(AliasMap, ReachSet);
@@ -517,9 +487,10 @@ CFLAndersAAResult::FunctionInfo::getAttrs(const Value *V) const {
   return None;
 }
 
-bool CFLAndersAAResult::FunctionInfo::mayAlias(
-    const Value *LHS, LocationSize MaybeLHSSize, const Value *RHS,
-    LocationSize MaybeRHSSize) const {
+bool CFLAndersAAResult::FunctionInfo::mayAlias(const Value *LHS,
+                                               uint64_t LHSSize,
+                                               const Value *RHS,
+                                               uint64_t RHSSize) const {
   assert(LHS && RHS);
 
   // Check if we've seen LHS and RHS before. Sometimes LHS or RHS can be created
@@ -558,13 +529,10 @@ bool CFLAndersAAResult::FunctionInfo::mayAlias(
                                       OffsetValue{RHS, 0}, Comparator);
 
     if (RangePair.first != RangePair.second) {
-      // Be conservative about unknown sizes
-      if (MaybeLHSSize == LocationSize::unknown() ||
-          MaybeRHSSize == LocationSize::unknown())
+      // Be conservative about UnknownSize
+      if (LHSSize == MemoryLocation::UnknownSize ||
+          RHSSize == MemoryLocation::UnknownSize)
         return true;
-
-      const uint64_t LHSSize = MaybeLHSSize.getValue();
-      const uint64_t RHSSize = MaybeRHSSize.getValue();
 
       for (const auto &OVal : make_range(RangePair)) {
         // Be conservative about UnknownOffset
@@ -615,7 +583,7 @@ static void initializeWorkList(std::vector<WorkListItem> &WorkList,
     for (unsigned I = 0, E = ValueInfo.getNumLevels(); I < E; ++I) {
       auto Src = InstantiatedValue{Val, I};
       // If there's an assignment edge from X to Y, it means Y is reachable from
-      // X at S3 and X is reachable from Y at S1
+      // X at S2 and X is reachable from Y at S1
       for (auto &Edge : ValueInfo.getNodeInfoAtLevel(I).Edges) {
         propagate(Edge.Other, Src, MatchState::FlowFromReadOnly, ReachSet,
                   WorkList);
@@ -649,7 +617,7 @@ static void processWorkListItem(const WorkListItem &Item, const CFLGraph &Graph,
   // relations that are symmetric, we could actually cut the storage by half by
   // sorting FromNode and ToNode before insertion happens.
 
-  // The newly added value alias pair may potentially generate more memory
+  // The newly added value alias pair may pontentially generate more memory
   // alias pairs. Check for them here.
   auto FromNodeBelow = getNodeBelow(Graph, FromNode);
   auto ToNodeBelow = getNodeBelow(Graph, ToNode);
@@ -697,39 +665,40 @@ static void processWorkListItem(const WorkListItem &Item, const CFLGraph &Graph,
   };
 
   switch (Item.State) {
-  case MatchState::FlowFromReadOnly:
+  case MatchState::FlowFromReadOnly: {
     NextRevAssignState(MatchState::FlowFromReadOnly);
     NextAssignState(MatchState::FlowToReadWrite);
     NextMemState(MatchState::FlowFromMemAliasReadOnly);
     break;
-
-  case MatchState::FlowFromMemAliasNoReadWrite:
+  }
+  case MatchState::FlowFromMemAliasNoReadWrite: {
     NextRevAssignState(MatchState::FlowFromReadOnly);
     NextAssignState(MatchState::FlowToWriteOnly);
     break;
-
-  case MatchState::FlowFromMemAliasReadOnly:
+  }
+  case MatchState::FlowFromMemAliasReadOnly: {
     NextRevAssignState(MatchState::FlowFromReadOnly);
     NextAssignState(MatchState::FlowToReadWrite);
     break;
-
-  case MatchState::FlowToWriteOnly:
+  }
+  case MatchState::FlowToWriteOnly: {
     NextAssignState(MatchState::FlowToWriteOnly);
     NextMemState(MatchState::FlowToMemAliasWriteOnly);
     break;
-
-  case MatchState::FlowToReadWrite:
+  }
+  case MatchState::FlowToReadWrite: {
     NextAssignState(MatchState::FlowToReadWrite);
     NextMemState(MatchState::FlowToMemAliasReadWrite);
     break;
-
-  case MatchState::FlowToMemAliasWriteOnly:
+  }
+  case MatchState::FlowToMemAliasWriteOnly: {
     NextAssignState(MatchState::FlowToWriteOnly);
     break;
-
-  case MatchState::FlowToMemAliasReadWrite:
+  }
+  case MatchState::FlowToMemAliasReadWrite: {
     NextAssignState(MatchState::FlowToReadWrite);
     break;
+  }
   }
 }
 
@@ -782,7 +751,7 @@ static AliasAttrMap buildAttrMap(const CFLGraph &Graph,
 CFLAndersAAResult::FunctionInfo
 CFLAndersAAResult::buildInfoFrom(const Function &Fn) {
   CFLGraphBuilder<CFLAndersAAResult> GraphBuilder(
-      *this, GetTLI(const_cast<Function &>(Fn)),
+      *this, TLI,
       // Cast away the constness here due to GraphBuilder's API requirement
       const_cast<Function &>(Fn));
   auto &Graph = GraphBuilder.getCFLGraph();
@@ -820,10 +789,10 @@ void CFLAndersAAResult::scan(const Function &Fn) {
   // resize and invalidating the reference returned by operator[]
   auto FunInfo = buildInfoFrom(Fn);
   Cache[&Fn] = std::move(FunInfo);
-  Handles.emplace_front(const_cast<Function *>(&Fn), this);
+  Handles.push_front(FunctionHandle(const_cast<Function *>(&Fn), this));
 }
 
-void CFLAndersAAResult::evict(const Function *Fn) { Cache.erase(Fn); }
+void CFLAndersAAResult::evict(const Function &Fn) { Cache.erase(&Fn); }
 
 const Optional<CFLAndersAAResult::FunctionInfo> &
 CFLAndersAAResult::ensureCached(const Function &Fn) {
@@ -859,9 +828,8 @@ AliasResult CFLAndersAAResult::query(const MemoryLocation &LocA,
     if (!Fn) {
       // The only times this is known to happen are when globals + InlineAsm are
       // involved
-      LLVM_DEBUG(
-          dbgs()
-          << "CFLAndersAA: could not extract parent function information.\n");
+      DEBUG(dbgs()
+            << "CFLAndersAA: could not extract parent function information.\n");
       return MayAlias;
     }
   } else {
@@ -878,10 +846,9 @@ AliasResult CFLAndersAAResult::query(const MemoryLocation &LocA,
 }
 
 AliasResult CFLAndersAAResult::alias(const MemoryLocation &LocA,
-                                     const MemoryLocation &LocB,
-                                     AAQueryInfo &AAQI) {
+                                     const MemoryLocation &LocB) {
   if (LocA.Ptr == LocB.Ptr)
-    return MustAlias;
+    return LocA.Size == LocB.Size ? MustAlias : PartialAlias;
 
   // Comparisons between global variables and other constants should be
   // handled by BasicAA.
@@ -889,11 +856,11 @@ AliasResult CFLAndersAAResult::alias(const MemoryLocation &LocA,
   // ConstantExpr, but every query needs to have at least one Value tied to a
   // Function, and neither GlobalValues nor ConstantExprs are.
   if (isa<Constant>(LocA.Ptr) && isa<Constant>(LocB.Ptr))
-    return AAResultBase::alias(LocA, LocB, AAQI);
+    return AAResultBase::alias(LocA, LocB);
 
   AliasResult QueryResult = query(LocA, LocB);
   if (QueryResult == MayAlias)
-    return AAResultBase::alias(LocA, LocB, AAQI);
+    return AAResultBase::alias(LocA, LocB);
 
   return QueryResult;
 }
@@ -901,10 +868,7 @@ AliasResult CFLAndersAAResult::alias(const MemoryLocation &LocA,
 AnalysisKey CFLAndersAA::Key;
 
 CFLAndersAAResult CFLAndersAA::run(Function &F, FunctionAnalysisManager &AM) {
-  auto GetTLI = [&AM](Function &F) -> TargetLibraryInfo & {
-    return AM.getResult<TargetLibraryAnalysis>(F);
-  };
-  return CFLAndersAAResult(GetTLI);
+  return CFLAndersAAResult(AM.getResult<TargetLibraryAnalysis>(F));
 }
 
 char CFLAndersAAWrapperPass::ID = 0;
@@ -920,10 +884,8 @@ CFLAndersAAWrapperPass::CFLAndersAAWrapperPass() : ImmutablePass(ID) {
 }
 
 void CFLAndersAAWrapperPass::initializePass() {
-  auto GetTLI = [this](Function &F) -> TargetLibraryInfo & {
-    return this->getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
-  };
-  Result.reset(new CFLAndersAAResult(GetTLI));
+  auto &TLIWP = getAnalysis<TargetLibraryInfoWrapperPass>();
+  Result.reset(new CFLAndersAAResult(TLIWP.getTLI()));
 }
 
 void CFLAndersAAWrapperPass::getAnalysisUsage(AnalysisUsage &AU) const {

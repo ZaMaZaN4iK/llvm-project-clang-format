@@ -1,58 +1,42 @@
-//===- llvm/lib/Target/ARM/ARMCallLowering.h - Call lowering ----*- C++ -*-===//
+//===-- llvm/lib/Target/ARM/ARMCallLowering.h - Call lowering -------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-//
+///
 /// \file
 /// This file describes how to lower LLVM calls to machine code calls.
-//
+///
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_ARM_ARMCALLLOWERING_H
-#define LLVM_LIB_TARGET_ARM_ARMCALLLOWERING_H
+#ifndef LLVM_LIB_TARGET_ARM_ARMCALLLOWERING
+#define LLVM_LIB_TARGET_ARM_ARMCALLLOWERING
 
-#include "llvm/ADT/ArrayRef.h"
+#include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/GlobalISel/CallLowering.h"
-#include "llvm/IR/CallingConv.h"
-#include <cstdint>
-#include <functional>
+#include "llvm/CodeGen/ValueTypes.h"
 
 namespace llvm {
 
 class ARMTargetLowering;
-class MachineFunction;
 class MachineInstrBuilder;
-class MachineIRBuilder;
-class Value;
 
 class ARMCallLowering : public CallLowering {
 public:
   ARMCallLowering(const ARMTargetLowering &TLI);
 
-  bool lowerReturn(MachineIRBuilder &MIRBuilder, const Value *Val,
-                   ArrayRef<Register> VRegs) const override;
+  bool lowerReturn(MachineIRBuilder &MIRBuiler, const Value *Val,
+                   unsigned VReg) const override;
 
   bool lowerFormalArguments(MachineIRBuilder &MIRBuilder, const Function &F,
-                            ArrayRef<ArrayRef<Register>> VRegs) const override;
-
-  bool lowerCall(MachineIRBuilder &MIRBuilder,
-                 CallLoweringInfo &Info) const override;
+                            ArrayRef<unsigned> VRegs) const override;
 
 private:
   bool lowerReturnVal(MachineIRBuilder &MIRBuilder, const Value *Val,
-                      ArrayRef<Register> VRegs,
-                      MachineInstrBuilder &Ret) const;
-
-  /// Split an argument into one or more arguments that the CC lowering can cope
-  /// with.
-  void splitToValueTypes(const ArgInfo &OrigArg,
-                         SmallVectorImpl<ArgInfo> &SplitArgs,
-                         MachineFunction &MF) const;
+                      unsigned VReg, MachineInstrBuilder &Ret) const;
 };
-
-} // end namespace llvm
-
-#endif // LLVM_LIB_TARGET_ARM_ARMCALLLOWERING_H
+} // End of namespace llvm
+#endif

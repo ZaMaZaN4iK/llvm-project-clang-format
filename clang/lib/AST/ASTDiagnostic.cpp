@@ -1,8 +1,9 @@
 //===--- ASTDiagnostic.cpp - Diagnostic Printing Hooks for AST Nodes ------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -39,11 +40,6 @@ static QualType Desugar(ASTContext &Context, QualType QT, bool &ShouldAKA) {
     // ... or a paren type ...
     if (const ParenType *PT = dyn_cast<ParenType>(Ty)) {
       QT = PT->desugar();
-      continue;
-    }
-    // ... or a macro defined type ...
-    if (const MacroQualifiedType *MDT = dyn_cast<MacroQualifiedType>(Ty)) {
-      QT = MDT->desugar();
       continue;
     }
     // ...or a substituted template type parameter ...
@@ -154,7 +150,7 @@ Underlying = CTy->desugar(); \
 } \
 break; \
 }
-#include "clang/AST/TypeNodes.inc"
+#include "clang/AST/TypeNodes.def"
     }
 
     // If it wasn't sugared, we're done.
@@ -204,7 +200,7 @@ break; \
   return QC.apply(Context, QT);
 }
 
-/// Convert the given type to a string suitable for printing as part of
+/// \brief Convert the given type to a string suitable for printing as part of 
 /// a diagnostic.
 ///
 /// There are four main criteria when determining whether we should have an
@@ -258,7 +254,7 @@ ConvertTypeToDiagnosticString(ASTContext &Context, QualType Ty,
                  // and the desugared comparison string.
     std::string CompareCanS =
         CompareCanTy.getAsString(Context.getPrintingPolicy());
-
+    
     if (CompareCanS == CanS)
       continue;  // No new info from canonical type
 
@@ -300,7 +296,8 @@ ConvertTypeToDiagnosticString(ASTContext &Context, QualType Ty,
     // Give some additional info on vector types. These are either not desugared
     // or displaying complex __attribute__ expressions so add details of the
     // type and element count.
-    if (const auto *VTy = Ty->getAs<VectorType>()) {
+    if (Ty->isVectorType()) {
+      const VectorType *VTy = Ty->getAs<VectorType>();
       std::string DecoratedString;
       llvm::raw_string_ostream OS(DecoratedString);
       const char *Values = VTy->getNumElements() > 1 ? "values" : "value";
@@ -330,42 +327,13 @@ void clang::FormatASTNodeDiagnosticArgument(
     void *Cookie,
     ArrayRef<intptr_t> QualTypeVals) {
   ASTContext &Context = *static_cast<ASTContext*>(Cookie);
-
+  
   size_t OldEnd = Output.size();
   llvm::raw_svector_ostream OS(Output);
   bool NeedQuotes = true;
-
+  
   switch (Kind) {
     default: llvm_unreachable("unknown ArgumentKind");
-    case DiagnosticsEngine::ak_addrspace: {
-      assert(Modifier.empty() && Argument.empty() &&
-             "Invalid modifier for Qualfiers argument");
-
-      auto S = Qualifiers::getAddrSpaceAsString(static_cast<LangAS>(Val));
-      if (S.empty()) {
-        OS << (Context.getLangOpts().OpenCL ? "default" : "generic");
-        OS << " address space";
-      } else {
-        OS << "address space";
-        OS << " '" << S << "'";
-      }
-      NeedQuotes = false;
-      break;
-    }
-    case DiagnosticsEngine::ak_qual: {
-      assert(Modifier.empty() && Argument.empty() &&
-             "Invalid modifier for Qualfiers argument");
-
-      Qualifiers Q(Qualifiers::fromOpaqueValue(Val));
-      auto S = Q.getAsString();
-      if (S.empty()) {
-        OS << "unqualified";
-        NeedQuotes = false;
-      } else {
-        OS << S;
-      }
-      break;
-    }
     case DiagnosticsEngine::ak_qualtype_pair: {
       TemplateDiffTypes &TDT = *reinterpret_cast<TemplateDiffTypes*>(Val);
       QualType FromType =
@@ -392,12 +360,11 @@ void clang::FormatASTNodeDiagnosticArgument(
       Modifier = StringRef();
       Argument = StringRef();
       // Fall through
-      LLVM_FALLTHROUGH;
     }
     case DiagnosticsEngine::ak_qualtype: {
       assert(Modifier.empty() && Argument.empty() &&
              "Invalid modifier for QualType argument");
-
+      
       QualType Ty(QualType::getFromOpaquePtr(reinterpret_cast<void*>(Val)));
       OS << ConvertTypeToDiagnosticString(Context, Ty, PrevArgs, QualTypeVals);
       NeedQuotes = false;
@@ -603,7 +570,8 @@ class TemplateDiff {
     unsigned ReadNode;
 
   public:
-    DiffTree() : CurrentNode(0), NextFreeNode(1), ReadNode(0) {
+    DiffTree() :
+        CurrentNode(0), NextFreeNode(1) {
       FlatTree.push_back(DiffNode());
     }
 
@@ -2071,7 +2039,7 @@ public:
 /// is successful.
 static bool FormatTemplateTypeDiff(ASTContext &Context, QualType FromType,
                                    QualType ToType, bool PrintTree,
-                                   bool PrintFromType, bool ElideType,
+                                   bool PrintFromType, bool ElideType, 
                                    bool ShowColors, raw_ostream &OS) {
   if (PrintTree)
     PrintFromType = true;

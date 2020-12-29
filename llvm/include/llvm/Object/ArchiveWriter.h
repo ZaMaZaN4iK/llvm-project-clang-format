@@ -1,8 +1,9 @@
 //===- ArchiveWriter.h - ar archive file format writer ----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,17 +16,16 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Object/Archive.h"
-#include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
 
 namespace llvm {
 
 struct NewArchiveMember {
   std::unique_ptr<MemoryBuffer> Buf;
-  StringRef MemberName;
   sys::TimePoint<std::chrono::seconds> ModTime;
   unsigned UID = 0, GID = 0, Perms = 0644;
 
+  bool IsNew = false;
   NewArchiveMember() = default;
   NewArchiveMember(MemoryBufferRef BufRef);
 
@@ -36,12 +36,10 @@ struct NewArchiveMember {
                                             bool Deterministic);
 };
 
-Expected<std::string> computeArchiveRelativePath(StringRef From, StringRef To);
-
-Error writeArchive(StringRef ArcName, ArrayRef<NewArchiveMember> NewMembers,
-                   bool WriteSymtab, object::Archive::Kind Kind,
-                   bool Deterministic, bool Thin,
-                   std::unique_ptr<MemoryBuffer> OldArchiveBuf = nullptr);
+std::pair<StringRef, std::error_code>
+writeArchive(StringRef ArcName, std::vector<NewArchiveMember> &NewMembers,
+             bool WriteSymtab, object::Archive::Kind Kind, bool Deterministic,
+             bool Thin, std::unique_ptr<MemoryBuffer> OldArchiveBuf = nullptr);
 }
 
 #endif

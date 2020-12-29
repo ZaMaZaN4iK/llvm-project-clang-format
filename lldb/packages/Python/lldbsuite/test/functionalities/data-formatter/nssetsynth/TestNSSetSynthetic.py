@@ -2,8 +2,12 @@
 Test lldb data formatter subsystem.
 """
 
+from __future__ import print_function
 
 
+import datetime
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -24,7 +28,7 @@ class NSSetSyntheticTestCase(TestBase):
     def test_rdar12529957_with_run_command(self):
         """Test that NSSet reports its synthetic children properly."""
         self.build()
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(
             self, "main.m", self.line, num_expected_locations=1, loc_exact=True)

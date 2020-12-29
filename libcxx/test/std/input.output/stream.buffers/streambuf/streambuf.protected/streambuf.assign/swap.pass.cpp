@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,7 +19,6 @@
 #include <streambuf>
 #include <cassert>
 
-#include "test_macros.h"
 #include "platform_support.h" // locale name macros
 
 template <class CharT>
@@ -48,6 +48,7 @@ struct test
         assert(t.pptr()  == old_this.pptr());
         assert(t.epptr() == old_this.epptr());
         assert(t.getloc() == old_this.getloc());
+        return *this;
     }
 
     void setg(CharT* gbeg, CharT* gnext, CharT* gend)
@@ -60,17 +61,17 @@ struct test
     }
 };
 
-int main(int, char**)
+int main()
 {
     {
         test<char> t;
         test<char> t2;
-        t2.swap(t);
+        swap(t2, t);
     }
     {
         test<wchar_t> t;
         test<wchar_t> t2;
-        t2.swap(t);
+        swap(t2, t);
     }
     {
         char g1, g2, g3, p1, p3;
@@ -78,7 +79,7 @@ int main(int, char**)
         t.setg(&g1, &g2, &g3);
         t.setp(&p1, &p3);
         test<char> t2;
-        t2.swap(t);
+        swap(t2, t);
     }
     {
         wchar_t g1, g2, g3, p1, p3;
@@ -86,19 +87,17 @@ int main(int, char**)
         t.setg(&g1, &g2, &g3);
         t.setp(&p1, &p3);
         test<wchar_t> t2;
-        t2.swap(t);
+        swap(t2, t);
     }
     std::locale::global(std::locale(LOCALE_en_US_UTF_8));
     {
         test<char> t;
         test<char> t2;
-        t2.swap(t);
+        swap(t2, t);
     }
     {
         test<wchar_t> t;
         test<wchar_t> t2;
-        t2.swap(t);
+        swap(t2, t);
     }
-
-  return 0;
 }

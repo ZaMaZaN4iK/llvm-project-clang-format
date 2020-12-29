@@ -1,8 +1,3 @@
-add_lldb_library(lldbPluginObjCPlusPlusLanguage PLUGIN
+add_lldb_library(lldbPluginObjCPlusPlusLanguage
   ObjCPlusPlusLanguage.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbTarget
-    lldbPluginClangCommon
 )

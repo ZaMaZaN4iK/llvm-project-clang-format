@@ -2,18 +2,18 @@
 
 # RUN: llvm-mc -filetype=obj -triple=x86_64-unknown-linux %s -o %t
 # RUN: ld.lld %t -o %t2
-# RUN: llvm-readobj --sections --symbols %t2 | FileCheck -check-prefix=NOGC %s
+# RUN: llvm-readobj -sections -symbols %t2 | FileCheck -check-prefix=NOGC %s
 # RUN: ld.lld --gc-sections %t -o %t2
-# RUN: llvm-readobj --sections --symbols %t2 | FileCheck -check-prefix=GC1 %s
+# RUN: llvm-readobj -sections -symbols %t2 | FileCheck -check-prefix=GC1 %s
 # RUN: ld.lld --export-dynamic --gc-sections %t -o %t2
-# RUN: llvm-readobj --sections --symbols %t2 | FileCheck -check-prefix=GC2 %s
+# RUN: llvm-readobj -sections -symbols %t2 | FileCheck -check-prefix=GC2 %s
 
 # NOGC: Name: .eh_frame
 # NOGC: Name: .text
-# NOGC: Name: .init
-# NOGC: Name: .fini
 # NOGC: Name: .ctors
 # NOGC: Name: .dtors
+# NOGC: Name: .init
+# NOGC: Name: .fini
 # NOGC: Name: .debug_pubtypes
 # NOGC: Name: .comment
 # NOGC: Name: a
@@ -25,10 +25,10 @@
 
 # GC1:     Name: .eh_frame
 # GC1:     Name: .text
-# GC1:     Name: .init
-# GC1:     Name: .fini
 # GC1:     Name: .ctors
 # GC1:     Name: .dtors
+# GC1:     Name: .init
+# GC1:     Name: .fini
 # GC1:     Name: .debug_pubtypes
 # GC1:     Name: .comment
 # GC1:     Name: a
@@ -40,10 +40,10 @@
 
 # GC2:     Name: .eh_frame
 # GC2:     Name: .text
-# GC2:     Name: .init
-# GC2:     Name: .fini
 # GC2:     Name: .ctors
 # GC2:     Name: .dtors
+# GC2:     Name: .init
+# GC2:     Name: .fini
 # GC2:     Name: .debug_pubtypes
 # GC2:     Name: .comment
 # GC2:     Name: a

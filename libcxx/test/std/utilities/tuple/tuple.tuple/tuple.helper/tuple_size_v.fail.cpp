@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,12 +17,10 @@
 
 #include <tuple>
 
-int main(int, char**)
+int main()
 {
     (void)std::tuple_size_v<std::tuple<> &>; // expected-note {{requested here}}
     (void)std::tuple_size_v<int>; // expected-note {{requested here}}
     (void)std::tuple_size_v<std::tuple<>*>; // expected-note {{requested here}}
     // expected-error@tuple:* 3 {{implicit instantiation of undefined template}}
-
-  return 0;
 }

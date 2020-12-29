@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,16 +19,14 @@
 
 template <class T>
 struct Hash {
-    std::size_t operator () (const T& lhs) const { return 0; }
+	std::size_t operator () (const T& lhs) const { return 0; }
 
-    Hash () {}
+	Hash () {}
 private:
-    Hash (const Hash &); // declared but not defined
-    };
+	Hash (const Hash &); // declared but not defined
+	};
 
 
-int main(int, char**) {
-    std::unordered_multimap<int, int, Hash<int> > m;
-
-  return 0;
+int main() {
+	std::unordered_multimap<int, int, Hash<int> > m;
 }

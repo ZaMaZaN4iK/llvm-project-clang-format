@@ -1,8 +1,9 @@
 //===-- SystemZMCTargetDesc.h - SystemZ target descriptions -----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,15 +12,13 @@
 
 #include "llvm/Support/DataTypes.h"
 
-#include <memory>
-
 namespace llvm {
 
 class MCAsmBackend;
 class MCCodeEmitter;
 class MCContext;
 class MCInstrInfo;
-class MCObjectTargetWriter;
+class MCObjectWriter;
 class MCRegisterInfo;
 class MCSubtargetInfo;
 class MCTargetOptions;
@@ -28,6 +27,8 @@ class Target;
 class Triple;
 class raw_pwrite_stream;
 class raw_ostream;
+
+Target &getTheSystemZTarget();
 
 namespace SystemZMC {
 // How many bytes are in the ABI-defined, caller-allocated part of
@@ -54,7 +55,6 @@ extern const unsigned VR32Regs[32];
 extern const unsigned VR64Regs[32];
 extern const unsigned VR128Regs[32];
 extern const unsigned AR32Regs[16];
-extern const unsigned CR64Regs[16];
 
 // Return the 0-based number of the first architectural register that
 // contains the given LLVM register.   E.g. R1D -> 1.
@@ -86,11 +86,11 @@ MCCodeEmitter *createSystemZMCCodeEmitter(const MCInstrInfo &MCII,
                                           MCContext &Ctx);
 
 MCAsmBackend *createSystemZMCAsmBackend(const Target &T,
-                                        const MCSubtargetInfo &STI,
                                         const MCRegisterInfo &MRI,
+                                        const Triple &TT, StringRef CPU,
                                         const MCTargetOptions &Options);
 
-std::unique_ptr<MCObjectTargetWriter> createSystemZObjectWriter(uint8_t OSABI);
+MCObjectWriter *createSystemZObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI);
 } // end namespace llvm
 
 // Defines symbolic names for SystemZ registers.

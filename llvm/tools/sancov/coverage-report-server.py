@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 #===- symcov-report-server.py - Coverage Reports HTTP Serve --*- python -*--===#
 #
-# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-# See https://llvm.org/LICENSE.txt for license information.
-# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+#                     The LLVM Compiler Infrastructure
+#
+# This file is distributed under the University of Illinois Open Source
+# License. See LICENSE.TXT for details.
 #
 #===------------------------------------------------------------------------===#
 '''(EXPERIMENTAL) HTTP server to browse coverage reports from .symcov files.
@@ -20,8 +21,6 @@ Other options:
     --port port_number - specifies the port to use (8001)
     --host host_name - host name to bind server to (127.0.0.1)
 '''
-
-from __future__ import print_function
 
 import argparse
 import http.server
@@ -139,7 +138,7 @@ class ServerHandler(http.server.BaseHTTPRequestHandler):
                 if not file_coverage:
                     continue
                 filelist.append(
-                        "<tr><td><a href=\"./{name}\">{name}</a></td>"
+                        "<tr><td><a href=\"/{name}\">{name}</a></td>"
                         "<td>{coverage}%</td></tr>".format(
                             name=html.escape(filename, quote=True), 
                             coverage=format_pct(file_coverage)))
@@ -161,12 +160,12 @@ class ServerHandler(http.server.BaseHTTPRequestHandler):
 
             linemap = self.symcov_data.compute_linemap(filename)
 
-            with open(filepath, 'r', encoding='utf8') as f:
+            with open(filepath, 'r') as f:
                 content = "\n".join(
                         ["<span class='{cls}'>{line}&nbsp;</span>".format(
                             line=html.escape(line.rstrip()), 
                             cls=linemap.get(line_no, ""))
-                            for line_no, line in enumerate(f, start=1)])
+                            for line_no, line in enumerate(f)])
 
             response = string.Template(CONTENT_PAGE_TMPL).safe_substitute(
                 path=self.path[1:],

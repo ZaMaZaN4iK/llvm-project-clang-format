@@ -1,45 +1,28 @@
 //===-- AMDGPUMachineFunctionInfo.cpp ---------------------------------------=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPUMachineFunction.h"
 #include "AMDGPUSubtarget.h"
-#include "AMDGPUPerfHintAnalysis.h"
-#include "llvm/CodeGen/MachineModuleInfo.h"
 
 using namespace llvm;
 
 AMDGPUMachineFunction::AMDGPUMachineFunction(const MachineFunction &MF) :
   MachineFunctionInfo(),
   LocalMemoryObjects(),
-  ExplicitKernArgSize(0),
+  KernArgSize(0),
+  MaxKernArgAlign(0),
   LDSSize(0),
-  Mode(MF.getFunction(), MF.getSubtarget<GCNSubtarget>()),
-  IsEntryFunction(AMDGPU::isEntryFunctionCC(MF.getFunction().getCallingConv())),
-  NoSignedZerosFPMath(MF.getTarget().Options.NoSignedZerosFPMath),
-  MemoryBound(false),
-  WaveLimiter(false) {
-  const AMDGPUSubtarget &ST = AMDGPUSubtarget::get(MF);
-
+  ABIArgOffset(0),
+  IsKernel(MF.getFunction()->getCallingConv() == CallingConv::AMDGPU_KERNEL ||
+           MF.getFunction()->getCallingConv() == CallingConv::SPIR_KERNEL) {
   // FIXME: Should initialize KernArgSize based on ExplicitKernelArgOffset,
   // except reserved size is not correctly aligned.
-  const Function &F = MF.getFunction();
-
-  Attribute MemBoundAttr = F.getFnAttribute("amdgpu-memory-bound");
-  MemoryBound = MemBoundAttr.isStringAttribute() &&
-                MemBoundAttr.getValueAsString() == "true";
-
-  Attribute WaveLimitAttr = F.getFnAttribute("amdgpu-wave-limiter");
-  WaveLimiter = WaveLimitAttr.isStringAttribute() &&
-                WaveLimitAttr.getValueAsString() == "true";
-
-  CallingConv::ID CC = F.getCallingConv();
-  if (CC == CallingConv::AMDGPU_KERNEL || CC == CallingConv::SPIR_KERNEL)
-    ExplicitKernArgSize = ST.getExplicitKernArgSize(F, MaxKernArgAlign);
 }
 
 unsigned AMDGPUMachineFunction::allocateLDSGlobal(const DataLayout &DL,

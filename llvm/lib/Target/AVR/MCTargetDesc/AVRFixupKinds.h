@@ -1,8 +1,9 @@
 //===-- AVRFixupKinds.h - AVR Specific Fixup Entries ------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -114,9 +115,10 @@ enum Fixups {
   fixup_8_hi8,
   fixup_8_hlo8,
 
-  fixup_diff8,
-  fixup_diff16,
-  fixup_diff32,
+  /// Fixup to calculate the difference between two symbols.
+  /// Is the only stateful fixup. We do not support it yet.
+  fixup_sym_diff,
+  fixup_16_ldst,
 
   fixup_lds_sts_16,
 

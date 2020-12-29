@@ -7,14 +7,6 @@
 // RUN: not %clang_asan -Dtestfunc=pvalloc  %s -o %t
 // RUN: not %clang_asan -Dtestfunc=cfree    %s -o %t
 
-// Conflicts with BIONIC declarations.
-// UNSUPPORTED: android
-
-// Inhibit conflicting declaration of memalign on Solaris.
-#if defined(__sun__) && defined(__svr4__)
-#undef __EXTENSIONS__
-#endif
-
 #include <stdlib.h>
 
 // For glibc, cause link failures by referencing a nonexistent function.

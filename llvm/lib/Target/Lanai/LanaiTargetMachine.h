@@ -1,8 +1,9 @@
 //===-- LanaiTargetMachine.h - Define TargetMachine for Lanai --- C++ ---===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,7 +19,7 @@
 #include "LanaiInstrInfo.h"
 #include "LanaiSelectionDAGInfo.h"
 #include "LanaiSubtarget.h"
-#include "llvm/CodeGen/TargetFrameLowering.h"
+#include "llvm/Target/TargetFrameLowering.h"
 #include "llvm/Target/TargetMachine.h"
 
 namespace llvm {
@@ -33,25 +34,20 @@ public:
                      StringRef Cpu, StringRef FeatureString,
                      const TargetOptions &Options,
                      Optional<Reloc::Model> RelocationModel,
-                     Optional<CodeModel::Model> CodeModel,
-                     CodeGenOpt::Level OptLevel, bool JIT);
+                     CodeModel::Model CodeModel, CodeGenOpt::Level OptLevel);
 
   const LanaiSubtarget *
   getSubtargetImpl(const llvm::Function & /*Fn*/) const override {
     return &Subtarget;
   }
 
-  TargetTransformInfo getTargetTransformInfo(const Function &F) override;
+  TargetIRAnalysis getTargetIRAnalysis() override;
 
   // Pass Pipeline Configuration
   TargetPassConfig *createPassConfig(PassManagerBase &pass_manager) override;
 
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();
-  }
-
-  bool isMachineVerifierClean() const override {
-    return false;
   }
 };
 } // namespace llvm

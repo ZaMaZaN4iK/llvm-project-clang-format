@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -32,8 +33,6 @@
 #include <type_traits>
 #include <vector>
 
-#include "test_macros.h"
-
 struct test
     : private std::priority_queue<int>
 {
@@ -52,7 +51,7 @@ struct C
     typedef int size_type;
 };
 
-int main(int, char**)
+int main()
 {
     static_assert(( std::is_same<std::priority_queue<int>::container_type, std::vector<int> >::value), "");
     static_assert(( std::is_same<std::priority_queue<int, std::deque<int> >::container_type, std::deque<int> >::value), "");
@@ -66,6 +65,4 @@ int main(int, char**)
     static_assert(( std::uses_allocator<std::priority_queue<int>, std::allocator<int> >::value), "");
     static_assert((!std::uses_allocator<std::priority_queue<int, C>, std::allocator<int> >::value), "");
     test t;
-
-  return 0;
 }

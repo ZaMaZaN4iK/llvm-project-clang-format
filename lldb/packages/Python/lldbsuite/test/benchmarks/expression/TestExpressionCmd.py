@@ -3,6 +3,7 @@
 from __future__ import print_function
 
 
+import os
 import sys
 import lldb
 from lldbsuite.test.decorators import *
@@ -38,7 +39,7 @@ class ExpressionEvaluationCase(BenchBase):
 
     def run_lldb_repeated_exprs(self, exe_name, count):
         import pexpect
-        exe = self.getBuildArtifact(exe_name)
+        exe = os.path.join(os.getcwd(), exe_name)
 
         # Set self.child_prompt, which is "(lldb) ".
         self.child_prompt = '(lldb) '

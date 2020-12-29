@@ -1,6 +1,4 @@
-// RUN: %clang_cc1 -verify -fopenmp %s -Wuninitialized
-
-// RUN: %clang_cc1 -verify -fopenmp-simd %s -Wuninitialized
+// RUN: %clang_cc1 -verify -fopenmp %s
 
 void foo();
 
@@ -23,7 +21,7 @@ int main(int argc, char **argv) {
 #pragma omp target teams distribute parallel for simd default (x) // expected-error {{expected 'none' or 'shared' in OpenMP clause 'default'}}
   for (int i=0; i<200; i++) foo();
 
-#pragma omp target teams distribute parallel for simd default(none) // expected-note {{explicit data sharing attribute requested here}}
+#pragma omp target teams distribute parallel for simd default(none)
   for (int i=0; i<200; i++) ++argc; // expected-error {{variable 'argc' must have explicitly specified data sharing attributes}}
 
   return 0;

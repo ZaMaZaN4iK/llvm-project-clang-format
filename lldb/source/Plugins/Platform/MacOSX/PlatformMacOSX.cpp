@@ -1,32 +1,37 @@
 //===-- PlatformMacOSX.cpp --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "PlatformMacOSX.h"
 #include "lldb/Host/Config.h"
 
+// C++ Includes
 
 #include <sstream>
 
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Breakpoint/BreakpointLocation.h"
+#include "lldb/Core/DataBufferHeap.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleList.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
+#include "lldb/Core/StreamString.h"
+#include "lldb/Host/FileSpec.h"
+#include "lldb/Host/FileSystem.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/FileSpec.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/StreamString.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -70,8 +75,8 @@ PlatformSP PlatformMacOSX::CreateInstance(bool force, const ArchSpec *arch) {
     const char *triple_cstr =
         arch ? arch->GetTriple().getTriple().c_str() : "<null>";
 
-    LLDB_LOGF(log, "PlatformMacOSX::%s(force=%s, arch={%s,%s})", __FUNCTION__,
-              force ? "true" : "false", arch_name, triple_cstr);
+    log->Printf("PlatformMacOSX::%s(force=%s, arch={%s,%s})", __FUNCTION__,
+                force ? "true" : "false", arch_name, triple_cstr);
   }
 
   // The only time we create an instance is when we are creating a remote
@@ -79,7 +84,7 @@ PlatformSP PlatformMacOSX::CreateInstance(bool force, const ArchSpec *arch) {
   const bool is_host = false;
 
   bool create = force;
-  if (!create && arch && arch->IsValid()) {
+  if (create == false && arch && arch->IsValid()) {
     const llvm::Triple &triple = arch->GetTriple();
     switch (triple.getVendor()) {
     case llvm::Triple::Apple:
@@ -87,9 +92,10 @@ PlatformSP PlatformMacOSX::CreateInstance(bool force, const ArchSpec *arch) {
       break;
 
 #if defined(__APPLE__)
-    // Only accept "unknown" for vendor if the host is Apple and it "unknown"
-    // wasn't specified (it was just returned because it was NOT specified)
-    case llvm::Triple::UnknownVendor:
+    // Only accept "unknown" for vendor if the host is Apple and
+    // it "unknown" wasn't specified (it was just returned because it
+    // was NOT specified)
+    case llvm::Triple::UnknownArch:
       create = !arch->TripleVendorWasSpecified();
       break;
 #endif
@@ -104,8 +110,9 @@ PlatformSP PlatformMacOSX::CreateInstance(bool force, const ArchSpec *arch) {
       case llvm::Triple::MacOSX:
         break;
 #if defined(__APPLE__)
-      // Only accept "vendor" for vendor if the host is Apple and it "unknown"
-      // wasn't specified (it was just returned because it was NOT specified)
+      // Only accept "vendor" for vendor if the host is Apple and
+      // it "unknown" wasn't specified (it was just returned because it
+      // was NOT specified)
       case llvm::Triple::UnknownOS:
         create = !arch->TripleOSWasSpecified();
         break;
@@ -117,12 +124,14 @@ PlatformSP PlatformMacOSX::CreateInstance(bool force, const ArchSpec *arch) {
     }
   }
   if (create) {
-    LLDB_LOGF(log, "PlatformMacOSX::%s() creating platform", __FUNCTION__);
+    if (log)
+      log->Printf("PlatformMacOSX::%s() creating platform", __FUNCTION__);
     return PlatformSP(new PlatformMacOSX(is_host));
   }
 
-  LLDB_LOGF(log, "PlatformMacOSX::%s() aborting creation of platform",
-            __FUNCTION__);
+  if (log)
+    log->Printf("PlatformMacOSX::%s() aborting creation of platform",
+                __FUNCTION__);
 
   return PlatformSP();
 }
@@ -144,13 +153,17 @@ const char *PlatformMacOSX::GetDescriptionStatic(bool is_host) {
     return "Remote Mac OS X user platform plug-in.";
 }
 
+//------------------------------------------------------------------
 /// Default Constructor
+//------------------------------------------------------------------
 PlatformMacOSX::PlatformMacOSX(bool is_host) : PlatformDarwin(is_host) {}
 
+//------------------------------------------------------------------
 /// Destructor.
 ///
 /// The destructor is virtual since this class is designed to be
 /// inherited from by the plug-in instance.
+//------------------------------------------------------------------
 PlatformMacOSX::~PlatformMacOSX() {}
 
 ConstString PlatformMacOSX::GetSDKDirectory(lldb_private::Target &target) {
@@ -161,10 +174,9 @@ ConstString PlatformMacOSX::GetSDKDirectory(lldb_private::Target &target) {
       std::string xcode_contents_path;
       std::string default_xcode_sdk;
       FileSpec fspec;
-      llvm::VersionTuple version = objfile->GetSDKVersion();
-      if (!version.empty()) {
-        fspec = HostInfo::GetShlibDir();
-        if (fspec) {
+      uint32_t versions[2];
+      if (objfile->GetSDKVersion(versions, sizeof(versions))) {
+        if (HostInfo::GetLLDBPath(ePathTypeLLDBShlibDir, fspec)) {
           std::string path;
           xcode_contents_path = fspec.GetPath();
           size_t pos = xcode_contents_path.find("/Xcode.app/Contents/");
@@ -179,15 +191,15 @@ ConstString PlatformMacOSX::GetSDKDirectory(lldb_private::Target &target) {
             int signo = 0;
             std::string output;
             const char *command = "xcrun -sdk macosx --show-sdk-path";
-            lldb_private::Status error = RunShellCommand(
-                command,    // shell command to run
-                FileSpec(), // current working directory
-                &status,    // Put the exit status of the process in here
-                &signo,     // Put the signal that caused the process to exit in
-                            // here
+            lldb_private::Error error = RunShellCommand(
+                command, // shell command to run
+                NULL,    // current working directory
+                &status, // Put the exit status of the process in here
+                &signo,  // Put the signal that caused the process to exit in
+                         // here
                 &output, // Get the output from the command and place it in this
                          // string
-                std::chrono::seconds(3));
+                3); // Timeout in seconds to wait for shell program to finish
             if (status == 0 && !output.empty()) {
               size_t first_non_newline = output.find_last_not_of("\r\n");
               if (first_non_newline != std::string::npos)
@@ -206,16 +218,16 @@ ConstString PlatformMacOSX::GetSDKDirectory(lldb_private::Target &target) {
           StreamString sdk_path;
           sdk_path.Printf("%sDeveloper/Platforms/MacOSX.platform/Developer/"
                           "SDKs/MacOSX%u.%u.sdk",
-                          xcode_contents_path.c_str(), version.getMajor(),
-                          version.getMinor().getValue());
-          fspec.SetFile(sdk_path.GetString(), FileSpec::Style::native);
-          if (FileSystem::Instance().Exists(fspec))
+                          xcode_contents_path.c_str(), versions[0],
+                          versions[1]);
+          fspec.SetFile(sdk_path.GetString(), false);
+          if (fspec.Exists())
             return ConstString(sdk_path.GetString());
         }
 
         if (!default_xcode_sdk.empty()) {
-          fspec.SetFile(default_xcode_sdk, FileSpec::Style::native);
-          if (FileSystem::Instance().Exists(fspec))
+          fspec.SetFile(default_xcode_sdk, false);
+          if (fspec.Exists())
             return ConstString(default_xcode_sdk);
         }
       }
@@ -224,9 +236,9 @@ ConstString PlatformMacOSX::GetSDKDirectory(lldb_private::Target &target) {
   return ConstString();
 }
 
-Status PlatformMacOSX::GetSymbolFile(const FileSpec &platform_file,
-                                     const UUID *uuid_ptr,
-                                     FileSpec &local_file) {
+Error PlatformMacOSX::GetSymbolFile(const FileSpec &platform_file,
+                                    const UUID *uuid_ptr,
+                                    FileSpec &local_file) {
   if (IsRemote()) {
     if (m_remote_platform_sp)
       return m_remote_platform_sp->GetFileWithUUID(platform_file, uuid_ptr,
@@ -235,10 +247,10 @@ Status PlatformMacOSX::GetSymbolFile(const FileSpec &platform_file,
 
   // Default to the local case
   local_file = platform_file;
-  return Status();
+  return Error();
 }
 
-lldb_private::Status
+lldb_private::Error
 PlatformMacOSX::GetFileWithUUID(const lldb_private::FileSpec &platform_file,
                                 const lldb_private::UUID *uuid_ptr,
                                 lldb_private::FileSpec &local_file) {
@@ -249,40 +261,40 @@ PlatformMacOSX::GetFileWithUUID(const lldb_private::FileSpec &platform_file,
 #endif
     std::string remote_os_build;
     m_remote_platform_sp->GetOSBuildString(remote_os_build);
-    if (local_os_build == remote_os_build) {
+    if (local_os_build.compare(remote_os_build) == 0) {
       // same OS version: the local file is good enough
       local_file = platform_file;
-      return Status();
+      return Error();
     } else {
       // try to find the file in the cache
       std::string cache_path(GetLocalCacheDirectory());
       std::string module_path(platform_file.GetPath());
       cache_path.append(module_path);
-      FileSpec module_cache_spec(cache_path);
-      if (FileSystem::Instance().Exists(module_cache_spec)) {
+      FileSpec module_cache_spec(cache_path, false);
+      if (module_cache_spec.Exists()) {
         local_file = module_cache_spec;
-        return Status();
+        return Error();
       }
       // bring in the remote module file
       FileSpec module_cache_folder =
           module_cache_spec.CopyByRemovingLastPathComponent();
       // try to make the local directory first
-      Status err(
-          llvm::sys::fs::create_directory(module_cache_folder.GetPath()));
+      Error err = FileSystem::MakeDirectory(module_cache_folder,
+                                            eFilePermissionsDirectoryDefault);
       if (err.Fail())
         return err;
       err = GetFile(platform_file, module_cache_spec);
       if (err.Fail())
         return err;
-      if (FileSystem::Instance().Exists(module_cache_spec)) {
+      if (module_cache_spec.Exists()) {
         local_file = module_cache_spec;
-        return Status();
+        return Error();
       } else
-        return Status("unable to obtain valid module file");
+        return Error("unable to obtain valid module file");
     }
   }
   local_file = platform_file;
-  return Status();
+  return Error();
 }
 
 bool PlatformMacOSX::GetSupportedArchitectureAtIndex(uint32_t idx,
@@ -294,12 +306,12 @@ bool PlatformMacOSX::GetSupportedArchitectureAtIndex(uint32_t idx,
 #endif
 }
 
-lldb_private::Status PlatformMacOSX::GetSharedModule(
+lldb_private::Error PlatformMacOSX::GetSharedModule(
     const lldb_private::ModuleSpec &module_spec, Process *process,
     lldb::ModuleSP &module_sp,
     const lldb_private::FileSpecList *module_search_paths_ptr,
     lldb::ModuleSP *old_module_sp_ptr, bool *did_create_ptr) {
-  Status error = GetSharedModuleWithLocalCache(
+  Error error = GetSharedModuleWithLocalCache(
       module_spec, module_sp, module_search_paths_ptr, old_module_sp_ptr,
       did_create_ptr);
 
@@ -307,14 +319,14 @@ lldb_private::Status PlatformMacOSX::GetSharedModule(
     if (module_spec.GetArchitecture().GetCore() ==
         ArchSpec::eCore_x86_64_x86_64h) {
       ObjectFile *objfile = module_sp->GetObjectFile();
-      if (objfile == nullptr) {
+      if (objfile == NULL) {
         // We didn't find an x86_64h slice, fall back to a x86_64 slice
         ModuleSpec module_spec_x86_64(module_spec);
         module_spec_x86_64.GetArchitecture() = ArchSpec("x86_64-apple-macosx");
         lldb::ModuleSP x86_64_module_sp;
         lldb::ModuleSP old_x86_64_module_sp;
         bool did_create = false;
-        Status x86_64_error = GetSharedModuleWithLocalCache(
+        Error x86_64_error = GetSharedModuleWithLocalCache(
             module_spec_x86_64, x86_64_module_sp, module_search_paths_ptr,
             &old_x86_64_module_sp, &did_create);
         if (x86_64_module_sp && x86_64_module_sp->GetObjectFile()) {
@@ -327,10 +339,6 @@ lldb_private::Status PlatformMacOSX::GetSharedModule(
         }
       }
     }
-  }
-
-  if (!module_sp) {
-      error = FindBundleBinaryInExecSearchPaths (module_spec, process, module_sp, module_search_paths_ptr, old_module_sp_ptr, did_create_ptr);
   }
   return error;
 }

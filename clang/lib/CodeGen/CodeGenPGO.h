@@ -1,8 +1,9 @@
 //===--- CodeGenPGO.h - PGO Instrumentation for LLVM CodeGen ----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,6 +17,7 @@
 #include "CGBuilder.h"
 #include "CodeGenModule.h"
 #include "CodeGenTypes.h"
+#include "clang/Frontend/CodeGenOptions.h"
 #include "llvm/ProfileData/InstrProfReader.h"
 #include <array>
 #include <memory>
@@ -38,11 +40,14 @@ private:
   std::unique_ptr<llvm::InstrProfRecord> ProfRecord;
   std::vector<uint64_t> RegionCounts;
   uint64_t CurrentRegionCount;
+  /// \brief A flag that is set to true when this function doesn't need
+  /// to have coverage mapping data.
+  bool SkipCoverageMapping;
 
 public:
   CodeGenPGO(CodeGenModule &CGM)
-      : CGM(CGM), FuncNameVar(nullptr), NumValueSites({{0}}),
-        NumRegionCounters(0), FunctionHash(0), CurrentRegionCount(0) {}
+      : CGM(CGM), NumValueSites({{0}}), NumRegionCounters(0),
+        FunctionHash(0), CurrentRegionCount(0), SkipCoverageMapping(false) {}
 
   /// Whether or not we have PGO region data for the current function. This is
   /// false both when we have no data at all and when our data has been
@@ -100,8 +105,7 @@ private:
   void emitCounterRegionMapping(const Decl *D);
 
 public:
-  void emitCounterIncrement(CGBuilderTy &Builder, const Stmt *S,
-                            llvm::Value *StepV);
+  void emitCounterIncrement(CGBuilderTy &Builder, const Stmt *S);
 
   /// Return the region count for the counter at the given index.
   uint64_t getRegionCount(const Stmt *S) {

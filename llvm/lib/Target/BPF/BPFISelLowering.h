@@ -1,8 +1,9 @@
 //===-- BPFISelLowering.h - BPF DAG Lowering Interface ----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,7 +17,7 @@
 
 #include "BPF.h"
 #include "llvm/CodeGen/SelectionDAG.h"
-#include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/Target/TargetLowering.h"
 
 namespace llvm {
 class BPFSubtarget;
@@ -27,8 +28,7 @@ enum NodeType : unsigned {
   CALL,
   SELECT_CC,
   BR_CC,
-  Wrapper,
-  MEMCPY
+  Wrapper
 };
 }
 
@@ -42,33 +42,11 @@ public:
   // This method returns the name of a target specific DAG node.
   const char *getTargetNodeName(unsigned Opcode) const override;
 
-  // This method decides whether folding a constant offset
-  // with the given GlobalAddress is legal.
-  bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
-
-  std::pair<unsigned, const TargetRegisterClass *>
-  getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
-                               StringRef Constraint, MVT VT) const override;
-
   MachineBasicBlock *
   EmitInstrWithCustomInserter(MachineInstr &MI,
                               MachineBasicBlock *BB) const override;
 
-  bool getHasAlu32() const { return HasAlu32; }
-  bool getHasJmp32() const { return HasJmp32; }
-  bool getHasJmpExt() const { return HasJmpExt; }
-
-  EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
-                         EVT VT) const override;
-
-  MVT getScalarShiftAmountTy(const DataLayout &, EVT) const override;
-
 private:
-  // Control Instruction Selection Features
-  bool HasAlu32;
-  bool HasJmp32;
-  bool HasJmpExt;
-
   SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
@@ -101,7 +79,7 @@ private:
 
   EVT getOptimalMemOpType(uint64_t Size, unsigned DstAlign, unsigned SrcAlign,
                           bool IsMemset, bool ZeroMemset, bool MemcpyStrSrc,
-                          const AttributeList &FuncAttributes) const override {
+                          MachineFunction &MF) const override {
     return Size >= 8 ? MVT::i64 : MVT::i32;
   }
 
@@ -109,27 +87,6 @@ private:
                                          Type *Ty) const override {
     return true;
   }
-
-  // Prevent reducing load width during SelectionDag phase.
-  // Otherwise, we may transform the following
-  //   ctx = ctx + reloc_offset
-  //   ... (*(u32 *)ctx) & 0x8000...
-  // to
-  //   ctx = ctx + reloc_offset
-  //   ... (*(u8 *)(ctx + 1)) & 0x80 ...
-  // which will be rejected by the verifier.
-  bool shouldReduceLoadWidth(SDNode *Load, ISD::LoadExtType ExtTy,
-                             EVT NewVT) const override {
-    return false;
-  }
-
-  unsigned EmitSubregExt(MachineInstr &MI, MachineBasicBlock *BB, unsigned Reg,
-                         bool isSigned) const;
-
-  MachineBasicBlock * EmitInstrWithCustomInserterMemcpy(MachineInstr &MI,
-                                                        MachineBasicBlock *BB)
-                                                        const;
-
 };
 }
 

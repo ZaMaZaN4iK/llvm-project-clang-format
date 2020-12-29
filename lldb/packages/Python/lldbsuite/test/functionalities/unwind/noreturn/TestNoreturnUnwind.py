@@ -5,6 +5,8 @@ Test that we can backtrace correctly with 'noreturn' functions on the stack
 from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -15,16 +17,14 @@ class NoreturnUnwind(TestBase):
     mydir = TestBase.compute_mydir(__file__)
 
     @skipIfWindows  # clang-cl does not support gcc style attributes.
-    # clang does not preserve LR in noreturn functions, making unwinding impossible
-    @skipIf(compiler="clang", archs=['arm'], oslist=['linux'])
-    @expectedFailureAll(bugnumber="llvm.org/pr33452", triple='^mips')
-    @expectedFailureNetBSD
+    @expectedFailureAndroid(bugnumber="llvm.org/pr31192", archs=["x86_64"])
+    @expectedFailureAll(bugnumber="llvm.org/pr31192", oslist=['linux'], compiler="gcc", archs=['arm'])
     def test(self):
         """Test that we can backtrace correctly with 'noreturn' functions on the stack"""
         self.build()
         self.setTearDownCleanup()
 
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
 

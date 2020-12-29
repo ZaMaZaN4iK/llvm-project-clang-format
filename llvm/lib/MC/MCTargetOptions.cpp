@@ -1,23 +1,28 @@
-//===- lib/MC/MCTargetOptions.cpp - MC Target Options ---------------------===//
+//===- lib/MC/MCTargetOptions.cpp - MC Target Options --------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/MC/MCTargetOptions.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/MC/MCTargetOptions.h"
 
-using namespace llvm;
+namespace llvm {
 
 MCTargetOptions::MCTargetOptions()
-    : MCRelaxAll(false), MCNoExecStack(false), MCFatalWarnings(false),
-      MCNoWarn(false), MCNoDeprecatedWarn(false), MCSaveTempLabels(false),
+    : SanitizeAddress(false), MCRelaxAll(false), MCNoExecStack(false),
+      MCFatalWarnings(false), MCNoWarn(false), MCNoDeprecatedWarn(false),
+      MCSaveTempLabels(false),
       MCUseDwarfDirectory(false), MCIncrementalLinkerCompatible(false),
-      ShowMCEncoding(false), ShowMCInst(false), AsmVerbose(false),
-      PreserveAsmComments(true) {}
+      MCPIECopyRelocations(false), ShowMCEncoding(false),
+      ShowMCInst(false), AsmVerbose(false),
+      PreserveAsmComments(true), DwarfVersion(0), ABIName() {}
 
 StringRef MCTargetOptions::getABIName() const {
   return ABIName;
 }
+
+} // end namespace llvm

@@ -1,32 +1,24 @@
 //===-- AddressResolverName.cpp ---------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Core/AddressResolverName.h"
 
-#include "lldb/Core/Address.h"
-#include "lldb/Core/AddressRange.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/Log.h"
 #include "lldb/Core/Module.h"
+#include "lldb/Core/StreamString.h"
 #include "lldb/Symbol/Function.h"
 #include "lldb/Symbol/Symbol.h"
 #include "lldb/Symbol/SymbolContext.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Logging.h"
-#include "lldb/Utility/Stream.h"
-#include "lldb/lldb-enumerations.h"
-#include "lldb/lldb-forward.h"
-#include "lldb/lldb-types.h"
-#include "llvm/ADT/StringRef.h"
-
-#include <memory>
-#include <string>
-#include <vector>
-
-#include <stdint.h>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -36,8 +28,7 @@ AddressResolverName::AddressResolverName(const char *func_name,
     : AddressResolver(), m_func_name(func_name), m_class_name(nullptr),
       m_regex(), m_match_type(type) {
   if (m_match_type == AddressResolver::Regexp) {
-    m_regex = RegularExpression(m_func_name.GetStringRef());
-    if (!m_regex.IsValid()) {
+    if (!m_regex.Compile(m_func_name.GetStringRef())) {
       Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_BREAKPOINTS));
 
       if (log)
@@ -47,9 +38,9 @@ AddressResolverName::AddressResolverName(const char *func_name,
   }
 }
 
-AddressResolverName::AddressResolverName(RegularExpression func_regex)
+AddressResolverName::AddressResolverName(RegularExpression &func_regex)
     : AddressResolver(), m_func_name(nullptr), m_class_name(nullptr),
-      m_regex(std::move(func_regex)), m_match_type(AddressResolver::Regexp) {}
+      m_regex(func_regex), m_match_type(AddressResolver::Regexp) {}
 
 AddressResolverName::AddressResolverName(const char *class_name,
                                          const char *method,
@@ -62,12 +53,14 @@ AddressResolverName::~AddressResolverName() = default;
 // FIXME: Right now we look at the module level, and call the module's
 // "FindFunctions".
 // Greg says he will add function tables, maybe at the CompileUnit level to
-// accelerate function lookup.  At that point, we should switch the depth to
-// CompileUnit, and look in these tables.
+// accelerate function
+// lookup.  At that point, we should switch the depth to CompileUnit, and look
+// in these tables.
 
 Searcher::CallbackReturn
 AddressResolverName::SearchCallback(SearchFilter &filter,
-                                    SymbolContext &context, Address *addr) {
+                                    SymbolContext &context, Address *addr,
+                                    bool containing) {
   SymbolContextList func_list;
   SymbolContextList sym_list;
 
@@ -86,6 +79,7 @@ AddressResolverName::SearchCallback(SearchFilter &filter,
 
   const bool include_symbols = false;
   const bool include_inlines = true;
+  const bool append = false;
   switch (m_match_type) {
   case AddressResolver::Exact:
     if (context.module_sp) {
@@ -93,7 +87,7 @@ AddressResolverName::SearchCallback(SearchFilter &filter,
                                                     eSymbolTypeCode, sym_list);
       context.module_sp->FindFunctions(m_func_name, nullptr,
                                        eFunctionNameTypeAuto, include_symbols,
-                                       include_inlines, func_list);
+                                       include_inlines, append, func_list);
     }
     break;
 
@@ -102,7 +96,7 @@ AddressResolverName::SearchCallback(SearchFilter &filter,
       context.module_sp->FindSymbolsMatchingRegExAndType(
           m_regex, eSymbolTypeCode, sym_list);
       context.module_sp->FindFunctions(m_regex, include_symbols,
-                                       include_inlines, func_list);
+                                       include_inlines, append, func_list);
     }
     break;
 
@@ -184,8 +178,8 @@ AddressResolverName::SearchCallback(SearchFilter &filter,
   return Searcher::eCallbackReturnContinue;
 }
 
-lldb::SearchDepth AddressResolverName::GetDepth() {
-  return lldb::eSearchDepthModule;
+Searcher::Depth AddressResolverName::GetDepth() {
+  return Searcher::eDepthModule;
 }
 
 void AddressResolverName::GetDescription(Stream *s) {

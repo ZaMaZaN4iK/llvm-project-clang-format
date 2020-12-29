@@ -1,8 +1,9 @@
-//===- InterleavedAccessPass.cpp ------------------------------------------===//
+//===--------------------- InterleavedAccessPass.cpp ----------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -41,33 +42,16 @@
 //
 // Similarly, a set of interleaved stores can be transformed into an optimized
 // sequence of shuffles followed by a set of target specific stores for X86.
-//
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/CodeGen/TargetLowering.h"
-#include "llvm/CodeGen/TargetPassConfig.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/IR/Constants.h"
+#include "llvm/CodeGen/Passes.h"
 #include "llvm/IR/Dominators.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstIterator.h"
-#include "llvm/IR/Instruction.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/Type.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/Pass.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetMachine.h"
-#include <cassert>
-#include <utility>
+#include "llvm/Target/TargetLowering.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 
 using namespace llvm;
 
@@ -81,10 +65,11 @@ static cl::opt<bool> LowerInterleavedAccesses(
 namespace {
 
 class InterleavedAccess : public FunctionPass {
+
 public:
   static char ID;
-
-  InterleavedAccess() : FunctionPass(ID) {
+  InterleavedAccess(const TargetMachine *TM = nullptr)
+      : FunctionPass(ID), DT(nullptr), TM(TM), TLI(nullptr) {
     initializeInterleavedAccessPass(*PassRegistry::getPassRegistry());
   }
 
@@ -98,45 +83,46 @@ public:
   }
 
 private:
-  DominatorTree *DT = nullptr;
-  const TargetLowering *TLI = nullptr;
+  DominatorTree *DT;
+  const TargetMachine *TM;
+  const TargetLowering *TLI;
 
   /// The maximum supported interleave factor.
   unsigned MaxFactor;
 
-  /// Transform an interleaved load into target specific intrinsics.
+  /// \brief Transform an interleaved load into target specific intrinsics.
   bool lowerInterleavedLoad(LoadInst *LI,
                             SmallVector<Instruction *, 32> &DeadInsts);
 
-  /// Transform an interleaved store into target specific intrinsics.
+  /// \brief Transform an interleaved store into target specific intrinsics.
   bool lowerInterleavedStore(StoreInst *SI,
                              SmallVector<Instruction *, 32> &DeadInsts);
 
-  /// Returns true if the uses of an interleaved load by the
+  /// \brief Returns true if the uses of an interleaved load by the
   /// extractelement instructions in \p Extracts can be replaced by uses of the
   /// shufflevector instructions in \p Shuffles instead. If so, the necessary
   /// replacements are also performed.
   bool tryReplaceExtracts(ArrayRef<ExtractElementInst *> Extracts,
                           ArrayRef<ShuffleVectorInst *> Shuffles);
 };
-
 } // end anonymous namespace.
 
 char InterleavedAccess::ID = 0;
-
-INITIALIZE_PASS_BEGIN(InterleavedAccess, DEBUG_TYPE,
+INITIALIZE_TM_PASS_BEGIN(
+    InterleavedAccess, "interleaved-access",
     "Lower interleaved memory accesses to target specific intrinsics", false,
     false)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
-INITIALIZE_PASS_END(InterleavedAccess, DEBUG_TYPE,
+INITIALIZE_TM_PASS_END(
+    InterleavedAccess, "interleaved-access",
     "Lower interleaved memory accesses to target specific intrinsics", false,
     false)
 
-FunctionPass *llvm::createInterleavedAccessPass() {
-  return new InterleavedAccess();
+FunctionPass *llvm::createInterleavedAccessPass(const TargetMachine *TM) {
+  return new InterleavedAccess(TM);
 }
 
-/// Check if the mask is a DE-interleave mask of the given factor
+/// \brief Check if the mask is a DE-interleave mask of the given factor
 /// \p Factor like:
 ///     <Index, Index+Factor, ..., Index+(NumElts-1)*Factor>
 static bool isDeInterleaveMaskOfFactor(ArrayRef<int> Mask, unsigned Factor,
@@ -158,30 +144,25 @@ static bool isDeInterleaveMaskOfFactor(ArrayRef<int> Mask, unsigned Factor,
   return false;
 }
 
-/// Check if the mask is a DE-interleave mask for an interleaved load.
+/// \brief Check if the mask is a DE-interleave mask for an interleaved load.
 ///
 /// E.g. DE-interleave masks (Factor = 2) could be:
 ///     <0, 2, 4, 6>    (mask of index 0 to extract even elements)
 ///     <1, 3, 5, 7>    (mask of index 1 to extract odd elements)
 static bool isDeInterleaveMask(ArrayRef<int> Mask, unsigned &Factor,
-                               unsigned &Index, unsigned MaxFactor,
-                               unsigned NumLoadElements) {
+                               unsigned &Index, unsigned MaxFactor) {
   if (Mask.size() < 2)
     return false;
 
   // Check potential Factors.
-  for (Factor = 2; Factor <= MaxFactor; Factor++) {
-    // Make sure we don't produce a load wider than the input load.
-    if (Mask.size() * Factor > NumLoadElements)
-      return false;
+  for (Factor = 2; Factor <= MaxFactor; Factor++)
     if (isDeInterleaveMaskOfFactor(Mask, Factor, Index))
       return true;
-  }
 
   return false;
 }
 
-/// Check if the mask can be used in an interleaved store.
+/// \brief Check if the mask can be used in an interleaved store.
 //
 /// It checks for a more general pattern than the RE-interleave mask.
 /// I.e. <x, y, ... z, x+1, y+1, ...z+1, x+2, y+2, ...z+2, ...>
@@ -308,10 +289,9 @@ bool InterleavedAccess::lowerInterleavedLoad(
 
   unsigned Factor, Index;
 
-  unsigned NumLoadElements = LI->getType()->getVectorNumElements();
   // Check if the first shufflevector is DE-interleave shuffle.
   if (!isDeInterleaveMask(Shuffles[0]->getShuffleMask(), Factor, Index,
-                          MaxFactor, NumLoadElements))
+                          MaxFactor))
     return false;
 
   // Holds the corresponding index for each DE-interleave shuffle.
@@ -338,7 +318,7 @@ bool InterleavedAccess::lowerInterleavedLoad(
   if (!tryReplaceExtracts(Extracts, Shuffles))
     return false;
 
-  LLVM_DEBUG(dbgs() << "IA: Found an interleaved load: " << *LI << "\n");
+  DEBUG(dbgs() << "IA: Found an interleaved load: " << *LI << "\n");
 
   // Try to create target specific intrinsics to replace the load and shuffles.
   if (!TLI->lowerInterleavedLoad(LI, Shuffles, Indices, Factor))
@@ -354,6 +334,7 @@ bool InterleavedAccess::lowerInterleavedLoad(
 bool InterleavedAccess::tryReplaceExtracts(
     ArrayRef<ExtractElementInst *> Extracts,
     ArrayRef<ShuffleVectorInst *> Shuffles) {
+
   // If there aren't any extractelement instructions to modify, there's nothing
   // to do.
   if (Extracts.empty())
@@ -364,6 +345,7 @@ bool InterleavedAccess::tryReplaceExtracts(
   DenseMap<ExtractElementInst *, std::pair<Value *, int>> ReplacementMap;
 
   for (auto *Extract : Extracts) {
+
     // The vector index that is extracted.
     auto *IndexOperand = cast<ConstantInt>(Extract->getIndexOperand());
     auto Index = IndexOperand->getSExtValue();
@@ -372,6 +354,7 @@ bool InterleavedAccess::tryReplaceExtracts(
     // extractelement instruction (which uses an interleaved load) to use one
     // of the shufflevector instructions instead of the load.
     for (auto *Shuffle : Shuffles) {
+
       // If the shufflevector instruction doesn't dominate the extract, we
       // can't create a use of it.
       if (!DT->dominates(Shuffle, Extract))
@@ -430,7 +413,7 @@ bool InterleavedAccess::lowerInterleavedStore(
   if (!isReInterleaveMask(SVI->getShuffleMask(), Factor, MaxFactor, OpNumElts))
     return false;
 
-  LLVM_DEBUG(dbgs() << "IA: Found an interleaved store: " << *SI << "\n");
+  DEBUG(dbgs() << "IA: Found an interleaved store: " << *SI << "\n");
 
   // Try to create target specific intrinsics to replace the store and shuffle.
   if (!TLI->lowerInterleavedStore(SI, SVI, Factor))
@@ -443,15 +426,13 @@ bool InterleavedAccess::lowerInterleavedStore(
 }
 
 bool InterleavedAccess::runOnFunction(Function &F) {
-  auto *TPC = getAnalysisIfAvailable<TargetPassConfig>();
-  if (!TPC || !LowerInterleavedAccesses)
+  if (!TM || !LowerInterleavedAccesses)
     return false;
 
-  LLVM_DEBUG(dbgs() << "*** " << getPassName() << ": " << F.getName() << "\n");
+  DEBUG(dbgs() << "*** " << getPassName() << ": " << F.getName() << "\n");
 
   DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-  auto &TM = TPC->getTM<TargetMachine>();
-  TLI = TM.getSubtargetImpl(F)->getTargetLowering();
+  TLI = TM->getSubtargetImpl(F)->getTargetLowering();
   MaxFactor = TLI->getMaxSupportedInterleaveFactor();
 
   // Holds dead instructions that will be erased later.

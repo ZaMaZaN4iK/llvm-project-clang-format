@@ -1,8 +1,9 @@
 //===--- HeaderGuard.cpp - clang-tidy -------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,7 +18,7 @@ namespace clang {
 namespace tidy {
 namespace utils {
 
-/// canonicalize a path by removing ./ and ../ components.
+/// \brief canonicalize a path by removing ./ and ../ components.
 static std::string cleanPath(StringRef Path) {
   SmallString<256> Result = Path;
   llvm::sys::path::remove_dots(Result, true);
@@ -75,7 +76,7 @@ public:
 
       // We use clang's header guard detection. This has the advantage of also
       // emitting a warning for cases where a pseudo header guard is found but
-      // preceded by something blocking the header guard optimization.
+      // preceeded by something blocking the header guard optimization.
       if (!MI->isUsedForHeaderGuard())
         continue;
 
@@ -159,7 +160,7 @@ public:
            (EndIfStr != "/* " + HeaderGuard.str() + " */");
   }
 
-  /// Look for header guards that don't match the preferred style. Emit
+  /// \brief Look for header guards that don't match the preferred style. Emit
   /// fix-its and return the suggested header guard (or the original if no
   /// change was made.
   std::string checkHeaderGuardDefinition(SourceLocation Ifndef,
@@ -189,7 +190,7 @@ public:
     return CurHeaderGuard;
   }
 
-  /// Checks the comment after the #endif of a header guard and fixes it
+  /// \brief Checks the comment after the #endif of a header guard and fixes it
   /// if it doesn't match \c HeaderGuard.
   void checkEndifComment(StringRef FileName, SourceLocation EndIf,
                          StringRef HeaderGuard,
@@ -203,7 +204,7 @@ public:
     }
   }
 
-  /// Looks for files that were visited but didn't have a header guard.
+  /// \brief Looks for files that were visited but didn't have a header guard.
   /// Emits a warning with fixits suggesting adding one.
   void checkGuardlessHeaders() {
     // Look for header files that didn't have a header guard. Emit a warning and
@@ -222,10 +223,9 @@ public:
 
       std::string CPPVar = Check->getHeaderGuard(FileName);
       std::string CPPVarUnder = CPPVar + '_'; // Allow a trailing underscore.
-      // If there's a macro with a name that follows the header guard convention
-      // but was not recognized by the preprocessor as a header guard there must
-      // be code outside of the guarded area. Emit a plain warning without
-      // fix-its.
+      // If there is a header guard macro but it's not in the topmost position
+      // emit a plain warning without fix-its. This often happens when the guard
+      // macro is preceeded by includes.
       // FIXME: Can we move it into the right spot?
       bool SeenMacro = false;
       for (const auto &MacroEntry : Macros) {
@@ -233,8 +233,9 @@ public:
         SourceLocation DefineLoc = MacroEntry.first.getLocation();
         if ((Name == CPPVar || Name == CPPVarUnder) &&
             SM.isWrittenInSameFile(StartLoc, DefineLoc)) {
-          Check->diag(DefineLoc, "code/includes outside of area guarded by "
-                                 "header guard; consider moving it");
+          Check->diag(
+              DefineLoc,
+              "Header guard after code/includes. Consider moving it up.");
           SeenMacro = true;
           break;
         }
@@ -266,10 +267,10 @@ private:
 };
 } // namespace
 
-void HeaderGuardCheck::registerPPCallbacks(const SourceManager &SM,
-                                           Preprocessor *PP,
-                                           Preprocessor *ModuleExpanderPP) {
-  PP->addPPCallbacks(std::make_unique<HeaderGuardPPCallbacks>(PP, this));
+void HeaderGuardCheck::registerPPCallbacks(CompilerInstance &Compiler) {
+  Compiler.getPreprocessor().addPPCallbacks(
+      llvm::make_unique<HeaderGuardPPCallbacks>(&Compiler.getPreprocessor(),
+                                                this));
 }
 
 bool HeaderGuardCheck::shouldSuggestEndifComment(StringRef FileName) {

@@ -1,21 +1,25 @@
 //===-- DWARFDebugAranges.h -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef SymbolFileDWARF_DWARFDebugAranges_h_
 #define SymbolFileDWARF_DWARFDebugAranges_h_
 
-#include "lldb/Core/dwarf.h"
-#include "lldb/Utility/RangeMap.h"
-#include "llvm/Support/Error.h"
+#include "DWARFDebugArangeSet.h"
+#include <list>
+
+#include "lldb/Core/RangeMap.h"
+
+class SymbolFileDWARF;
 
 class DWARFDebugAranges {
 protected:
-  typedef lldb_private::RangeDataVector<dw_addr_t, uint32_t, dw_offset_t>
+  typedef lldb_private::RangeDataArray<dw_addr_t, uint32_t, dw_offset_t, 1>
       RangeToDIE;
 
 public:
@@ -26,13 +30,18 @@ public:
 
   void Clear() { m_aranges.Clear(); }
 
-  llvm::Error
-  extract(const lldb_private::DWARFDataExtractor &debug_aranges_data);
+  bool Extract(const lldb_private::DWARFDataExtractor &debug_aranges_data);
+
+  bool Generate(SymbolFileDWARF *dwarf2Data);
 
   // Use append range multiple times and then call sort
   void AppendRange(dw_offset_t cu_offset, dw_addr_t low_pc, dw_addr_t high_pc);
 
   void Sort(bool minimize);
+
+  const Range *RangeAtIndex(uint32_t idx) const {
+    return m_aranges.GetEntryAtIndex(idx);
+  }
 
   void Dump(lldb_private::Log *log) const;
 
@@ -47,6 +56,8 @@ public:
       return range->data;
     return DW_INVALID_OFFSET;
   }
+
+  static void Dump(SymbolFileDWARF *dwarf2Data, lldb_private::Stream *s);
 
 protected:
   RangeToDIE m_aranges;

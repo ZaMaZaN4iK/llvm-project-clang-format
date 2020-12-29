@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,22 +14,10 @@
 // iter_type get(iter_type in, iter_type end, ios_base&,
 //               ios_base::iostate& err, long& v) const;
 
-// This test exercises the fix for PR28704, which isn't in the dylib for
-// some systems.
-// XFAIL: with_system_cxx_lib=macosx10.15
-// XFAIL: with_system_cxx_lib=macosx10.14
-// XFAIL: with_system_cxx_lib=macosx10.13
-// XFAIL: with_system_cxx_lib=macosx10.12
-// XFAIL: with_system_cxx_lib=macosx10.11
-// XFAIL: with_system_cxx_lib=macosx10.10
-// XFAIL: with_system_cxx_lib=macosx10.9
-
 #include <locale>
 #include <ios>
 #include <cassert>
-#include <limits>
 #include <streambuf>
-#include "test_macros.h"
 #include "test_iterators.h"
 
 typedef std::num_get<char, input_iterator<const char*> > F;
@@ -52,12 +41,11 @@ protected:
     virtual std::string do_grouping() const {return std::string("\1\2\3");}
 };
 
-int main(int, char**)
+int main()
 {
     const my_facet f(1);
     std::ios ios(0);
     long v = -1;
-    const std::ios_base::fmtflags zf = static_cast<std::ios_base::fmtflags>(0);
     {
         const char str[] = "123";
         assert((ios.flags() & ios.basefield) == ios.dec);
@@ -122,7 +110,7 @@ int main(int, char**)
     }
     {
         const char str[] = "123";
-        ios.setf(zf, ios.basefield);
+        ios.setf(0, ios.basefield);
         std::ios_base::iostate err = ios.goodbit;
         input_iterator<const char*> iter =
             f.get(input_iterator<const char*>(str),
@@ -134,7 +122,7 @@ int main(int, char**)
     }
     {
         const char str[] = "0x123";
-        ios.setf(zf, ios.basefield);
+        ios.setf(0, ios.basefield);
         std::ios_base::iostate err = ios.goodbit;
         input_iterator<const char*> iter =
             f.get(input_iterator<const char*>(str),
@@ -146,7 +134,7 @@ int main(int, char**)
     }
     {
         const char str[] = "0123";
-        ios.setf(zf, ios.basefield);
+        ios.setf(0, ios.basefield);
         std::ios_base::iostate err = ios.goodbit;
         input_iterator<const char*> iter =
             f.get(input_iterator<const char*>(str),
@@ -158,7 +146,7 @@ int main(int, char**)
     }
     {
         const char str[] = "2-";
-        ios.setf(zf, ios.basefield);
+        ios.setf(0, ios.basefield);
         std::ios_base::iostate err = ios.goodbit;
         input_iterator<const char*> iter =
             f.get(input_iterator<const char*>(str),
@@ -172,14 +160,14 @@ int main(int, char**)
     ios.imbue(std::locale(std::locale(), new my_numpunct));
     {
         v = -1;
-        const char str[] = "123"; // no separators at all
+        const char str[] = "123";
         std::ios_base::iostate err = ios.goodbit;
         input_iterator<const char*> iter =
             f.get(input_iterator<const char*>(str),
                   input_iterator<const char*>(str+sizeof(str)),
                   ios, err, v);
         assert(iter.base() == str+sizeof(str)-1);
-        assert(err == ios.goodbit);
+        assert(err == ios.failbit);
         assert(v == 123);
     }
     {
@@ -528,6 +516,4 @@ int main(int, char**)
         assert(err == ios.failbit);
         assert(v == std::numeric_limits<long>::max());
     }
-
-  return 0;
 }

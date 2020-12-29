@@ -3,8 +3,11 @@ Test that objective-c constant strings are generated correctly by the expression
 parser.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import shutil
 import subprocess
 import lldb
@@ -19,7 +22,7 @@ class TestObjCBreakpoints(TestBase):
     mydir = TestBase.compute_mydir(__file__)
 
     def test_break(self):
-        """Test setting Objective-C specific breakpoints (DWARF in .o files)."""
+        """Test setting Objective C specific breakpoints (DWARF in .o files)."""
         self.build()
         self.setTearDownCleanup()
         self.check_objc_breakpoints(False)
@@ -70,7 +73,7 @@ class TestObjCBreakpoints(TestBase):
         self.dbg.SetAsync(False)
 
         # Create a target by the debugger.
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.target = self.dbg.CreateTarget(exe)
         self.assertTrue(self.target, VALID_TARGET)
 

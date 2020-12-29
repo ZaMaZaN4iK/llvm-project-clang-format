@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,9 +13,7 @@
 #include <type_traits>
 #include <cassert>
 
-#include "test_macros.h"
 #include "hexfloat.h"
-#include "truncate_fp.h"
 
 // convertible to int/float/double/etc
 template <class T, int N=0>
@@ -98,45 +97,13 @@ Ambiguous scalbn(Ambiguous, Ambiguous){ return Ambiguous(); }
 Ambiguous tgamma(Ambiguous){ return Ambiguous(); }
 Ambiguous trunc(Ambiguous){ return Ambiguous(); }
 
-template <class T, class = decltype(::abs(std::declval<T>()))>
-std::true_type has_abs_imp(int);
-template <class T>
-std::false_type has_abs_imp(...);
-
-template <class T>
-struct has_abs : decltype(has_abs_imp<T>(0)) {};
-
 void test_abs()
 {
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wabsolute-value"
-#endif
-  static_assert((std::is_same<decltype(abs((float)0)), float>::value), "");
-  static_assert((std::is_same<decltype(abs((double)0)), double>::value), "");
-  static_assert(
-      (std::is_same<decltype(abs((long double)0)), long double>::value), "");
-  static_assert((std::is_same<decltype(abs((int)0)), int>::value), "");
-  static_assert((std::is_same<decltype(abs((long)0)), long>::value), "");
-  static_assert((std::is_same<decltype(abs((long long)0)), long long>::value),
-                "");
-  static_assert((std::is_same<decltype(abs((unsigned char)0)), int>::value),
-                "");
-  static_assert((std::is_same<decltype(abs((unsigned short)0)), int>::value),
-                "");
-
-  static_assert((std::is_same<decltype(abs(Ambiguous())), Ambiguous>::value),
-                "");
-
-  static_assert(!has_abs<unsigned>::value, "");
-  static_assert(!has_abs<unsigned long>::value, "");
-  static_assert(!has_abs<unsigned long long>::value, "");
-
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
-
-  assert(abs(-1.) == 1);
+    static_assert((std::is_same<decltype(abs((float)0)), float>::value), "");
+    static_assert((std::is_same<decltype(abs((double)0)), double>::value), "");
+    static_assert((std::is_same<decltype(abs((long double)0)), long double>::value), "");
+    static_assert((std::is_same<decltype(abs(Ambiguous())), Ambiguous>::value), "");
+    assert(abs(-1.) == 1);
 }
 
 void test_acos()
@@ -840,31 +807,23 @@ void test_atanh()
     assert(atanh(0) == 0);
 }
 
-void test_cbrt() {
-    static_assert((std::is_same<decltype(cbrt((float) 0)), float>::value), "");
-    static_assert((std::is_same<decltype(cbrt((bool) 0)), double>::value), "");
-    static_assert((std::is_same<decltype(cbrt((unsigned short) 0)),
-                                double>::value), "");
-    static_assert((std::is_same<decltype(cbrt((int) 0)), double>::value), "");
-    static_assert((std::is_same<decltype(cbrt((unsigned int) 0)),
-                                double>::value), "");
-    static_assert((std::is_same<decltype(cbrt((long) 0)), double>::value), "");
-    static_assert((std::is_same<decltype(cbrt((unsigned long) 0)),
-                                double>::value), "");
-    static_assert((std::is_same<decltype(cbrt((long long) 0)), double>::value),
-                  "");
-    static_assert((std::is_same<decltype(cbrt((unsigned long long) 0)),
-                                double>::value), "");
-    static_assert((std::is_same<decltype(cbrt((double) 0)), double>::value),
-                  "");
-    static_assert((std::is_same<decltype(cbrt((long double) 0)),
-                                long double>::value), "");
+void test_cbrt()
+{
+    static_assert((std::is_same<decltype(cbrt((float)0)), float>::value), "");
+    static_assert((std::is_same<decltype(cbrt((bool)0)), double>::value), "");
+    static_assert((std::is_same<decltype(cbrt((unsigned short)0)), double>::value), "");
+    static_assert((std::is_same<decltype(cbrt((int)0)), double>::value), "");
+    static_assert((std::is_same<decltype(cbrt((unsigned int)0)), double>::value), "");
+    static_assert((std::is_same<decltype(cbrt((long)0)), double>::value), "");
+    static_assert((std::is_same<decltype(cbrt((unsigned long)0)), double>::value), "");
+    static_assert((std::is_same<decltype(cbrt((long long)0)), double>::value), "");
+    static_assert((std::is_same<decltype(cbrt((unsigned long long)0)), double>::value), "");
+    static_assert((std::is_same<decltype(cbrt((double)0)), double>::value), "");
+    static_assert((std::is_same<decltype(cbrt((long double)0)), long double>::value), "");
     static_assert((std::is_same<decltype(cbrtf(0)), float>::value), "");
     static_assert((std::is_same<decltype(cbrtl(0)), long double>::value), "");
-    static_assert((std::is_same<decltype(cbrt(Ambiguous())), Ambiguous>::value),
-                  "");
-    assert(truncate_fp(cbrt(1)) == 1);
-
+    static_assert((std::is_same<decltype(cbrt(Ambiguous())), Ambiguous>::value), "");
+    assert(cbrt(1) == 1);
 }
 
 void test_copysign()
@@ -1496,7 +1455,7 @@ void test_trunc()
     assert(trunc(1) == 1);
 }
 
-int main(int, char**)
+int main()
 {
     test_abs();
     test_acos();
@@ -1568,6 +1527,4 @@ int main(int, char**)
     test_scalbn();
     test_tgamma();
     test_trunc();
-
-  return 0;
 }

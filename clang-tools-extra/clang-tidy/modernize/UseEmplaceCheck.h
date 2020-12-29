@@ -1,15 +1,16 @@
 //===--- UseEmplaceCheck.h - clang-tidy--------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_MODERNIZE_USE_EMPLACE_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_MODERNIZE_USE_EMPLACE_H
 
-#include "../ClangTidyCheck.h"
+#include "../ClangTidy.h"
 #include <string>
 #include <vector>
 
@@ -32,11 +33,8 @@ public:
   void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
 
 private:
-  const bool IgnoreImplicitConstructors;
-  const std::vector<std::string> ContainersWithPushBack;
-  const std::vector<std::string> SmartPointers;
-  const std::vector<std::string> TupleTypes;
-  const std::vector<std::string> TupleMakeFunctions;
+  std::vector<std::string> ContainersWithPushBack;
+  std::vector<std::string> SmartPointers;
 };
 
 } // namespace modernize

@@ -1,15 +1,16 @@
 //===-- NativeWatchpointList.h ----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_NativeWatchpointList_h_
 #define liblldb_NativeWatchpointList_h_
 
-#include "lldb/Utility/Status.h"
+#include "lldb/Core/Error.h"
 #include "lldb/lldb-private-forward.h"
 
 #include <map>
@@ -24,10 +25,10 @@ struct NativeWatchpoint {
 
 class NativeWatchpointList {
 public:
-  Status Add(lldb::addr_t addr, size_t size, uint32_t watch_flags,
-             bool hardware);
+  Error Add(lldb::addr_t addr, size_t size, uint32_t watch_flags,
+            bool hardware);
 
-  Status Remove(lldb::addr_t addr);
+  Error Remove(lldb::addr_t addr);
 
   using WatchpointMap = std::map<lldb::addr_t, NativeWatchpoint>;
 

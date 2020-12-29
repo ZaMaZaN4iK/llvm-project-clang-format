@@ -1,25 +1,19 @@
 //===- lib/MC/MCSymbol.cpp - MCSymbol implementation ----------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Config/llvm-config.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
-#include "llvm/MC/MCFragment.h"
-#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include <cassert>
-#include <cstddef>
-
 using namespace llvm;
 
 // Only the address of this fragment is ever actually used.
@@ -81,8 +75,4 @@ void MCSymbol::print(raw_ostream &OS, const MCAsmInfo *MAI) const {
   OS << '"';
 }
 
-#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-LLVM_DUMP_METHOD void MCSymbol::dump() const {
-  dbgs() << *this;
-}
-#endif
+LLVM_DUMP_METHOD void MCSymbol::dump() const { dbgs() << *this; }

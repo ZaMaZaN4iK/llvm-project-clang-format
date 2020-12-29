@@ -1,52 +1,52 @@
 //===-- UnwindPlan.h --------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_UnwindPlan_h
 #define liblldb_UnwindPlan_h
 
+// C Includes
+// C++ Includes
 #include <map>
 #include <memory>
 #include <vector>
 
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Core/AddressRange.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/Stream.h"
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/lldb-private.h"
 
 namespace lldb_private {
 
-// The UnwindPlan object specifies how to unwind out of a function - where this
-// function saves the caller's register values before modifying them (for non-
-// volatile aka saved registers) and how to find this frame's Canonical Frame
-// Address (CFA) or Aligned Frame Address (AFA).
+// The UnwindPlan object specifies how to unwind out of a function - where
+// this function saves the caller's register values before modifying them
+// (for non-volatile aka saved registers) and how to find this frame's
+// Canonical Frame Address (CFA).
 
-// CFA is a DWARF's Canonical Frame Address.
-// Most commonly, registers are saved on the stack, offset some bytes from the
-// Canonical Frame Address, or CFA, which is the starting address of this
-// function's stack frame (the CFA is same as the eh_frame's CFA, whatever that
-// may be on a given architecture). The CFA address for the stack frame does
-// not change during the lifetime of the function.
-
-// AFA is an artificially introduced Aligned Frame Address.
-// It is used only for stack frames with realignment (e.g. when some of the
-// locals has an alignment requirement higher than the stack alignment right
-// after the function call). It is used to access register values saved on the
-// stack after the realignment (and so they are inaccessible through the CFA).
-// AFA usually equals the stack pointer value right after the realignment.
+// Most commonly, registers are saved on the stack, offset some bytes from
+// the Canonical Frame Address, or CFA, which is the starting address of
+// this function's stack frame (the CFA is same as the eh_frame's CFA,
+// whatever that may be on a given architecture).
+// The CFA address for the stack frame does not change during
+// the lifetime of the function.
 
 // Internally, the UnwindPlan is structured as a vector of register locations
 // organized by code address in the function, showing which registers have been
-// saved at that point and where they are saved. It can be thought of as the
-// expanded table form of the DWARF CFI encoded information.
+// saved at that point and where they are saved.
+// It can be thought of as the expanded table form of the DWARF CFI
+// encoded information.
 
 // Other unwind information sources will be converted into UnwindPlans before
-// being added to a FuncUnwinders object.  The unwind source may be an eh_frame
-// FDE, a DWARF debug_frame FDE, or assembly language based prologue analysis.
+// being added to a FuncUnwinders object.  The unwind source may be
+// an eh_frame FDE, a DWARF debug_frame FDE, or assembly language based
+// prologue analysis.
 // The UnwindPlan is the canonical form of this information that the unwinder
 // code will use when walking the stack.
 
@@ -64,8 +64,6 @@ public:
         same,              // reg is unchanged
         atCFAPlusOffset,   // reg = deref(CFA + offset)
         isCFAPlusOffset,   // reg = CFA + offset
-        atAFAPlusOffset,   // reg = deref(AFA + offset)
-        isAFAPlusOffset,   // reg = AFA + offset
         inOtherRegister,   // reg = other reg
         atDWARFExpression, // reg = deref(eval(dwarf_expr))
         isDWARFExpression  // reg = eval(dwarf_expr)
@@ -95,10 +93,6 @@ public:
 
       bool IsAtCFAPlusOffset() const { return m_type == atCFAPlusOffset; }
 
-      bool IsAFAPlusOffset() const { return m_type == isAFAPlusOffset; }
-
-      bool IsAtAFAPlusOffset() const { return m_type == atAFAPlusOffset; }
-
       bool IsInOtherRegister() const { return m_type == inOtherRegister; }
 
       bool IsAtDWARFExpression() const { return m_type == atDWARFExpression; }
@@ -112,16 +106,6 @@ public:
 
       void SetIsCFAPlusOffset(int32_t offset) {
         m_type = isCFAPlusOffset;
-        m_location.offset = offset;
-      }
-
-      void SetAtAFAPlusOffset(int32_t offset) {
-        m_type = atAFAPlusOffset;
-        m_location.offset = offset;
-      }
-
-      void SetIsAFAPlusOffset(int32_t offset) {
-        m_type = isAFAPlusOffset;
         m_location.offset = offset;
       }
 
@@ -139,16 +123,9 @@ public:
       RestoreType GetLocationType() const { return m_type; }
 
       int32_t GetOffset() const {
-        switch(m_type)
-        {
-        case atCFAPlusOffset:
-        case isCFAPlusOffset:
-        case atAFAPlusOffset:
-        case isAFAPlusOffset:
+        if (m_type == atCFAPlusOffset || m_type == isCFAPlusOffset)
           return m_location.offset;
-        default:
-          return 0;
-        }
+        return 0;
       }
 
       void GetDWARFExpr(const uint8_t **opcodes, uint16_t &len) const {
@@ -195,30 +172,24 @@ public:
       } m_location;
     };
 
-    class FAValue {
+    class CFAValue {
     public:
       enum ValueType {
         unspecified,            // not specified
-        isRegisterPlusOffset,   // FA = register + offset
-        isRegisterDereferenced, // FA = [reg]
-        isDWARFExpression,      // FA = eval(dwarf_expr)
-        isRaSearch,             // FA = SP + offset + ???
+        isRegisterPlusOffset,   // CFA = register + offset
+        isRegisterDereferenced, // CFA = [reg]
+        isDWARFExpression       // CFA = eval(dwarf_expr)
       };
 
-      FAValue() : m_type(unspecified), m_value() {}
+      CFAValue() : m_type(unspecified), m_value() {}
 
-      bool operator==(const FAValue &rhs) const;
+      bool operator==(const CFAValue &rhs) const;
 
-      bool operator!=(const FAValue &rhs) const { return !(*this == rhs); }
+      bool operator!=(const CFAValue &rhs) const { return !(*this == rhs); }
 
       void SetUnspecified() { m_type = unspecified; }
 
       bool IsUnspecified() const { return m_type == unspecified; }
-
-      void SetRaSearch(int32_t offset) {
-        m_type = isRaSearch;
-        m_value.ra_search_offset = offset;
-      }
 
       bool IsRegisterPlusOffset() const {
         return m_type == isRegisterPlusOffset;
@@ -256,14 +227,9 @@ public:
       ValueType GetValueType() const { return m_type; }
 
       int32_t GetOffset() const {
-        switch (m_type) {
-          case isRegisterPlusOffset:
-            return m_value.reg.offset;
-          case isRaSearch:
-            return m_value.ra_search_offset;
-          default:
-            return 0;
-        }
+        if (m_type == isRegisterPlusOffset)
+          return m_value.reg.offset;
+        return 0;
       }
 
       void IncOffset(int32_t delta) {
@@ -315,10 +281,8 @@ public:
           const uint8_t *opcodes;
           uint16_t length;
         } expr;
-        // For m_type == isRaSearch
-        int32_t ra_search_offset;
       } m_value;
-    }; // class FAValue
+    }; // class CFAValue
 
   public:
     Row();
@@ -341,9 +305,7 @@ public:
 
     void SlideOffset(lldb::addr_t offset) { m_offset += offset; }
 
-    FAValue &GetCFAValue() { return m_cfa_value; }
-
-    FAValue &GetAFAValue() { return m_afa_value; }
+    CFAValue &GetCFAValue() { return m_cfa_value; }
 
     bool SetRegisterLocationToAtCFAPlusOffset(uint32_t reg_num, int32_t offset,
                                               bool can_replace);
@@ -370,8 +332,7 @@ public:
     typedef std::map<uint32_t, RegisterLocation> collection;
     lldb::addr_t m_offset; // Offset into the function for this row
 
-    FAValue m_cfa_value;
-    FAValue m_afa_value;
+    CFAValue m_cfa_value;
     collection m_register_locations;
   }; // class Row
 
@@ -383,7 +344,6 @@ public:
         m_return_addr_register(LLDB_INVALID_REGNUM), m_source_name(),
         m_plan_is_sourced_from_compiler(eLazyBoolCalculate),
         m_plan_is_valid_at_all_instruction_locations(eLazyBoolCalculate),
-        m_plan_is_for_signal_trap(eLazyBoolCalculate),
         m_lsda_address(), m_personality_func_addr() {}
 
   // Performs a deep copy of the plan, including all the rows (expensive).
@@ -411,10 +371,12 @@ public:
   void InsertRow(const RowSP &row_sp, bool replace_existing = false);
 
   // Returns a pointer to the best row for the given offset into the function's
-  // instructions. If offset is -1 it indicates that the function start is
-  // unknown - the final row in the UnwindPlan is returned. In practice, the
-  // UnwindPlan for a function with no known start address will be the
-  // architectural default UnwindPlan which will only have one row.
+  // instructions.
+  // If offset is -1 it indicates that the function start is unknown - the final
+  // row in the UnwindPlan is returned.
+  // In practice, the UnwindPlan for a function with no known start address will
+  // be the architectural default
+  // UnwindPlan which will only have one row.
   UnwindPlan::RowSP GetRowForFunctionOffset(int offset) const;
 
   lldb::RegisterKind GetRegisterKind() const { return m_register_kind; }
@@ -465,27 +427,18 @@ public:
   }
 
   // Is this UnwindPlan valid at all instructions?  If not, then it is assumed
-  // valid at call sites, e.g. for exception handling.
+  // valid at call sites,
+  // e.g. for exception handling.
   lldb_private::LazyBool GetUnwindPlanValidAtAllInstructions() const {
     return m_plan_is_valid_at_all_instruction_locations;
   }
 
   // Is this UnwindPlan valid at all instructions?  If not, then it is assumed
-  // valid at call sites, e.g. for exception handling.
+  // valid at call sites,
+  // e.g. for exception handling.
   void SetUnwindPlanValidAtAllInstructions(
       lldb_private::LazyBool valid_at_all_insn) {
     m_plan_is_valid_at_all_instruction_locations = valid_at_all_insn;
-  }
-
-  // Is this UnwindPlan for a signal trap frame?  If so, then its saved pc
-  // may have been set manually by the signal dispatch code and therefore
-  // not follow a call to the child frame.
-  lldb_private::LazyBool GetUnwindPlanForSignalTrap() const {
-    return m_plan_is_for_signal_trap;
-  }
-
-  void SetUnwindPlanForSignalTrap(lldb_private::LazyBool is_for_signal_trap) {
-    m_plan_is_for_signal_trap = is_for_signal_trap;
   }
 
   int GetRowCount() const;
@@ -497,7 +450,6 @@ public:
     m_source_name.Clear();
     m_plan_is_sourced_from_compiler = eLazyBoolCalculate;
     m_plan_is_valid_at_all_instruction_locations = eLazyBoolCalculate;
-    m_plan_is_for_signal_trap = eLazyBoolCalculate;
     m_lsda_address.Clear();
     m_personality_func_addr.Clear();
   }
@@ -528,7 +480,6 @@ private:
       m_source_name; // for logging, where this UnwindPlan originated from
   lldb_private::LazyBool m_plan_is_sourced_from_compiler;
   lldb_private::LazyBool m_plan_is_valid_at_all_instruction_locations;
-  lldb_private::LazyBool m_plan_is_for_signal_trap;
 
   Address m_lsda_address; // Where the language specific data area exists in the
                           // module - used

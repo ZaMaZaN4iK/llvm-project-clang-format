@@ -1,8 +1,9 @@
 //===--- TrailingObjects.h - Variable-length classes ------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -47,7 +48,6 @@
 #define LLVM_SUPPORT_TRAILINGOBJECTS_H
 
 #include "llvm/Support/AlignOf.h"
-#include "llvm/Support/Alignment.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/type_traits.h"
@@ -88,21 +88,26 @@ protected:
   template <typename T> struct OverloadToken {};
 };
 
+/// This helper template works-around MSVC 2013's lack of useful
+/// alignas() support. The argument to LLVM_ALIGNAS(), in MSVC, is
+/// required to be a literal integer. But, you *can* use template
+/// specialization to select between a bunch of different LLVM_ALIGNAS
+/// expressions...
 template <int Align>
 class TrailingObjectsAligner : public TrailingObjectsBase {};
 template <>
-class alignas(1) TrailingObjectsAligner<1> : public TrailingObjectsBase {};
+class LLVM_ALIGNAS(1) TrailingObjectsAligner<1> : public TrailingObjectsBase {};
 template <>
-class alignas(2) TrailingObjectsAligner<2> : public TrailingObjectsBase {};
+class LLVM_ALIGNAS(2) TrailingObjectsAligner<2> : public TrailingObjectsBase {};
 template <>
-class alignas(4) TrailingObjectsAligner<4> : public TrailingObjectsBase {};
+class LLVM_ALIGNAS(4) TrailingObjectsAligner<4> : public TrailingObjectsBase {};
 template <>
-class alignas(8) TrailingObjectsAligner<8> : public TrailingObjectsBase {};
+class LLVM_ALIGNAS(8) TrailingObjectsAligner<8> : public TrailingObjectsBase {};
 template <>
-class alignas(16) TrailingObjectsAligner<16> : public TrailingObjectsBase {
+class LLVM_ALIGNAS(16) TrailingObjectsAligner<16> : public TrailingObjectsBase {
 };
 template <>
-class alignas(32) TrailingObjectsAligner<32> : public TrailingObjectsBase {
+class LLVM_ALIGNAS(32) TrailingObjectsAligner<32> : public TrailingObjectsBase {
 };
 
 // Just a little helper for transforming a type pack into the same
@@ -168,7 +173,7 @@ protected:
 
     if (requiresRealignment())
       return reinterpret_cast<const NextTy *>(
-          alignAddr(Ptr, Align::Of<NextTy>()));
+          llvm::alignAddr(Ptr, alignof(NextTy)));
     else
       return reinterpret_cast<const NextTy *>(Ptr);
   }
@@ -182,7 +187,7 @@ protected:
                     Obj, TrailingObjectsBase::OverloadToken<PrevTy>());
 
     if (requiresRealignment())
-      return reinterpret_cast<NextTy *>(alignAddr(Ptr, Align::Of<NextTy>()));
+      return reinterpret_cast<NextTy *>(llvm::alignAddr(Ptr, alignof(NextTy)));
     else
       return reinterpret_cast<NextTy *>(Ptr);
   }
@@ -250,7 +255,9 @@ class TrailingObjects : private trailing_objects_internal::TrailingObjectsImpl<
   // because BaseTy isn't complete at class instantiation time, but
   // will be by the time this function is instantiated.
   static void verifyTrailingObjectsAssertions() {
-    static_assert(std::is_final<BaseTy>(), "BaseTy must be final.");
+#ifdef LLVM_IS_FINAL
+    static_assert(LLVM_IS_FINAL(BaseTy), "BaseTy must be final.");
+#endif
   }
 
   // These two methods are the base of the recursion for this method.
@@ -287,14 +294,7 @@ class TrailingObjects : private trailing_objects_internal::TrailingObjectsImpl<
 
 public:
   // Make this (privately inherited) member public.
-#ifndef _MSC_VER
   using ParentType::OverloadToken;
-#else
-  // MSVC bug prevents the above from working, at least up through CL
-  // 19.10.24629.
-  template <typename T>
-  using OverloadToken = typename ParentType::template OverloadToken<T>;
-#endif
 
   /// Returns a pointer to the trailing object array of the given type
   /// (which must be one of those specified in the class template). The
@@ -363,9 +363,7 @@ public:
   template <typename... Tys> struct FixedSizeStorage {
     template <size_t... Counts> struct with_counts {
       enum { Size = totalSizeToAlloc<Tys...>(Counts...) };
-      struct type {
-        alignas(BaseTy) char buffer[Size];
-      };
+      typedef llvm::AlignedCharArray<alignof(BaseTy), Size> type;
     };
   };
 

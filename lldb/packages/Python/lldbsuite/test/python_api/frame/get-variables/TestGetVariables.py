@@ -5,6 +5,8 @@ Test that SBFrame::GetVariables() calls work correctly.
 from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -49,7 +51,7 @@ class TestGetVariables(TestBase):
         self.dbg.SetAsync(False)
 
         # Create a target by the debugger.
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
 

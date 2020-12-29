@@ -1,8 +1,9 @@
 //===-- NVPTXPeephole.cpp - NVPTX Peephole Optimiztions -------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,11 +22,11 @@
 // This peephole pass optimizes these cases, for example
 //
 // It will transform the following pattern
-//    %0 = LEA_ADDRi64 %VRFrame, 4
-//    %1 = cvta_to_local_yes_64 %0
+//    %vreg0<def> = LEA_ADDRi64 %VRFrame, 4
+//    %vreg1<def> = cvta_to_local_yes_64 %vreg0
 //
 // into
-//    %1 = LEA_ADDRi64 %VRFrameLocal, 4
+//    %vreg1<def> = LEA_ADDRi64 %VRFrameLocal, 4
 //
 // %VRFrameLocal is the virtual register name of %SPL
 //
@@ -35,8 +36,8 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetInstrInfo.h"
 
 using namespace llvm;
 
@@ -81,7 +82,7 @@ static bool isCVTAToLocalCombinationCandidate(MachineInstr &Root) {
   auto &Op = Root.getOperand(1);
   const auto &MRI = MF.getRegInfo();
   MachineInstr *GenericAddrDef = nullptr;
-  if (Op.isReg() && Register::isVirtualRegister(Op.getReg())) {
+  if (Op.isReg() && TargetRegisterInfo::isVirtualRegister(Op.getReg())) {
     GenericAddrDef = MRI.getUniqueVRegDef(Op.getReg());
   }
 
@@ -112,7 +113,7 @@ static void CombineCVTAToLocal(MachineInstr &Root) {
       BuildMI(MF, Root.getDebugLoc(), TII->get(Prev.getOpcode()),
               Root.getOperand(0).getReg())
           .addReg(NVPTX::VRFrameLocal)
-          .add(Prev.getOperand(2));
+          .addOperand(Prev.getOperand(2));
 
   MBB.insert((MachineBasicBlock::iterator)&Root, MIB);
 
@@ -124,7 +125,7 @@ static void CombineCVTAToLocal(MachineInstr &Root) {
 }
 
 bool NVPTXPeephole::runOnMachineFunction(MachineFunction &MF) {
-  if (skipFunction(MF.getFunction()))
+  if (skipFunction(*MF.getFunction()))
     return false;
 
   bool Changed = false;

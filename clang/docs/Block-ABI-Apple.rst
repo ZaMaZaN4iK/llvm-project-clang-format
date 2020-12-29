@@ -61,14 +61,6 @@ The following flags bits are in use thusly for a possible ABI.2010.3.16:
 .. code-block:: c
 
     enum {
-        // Set to true on blocks that have captures (and thus are not true
-        // global blocks) but are known not to escape for various other
-        // reasons. For backward compatiblity with old runtimes, whenever
-        // BLOCK_IS_NOESCAPE is set, BLOCK_IS_GLOBAL is set too. Copying a
-        // non-escaping block returns the original block and releasing such a
-        // block is a no-op, which is exactly how global blocks are handled.
-        BLOCK_IS_NOESCAPE      =  (1 << 23),
-
         BLOCK_HAS_COPY_DISPOSE =  (1 << 25),
         BLOCK_HAS_CTOR =          (1 << 26), // helpers have C++ code
         BLOCK_IS_GLOBAL =         (1 << 28),
@@ -152,7 +144,7 @@ would cause the following to be created on a 32-bit system:
     static struct __block_descriptor_1 {
         unsigned long int reserved;
         unsigned long int Block_size;
-    } __block_descriptor_1 = { 0, sizeof(struct __block_literal_1) };
+    } __block_descriptor_1 = { 0, sizeof(struct __block_literal_1), __block_invoke_1 };
 
 and where the ``Block`` literal itself appears:
 
@@ -864,15 +856,15 @@ mentioned above, call:
 
 .. code-block:: c
 
-     _Block_object_assign(&dst->target, src->target, BLOCK_FIELD_<apropos>);
+     _Block_object_assign(&dst->target, src->target, BLOCK_FIELD_<appropo>);
 
 in the copy helper and:
 
 .. code-block:: c
 
-    _Block_object_dispose(->target, BLOCK_FIELD_<apropos>);
+    _Block_object_dispose(->target, BLOCK_FIELD_<appropo>);
 
-in the dispose helper where ``<apropos>`` is:
+in the dispose helper where ``<appropo>`` is:
 
 .. code-block:: c
 
@@ -896,7 +888,7 @@ and functions are generated in the same manner.
 Under ObjC we allow ``__weak`` as an attribute on ``__block`` variables, and
 this causes the addition of ``BLOCK_FIELD_IS_WEAK`` orred onto the
 ``BLOCK_FIELD_IS_BYREF`` flag when copying the ``block_byref`` structure in the
-``Block`` copy helper, and onto the ``BLOCK_FIELD_<apropos>`` field within the
+``Block`` copy helper, and onto the ``BLOCK_FIELD_<appropo>`` field within the
 ``block_byref`` copy/dispose helper calls.
 
 The prototypes, and summary, of the helper functions are:

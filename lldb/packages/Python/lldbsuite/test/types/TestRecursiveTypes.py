@@ -2,10 +2,12 @@
 Test that recursive types are handled correctly.
 """
 
+from __future__ import print_function
 
 
 import lldb
 import lldbsuite.test.lldbutil as lldbutil
+import sys
 from lldbsuite.test.lldbtest import *
 
 
@@ -16,7 +18,10 @@ class RecursiveTypesTestCase(TestBase):
     def setUp(self):
         # Call super's setUp().
         TestBase.setUp(self)
-
+        # disable "There is a running process, kill it and restart?" prompt
+        self.runCmd("settings set auto-confirm true")
+        self.addTearDownHook(
+            lambda: self.runCmd("settings clear auto-confirm"))
         # Find the line number to break for main.c.
         self.line = line_number('recursive_type_main.cpp',
                                 '// Test at this line.')
@@ -39,7 +44,7 @@ class RecursiveTypesTestCase(TestBase):
         self.print_struct()
 
     def print_struct(self):
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(
             self,

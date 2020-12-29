@@ -1,13 +1,14 @@
 //===-- WebAssemblyOptimizeReturned.cpp - Optimize "returned" attributes --===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Optimize calls with "returned" attributes for WebAssembly.
+/// \brief Optimize calls with "returned" attributes for WebAssembly.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -36,44 +37,39 @@ class OptimizeReturned final : public FunctionPass,
 
   bool runOnFunction(Function &F) override;
 
-  DominatorTree *DT = nullptr;
+  DominatorTree *DT;
 
 public:
   static char ID;
-  OptimizeReturned() : FunctionPass(ID) {}
+  OptimizeReturned() : FunctionPass(ID), DT(nullptr) {}
 
   void visitCallSite(CallSite CS);
 };
 } // End anonymous namespace
 
 char OptimizeReturned::ID = 0;
-INITIALIZE_PASS(OptimizeReturned, DEBUG_TYPE,
-                "Optimize calls with \"returned\" attributes for WebAssembly",
-                false, false)
-
 FunctionPass *llvm::createWebAssemblyOptimizeReturned() {
   return new OptimizeReturned();
 }
 
 void OptimizeReturned::visitCallSite(CallSite CS) {
-  for (unsigned I = 0, E = CS.getNumArgOperands(); I < E; ++I)
-    if (CS.paramHasAttr(I, Attribute::Returned)) {
+  for (unsigned i = 0, e = CS.getNumArgOperands(); i < e; ++i)
+    if (CS.paramHasAttr(1 + i, Attribute::Returned)) {
       Instruction *Inst = CS.getInstruction();
-      Value *Arg = CS.getArgOperand(I);
+      Value *Arg = CS.getArgOperand(i);
       // Ignore constants, globals, undef, etc.
       if (isa<Constant>(Arg))
         continue;
       // Like replaceDominatedUsesWith but using Instruction/Use dominance.
-      Arg->replaceUsesWithIf(Inst,
-                             [&](Use &U) { return DT->dominates(Inst, U); });
+      for (auto UI = Arg->use_begin(), UE = Arg->use_end(); UI != UE;) {
+        Use &U = *UI++;
+        if (DT->dominates(Inst, U))
+          U.set(Inst);
+      }
     }
 }
 
 bool OptimizeReturned::runOnFunction(Function &F) {
-  LLVM_DEBUG(dbgs() << "********** Optimize returned Attributes **********\n"
-                       "********** Function: "
-                    << F.getName() << '\n');
-
   DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
   visit(F);
   return true;

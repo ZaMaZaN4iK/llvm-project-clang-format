@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,9 +18,9 @@
 template <class T, class U>
 void test_remove_cv_imp()
 {
-    ASSERT_SAME_TYPE(U, typename std::remove_cv<T>::type);
+    static_assert((std::is_same<typename std::remove_cv<T>::type, U>::value), "");
 #if TEST_STD_VER > 11
-    ASSERT_SAME_TYPE(U,        std::remove_cv_t<T>);
+    static_assert((std::is_same<std::remove_cv_t<T>, U>::value), "");
 #endif
 }
 
@@ -32,7 +33,7 @@ void test_remove_cv()
     test_remove_cv_imp<const volatile T, T>();
 }
 
-int main(int, char**)
+int main()
 {
     test_remove_cv<void>();
     test_remove_cv<int>();
@@ -41,6 +42,4 @@ int main(int, char**)
     test_remove_cv<const int&>();
     test_remove_cv<int*>();
     test_remove_cv<const int*>();
-
-  return 0;
 }

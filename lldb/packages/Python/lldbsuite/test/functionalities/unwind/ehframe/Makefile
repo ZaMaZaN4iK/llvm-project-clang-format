@@ -1,5 +1,7 @@
+LEVEL = ../../../make
+
 C_SOURCES := main.c
 
 CFLAGS ?= -g -fomit-frame-pointer
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

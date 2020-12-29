@@ -1,15 +1,19 @@
 //===-- StringExtractorGDBRemote.cpp ----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "lldb/Utility/StringExtractorGDBRemote.h"
-
-#include <ctype.h>
+// C Includes
 #include <string.h>
+
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "Utility/StringExtractorGDBRemote.h"
 
 StringExtractorGDBRemote::ResponseType
 StringExtractorGDBRemote::GetResponseType() const {
@@ -18,18 +22,8 @@ StringExtractorGDBRemote::GetResponseType() const {
 
   switch (m_packet[0]) {
   case 'E':
-    if (isxdigit(m_packet[1]) && isxdigit(m_packet[2])) {
-      if (m_packet.size() == 3)
-        return eError;
-      llvm::StringRef packet_ref(m_packet);
-      if (packet_ref[3] == ';') {
-        auto err_string = packet_ref.substr(4);
-        for (auto e : err_string)
-          if (!isxdigit(e))
-            return eResponse;
-        return eError;
-      }
-    }
+    if (m_packet.size() == 3 && isxdigit(m_packet[1]) && isxdigit(m_packet[2]))
+      return eError;
     break;
 
   case 'O':
@@ -95,13 +89,6 @@ StringExtractorGDBRemote::GetServerPacketType() const {
         return eServerPacketType_QEnvironment;
       if (PACKET_STARTS_WITH("QEnvironmentHexEncoded:"))
         return eServerPacketType_QEnvironmentHexEncoded;
-      if (PACKET_STARTS_WITH("QEnableErrorStrings"))
-        return eServerPacketType_QEnableErrorStrings;
-      break;
-
-    case 'P':
-      if (PACKET_STARTS_WITH("QPassSignals:"))
-        return eServerPacketType_QPassSignals;
       break;
 
     case 'S':
@@ -285,8 +272,8 @@ StringExtractorGDBRemote::GetServerPacketType() const {
       break;
 
     case 'X':
-      if (PACKET_STARTS_WITH("qXfer:"))
-        return eServerPacketType_qXfer;
+      if (PACKET_STARTS_WITH("qXfer:auxv:read::"))
+        return eServerPacketType_qXfer_auxv_read;
       break;
     }
     break;
@@ -298,16 +285,6 @@ StringExtractorGDBRemote::GetServerPacketType() const {
       return eServerPacketType_jSignalsInfo;
     if (PACKET_MATCHES("jThreadsInfo"))
       return eServerPacketType_jThreadsInfo;
-    if (PACKET_STARTS_WITH("jTraceBufferRead:"))
-      return eServerPacketType_jTraceBufferRead;
-    if (PACKET_STARTS_WITH("jTraceConfigRead:"))
-      return eServerPacketType_jTraceConfigRead;
-    if (PACKET_STARTS_WITH("jTraceMetaRead:"))
-      return eServerPacketType_jTraceMetaRead;
-    if (PACKET_STARTS_WITH("jTraceStart:"))
-      return eServerPacketType_jTraceStart;
-    if (PACKET_STARTS_WITH("jTraceStop:"))
-      return eServerPacketType_jTraceStop;
     break;
 
   case 'v':
@@ -377,7 +354,9 @@ StringExtractorGDBRemote::GetServerPacketType() const {
     break;
 
   case 'g':
-    return eServerPacketType_g;
+    if (packet_size == 1)
+      return eServerPacketType_g;
+    break;
 
   case 'G':
     return eServerPacketType_G;
@@ -448,8 +427,8 @@ bool StringExtractorGDBRemote::IsNormalResponse() const {
 }
 
 bool StringExtractorGDBRemote::IsErrorResponse() const {
-  return GetResponseType() == eError && isxdigit(m_packet[1]) &&
-         isxdigit(m_packet[2]);
+  return GetResponseType() == eError && m_packet.size() == 3 &&
+         isxdigit(m_packet[1]) && isxdigit(m_packet[2]);
 }
 
 uint8_t StringExtractorGDBRemote::GetError() {
@@ -460,28 +439,12 @@ uint8_t StringExtractorGDBRemote::GetError() {
   return 0;
 }
 
-lldb_private::Status StringExtractorGDBRemote::GetStatus() {
-  lldb_private::Status error;
-  if (GetResponseType() == eError) {
-    SetFilePos(1);
-    uint8_t errc = GetHexU8(255);
-    error.SetError(errc, lldb::eErrorTypeGeneric);
-
-    error.SetErrorStringWithFormat("Error %u", errc);
-    std::string error_messg;
-    if (GetChar() == ';') {
-      GetHexByteString(error_messg);
-      error.SetErrorString(error_messg);
-    }
-  }
-  return error;
-}
-
 size_t StringExtractorGDBRemote::GetEscapedBinaryData(std::string &str) {
   // Just get the data bytes in the string as
-  // GDBRemoteCommunication::CheckForPacket() already removes any 0x7d escaped
-  // characters. If any 0x7d characters are left in the packet, then they are
-  // supposed to be there...
+  // GDBRemoteCommunication::CheckForPacket()
+  // already removes any 0x7d escaped characters. If any 0x7d characters are
+  // left in
+  // the packet, then they are supposed to be there...
   str.clear();
   const size_t bytes_left = GetBytesLeft();
   if (bytes_left > 0) {
@@ -522,9 +485,9 @@ static bool JSONResponseValidator(void *,
 
   case StringExtractorGDBRemote::eResponse:
     // JSON that is returned in from JSON query packets is currently always
-    // either a dictionary which starts with a '{', or an array which starts
-    // with a '['. This is a quick validator to just make sure the response
-    // could be valid JSON without having to validate all of the
+    // either a dictionary which starts with a '{', or an array which
+    // starts with a '['. This is a quick validator to just make sure the
+    // response could be valid JSON without having to validate all of the
     // JSON content.
     switch (response.GetStringRef()[0]) {
     case '{':

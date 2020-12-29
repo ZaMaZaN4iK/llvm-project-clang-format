@@ -74,8 +74,8 @@ entry:
 ; CHECK: stfd
 
 ; CHECK-VSX: @foo5
-; CHECK-VSX: lfdx
-; CHECK-VSX: stfdx
+; CHECK-VSX: lxsdx
+; CHECK-VSX: stxsdx
 }
 
 define void @foo6(<4 x float>* %p, <4 x float>* %r) nounwind {
@@ -89,7 +89,7 @@ entry:
 ; CHECK: @foo6
 ; CHECK-DAG: ld
 ; CHECK-DAG: ld
-; CHECK-DAG: std
+; CHECK-DAG: stdx
 ; CHECK: stdx
 
 ; For VSX on P7, unaligned loads and stores are preferable to aligned

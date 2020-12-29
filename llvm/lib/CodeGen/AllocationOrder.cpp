@@ -1,8 +1,9 @@
 //===-- llvm/CodeGen/AllocationOrder.cpp - Allocation Order ---------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -30,19 +31,18 @@ AllocationOrder::AllocationOrder(unsigned VirtReg,
                                  const VirtRegMap &VRM,
                                  const RegisterClassInfo &RegClassInfo,
                                  const LiveRegMatrix *Matrix)
-  : Pos(0), HardHints(false) {
+  : Pos(0) {
   const MachineFunction &MF = VRM.getMachineFunction();
   const TargetRegisterInfo *TRI = &VRM.getTargetRegInfo();
   Order = RegClassInfo.getOrder(MF.getRegInfo().getRegClass(VirtReg));
-  if (TRI->getRegAllocationHints(VirtReg, Order, Hints, MF, &VRM, Matrix))
-    HardHints = true;
+  TRI->getRegAllocationHints(VirtReg, Order, Hints, MF, &VRM, Matrix);
   rewind();
 
-  LLVM_DEBUG({
+  DEBUG({
     if (!Hints.empty()) {
       dbgs() << "hints:";
       for (unsigned I = 0, E = Hints.size(); I != E; ++I)
-        dbgs() << ' ' << printReg(Hints[I], TRI);
+        dbgs() << ' ' << PrintReg(Hints[I], TRI);
       dbgs() << '\n';
     }
   });

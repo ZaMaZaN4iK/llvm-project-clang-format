@@ -41,24 +41,12 @@ set(LLVM_CONFIG_INCLUDE_DIRS
   "${LLVM_MAIN_INCLUDE_DIR}"
   "${LLVM_INCLUDE_DIR}"
   )
-set(LLVM_CONFIG_INCLUDE_DIR
-  "${LLVM_INCLUDE_DIR}"
-  )
-set(LLVM_CONFIG_MAIN_INCLUDE_DIR
-  "${LLVM_MAIN_INCLUDE_DIR}"
-  )
 set(LLVM_CONFIG_LIBRARY_DIRS
   "${LLVM_LIBRARY_DIR}"
   )
 set(LLVM_CONFIG_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(LLVM_CONFIG_BINARY_DIR "${LLVM_BINARY_DIR}")
 set(LLVM_CONFIG_TOOLS_BINARY_DIR "${LLVM_TOOLS_BINARY_DIR}")
-
-if (LLVM_LINK_LLVM_DYLIB)
-  set(LLVM_CONFIG_LINK_LLVM_DYLIB
-      "set(LLVM_LINK_LLVM_DYLIB ${LLVM_LINK_LLVM_DYLIB})")
-endif()
-
 # We need to use the full path to the LLVM Exports file to make sure we get the
 # one from the build tree. This is due to our cmake files being split between
 # this source dir and the binary dir in the build tree configuration and the
@@ -97,8 +85,6 @@ foreach(p ${_count})
 get_filename_component(LLVM_INSTALL_PREFIX \"\${LLVM_INSTALL_PREFIX}\" PATH)")
 endforeach(p)
 set(LLVM_CONFIG_INCLUDE_DIRS "\${LLVM_INSTALL_PREFIX}/include")
-set(LLVM_CONFIG_INCLUDE_DIR "${LLVM_CONFIG_INCLUDE_DIRS}")
-set(LLVM_CONFIG_MAIN_INCLUDE_DIR "${LLVM_CONFIG_INCLUDE_DIRS}")
 set(LLVM_CONFIG_LIBRARY_DIRS "\${LLVM_INSTALL_PREFIX}/lib\${LLVM_LIBDIR_SUFFIX}")
 set(LLVM_CONFIG_CMAKE_DIR "\${LLVM_INSTALL_PREFIX}/${LLVM_INSTALL_PACKAGE_DIR}")
 set(LLVM_CONFIG_BINARY_DIR "\${LLVM_INSTALL_PREFIX}")
@@ -136,15 +122,16 @@ if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
     FILES_MATCHING PATTERN *.cmake
     PATTERN .svn EXCLUDE
     PATTERN LLVMConfig.cmake EXCLUDE
-    PATTERN LLVMConfigExtensions.cmake EXCLUDE
     PATTERN LLVMConfigVersion.cmake EXCLUDE
     PATTERN LLVM-Config.cmake EXCLUDE
     PATTERN GetHostTriple.cmake EXCLUDE)
 
-  if (NOT LLVM_ENABLE_IDE)
+  if (NOT CMAKE_CONFIGURATION_TYPES)
     # Add a dummy target so this can be used with LLVM_DISTRIBUTION_COMPONENTS
     add_custom_target(cmake-exports)
-    add_llvm_install_targets(install-cmake-exports
-                             COMPONENT cmake-exports)
+    add_custom_target(install-cmake-exports
+                      COMMAND "${CMAKE_COMMAND}"
+                                  -DCMAKE_INSTALL_COMPONENT=cmake-exports
+                                  -P "${CMAKE_BINARY_DIR}/cmake_install.cmake")
   endif()
 endif()

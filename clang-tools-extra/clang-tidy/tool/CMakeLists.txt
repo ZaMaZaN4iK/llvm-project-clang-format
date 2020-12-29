@@ -1,34 +1,33 @@
 set(LLVM_LINK_COMPONENTS
-  AllTargetsAsmParsers
-  AllTargetsDescs
-  AllTargetsInfos
   support
   )
 
-add_clang_tool(clang-tidy
+add_clang_executable(clang-tidy
   ClangTidyMain.cpp
   )
 add_dependencies(clang-tidy
-  clang-resource-headers
+  clang-headers
   )
-clang_target_link_libraries(clang-tidy
-  PRIVATE
+target_link_libraries(clang-tidy
   clangAST
   clangASTMatchers
   clangBasic
-  clangTooling
-  clangToolingCore
-  )
-target_link_libraries(clang-tidy
-  PRIVATE
   clangTidy
-  ${ALL_CLANG_TIDY_CHECKS}
+  clangTidyBoostModule
+  clangTidyCERTModule
+  clangTidyCppCoreGuidelinesModule
+  clangTidyGoogleModule
+  clangTidyLLVMModule
+  clangTidyMiscModule
+  clangTidyModernizeModule
+  clangTidyMPIModule
+  clangTidyPerformanceModule
+  clangTidyReadabilityModule
+  clangTooling
   )
 
+install(TARGETS clang-tidy
+  RUNTIME DESTINATION bin)
 
-install(PROGRAMS clang-tidy-diff.py
-  DESTINATION share/clang
-  COMPONENT clang-tidy)
-install(PROGRAMS run-clang-tidy.py
-  DESTINATION share/clang
-  COMPONENT clang-tidy)
+install(PROGRAMS clang-tidy-diff.py DESTINATION share/clang)
+install(PROGRAMS run-clang-tidy.py DESTINATION share/clang)

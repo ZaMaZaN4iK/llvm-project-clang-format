@@ -1,12 +1,13 @@
-//===- ExternalASTSource.cpp - Abstract External AST Interface ------------===//
+//===- ExternalASTSource.cpp - Abstract External AST Interface --*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
-//  This file provides the default implementation of the ExternalASTSource
+//  This file provides the default implementation of the ExternalASTSource 
 //  interface, which enables construction of AST nodes from some external
 //  source.
 //
@@ -15,27 +16,16 @@
 #include "clang/AST/ExternalASTSource.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclarationName.h"
-#include "clang/Basic/IdentifierTable.h"
-#include "clang/Basic/LLVM.h"
 #include "clang/Basic/Module.h"
-#include "llvm/ADT/None.h"
 #include "llvm/Support/ErrorHandling.h"
-#include <cstdint>
 
 using namespace clang;
 
-char ExternalASTSource::ID;
-
-ExternalASTSource::~ExternalASTSource() = default;
+ExternalASTSource::~ExternalASTSource() { }
 
 llvm::Optional<ExternalASTSource::ASTSourceDescriptor>
 ExternalASTSource::getSourceDescriptor(unsigned ID) {
   return None;
-}
-
-ExternalASTSource::ExtKind
-ExternalASTSource::hasExternalDefinitions(const Decl *D) {
-  return EK_ReplyHazy;
 }
 
 ExternalASTSource::ASTSourceDescriptor::ASTSourceDescriptor(const Module &M)
@@ -71,7 +61,7 @@ void ExternalASTSource::FinishedDeserializing() {}
 
 void ExternalASTSource::StartTranslationUnit(ASTConsumer *Consumer) {}
 
-void ExternalASTSource::PrintStats() {}
+void ExternalASTSource::PrintStats() { }
 
 bool ExternalASTSource::layoutRecordType(
     const RecordDecl *Record, uint64_t &Size, uint64_t &Alignment,

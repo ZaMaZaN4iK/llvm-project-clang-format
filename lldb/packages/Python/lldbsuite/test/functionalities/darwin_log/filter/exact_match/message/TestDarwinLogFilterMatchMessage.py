@@ -6,8 +6,10 @@ These tests are currently only supported when running against Darwin
 targets.
 """
 
+from __future__ import print_function
 
 import lldb
+import os
 import re
 
 from lldbsuite.test import decorators
@@ -27,7 +29,7 @@ class TestDarwinLogFilterMatchMessage(darwin_log.DarwinLogTestBase):
         self.source = 'main.c'
 
         # Output filename.
-        self.exe_name = self.getBuildArtifact("a.out")
+        self.exe_name = 'a.out'
         self.d = {'C_SOURCES': self.source, 'EXE': self.exe_name}
 
         # Locate breakpoint.

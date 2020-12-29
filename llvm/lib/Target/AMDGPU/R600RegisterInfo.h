@@ -1,39 +1,39 @@
 //===-- R600RegisterInfo.h - R600 Register Info Interface ------*- C++ -*--===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 /// \file
-/// Interface definition for R600RegisterInfo
+/// \brief Interface definition for R600RegisterInfo
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_AMDGPU_R600REGISTERINFO_H
 #define LLVM_LIB_TARGET_AMDGPU_R600REGISTERINFO_H
 
-#define GET_REGINFO_HEADER
-#include "R600GenRegisterInfo.inc"
+#include "AMDGPURegisterInfo.h"
 
 namespace llvm {
 
-struct R600RegisterInfo final : public R600GenRegisterInfo {
+class AMDGPUSubtarget;
+
+struct R600RegisterInfo final : public AMDGPURegisterInfo {
   RegClassWeight RCW;
 
   R600RegisterInfo();
 
   BitVector getReservedRegs(const MachineFunction &MF) const override;
-  const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
-  Register getFrameRegister(const MachineFunction &MF) const override;
 
-  /// get the HW encoding for a register's channel.
+  /// \brief get the HW encoding for a register's channel.
   unsigned getHWRegChan(unsigned reg) const;
 
   unsigned getHWRegIndex(unsigned Reg) const;
 
-  /// get the register class of the specified type to use in the
+  /// \brief get the register class of the specified type to use in the
   /// CFGStructurizer
   const TargetRegisterClass *getCFGStructurizerRegClass(MVT VT) const;
 
@@ -47,8 +47,6 @@ struct R600RegisterInfo final : public R600GenRegisterInfo {
   void eliminateFrameIndex(MachineBasicBlock::iterator MI, int SPAdj,
                            unsigned FIOperandNum,
                            RegScavenger *RS = nullptr) const override;
-
-  void reserveRegisterTuples(BitVector &Reserved, unsigned Reg) const;
 };
 
 } // End namespace llvm

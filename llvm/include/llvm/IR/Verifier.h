@@ -1,8 +1,9 @@
 //===- Verifier.h - LLVM IR Verifier ----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,17 +21,13 @@
 #ifndef LLVM_IR_VERIFIER_H
 #define LLVM_IR_VERIFIER_H
 
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/IR/PassManager.h"
-#include <utility>
 
 namespace llvm {
 
-class APInt;
 class Function;
 class FunctionPass;
-class Instruction;
-class MDNode;
+class ModulePass;
 class Module;
 class raw_ostream;
 struct VerifierSupport;
@@ -50,7 +47,7 @@ class TBAAVerifier {
   ///    the offset of the access.  If zero, only a zero offset is allowed.
   ///
   /// \c BitWidth has no meaning if \c IsInvalid is true.
-  using TBAABaseNodeSummary = std::pair<bool, unsigned>;
+  typedef std::pair<bool, unsigned> TBAABaseNodeSummary;
   DenseMap<const MDNode *, TBAABaseNodeSummary> TBAABaseNodes;
 
   /// Maps an alleged scalar TBAA node to a boolean that is true if the said
@@ -60,13 +57,11 @@ class TBAAVerifier {
   /// \name Helper functions used by \c visitTBAAMetadata.
   /// @{
   MDNode *getFieldNodeFromTBAABaseNode(Instruction &I, const MDNode *BaseNode,
-                                       APInt &Offset, bool IsNewFormat);
+                                       APInt &Offset);
   TBAAVerifier::TBAABaseNodeSummary verifyTBAABaseNode(Instruction &I,
-                                                       const MDNode *BaseNode,
-                                                       bool IsNewFormat);
+                                                       const MDNode *BaseNode);
   TBAABaseNodeSummary verifyTBAABaseNodeImpl(Instruction &I,
-                                             const MDNode *BaseNode,
-                                             bool IsNewFormat);
+                                             const MDNode *BaseNode);
 
   bool isValidScalarTBAANode(const MDNode *MD);
   /// @}
@@ -79,7 +74,7 @@ public:
   bool visitTBAAMetadata(Instruction &I, const MDNode *MD);
 };
 
-/// Check a function for errors, useful for use when debugging a
+/// \brief Check a function for errors, useful for use when debugging a
 /// pass.
 ///
 /// If there are no errors, the function returns false. If an error is found,
@@ -87,7 +82,7 @@ public:
 /// returned.
 bool verifyFunction(const Function &F, raw_ostream *OS = nullptr);
 
-/// Check a module for errors.
+/// \brief Check a module for errors.
 ///
 /// If there are no errors, the function returns false. If an error is
 /// found, a message describing the error is written to OS (if
@@ -106,14 +101,12 @@ FunctionPass *createVerifierPass(bool FatalErrors = true);
 /// and debug info errors.
 class VerifierAnalysis : public AnalysisInfoMixin<VerifierAnalysis> {
   friend AnalysisInfoMixin<VerifierAnalysis>;
-
   static AnalysisKey Key;
 
 public:
   struct Result {
     bool IRBroken, DebugInfoBroken;
   };
-
   Result run(Module &M, ModuleAnalysisManager &);
   Result run(Function &F, FunctionAnalysisManager &);
 };
@@ -123,7 +116,7 @@ public:
 /// "recovered" from by stripping the debug info.
 bool verifyModule(bool &BrokenDebugInfo, const Module &M, raw_ostream *OS);
 
-/// Create a verifier pass.
+/// \brief Create a verifier pass.
 ///
 /// Check a module or function for validity. This is essentially a pass wrapped
 /// around the above verifyFunction and verifyModule routines and
@@ -143,6 +136,7 @@ public:
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
-} // end namespace llvm
 
-#endif // LLVM_IR_VERIFIER_H
+} // End llvm namespace
+
+#endif

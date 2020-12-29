@@ -1,14 +1,19 @@
 //===-- OptionValueFormatEntity.h --------------------------------*- C++-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_OptionValueFormatEntity_h_
 #define liblldb_OptionValueFormatEntity_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Core/FormatEntity.h"
 #include "lldb/Interpreter/OptionValue.h"
 
@@ -20,17 +25,19 @@ public:
 
   ~OptionValueFormatEntity() override {}
 
+  //---------------------------------------------------------------------
   // Virtual subclass pure virtual overrides
+  //---------------------------------------------------------------------
 
   OptionValue::Type GetType() const override { return eTypeFormatEntity; }
 
   void DumpValue(const ExecutionContext *exe_ctx, Stream &strm,
                  uint32_t dump_mask) override;
 
-  Status
+  Error
   SetValueFromString(llvm::StringRef value,
                      VarSetOperationType op = eVarSetOperationAssign) override;
-  Status
+  Error
   SetValueFromString(const char *,
                      VarSetOperationType = eVarSetOperationAssign) = delete;
 
@@ -38,10 +45,13 @@ public:
 
   lldb::OptionValueSP DeepCopy() const override;
 
-  void AutoComplete(CommandInterpreter &interpreter,
-                    CompletionRequest &request) override;
+  size_t AutoComplete(CommandInterpreter &interpreter, llvm::StringRef s,
+                      int match_start_point, int max_return_elements,
+                      bool &word_complete, StringList &matches) override;
 
+  //---------------------------------------------------------------------
   // Subclass specific functions
+  //---------------------------------------------------------------------
 
   FormatEntity::Entry &GetCurrentValue() { return m_current_entry; }
 

@@ -1,8 +1,9 @@
-//===- MipsInstrInfo.h - Mips Instruction Information -----------*- C++ -*-===//
+//===-- MipsInstrInfo.h - Mips Instruction Information ----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,30 +18,19 @@
 #ifndef LLVM_LIB_TARGET_MIPS_MIPSINSTRINFO_H
 #define LLVM_LIB_TARGET_MIPS_MIPSINSTRINFO_H
 
-#include "MCTargetDesc/MipsMCTargetDesc.h"
 #include "Mips.h"
 #include "MipsRegisterInfo.h"
-#include "llvm/ADT/ArrayRef.h"
-#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/MachineMemOperand.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include <cstdint>
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Target/TargetInstrInfo.h"
 
 #define GET_INSTRINFO_HEADER
 #include "MipsGenInstrInfo.inc"
 
 namespace llvm {
-
-class MachineInstr;
-class MachineOperand;
 class MipsSubtarget;
-class TargetRegisterClass;
-class TargetRegisterInfo;
-
 class MipsInstrInfo : public MipsGenInstrInfo {
   virtual void anchor();
-
 protected:
   const MipsSubtarget &Subtarget;
   unsigned UncondBrOpc;
@@ -85,10 +75,6 @@ public:
   /// Determine the opcode of a non-delay slot form for a branch if one exists.
   unsigned getEquivalentCompactForm(const MachineBasicBlock::iterator I) const;
 
-  /// Determine if the branch target is in range.
-  bool isBranchOffsetInRange(unsigned BranchOpc,
-                             int64_t BrOffset) const override;
-
   /// Predicate to determine if an instruction can go in a forbidden slot.
   bool SafeInForbiddenSlot(const MachineInstr &MI) const;
 
@@ -102,6 +88,7 @@ public:
   /// getRegisterInfo - TargetInstrInfo is a superset of MRegister info.  As
   /// such, whenever a client has an instance of instruction info, it should
   /// always be able to get register info as well (through this method).
+  ///
   virtual const MipsRegisterInfo &getRegisterInfo() const = 0;
 
   virtual unsigned getOppositeBranchOpc(unsigned Opc) const = 0;
@@ -148,19 +135,6 @@ public:
   MachineInstrBuilder genInstrWithNewOpc(unsigned NewOpc,
                                          MachineBasicBlock::iterator I) const;
 
-  bool findCommutedOpIndices(const MachineInstr &MI, unsigned &SrcOpIdx1,
-                             unsigned &SrcOpIdx2) const override;
-
-  /// Perform target specific instruction verification.
-  bool verifyInstruction(const MachineInstr &MI,
-                         StringRef &ErrInfo) const override;
-
-  std::pair<unsigned, unsigned>
-  decomposeMachineOperandsTargetFlags(unsigned TF) const override;
-
-  ArrayRef<std::pair<unsigned, const char *>>
-  getSerializableDirectMachineOperandTargetFlags() const override;
-
 protected:
   bool isZeroImm(const MachineOperand &op) const;
 
@@ -182,6 +156,6 @@ private:
 const MipsInstrInfo *createMips16InstrInfo(const MipsSubtarget &STI);
 const MipsInstrInfo *createMipsSEInstrInfo(const MipsSubtarget &STI);
 
-} // end namespace llvm
+}
 
-#endif // LLVM_LIB_TARGET_MIPS_MIPSINSTRINFO_H
+#endif

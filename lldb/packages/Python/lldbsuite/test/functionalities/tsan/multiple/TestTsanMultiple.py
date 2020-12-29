@@ -2,6 +2,8 @@
 Test ThreadSanitizer when multiple different issues are found.
 """
 
+import os
+import time
 import lldb
 from lldbsuite.test.lldbtest import *
 from lldbsuite.test.decorators import *
@@ -16,7 +18,6 @@ class TsanMultipleTestCase(TestBase):
     @expectedFailureAll(
         oslist=["linux"],
         bugnumber="non-core functionality, need to reenable and fix later (DES 2014.11.07)")
-    @expectedFailureNetBSD
     @skipIfFreeBSD  # llvm.org/pr21136 runtimes not yet available by default
     @skipIfRemote
     @skipUnlessThreadSanitizer
@@ -24,8 +25,12 @@ class TsanMultipleTestCase(TestBase):
         self.build()
         self.tsan_tests()
 
+    def setUp(self):
+        # Call super's setUp().
+        TestBase.setUp(self)
+
     def tsan_tests(self):
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.expect(
             "file " + exe,
             patterns=["Current executable set to .*a.out"])

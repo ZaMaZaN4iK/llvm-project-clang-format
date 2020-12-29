@@ -2,8 +2,11 @@
 Test that breakpoint works correctly in the presence of dead-code stripping.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -14,11 +17,18 @@ class DeadStripTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
-    @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr44429")
+    @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr24778")
+    @expectedFailureAll(debug_info="dwo", bugnumber="llvm.org/pr25087")
+    @expectedFailureAll(
+        oslist=["linux"],
+        debug_info="gmodules",
+        bugnumber="llvm.org/pr27865")
+    # The -dead_strip linker option isn't supported on FreeBSD versions of ld.
+    @skipIfFreeBSD
     def test(self):
         """Test breakpoint works correctly with dead-code stripping."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Break by function name f1 (live code).

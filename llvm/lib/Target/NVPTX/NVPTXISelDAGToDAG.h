@@ -1,8 +1,9 @@
 //===-- NVPTXISelDAGToDAG.h - A dag to dag inst selector for NVPTX --------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,7 +18,6 @@
 #include "NVPTXISelLowering.h"
 #include "NVPTXRegisterInfo.h"
 #include "NVPTXTargetMachine.h"
-#include "MCTargetDesc/NVPTXBaseInfo.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/Support/Compiler.h"
@@ -34,8 +34,6 @@ class LLVM_LIBRARY_VISIBILITY NVPTXDAGToDAGISel : public SelectionDAGISel {
   bool usePrecSqrtF32() const;
   bool useF32FTZ() const;
   bool allowFMA() const;
-  bool allowUnsafeFPMath() const;
-  bool useShortPointers() const;
 
 public:
   explicit NVPTXDAGToDAGISel(NVPTXTargetMachine &tm,
@@ -46,7 +44,7 @@ public:
     return "NVPTX DAG->DAG Pattern Instruction Selection";
   }
   bool runOnMachineFunction(MachineFunction &MF) override;
-  const NVPTXSubtarget *Subtarget = nullptr;
+  const NVPTXSubtarget *Subtarget;
 
   bool SelectInlineAsmMemoryOperand(const SDValue &Op,
                                     unsigned ConstraintID,
@@ -71,9 +69,6 @@ private:
   bool tryTextureIntrinsic(SDNode *N);
   bool trySurfaceIntrinsic(SDNode *N);
   bool tryBFE(SDNode *N);
-  bool tryConstantFP16(SDNode *N);
-  bool SelectSETP_F16X2(SDNode *N);
-  bool tryEXTRACT_VECTOR_ELEMENT(SDNode *N);
 
   inline SDValue getI32Imm(unsigned Imm, const SDLoc &DL) {
     return CurDAG->getTargetConstant(Imm, DL, MVT::i32);
@@ -88,6 +83,7 @@ private:
                     SDValue &Offset);
   bool SelectADDRri64(SDNode *OpNode, SDValue Addr, SDValue &Base,
                       SDValue &Offset);
+
   bool SelectADDRsi_imp(SDNode *OpNode, SDValue Addr, SDValue &Base,
                         SDValue &Offset, MVT mvt);
   bool SelectADDRsi(SDNode *OpNode, SDValue Addr, SDValue &Base,

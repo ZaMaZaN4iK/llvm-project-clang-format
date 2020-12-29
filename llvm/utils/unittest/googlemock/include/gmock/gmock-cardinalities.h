@@ -35,8 +35,6 @@
 // cardinalities can be defined by the user implementing the
 // CardinalityInterface interface if necessary.
 
-// IWYU pragma: private, include "gmock/gmock.h"
-
 #ifndef GMOCK_INCLUDE_GMOCK_GMOCK_CARDINALITIES_H_
 #define GMOCK_INCLUDE_GMOCK_GMOCK_CARDINALITIES_H_
 

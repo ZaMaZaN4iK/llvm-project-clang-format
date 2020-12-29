@@ -1,15 +1,15 @@
 //===-- FileCache.cpp -------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Host/FileCache.h"
 
 #include "lldb/Host/File.h"
-#include "lldb/Host/FileSystem.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -23,24 +23,23 @@ FileCache &FileCache::GetInstance() {
   return *m_instance;
 }
 
-lldb::user_id_t FileCache::OpenFile(const FileSpec &file_spec,
-                                    File::OpenOptions flags, uint32_t mode,
-                                    Status &error) {
-  if (!file_spec) {
+lldb::user_id_t FileCache::OpenFile(const FileSpec &file_spec, uint32_t flags,
+                                    uint32_t mode, Error &error) {
+  std::string path(file_spec.GetPath());
+  if (path.empty()) {
     error.SetErrorString("empty path");
     return UINT64_MAX;
   }
-  auto file = FileSystem::Instance().Open(file_spec, flags, mode);
-  if (!file) {
-    error = file.takeError();
+  FileSP file_sp(new File());
+  error = file_sp->Open(path.c_str(), flags, mode);
+  if (file_sp->IsValid() == false)
     return UINT64_MAX;
-  }
-  lldb::user_id_t fd = file.get()->GetDescriptor();
-  m_cache[fd] = std::move(file.get());
+  lldb::user_id_t fd = file_sp->GetDescriptor();
+  m_cache[fd] = file_sp;
   return fd;
 }
 
-bool FileCache::CloseFile(lldb::user_id_t fd, Status &error) {
+bool FileCache::CloseFile(lldb::user_id_t fd, Error &error) {
   if (fd == UINT64_MAX) {
     error.SetErrorString("invalid file descriptor");
     return false;
@@ -50,19 +49,18 @@ bool FileCache::CloseFile(lldb::user_id_t fd, Status &error) {
     error.SetErrorStringWithFormat("invalid host file descriptor %" PRIu64, fd);
     return false;
   }
-  FileUP &file_up = pos->second;
-  if (!file_up) {
+  FileSP file_sp = pos->second;
+  if (!file_sp) {
     error.SetErrorString("invalid host backing file");
     return false;
   }
-  error = file_up->Close();
+  error = file_sp->Close();
   m_cache.erase(pos);
   return error.Success();
 }
 
 uint64_t FileCache::WriteFile(lldb::user_id_t fd, uint64_t offset,
-                              const void *src, uint64_t src_len,
-                              Status &error) {
+                              const void *src, uint64_t src_len, Error &error) {
   if (fd == UINT64_MAX) {
     error.SetErrorString("invalid file descriptor");
     return UINT64_MAX;
@@ -72,23 +70,23 @@ uint64_t FileCache::WriteFile(lldb::user_id_t fd, uint64_t offset,
     error.SetErrorStringWithFormat("invalid host file descriptor %" PRIu64, fd);
     return false;
   }
-  FileUP &file_up = pos->second;
-  if (!file_up) {
+  FileSP file_sp = pos->second;
+  if (!file_sp) {
     error.SetErrorString("invalid host backing file");
     return UINT64_MAX;
   }
-  if (static_cast<uint64_t>(file_up->SeekFromStart(offset, &error)) != offset ||
+  if (static_cast<uint64_t>(file_sp->SeekFromStart(offset, &error)) != offset ||
       error.Fail())
     return UINT64_MAX;
   size_t bytes_written = src_len;
-  error = file_up->Write(src, bytes_written);
+  error = file_sp->Write(src, bytes_written);
   if (error.Fail())
     return UINT64_MAX;
   return bytes_written;
 }
 
 uint64_t FileCache::ReadFile(lldb::user_id_t fd, uint64_t offset, void *dst,
-                             uint64_t dst_len, Status &error) {
+                             uint64_t dst_len, Error &error) {
   if (fd == UINT64_MAX) {
     error.SetErrorString("invalid file descriptor");
     return UINT64_MAX;
@@ -98,16 +96,16 @@ uint64_t FileCache::ReadFile(lldb::user_id_t fd, uint64_t offset, void *dst,
     error.SetErrorStringWithFormat("invalid host file descriptor %" PRIu64, fd);
     return false;
   }
-  FileUP &file_up = pos->second;
-  if (!file_up) {
+  FileSP file_sp = pos->second;
+  if (!file_sp) {
     error.SetErrorString("invalid host backing file");
     return UINT64_MAX;
   }
-  if (static_cast<uint64_t>(file_up->SeekFromStart(offset, &error)) != offset ||
+  if (static_cast<uint64_t>(file_sp->SeekFromStart(offset, &error)) != offset ||
       error.Fail())
     return UINT64_MAX;
   size_t bytes_read = dst_len;
-  error = file_up->Read(dst, bytes_read);
+  error = file_sp->Read(dst, bytes_read);
   if (error.Fail())
     return UINT64_MAX;
   return bytes_read;

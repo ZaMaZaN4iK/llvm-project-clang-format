@@ -1,8 +1,9 @@
 //===-- TargetThreadWindows.h -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -36,14 +37,15 @@ public:
   bool CalculateStopInfo() override;
   Unwind *GetUnwinder() override;
 
-  Status DoResume();
+  bool DoResume();
 
   HostThread GetHostThread() const { return m_host_thread; }
 
 private:
-  lldb::RegisterContextSP m_thread_reg_ctx_sp;
+  lldb::RegisterContextSP CreateRegisterContextForFrameIndex(uint32_t idx);
+
   HostThread m_host_thread;
 };
-} // namespace lldb_private
+}
 
 #endif

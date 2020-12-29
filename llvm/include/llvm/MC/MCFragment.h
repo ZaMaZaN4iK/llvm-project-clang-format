@@ -1,35 +1,33 @@
 //===- MCFragment.h - Fragment type hierarchy -------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_MC_MCFRAGMENT_H
 #define LLVM_MC_MCFRAGMENT_H
 
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/ilist.h"
 #include "llvm/ADT/ilist_node.h"
+#include "llvm/ADT/iterator.h"
 #include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCInst.h"
-#include "llvm/Support/Alignment.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/SMLoc.h"
-#include <cstdint>
-#include <utility>
 
 namespace llvm {
-
 class MCSection;
-class MCSubtargetInfo;
 class MCSymbol;
+class MCSubtargetInfo;
 
 class MCFragment : public ilist_node_with_parent<MCFragment, MCSection> {
   friend class MCAsmLayout;
+
+  MCFragment() = delete;
+  MCFragment(const MCFragment &) = delete;
+  void operator=(const MCFragment &) = delete;
 
 public:
   enum FragmentType : uint8_t {
@@ -42,40 +40,52 @@ public:
     FT_Dwarf,
     FT_DwarfFrame,
     FT_LEB,
-    FT_BoundaryAlign,
-    FT_SymbolId,
+    FT_SafeSEH,
     FT_CVInlineLines,
     FT_CVDefRange,
     FT_Dummy
   };
 
 private:
-  /// The data for the section this fragment is in.
-  MCSection *Parent;
-
-  /// The atom this fragment is in, as represented by its defining symbol.
-  const MCSymbol *Atom;
-
-  /// The offset of this fragment in its section. This is ~0 until
-  /// initialized.
-  uint64_t Offset;
-
-  /// The layout order of this fragment.
-  unsigned LayoutOrder;
-
   FragmentType Kind;
 
 protected:
   bool HasInstructions;
 
+private:
+  /// \brief Should this fragment be aligned to the end of a bundle?
+  bool AlignToBundleEnd;
+
+  uint8_t BundlePadding;
+
+  /// LayoutOrder - The layout order of this fragment.
+  unsigned LayoutOrder;
+
+  /// The data for the section this fragment is in.
+  MCSection *Parent;
+
+  /// Atom - The atom this fragment is in, as represented by it's defining
+  /// symbol.
+  const MCSymbol *Atom;
+
+  /// \name Assembler Backend Data
+  /// @{
+  //
+  // FIXME: This could all be kept private to the assembler implementation.
+
+  /// Offset - The offset of this fragment in its section. This is ~0 until
+  /// initialized.
+  uint64_t Offset;
+
+  /// @}
+
+protected:
   MCFragment(FragmentType Kind, bool HasInstructions,
-             MCSection *Parent = nullptr);
+             uint8_t BundlePadding, MCSection *Parent = nullptr);
+
+  ~MCFragment();
 
 public:
-  MCFragment() = delete;
-  MCFragment(const MCFragment &) = delete;
-  MCFragment &operator=(const MCFragment &) = delete;
-
   /// Destroys the current fragment.
   ///
   /// This must be used instead of delete as MCFragment is non-virtual.
@@ -93,17 +103,35 @@ public:
   unsigned getLayoutOrder() const { return LayoutOrder; }
   void setLayoutOrder(unsigned Value) { LayoutOrder = Value; }
 
-  /// Does this fragment have instructions emitted into it? By default
+  /// \brief Does this fragment have instructions emitted into it? By default
   /// this is false, but specific fragment types may set it to true.
   bool hasInstructions() const { return HasInstructions; }
 
-  void dump() const;
+  /// \brief Should this fragment be placed at the end of an aligned bundle?
+  bool alignToBundleEnd() const { return AlignToBundleEnd; }
+  void setAlignToBundleEnd(bool V) { AlignToBundleEnd = V; }
+
+  /// \brief Get the padding size that must be inserted before this fragment.
+  /// Used for bundling. By default, no padding is inserted.
+  /// Note that padding size is restricted to 8 bits. This is an optimization
+  /// to reduce the amount of space used for each fragment. In practice, larger
+  /// padding should never be required.
+  uint8_t getBundlePadding() const { return BundlePadding; }
+
+  /// \brief Set the padding size for this fragment. By default it's a no-op,
+  /// and only some fragments have a meaningful implementation.
+  void setBundlePadding(uint8_t N) { BundlePadding = N; }
+
+  /// \brief Return true if given frgment has FT_Dummy type.
+  bool isDummy() const { return Kind == FT_Dummy; }
+
+  void dump();
 };
 
 class MCDummyFragment : public MCFragment {
 public:
-  explicit MCDummyFragment(MCSection *Sec) : MCFragment(FT_Dummy, false, Sec) {}
-
+  explicit MCDummyFragment(MCSection *Sec)
+      : MCFragment(FT_Dummy, false, 0, Sec){};
   static bool classof(const MCFragment *F) { return F->getKind() == FT_Dummy; }
 };
 
@@ -111,19 +139,10 @@ public:
 /// data.
 ///
 class MCEncodedFragment : public MCFragment {
-  /// Should this fragment be aligned to the end of a bundle?
-  bool AlignToBundleEnd = false;
-
-  uint8_t BundlePadding = 0;
-
 protected:
   MCEncodedFragment(MCFragment::FragmentType FType, bool HasInstructions,
                     MCSection *Sec)
-      : MCFragment(FType, HasInstructions, Sec) {}
-
-  /// The MCSubtargetInfo in effect when the instruction was encoded.
-  /// It must be non-null for instructions.
-  const MCSubtargetInfo *STI = nullptr;
+      : MCFragment(FType, HasInstructions, 0, Sec) {}
 
 public:
   static bool classof(const MCFragment *F) {
@@ -134,36 +153,8 @@ public:
     case MCFragment::FT_Relaxable:
     case MCFragment::FT_CompactEncodedInst:
     case MCFragment::FT_Data:
-    case MCFragment::FT_Dwarf:
-    case MCFragment::FT_DwarfFrame:
       return true;
     }
-  }
-
-  /// Should this fragment be placed at the end of an aligned bundle?
-  bool alignToBundleEnd() const { return AlignToBundleEnd; }
-  void setAlignToBundleEnd(bool V) { AlignToBundleEnd = V; }
-
-  /// Get the padding size that must be inserted before this fragment.
-  /// Used for bundling. By default, no padding is inserted.
-  /// Note that padding size is restricted to 8 bits. This is an optimization
-  /// to reduce the amount of space used for each fragment. In practice, larger
-  /// padding should never be required.
-  uint8_t getBundlePadding() const { return BundlePadding; }
-
-  /// Set the padding size for this fragment. By default it's a no-op,
-  /// and only some fragments have a meaningful implementation.
-  void setBundlePadding(uint8_t N) { BundlePadding = N; }
-
-  /// Retrieve the MCSubTargetInfo in effect when the instruction was encoded.
-  /// Guaranteed to be non-null if hasInstructions() == true
-  const MCSubtargetInfo *getSubtargetInfo() const { return STI; }
-
-  /// Record that the fragment contains instructions with the MCSubtargetInfo in
-  /// effect when the instruction was encoded.
-  void setHasInstructions(const MCSubtargetInfo &STI) {
-    HasInstructions = true;
-    this->STI = &STI;
   }
 };
 
@@ -192,7 +183,7 @@ template<unsigned ContentsSize, unsigned FixupsSize>
 class MCEncodedFragmentWithFixups :
   public MCEncodedFragmentWithContents<ContentsSize> {
 
-  /// The list of fixups in this fragment.
+  /// Fixups - The list of fixups in this fragment.
   SmallVector<MCFixup, FixupsSize> Fixups;
 
 protected:
@@ -203,9 +194,8 @@ protected:
                                                     Sec) {}
 
 public:
-
-  using const_fixup_iterator = SmallVectorImpl<MCFixup>::const_iterator;
-  using fixup_iterator = SmallVectorImpl<MCFixup>::iterator;
+  typedef SmallVectorImpl<MCFixup>::const_iterator const_fixup_iterator;
+  typedef SmallVectorImpl<MCFixup>::iterator fixup_iterator;
 
   SmallVectorImpl<MCFixup> &getFixups() { return Fixups; }
   const SmallVectorImpl<MCFixup> &getFixups() const { return Fixups; }
@@ -219,8 +209,7 @@ public:
   static bool classof(const MCFragment *F) {
     MCFragment::FragmentType Kind = F->getKind();
     return Kind == MCFragment::FT_Relaxable || Kind == MCFragment::FT_Data ||
-           Kind == MCFragment::FT_CVDefRange || Kind == MCFragment::FT_Dwarf ||
-           Kind == MCFragment::FT_DwarfFrame;
+           Kind == MCFragment::FT_CVDefRange;
   }
 };
 
@@ -230,6 +219,8 @@ class MCDataFragment : public MCEncodedFragmentWithFixups<32, 4> {
 public:
   MCDataFragment(MCSection *Sec = nullptr)
       : MCEncodedFragmentWithFixups<32, 4>(FT_Data, false, Sec) {}
+
+  void setHasInstructions(bool V) { HasInstructions = V; }
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_Data;
@@ -257,17 +248,22 @@ public:
 ///
 class MCRelaxableFragment : public MCEncodedFragmentWithFixups<8, 1> {
 
-  /// The instruction this is a fragment for.
+  /// Inst - The instruction this is a fragment for.
   MCInst Inst;
+
+  /// STI - The MCSubtargetInfo in effect when the instruction was encoded.
+  const MCSubtargetInfo &STI;
 
 public:
   MCRelaxableFragment(const MCInst &Inst, const MCSubtargetInfo &STI,
                       MCSection *Sec = nullptr)
       : MCEncodedFragmentWithFixups(FT_Relaxable, true, Sec),
-        Inst(Inst) { this->STI = &STI; }
+        Inst(Inst), STI(STI) {}
 
   const MCInst &getInst() const { return Inst; }
   void setInst(const MCInst &Value) { Inst = Value; }
+
+  const MCSubtargetInfo &getSubtargetInfo() { return STI; }
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_Relaxable;
@@ -275,29 +271,34 @@ public:
 };
 
 class MCAlignFragment : public MCFragment {
-  /// The alignment to ensure, in bytes.
+
+  /// Alignment - The alignment to ensure, in bytes.
   unsigned Alignment;
 
-  /// Flag to indicate that (optimal) NOPs should be emitted instead
+  /// EmitNops - Flag to indicate that (optimal) NOPs should be emitted instead
   /// of using the provided value. The exact interpretation of this flag is
   /// target dependent.
   bool EmitNops : 1;
 
-  /// Value to use for filling padding bytes.
+  /// Value - Value to use for filling padding bytes.
   int64_t Value;
 
-  /// The size of the integer (in bytes) of \p Value.
+  /// ValueSize - The size of the integer (in bytes) of \p Value.
   unsigned ValueSize;
 
-  /// The maximum number of bytes to emit; if the alignment
+  /// MaxBytesToEmit - The maximum number of bytes to emit; if the alignment
   /// cannot be satisfied in this width then this fragment is ignored.
   unsigned MaxBytesToEmit;
 
 public:
   MCAlignFragment(unsigned Alignment, int64_t Value, unsigned ValueSize,
                   unsigned MaxBytesToEmit, MCSection *Sec = nullptr)
-      : MCFragment(FT_Align, false, Sec), Alignment(Alignment), EmitNops(false),
-        Value(Value), ValueSize(ValueSize), MaxBytesToEmit(MaxBytesToEmit) {}
+      : MCFragment(FT_Align, false, 0, Sec), Alignment(Alignment),
+        EmitNops(false), Value(Value),
+        ValueSize(ValueSize), MaxBytesToEmit(MaxBytesToEmit) {}
+
+  /// \name Accessors
+  /// @{
 
   unsigned getAlignment() const { return Alignment; }
 
@@ -310,32 +311,27 @@ public:
   bool hasEmitNops() const { return EmitNops; }
   void setEmitNops(bool Value) { EmitNops = Value; }
 
+  /// @}
+
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_Align;
   }
 };
 
 class MCFillFragment : public MCFragment {
-  uint8_t ValueSize;
-  /// Value to use for filling bytes.
-  uint64_t Value;
-  /// The number of bytes to insert.
-  const MCExpr &NumValues;
 
-  /// Source location of the directive that this fragment was created for.
-  SMLoc Loc;
+  /// Value to use for filling bytes.
+  uint8_t Value;
+
+  /// The number of bytes to insert.
+  uint64_t Size;
 
 public:
-  MCFillFragment(uint64_t Value, uint8_t VSize, const MCExpr &NumValues,
-                 SMLoc Loc, MCSection *Sec = nullptr)
-      : MCFragment(FT_Fill, false, Sec), ValueSize(VSize), Value(Value),
-        NumValues(NumValues), Loc(Loc) {}
+  MCFillFragment(uint8_t Value, uint64_t Size, MCSection *Sec = nullptr)
+      : MCFragment(FT_Fill, false, 0, Sec), Value(Value), Size(Size) {}
 
-  uint64_t getValue() const { return Value; }
-  uint8_t getValueSize() const { return ValueSize; }
-  const MCExpr &getNumValues() const { return NumValues; }
-
-  SMLoc getLoc() const { return Loc; }
+  uint8_t getValue() const { return Value; }
+  uint64_t getSize() const { return Size; }
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_Fill;
@@ -343,20 +339,23 @@ public:
 };
 
 class MCOrgFragment : public MCFragment {
-  /// Value to use for filling bytes.
-  int8_t Value;
 
-  /// The offset this fragment should start at.
+  /// Offset - The offset this fragment should start at.
   const MCExpr *Offset;
 
-  /// Source location of the directive that this fragment was created for.
+  /// Value - Value to use for filling bytes.
+  int8_t Value;
+
+  /// Loc - Source location of the directive that this fragment was created for.
   SMLoc Loc;
 
 public:
   MCOrgFragment(const MCExpr &Offset, int8_t Value, SMLoc Loc,
                 MCSection *Sec = nullptr)
-      : MCFragment(FT_Org, false, Sec), Value(Value), Offset(&Offset),
-        Loc(Loc) {}
+      : MCFragment(FT_Org, false, 0, Sec), Offset(&Offset), Value(Value), Loc(Loc) {}
+
+  /// \name Accessors
+  /// @{
 
   const MCExpr &getOffset() const { return *Offset; }
 
@@ -364,25 +363,31 @@ public:
 
   SMLoc getLoc() const { return Loc; }
 
+  /// @}
+
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_Org;
   }
 };
 
 class MCLEBFragment : public MCFragment {
-  /// True if this is a sleb128, false if uleb128.
-  bool IsSigned;
 
-  /// The value this fragment should contain.
+  /// Value - The value this fragment should contain.
   const MCExpr *Value;
+
+  /// IsSigned - True if this is a sleb128, false if uleb128.
+  bool IsSigned;
 
   SmallString<8> Contents;
 
 public:
   MCLEBFragment(const MCExpr &Value_, bool IsSigned_, MCSection *Sec = nullptr)
-      : MCFragment(FT_LEB, false, Sec), IsSigned(IsSigned_), Value(&Value_) {
+      : MCFragment(FT_LEB, false, 0, Sec), Value(&Value_), IsSigned(IsSigned_) {
     Contents.push_back(0);
   }
+
+  /// \name Accessors
+  /// @{
 
   const MCExpr &getValue() const { return *Value; }
 
@@ -398,60 +403,89 @@ public:
   }
 };
 
-class MCDwarfLineAddrFragment : public MCEncodedFragmentWithFixups<8, 1> {
-  /// The value of the difference between the two line numbers
+class MCDwarfLineAddrFragment : public MCFragment {
+
+  /// LineDelta - the value of the difference between the two line numbers
   /// between two .loc dwarf directives.
   int64_t LineDelta;
 
-  /// The expression for the difference of the two symbols that
+  /// AddrDelta - The expression for the difference of the two symbols that
   /// make up the address delta between two .loc dwarf directives.
   const MCExpr *AddrDelta;
+
+  SmallString<8> Contents;
 
 public:
   MCDwarfLineAddrFragment(int64_t LineDelta, const MCExpr &AddrDelta,
                           MCSection *Sec = nullptr)
-      : MCEncodedFragmentWithFixups<8, 1>(FT_Dwarf, false, Sec),
-        LineDelta(LineDelta), AddrDelta(&AddrDelta) {}
+      : MCFragment(FT_Dwarf, false, 0, Sec), LineDelta(LineDelta),
+        AddrDelta(&AddrDelta) {
+    Contents.push_back(0);
+  }
+
+  /// \name Accessors
+  /// @{
 
   int64_t getLineDelta() const { return LineDelta; }
 
   const MCExpr &getAddrDelta() const { return *AddrDelta; }
+
+  SmallString<8> &getContents() { return Contents; }
+  const SmallString<8> &getContents() const { return Contents; }
+
+  /// @}
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_Dwarf;
   }
 };
 
-class MCDwarfCallFrameFragment : public MCEncodedFragmentWithFixups<8, 1> {
-  /// The expression for the difference of the two symbols that
+class MCDwarfCallFrameFragment : public MCFragment {
+
+  /// AddrDelta - The expression for the difference of the two symbols that
   /// make up the address delta between two .cfi_* dwarf directives.
   const MCExpr *AddrDelta;
 
+  SmallString<8> Contents;
+
 public:
   MCDwarfCallFrameFragment(const MCExpr &AddrDelta, MCSection *Sec = nullptr)
-      : MCEncodedFragmentWithFixups<8, 1>(FT_DwarfFrame, false, Sec),
-        AddrDelta(&AddrDelta) {}
+      : MCFragment(FT_DwarfFrame, false, 0, Sec), AddrDelta(&AddrDelta) {
+    Contents.push_back(0);
+  }
+
+  /// \name Accessors
+  /// @{
 
   const MCExpr &getAddrDelta() const { return *AddrDelta; }
+
+  SmallString<8> &getContents() { return Contents; }
+  const SmallString<8> &getContents() const { return Contents; }
+
+  /// @}
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_DwarfFrame;
   }
 };
 
-/// Represents a symbol table index fragment.
-class MCSymbolIdFragment : public MCFragment {
+class MCSafeSEHFragment : public MCFragment {
   const MCSymbol *Sym;
 
 public:
-  MCSymbolIdFragment(const MCSymbol *Sym, MCSection *Sec = nullptr)
-      : MCFragment(FT_SymbolId, false, Sec), Sym(Sym) {}
+  MCSafeSEHFragment(const MCSymbol *Sym, MCSection *Sec = nullptr)
+      : MCFragment(FT_SafeSEH, false, 0, Sec), Sym(Sym) {}
+
+  /// \name Accessors
+  /// @{
 
   const MCSymbol *getSymbol() { return Sym; }
   const MCSymbol *getSymbol() const { return Sym; }
 
+  /// @}
+
   static bool classof(const MCFragment *F) {
-    return F->getKind() == MCFragment::FT_SymbolId;
+    return F->getKind() == MCFragment::FT_SafeSEH;
   }
 };
 
@@ -474,15 +508,20 @@ public:
                               unsigned StartLineNum, const MCSymbol *FnStartSym,
                               const MCSymbol *FnEndSym,
                               MCSection *Sec = nullptr)
-      : MCFragment(FT_CVInlineLines, false, Sec), SiteFuncId(SiteFuncId),
+      : MCFragment(FT_CVInlineLines, false, 0, Sec), SiteFuncId(SiteFuncId),
         StartFileId(StartFileId), StartLineNum(StartLineNum),
         FnStartSym(FnStartSym), FnEndSym(FnEndSym) {}
+
+  /// \name Accessors
+  /// @{
 
   const MCSymbol *getFnStartSym() const { return FnStartSym; }
   const MCSymbol *getFnEndSym() const { return FnEndSym; }
 
   SmallString<8> &getContents() { return Contents; }
   const SmallString<8> &getContents() const { return Contents; }
+
+  /// @}
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_CVInlineLines;
@@ -506,53 +545,20 @@ public:
         Ranges(Ranges.begin(), Ranges.end()),
         FixedSizePortion(FixedSizePortion) {}
 
+  /// \name Accessors
+  /// @{
   ArrayRef<std::pair<const MCSymbol *, const MCSymbol *>> getRanges() const {
     return Ranges;
   }
 
   StringRef getFixedSizePortion() const { return FixedSizePortion; }
+  /// @}
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_CVDefRange;
   }
 };
 
-/// Represents required padding such that a particular other set of fragments
-/// does not cross a particular power-of-two boundary. The other fragments must
-/// follow this one within the same section.
-class MCBoundaryAlignFragment : public MCFragment {
-  /// The alignment requirement of the branch to be aligned.
-  Align AlignBoundary;
-  /// Flag to indicate whether the branch is fused.  Use in determining the
-  /// region of fragments being aligned.
-  bool Fused : 1;
-  /// Flag to indicate whether NOPs should be emitted.
-  bool EmitNops : 1;
-  /// The size of the fragment.  The size is lazily set during relaxation, and
-  /// is not meaningful before that.
-  uint64_t Size = 0;
-
-public:
-  MCBoundaryAlignFragment(Align AlignBoundary, bool Fused = false,
-                          bool EmitNops = false, MCSection *Sec = nullptr)
-      : MCFragment(FT_BoundaryAlign, false, Sec), AlignBoundary(AlignBoundary),
-        Fused(Fused), EmitNops(EmitNops) {}
-
-  uint64_t getSize() const { return Size; }
-  void setSize(uint64_t Value) { Size = Value; }
-
-  Align getAlignment() const { return AlignBoundary; }
-
-  bool isFused() const { return Fused; }
-  void setFused(bool Value) { Fused = Value; }
-
-  bool canEmitNops() const { return EmitNops; }
-  void setEmitNops(bool Value) { EmitNops = Value; }
-
-  static bool classof(const MCFragment *F) {
-    return F->getKind() == MCFragment::FT_BoundaryAlign;
-  }
-};
 } // end namespace llvm
 
-#endif // LLVM_MC_MCFRAGMENT_H
+#endif

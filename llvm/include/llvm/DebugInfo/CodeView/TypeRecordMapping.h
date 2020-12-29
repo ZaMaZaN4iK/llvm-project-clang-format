@@ -1,8 +1,9 @@
 //===- TypeRecordMapping.h --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,25 +11,22 @@
 #define LLVM_DEBUGINFO_CODEVIEW_TYPERECORDMAPPING_H
 
 #include "llvm/ADT/Optional.h"
-#include "llvm/DebugInfo/CodeView/CVTypeVisitor.h"
 #include "llvm/DebugInfo/CodeView/CodeViewRecordIO.h"
 #include "llvm/DebugInfo/CodeView/TypeVisitorCallbacks.h"
 #include "llvm/Support/Error.h"
 
 namespace llvm {
-class BinaryStreamReader;
-class BinaryStreamWriter;
-
+namespace msf {
+class StreamReader;
+class StreamWriter;
+}
 namespace codeview {
 class TypeRecordMapping : public TypeVisitorCallbacks {
 public:
-  explicit TypeRecordMapping(BinaryStreamReader &Reader) : IO(Reader) {}
-  explicit TypeRecordMapping(BinaryStreamWriter &Writer) : IO(Writer) {}
-  explicit TypeRecordMapping(CodeViewRecordStreamer &Streamer) : IO(Streamer) {}
+  explicit TypeRecordMapping(msf::StreamReader &Reader) : IO(Reader) {}
+  explicit TypeRecordMapping(msf::StreamWriter &Writer) : IO(Writer) {}
 
-  using TypeVisitorCallbacks::visitTypeBegin;
   Error visitTypeBegin(CVType &Record) override;
-  Error visitTypeBegin(CVType &Record, TypeIndex Index) override;
   Error visitTypeEnd(CVType &Record) override;
 
   Error visitMemberBegin(CVMemberRecord &Record) override;
@@ -40,7 +38,7 @@ public:
   Error visitKnownMember(CVMemberRecord &CVR, Name##Record &Record) override;
 #define TYPE_RECORD_ALIAS(EnumName, EnumVal, Name, AliasName)
 #define MEMBER_RECORD_ALIAS(EnumName, EnumVal, Name, AliasName)
-#include "llvm/DebugInfo/CodeView/CodeViewTypes.def"
+#include "TypeRecords.def"
 
 private:
   Optional<TypeLeafKind> TypeKind;

@@ -1,17 +1,17 @@
 //===- XCoreDisassembler.cpp - Disassembler for XCore -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file is part of the XCore Disassembler.
+/// \brief This file is part of the XCore Disassembler.
 ///
 //===----------------------------------------------------------------------===//
 
-#include "TargetInfo/XCoreTargetInfo.h"
 #include "XCore.h"
 #include "XCoreRegisterInfo.h"
 #include "llvm/MC/MCContext.h"
@@ -29,7 +29,7 @@ typedef MCDisassembler::DecodeStatus DecodeStatus;
 
 namespace {
 
-/// A disassembler class for XCore.
+/// \brief A disassembler class for XCore.
 class XCoreDisassembler : public MCDisassembler {
 public:
   XCoreDisassembler(const MCSubtargetInfo &STI, MCContext &Ctx) :
@@ -37,6 +37,7 @@ public:
 
   DecodeStatus getInstruction(MCInst &Instr, uint64_t &Size,
                               ArrayRef<uint8_t> Bytes, uint64_t Address,
+                              raw_ostream &VStream,
                               raw_ostream &CStream) const override;
 };
 }
@@ -734,10 +735,9 @@ DecodeL4RSrcDstSrcDstInstruction(MCInst &Inst, unsigned Insn, uint64_t Address,
   return S;
 }
 
-MCDisassembler::DecodeStatus
-XCoreDisassembler::getInstruction(MCInst &instr, uint64_t &Size,
-                                  ArrayRef<uint8_t> Bytes, uint64_t Address,
-                                  raw_ostream &cStream) const {
+MCDisassembler::DecodeStatus XCoreDisassembler::getInstruction(
+    MCInst &instr, uint64_t &Size, ArrayRef<uint8_t> Bytes, uint64_t Address,
+    raw_ostream &vStream, raw_ostream &cStream) const {
   uint16_t insn16;
 
   if (!readInstruction16(Bytes, Address, Size, insn16)) {
@@ -768,13 +768,17 @@ XCoreDisassembler::getInstruction(MCInst &instr, uint64_t &Size,
   return Fail;
 }
 
+namespace llvm {
+  Target &getTheXCoreTarget();
+}
+
 static MCDisassembler *createXCoreDisassembler(const Target &T,
                                                const MCSubtargetInfo &STI,
                                                MCContext &Ctx) {
   return new XCoreDisassembler(STI, Ctx);
 }
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeXCoreDisassembler() {
+extern "C" void LLVMInitializeXCoreDisassembler() {
   // Register the disassembler.
   TargetRegistry::RegisterMCDisassembler(getTheXCoreTarget(),
                                          createXCoreDisassembler);

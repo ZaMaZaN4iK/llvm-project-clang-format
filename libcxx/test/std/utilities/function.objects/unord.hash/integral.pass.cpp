@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -30,14 +31,12 @@ test()
     typedef std::hash<T> H;
     static_assert((std::is_same<typename H::argument_type, T>::value), "" );
     static_assert((std::is_same<typename H::result_type, std::size_t>::value), "" );
-    ASSERT_NOEXCEPT(H()(T()));
     H h;
 
     for (int i = 0; i <= 5; ++i)
     {
         T t(static_cast<T>(i));
-        const bool small = std::integral_constant<bool, sizeof(T) <= sizeof(std::size_t)>::value; // avoid compiler warnings
-        if (small)
+        if (sizeof(T) <= sizeof(std::size_t))
         {
             const std::size_t result = h(t);
             LIBCPP_ASSERT(result == static_cast<size_t>(t));
@@ -46,7 +45,7 @@ test()
     }
 }
 
-int main(int, char**)
+int main()
 {
     test<bool>();
     test<char>();
@@ -64,42 +63,42 @@ int main(int, char**)
     test<long long>();
     test<unsigned long long>();
 
-//  LWG #2119
+//	LWG #2119
     test<std::ptrdiff_t>();
     test<size_t>();
 
-    test<int8_t>();
-    test<int16_t>();
-    test<int32_t>();
-    test<int64_t>();
+	test<int8_t>();
+	test<int16_t>();
+	test<int32_t>();
+	test<int64_t>();
 
-    test<int_fast8_t>();
-    test<int_fast16_t>();
-    test<int_fast32_t>();
-    test<int_fast64_t>();
+	test<int_fast8_t>();
+	test<int_fast16_t>();
+	test<int_fast32_t>();
+	test<int_fast64_t>();
 
-    test<int_least8_t>();
-    test<int_least16_t>();
-    test<int_least32_t>();
-    test<int_least64_t>();
+	test<int_least8_t>();
+	test<int_least16_t>();
+	test<int_least32_t>();
+	test<int_least64_t>();
 
     test<intmax_t>();
     test<intptr_t>();
 
-    test<uint8_t>();
-    test<uint16_t>();
-    test<uint32_t>();
-    test<uint64_t>();
+	test<uint8_t>();
+	test<uint16_t>();
+	test<uint32_t>();
+	test<uint64_t>();
 
-    test<uint_fast8_t>();
-    test<uint_fast16_t>();
-    test<uint_fast32_t>();
-    test<uint_fast64_t>();
+	test<uint_fast8_t>();
+	test<uint_fast16_t>();
+	test<uint_fast32_t>();
+	test<uint_fast64_t>();
 
-    test<uint_least8_t>();
-    test<uint_least16_t>();
-    test<uint_least32_t>();
-    test<uint_least64_t>();
+	test<uint_least8_t>();
+	test<uint_least16_t>();
+	test<uint_least32_t>();
+	test<uint_least64_t>();
 
     test<uintmax_t>();
     test<uintptr_t>();
@@ -108,6 +107,4 @@ int main(int, char**)
     test<__int128_t>();
     test<__uint128_t>();
 #endif
-
-  return 0;
 }

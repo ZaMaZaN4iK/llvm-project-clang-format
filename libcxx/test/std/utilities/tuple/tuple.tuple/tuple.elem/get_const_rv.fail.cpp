@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -23,13 +24,11 @@ template <class T> void cref(T const&&) = delete;
 
 std::tuple<int> const tup4() { return std::make_tuple(4); }
 
-int main(int, char**)
+int main()
 {
     // LWG2485: tuple should not open a hole in the type system, get() should
     // imitate [expr.ref]'s rules for accessing data members
     {
         cref(std::get<0>(tup4()));  // expected-error {{call to deleted function 'cref'}}
     }
-
-  return 0;
 }

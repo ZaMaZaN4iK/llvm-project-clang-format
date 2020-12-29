@@ -2,8 +2,11 @@
 Test number of threads.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -15,7 +18,6 @@ class ExitDuringStepTestCase(TestBase):
     mydir = TestBase.compute_mydir(__file__)
 
     @skipIfFreeBSD  # llvm.org/pr21411: test is hanging
-    @skipIfWindows # This is flakey on Windows: llvm.org/pr38373
     def test(self):
         """Test thread exit during step handling."""
         self.build(dictionary=self.getBuildFlags())
@@ -25,7 +27,6 @@ class ExitDuringStepTestCase(TestBase):
             True)
 
     @skipIfFreeBSD  # llvm.org/pr21411: test is hanging
-    @skipIfWindows # This is flakey on Windows: llvm.org/pr38373
     def test_step_over(self):
         """Test thread exit during step-over handling."""
         self.build(dictionary=self.getBuildFlags())
@@ -35,7 +36,6 @@ class ExitDuringStepTestCase(TestBase):
             False)
 
     @skipIfFreeBSD  # llvm.org/pr21411: test is hanging
-    @skipIfWindows # This is flakey on Windows: llvm.org/pr38373
     def test_step_in(self):
         """Test thread exit during step-in handling."""
         self.build(dictionary=self.getBuildFlags())
@@ -53,7 +53,7 @@ class ExitDuringStepTestCase(TestBase):
 
     def exit_during_step_base(self, step_cmd, step_stop_reason, by_instruction):
         """Test thread exit during step handling."""
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # This should create a breakpoint in the main thread.

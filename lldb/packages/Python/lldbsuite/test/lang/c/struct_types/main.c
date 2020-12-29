@@ -1,8 +1,9 @@
 //===-- main.c --------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,11 +27,7 @@ int main (int argc, char const *argv[])
     }; //% self.expect("frame variable pt.padding[0]", DATA_TYPES_DISPLAYED_CORRECTLY, substrs = ["pt.padding[0] = "])
        //% self.expect("frame variable pt.padding[1]", DATA_TYPES_DISPLAYED_CORRECTLY, substrs = ["pt.padding[1] = "])
        //% self.expect("expression -- (pt.padding[0])", DATA_TYPES_DISPLAYED_CORRECTLY, substrs = ["(char)", " = "])
-       //% self.expect("image lookup -t point_tag", DATA_TYPES_DISPLAYED_CORRECTLY, substrs = ['padding[]'])
-
-    struct {} empty;
-    //% self.expect("frame variable empty", substrs = ["empty = {}"])
-    //% self.expect("expression -- sizeof(empty)", substrs = ["= 0"])
+       //% self.expect("image lookup -t point_tag", DATA_TYPES_DISPLAYED_CORRECTLY, substrs = ['padding[]']) # Once rdar://problem/12566646 is fixed, this should display correctly
 
     struct rect_tag {
         struct point_tag bottom_left;
@@ -42,5 +39,5 @@ int main (int argc, char const *argv[])
 
     int sum = sum_things(tts); //% self.expect("expression -- &pt == (struct point_tag*)0", substrs = ['false'])
                                //% self.expect("expression -- sum_things(tts)", substrs = ['9'])
-    return 0;
+    return 0; 
 }

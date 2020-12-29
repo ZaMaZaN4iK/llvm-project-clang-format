@@ -1,8 +1,9 @@
 //===-- DiagnosticManager.cpp -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,8 +11,8 @@
 
 #include "llvm/Support/ErrorHandling.h"
 
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/StreamString.h"
+#include "lldb/Core/Log.h"
+#include "lldb/Core/StreamString.h"
 
 using namespace lldb_private;
 
@@ -21,8 +22,9 @@ void DiagnosticManager::Dump(Log *log) {
 
   std::string str = GetString();
 
-  // GetString() puts a separator after each diagnostic. We want to remove the
-  // last '\n' because log->PutCString will add one for us.
+  // GetString() puts a separator after each diagnostic.
+  // We want to remove the last '\n' because log->PutCString will add one for
+  // us.
 
   if (str.size() && str.back() == '\n') {
     str.pop_back();
@@ -47,7 +49,7 @@ static const char *StringForSeverity(DiagnosticSeverity severity) {
 std::string DiagnosticManager::GetString(char separator) {
   std::string ret;
 
-  for (const auto &diagnostic : Diagnostics()) {
+  for (const Diagnostic *diagnostic : Diagnostics()) {
     ret.append(StringForSeverity(diagnostic->GetSeverity()));
     ret.append(diagnostic->GetMessage());
     ret.push_back(separator);
@@ -70,9 +72,10 @@ size_t DiagnosticManager::Printf(DiagnosticSeverity severity,
   return result;
 }
 
-void DiagnosticManager::PutString(DiagnosticSeverity severity,
-                                  llvm::StringRef str) {
+size_t DiagnosticManager::PutString(DiagnosticSeverity severity,
+                                    llvm::StringRef str) {
   if (str.empty())
-    return;
+    return 0;
   AddDiagnostic(str, severity, eDiagnosticOriginLLDB);
+  return str.size();
 }

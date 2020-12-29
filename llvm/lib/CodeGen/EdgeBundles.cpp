@@ -1,8 +1,9 @@
 //===-------- EdgeBundles.cpp - Bundles of CFG edges ----------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,7 +15,6 @@
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/Passes.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
@@ -28,7 +28,7 @@ ViewEdgeBundles("view-edge-bundles", cl::Hidden,
 char EdgeBundles::ID = 0;
 
 INITIALIZE_PASS(EdgeBundles, "edge-bundles", "Bundle Machine CFG Edges",
-                /* cfg = */true, /* is_analysis = */ true)
+                /* cfg = */true, /* analysis = */ true)
 
 char &llvm::EdgeBundlesID = EdgeBundles::ID;
 
@@ -80,15 +80,13 @@ raw_ostream &WriteGraph<>(raw_ostream &O, const EdgeBundles &G,
   O << "digraph {\n";
   for (const auto &MBB : *MF) {
     unsigned BB = MBB.getNumber();
-    O << "\t\"" << printMBBReference(MBB) << "\" [ shape=box ]\n"
-      << '\t' << G.getBundle(BB, false) << " -> \"" << printMBBReference(MBB)
-      << "\"\n"
-      << "\t\"" << printMBBReference(MBB) << "\" -> " << G.getBundle(BB, true)
-      << '\n';
+    O << "\t\"BB#" << BB << "\" [ shape=box ]\n"
+      << '\t' << G.getBundle(BB, false) << " -> \"BB#" << BB << "\"\n"
+      << "\t\"BB#" << BB << "\" -> " << G.getBundle(BB, true) << '\n';
     for (MachineBasicBlock::const_succ_iterator SI = MBB.succ_begin(),
            SE = MBB.succ_end(); SI != SE; ++SI)
-      O << "\t\"" << printMBBReference(MBB) << "\" -> \""
-        << printMBBReference(**SI) << "\" [ color=lightgray ]\n";
+      O << "\t\"BB#" << BB << "\" -> \"BB#" << (*SI)->getNumber()
+        << "\" [ color=lightgray ]\n";
   }
   O << "}\n";
   return O;

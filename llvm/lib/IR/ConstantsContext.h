@@ -1,8 +1,9 @@
 //===-- ConstantsContext.h - Constants-related Context Interals -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,7 +22,6 @@
 #include "llvm/ADT/None.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/InlineAsm.h"
@@ -43,6 +43,8 @@ namespace llvm {
 /// UnaryConstantExpr - This class is private to Constants.cpp, and is used
 /// behind the scenes to implement unary constant exprs.
 class UnaryConstantExpr : public ConstantExpr {
+  void anchor() override;
+
 public:
   UnaryConstantExpr(unsigned Opcode, Constant *C, Type *Ty)
     : ConstantExpr(Ty, Opcode, &Op<0>(), 1) {
@@ -54,12 +56,16 @@ public:
     return User::operator new(s, 1);
   }
 
+  void *operator new(size_t, unsigned) = delete;
+
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 };
 
 /// BinaryConstantExpr - This class is private to Constants.cpp, and is used
 /// behind the scenes to implement binary constant exprs.
 class BinaryConstantExpr : public ConstantExpr {
+  void anchor() override;
+
 public:
   BinaryConstantExpr(unsigned Opcode, Constant *C1, Constant *C2,
                      unsigned Flags)
@@ -74,6 +80,8 @@ public:
     return User::operator new(s, 2);
   }
 
+  void *operator new(size_t, unsigned) = delete;
+
   /// Transparently provide more efficient getOperand methods.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 };
@@ -81,6 +89,8 @@ public:
 /// SelectConstantExpr - This class is private to Constants.cpp, and is used
 /// behind the scenes to implement select constant exprs.
 class SelectConstantExpr : public ConstantExpr {
+  void anchor() override;
+
 public:
   SelectConstantExpr(Constant *C1, Constant *C2, Constant *C3)
     : ConstantExpr(C2->getType(), Instruction::Select, &Op<0>(), 3) {
@@ -94,6 +104,8 @@ public:
     return User::operator new(s, 3);
   }
 
+  void *operator new(size_t, unsigned) = delete;
+
   /// Transparently provide more efficient getOperand methods.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 };
@@ -102,6 +114,8 @@ public:
 /// Constants.cpp, and is used behind the scenes to implement
 /// extractelement constant exprs.
 class ExtractElementConstantExpr : public ConstantExpr {
+  void anchor() override;
+
 public:
   ExtractElementConstantExpr(Constant *C1, Constant *C2)
     : ConstantExpr(cast<VectorType>(C1->getType())->getElementType(),
@@ -115,6 +129,8 @@ public:
     return User::operator new(s, 2);
   }
 
+  void *operator new(size_t, unsigned) = delete;
+
   /// Transparently provide more efficient getOperand methods.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 };
@@ -123,6 +139,8 @@ public:
 /// Constants.cpp, and is used behind the scenes to implement
 /// insertelement constant exprs.
 class InsertElementConstantExpr : public ConstantExpr {
+  void anchor() override;
+
 public:
   InsertElementConstantExpr(Constant *C1, Constant *C2, Constant *C3)
     : ConstantExpr(C1->getType(), Instruction::InsertElement,
@@ -137,6 +155,8 @@ public:
     return User::operator new(s, 3);
   }
 
+  void *operator new(size_t, unsigned) = delete;
+
   /// Transparently provide more efficient getOperand methods.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 };
@@ -145,11 +165,13 @@ public:
 /// Constants.cpp, and is used behind the scenes to implement
 /// shufflevector constant exprs.
 class ShuffleVectorConstantExpr : public ConstantExpr {
+  void anchor() override;
+
 public:
   ShuffleVectorConstantExpr(Constant *C1, Constant *C2, Constant *C3)
   : ConstantExpr(VectorType::get(
                    cast<VectorType>(C1->getType())->getElementType(),
-                   cast<VectorType>(C3->getType())->getElementCount()),
+                   cast<VectorType>(C3->getType())->getNumElements()),
                  Instruction::ShuffleVector,
                  &Op<0>(), 3) {
     Op<0>() = C1;
@@ -162,6 +184,8 @@ public:
     return User::operator new(s, 3);
   }
 
+  void *operator new(size_t, unsigned) = delete;
+
   /// Transparently provide more efficient getOperand methods.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
 };
@@ -170,6 +194,8 @@ public:
 /// Constants.cpp, and is used behind the scenes to implement
 /// extractvalue constant exprs.
 class ExtractValueConstantExpr : public ConstantExpr {
+  void anchor() override;
+
 public:
   ExtractValueConstantExpr(Constant *Agg, ArrayRef<unsigned> IdxList,
                            Type *DestTy)
@@ -182,6 +208,8 @@ public:
   void *operator new(size_t s) {
     return User::operator new(s, 1);
   }
+
+  void *operator new(size_t, unsigned) = delete;
 
   /// Indices - These identify which value to extract.
   const SmallVector<unsigned, 4> Indices;
@@ -201,6 +229,8 @@ public:
 /// Constants.cpp, and is used behind the scenes to implement
 /// insertvalue constant exprs.
 class InsertValueConstantExpr : public ConstantExpr {
+  void anchor() override;
+
 public:
   InsertValueConstantExpr(Constant *Agg, Constant *Val,
                           ArrayRef<unsigned> IdxList, Type *DestTy)
@@ -214,6 +244,8 @@ public:
   void *operator new(size_t s) {
     return User::operator new(s, 2);
   }
+
+  void *operator new(size_t, unsigned) = delete;
 
   /// Indices - These identify the position for the insertion.
   const SmallVector<unsigned, 4> Indices;
@@ -237,6 +269,8 @@ class GetElementPtrConstantExpr : public ConstantExpr {
 
   GetElementPtrConstantExpr(Type *SrcElementTy, Constant *C,
                             ArrayRef<Constant *> IdxList, Type *DestTy);
+
+  void anchor() override;
 
 public:
   static GetElementPtrConstantExpr *Create(Type *SrcElementTy, Constant *C,
@@ -266,6 +300,8 @@ public:
 // behind the scenes to implement ICmp and FCmp constant expressions. This is
 // needed in order to store the predicate value for these instructions.
 class CompareConstantExpr : public ConstantExpr {
+  void anchor() override;
+
 public:
   unsigned short predicate;
   CompareConstantExpr(Type *ty, Instruction::OtherOps opc,
@@ -279,6 +315,8 @@ public:
   void *operator new(size_t s) {
     return User::operator new(s, 2);
   }
+
+  void *operator new(size_t, unsigned) = delete;
 
   /// Transparently provide more efficient getOperand methods.
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
@@ -349,34 +387,31 @@ struct ConstantExprKeyType;
 
 template <class ConstantClass> struct ConstantInfo;
 template <> struct ConstantInfo<ConstantExpr> {
-  using ValType = ConstantExprKeyType;
-  using TypeClass = Type;
+  typedef ConstantExprKeyType ValType;
+  typedef Type TypeClass;
 };
 template <> struct ConstantInfo<InlineAsm> {
-  using ValType = InlineAsmKeyType;
-  using TypeClass = PointerType;
+  typedef InlineAsmKeyType ValType;
+  typedef PointerType TypeClass;
 };
 template <> struct ConstantInfo<ConstantArray> {
-  using ValType = ConstantAggrKeyType<ConstantArray>;
-  using TypeClass = ArrayType;
+  typedef ConstantAggrKeyType<ConstantArray> ValType;
+  typedef ArrayType TypeClass;
 };
 template <> struct ConstantInfo<ConstantStruct> {
-  using ValType = ConstantAggrKeyType<ConstantStruct>;
-  using TypeClass = StructType;
+  typedef ConstantAggrKeyType<ConstantStruct> ValType;
+  typedef StructType TypeClass;
 };
 template <> struct ConstantInfo<ConstantVector> {
-  using ValType = ConstantAggrKeyType<ConstantVector>;
-  using TypeClass = VectorType;
+  typedef ConstantAggrKeyType<ConstantVector> ValType;
+  typedef VectorType TypeClass;
 };
 
 template <class ConstantClass> struct ConstantAggrKeyType {
   ArrayRef<Constant *> Operands;
-
   ConstantAggrKeyType(ArrayRef<Constant *> Operands) : Operands(Operands) {}
-
   ConstantAggrKeyType(ArrayRef<Constant *> Operands, const ConstantClass *)
       : Operands(Operands) {}
-
   ConstantAggrKeyType(const ConstantClass *C,
                       SmallVectorImpl<Constant *> &Storage) {
     assert(Storage.empty() && "Expected empty storage");
@@ -402,8 +437,7 @@ template <class ConstantClass> struct ConstantAggrKeyType {
     return hash_combine_range(Operands.begin(), Operands.end());
   }
 
-  using TypeClass = typename ConstantInfo<ConstantClass>::TypeClass;
-
+  typedef typename ConstantInfo<ConstantClass>::TypeClass TypeClass;
   ConstantClass *create(TypeClass *Ty) const {
     return new (Operands.size()) ConstantClass(Ty, Operands);
   }
@@ -423,7 +457,6 @@ struct InlineAsmKeyType {
       : AsmString(AsmString), Constraints(Constraints), FTy(FTy),
         HasSideEffects(HasSideEffects), IsAlignStack(IsAlignStack),
         AsmDialect(AsmDialect) {}
-
   InlineAsmKeyType(const InlineAsm *Asm, SmallVectorImpl<Constant *> &)
       : AsmString(Asm->getAsmString()), Constraints(Asm->getConstraintString()),
         FTy(Asm->getFunctionType()), HasSideEffects(Asm->hasSideEffects()),
@@ -450,8 +483,7 @@ struct InlineAsmKeyType {
                         AsmDialect, FTy);
   }
 
-  using TypeClass = ConstantInfo<InlineAsm>::TypeClass;
-
+  typedef ConstantInfo<InlineAsm>::TypeClass TypeClass;
   InlineAsm *create(TypeClass *Ty) const {
     assert(PointerType::getUnqual(FTy) == Ty);
     return new InlineAsm(FTy, AsmString, Constraints, HasSideEffects,
@@ -475,21 +507,17 @@ struct ConstantExprKeyType {
       : Opcode(Opcode), SubclassOptionalData(SubclassOptionalData),
         SubclassData(SubclassData), Ops(Ops), Indexes(Indexes),
         ExplicitTy(ExplicitTy) {}
-
   ConstantExprKeyType(ArrayRef<Constant *> Operands, const ConstantExpr *CE)
       : Opcode(CE->getOpcode()),
         SubclassOptionalData(CE->getRawSubclassOptionalData()),
         SubclassData(CE->isCompare() ? CE->getPredicate() : 0), Ops(Operands),
-        Indexes(CE->hasIndices() ? CE->getIndices() : ArrayRef<unsigned>()),
-        ExplicitTy(nullptr) {}
-
+        Indexes(CE->hasIndices() ? CE->getIndices() : ArrayRef<unsigned>()) {}
   ConstantExprKeyType(const ConstantExpr *CE,
                       SmallVectorImpl<Constant *> &Storage)
       : Opcode(CE->getOpcode()),
         SubclassOptionalData(CE->getRawSubclassOptionalData()),
         SubclassData(CE->isCompare() ? CE->getPredicate() : 0),
-        Indexes(CE->hasIndices() ? CE->getIndices() : ArrayRef<unsigned>()),
-        ExplicitTy(nullptr) {
+        Indexes(CE->hasIndices() ? CE->getIndices() : ArrayRef<unsigned>()) {
     assert(Storage.empty() && "Expected empty storage");
     for (unsigned I = 0, E = CE->getNumOperands(); I != E; ++I)
       Storage.push_back(CE->getOperand(I));
@@ -525,14 +553,11 @@ struct ConstantExprKeyType {
                         hash_combine_range(Indexes.begin(), Indexes.end()));
   }
 
-  using TypeClass = ConstantInfo<ConstantExpr>::TypeClass;
-
+  typedef ConstantInfo<ConstantExpr>::TypeClass TypeClass;
   ConstantExpr *create(TypeClass *Ty) const {
     switch (Opcode) {
     default:
-      if (Instruction::isCast(Opcode) ||
-          (Opcode >= Instruction::UnaryOpsBegin &&
-           Opcode < Instruction::UnaryOpsEnd))
+      if (Instruction::isCast(Opcode))
         return new UnaryConstantExpr(Opcode, Ops[0], Ty);
       if ((Opcode >= Instruction::BinaryOpsBegin &&
            Opcode < Instruction::BinaryOpsEnd))
@@ -569,17 +594,16 @@ struct ConstantExprKeyType {
 
 template <class ConstantClass> class ConstantUniqueMap {
 public:
-  using ValType = typename ConstantInfo<ConstantClass>::ValType;
-  using TypeClass = typename ConstantInfo<ConstantClass>::TypeClass;
-  using LookupKey = std::pair<TypeClass *, ValType>;
+  typedef typename ConstantInfo<ConstantClass>::ValType ValType;
+  typedef typename ConstantInfo<ConstantClass>::TypeClass TypeClass;
+  typedef std::pair<TypeClass *, ValType> LookupKey;
 
   /// Key and hash together, so that we compute the hash only once and reuse it.
-  using LookupKeyHashed = std::pair<unsigned, LookupKey>;
+  typedef std::pair<unsigned, LookupKey> LookupKeyHashed;
 
 private:
   struct MapInfo {
-    using ConstantClassInfo = DenseMapInfo<ConstantClass *>;
-
+    typedef DenseMapInfo<ConstantClass *> ConstantClassInfo;
     static inline ConstantClass *getEmptyKey() {
       return ConstantClassInfo::getEmptyKey();
     }
@@ -619,7 +643,7 @@ private:
   };
 
 public:
-  using MapTy = DenseSet<ConstantClass *, MapInfo>;
+  typedef DenseSet<ConstantClass *, MapInfo> MapTy;
 
 private:
   MapTy Map;
@@ -678,9 +702,9 @@ public:
     /// Hash once, and reuse it for the lookup and the insertion if needed.
     LookupKeyHashed Lookup(MapInfo::getHashValue(Key), Key);
 
-    auto ItMap = Map.find_as(Lookup);
-    if (ItMap != Map.end())
-      return *ItMap;
+    auto I = Map.find_as(Lookup);
+    if (I != Map.end())
+      return *I;
 
     // Update to the new value.  Optimize for the case when we have a single
     // operand that we're changing, but handle bulk updates efficiently.
@@ -698,9 +722,7 @@ public:
     return nullptr;
   }
 
-  void dump() const {
-    LLVM_DEBUG(dbgs() << "Constant.cpp: ConstantUniqueMap\n");
-  }
+  void dump() const { DEBUG(dbgs() << "Constant.cpp: ConstantUniqueMap\n"); }
 };
 
 } // end namespace llvm

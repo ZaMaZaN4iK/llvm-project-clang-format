@@ -1,8 +1,8 @@
-// RUN: %clang_analyze_cc1 -triple i386-apple-darwin8 -analyzer-checker=core,alpha.core -analyzer-store=region -Wno-objc-root-class %s > %t.1 2>&1
+// RUN: %clang_cc1 -triple i386-apple-darwin8 -analyze -analyzer-checker=core,alpha.core -analyzer-store=region -Wno-objc-root-class %s > %t.1 2>&1
 // RUN: FileCheck -input-file=%t.1 -check-prefix=CHECK-darwin8 %s
-// RUN: %clang_analyze_cc1 -triple i386-apple-darwin9 -analyzer-checker=core,alpha.core -analyzer-store=region -Wno-objc-root-class %s > %t.2 2>&1
+// RUN: %clang_cc1 -triple i386-apple-darwin9 -analyze -analyzer-checker=core,alpha.core -analyzer-store=region -Wno-objc-root-class %s > %t.2 2>&1
 // RUN: FileCheck -input-file=%t.2 -check-prefix=CHECK-darwin9 %s
-// RUN: %clang_analyze_cc1 -triple thumbv6-apple-ios4.0 -analyzer-checker=core,alpha.core -analyzer-store=region -Wno-objc-root-class %s > %t.3 2>&1
+// RUN: %clang_cc1 -triple thumbv6-apple-ios4.0 -analyze -analyzer-checker=core,alpha.core -analyzer-store=region -Wno-objc-root-class %s > %t.3 2>&1
 // RUN: FileCheck -input-file=%t.3 -check-prefix=CHECK-darwin9 %s
 
 @interface MyClass {}
@@ -80,7 +80,7 @@ int handleVoidInComma() {
   return [obj voidM], 0;
 }
 
-int marker(void) { // non-void function does not return a value
+int marker(void) { // control reaches end of non-void function
 }
 
 // CHECK-darwin8: warning: The receiver of message 'longDoubleM' is nil and returns a value of type 'long double' that will be garbage

@@ -1,18 +1,28 @@
 //===-- ABISysV_mips.cpp ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "ABISysV_mips.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Triple.h"
 
+// Project includes
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/DataExtractor.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/PluginManager.h"
+#include "lldb/Core/RegisterValue.h"
 #include "lldb/Core/Value.h"
 #include "lldb/Core/ValueObjectConstResult.h"
 #include "lldb/Core/ValueObjectMemory.h"
@@ -23,11 +33,6 @@
 #include "lldb/Target/StackFrame.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/RegisterValue.h"
-#include "lldb/Utility/Status.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -549,15 +554,19 @@ ABISysV_mips::GetRegisterInfoArray(uint32_t &count) {
 
 size_t ABISysV_mips::GetRedZoneSize() const { return 0; }
 
+//------------------------------------------------------------------
 // Static Functions
+//------------------------------------------------------------------
 
 ABISP
-ABISysV_mips::CreateInstance(lldb::ProcessSP process_sp, const ArchSpec &arch) {
+ABISysV_mips::CreateInstance(const ArchSpec &arch) {
+  static ABISP g_abi_sp;
   const llvm::Triple::ArchType arch_type = arch.GetTriple().getArch();
   if ((arch_type == llvm::Triple::mips) ||
       (arch_type == llvm::Triple::mipsel)) {
-    return ABISP(
-        new ABISysV_mips(std::move(process_sp), MakeMCRegisterInfo(arch)));
+    if (!g_abi_sp)
+      g_abi_sp.reset(new ABISysV_mips);
+    return g_abi_sp;
   }
   return ABISP();
 }
@@ -601,8 +610,9 @@ bool ABISysV_mips::PrepareTrivialCall(Thread &thread, addr_t sp,
 
     reg_info = reg_ctx->GetRegisterInfo(eRegisterKindGeneric,
                                         LLDB_REGNUM_GENERIC_ARG1 + i);
-    LLDB_LOGF(log, "About to write arg%zd (0x%" PRIx64 ") into %s", i + 1,
-              args[i], reg_info->name);
+    if (log)
+      log->Printf("About to write arg%zd (0x%" PRIx64 ") into %s", i + 1,
+                  args[i], reg_info->name);
 
     if (!reg_ctx->WriteRegisterFromUnsigned(reg_info, args[i]))
       return false;
@@ -630,8 +640,9 @@ bool ABISysV_mips::PrepareTrivialCall(Thread &thread, addr_t sp,
     size_t i = 4;
     for (; ai != ae; ++ai) {
       reg_value.SetUInt32(*ai);
-      LLDB_LOGF(log, "About to write arg%zd (0x%" PRIx64 ") at  0x%" PRIx64 "",
-                i + 1, args[i], arg_pos);
+      if (log)
+        log->Printf("About to write arg%zd (0x%" PRIx64 ") at  0x%" PRIx64 "",
+                    i + 1, args[i], arg_pos);
 
       if (reg_ctx
               ->WriteRegisterValueToMemory(reg_info, arg_pos,
@@ -643,7 +654,7 @@ bool ABISysV_mips::PrepareTrivialCall(Thread &thread, addr_t sp,
     }
   }
 
-  Status error;
+  Error error;
   const RegisterInfo *pc_reg_info =
       reg_ctx->GetRegisterInfo(eRegisterKindGeneric, LLDB_REGNUM_GENERIC_PC);
   const RegisterInfo *sp_reg_info =
@@ -653,7 +664,8 @@ bool ABISysV_mips::PrepareTrivialCall(Thread &thread, addr_t sp,
   const RegisterInfo *r25_info = reg_ctx->GetRegisterInfoByName("r25", 0);
   const RegisterInfo *r0_info = reg_ctx->GetRegisterInfoByName("zero", 0);
 
-  LLDB_LOGF(log, "Writing R0: 0x%" PRIx64, (uint64_t)0);
+  if (log)
+    log->Printf("Writing R0: 0x%" PRIx64, (uint64_t)0);
 
   /* Write r0 with 0, in case we are stopped in syscall,
    * such setting prevents automatic decrement of the PC.
@@ -662,28 +674,32 @@ bool ABISysV_mips::PrepareTrivialCall(Thread &thread, addr_t sp,
   if (!reg_ctx->WriteRegisterFromUnsigned(r0_info, (uint64_t)0))
     return false;
 
-  LLDB_LOGF(log, "Writing SP: 0x%" PRIx64, (uint64_t)sp);
+  if (log)
+    log->Printf("Writing SP: 0x%" PRIx64, (uint64_t)sp);
 
   // Set "sp" to the requested value
   if (!reg_ctx->WriteRegisterFromUnsigned(sp_reg_info, sp))
     return false;
 
-  LLDB_LOGF(log, "Writing RA: 0x%" PRIx64, (uint64_t)return_addr);
+  if (log)
+    log->Printf("Writing RA: 0x%" PRIx64, (uint64_t)return_addr);
 
   // Set "ra" to the return address
   if (!reg_ctx->WriteRegisterFromUnsigned(ra_reg_info, return_addr))
     return false;
 
-  LLDB_LOGF(log, "Writing PC: 0x%" PRIx64, (uint64_t)func_addr);
+  if (log)
+    log->Printf("Writing PC: 0x%" PRIx64, (uint64_t)func_addr);
 
   // Set pc to the address of the called function.
   if (!reg_ctx->WriteRegisterFromUnsigned(pc_reg_info, func_addr))
     return false;
 
-  LLDB_LOGF(log, "Writing r25: 0x%" PRIx64, (uint64_t)func_addr);
+  if (log)
+    log->Printf("Writing r25: 0x%" PRIx64, (uint64_t)func_addr);
 
-  // All callers of position independent functions must place the address of
-  // the called function in t9 (r25)
+  // All callers of position independent functions must place the address of the
+  // called function in t9 (r25)
   if (!reg_ctx->WriteRegisterFromUnsigned(r25_info, func_addr))
     return false;
 
@@ -694,9 +710,9 @@ bool ABISysV_mips::GetArgumentValues(Thread &thread, ValueList &values) const {
   return false;
 }
 
-Status ABISysV_mips::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
-                                          lldb::ValueObjectSP &new_value_sp) {
-  Status error;
+Error ABISysV_mips::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
+                                         lldb::ValueObjectSP &new_value_sp) {
+  Error error;
   if (!new_value_sp) {
     error.SetErrorString("Empty value object for return value.");
     return error;
@@ -720,7 +736,7 @@ Status ABISysV_mips::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
   if (compiler_type.IsIntegerOrEnumerationType(is_signed) ||
       compiler_type.IsPointerType()) {
     DataExtractor data;
-    Status data_error;
+    Error data_error;
     size_t num_bytes = new_value_sp->GetData(data, data_error);
     if (data_error.Fail()) {
       error.SetErrorStringWithFormat(
@@ -803,11 +819,9 @@ ValueObjectSP ABISysV_mips::GetReturnValueObjectImpl(
 
   // In MIPS register "r2" (v0) holds the integer function return values
   const RegisterInfo *r2_reg_info = reg_ctx->GetRegisterInfoByName("r2", 0);
-  llvm::Optional<uint64_t> bit_width = return_compiler_type.GetBitSize(&thread);
-  if (!bit_width)
-    return return_valobj_sp;
+  size_t bit_width = return_compiler_type.GetBitSize(&thread);
   if (return_compiler_type.IsIntegerOrEnumerationType(is_signed)) {
-    switch (*bit_width) {
+    switch (bit_width) {
     default:
       return return_valobj_sp;
     case 64: {
@@ -853,8 +867,8 @@ ValueObjectSP ABISysV_mips::GetReturnValueObjectImpl(
         UINT32_MAX;
     value.GetScalar() = ptr;
   } else if (return_compiler_type.IsAggregateType()) {
-    // Structure/Vector is always passed in memory and pointer to that memory
-    // is passed in r2.
+    // Structure/Vector is always passed in memory and pointer to that memory is
+    // passed in r2.
     uint64_t mem_address = reg_ctx->ReadRegisterAsUnsigned(
         reg_ctx->GetRegisterInfoByName("r2", 0), 0);
     // We have got the address. Create a memory object out of it
@@ -866,7 +880,7 @@ ValueObjectSP ABISysV_mips::GetReturnValueObjectImpl(
       uint64_t raw_value = reg_ctx->ReadRegisterAsUnsigned(r2_reg_info, 0);
       if (count != 1 && is_complex)
         return return_valobj_sp;
-      switch (*bit_width) {
+      switch (bit_width) {
       default:
         return return_valobj_sp;
       case 32:
@@ -898,7 +912,7 @@ ValueObjectSP ABISysV_mips::GetReturnValueObjectImpl(
       lldb::offset_t offset = 0;
 
       if (count == 1 && !is_complex) {
-        switch (*bit_width) {
+        switch (bit_width) {
         default:
           return return_valobj_sp;
         case 64: {
@@ -991,7 +1005,6 @@ bool ABISysV_mips::CreateDefaultUnwindPlan(UnwindPlan &unwind_plan) {
   unwind_plan.SetSourceName("mips default unwind plan");
   unwind_plan.SetSourcedFromCompiler(eLazyBoolNo);
   unwind_plan.SetUnwindPlanValidAtAllInstructions(eLazyBoolNo);
-  unwind_plan.SetUnwindPlanForSignalTrap(eLazyBoolNo);
   return true;
 }
 
@@ -1055,7 +1068,9 @@ lldb_private::ConstString ABISysV_mips::GetPluginNameStatic() {
   return g_name;
 }
 
+//------------------------------------------------------------------
 // PluginInterface protocol
+//------------------------------------------------------------------
 
 lldb_private::ConstString ABISysV_mips::GetPluginName() {
   return GetPluginNameStatic();

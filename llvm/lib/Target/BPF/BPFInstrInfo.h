@@ -1,8 +1,9 @@
 //===-- BPFInstrInfo.h - BPF Instruction Information ------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,7 +15,7 @@
 #define LLVM_LIB_TARGET_BPF_BPFINSTRINFO_H
 
 #include "BPFRegisterInfo.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/Target/TargetInstrInfo.h"
 
 #define GET_INSTRINFO_HEADER
 #include "BPFGenInstrInfo.inc"
@@ -30,10 +31,8 @@ public:
   const BPFRegisterInfo &getRegisterInfo() const { return RI; }
 
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
-                   const DebugLoc &DL, MCRegister DestReg, MCRegister SrcReg,
+                   const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
                    bool KillSrc) const override;
-
-  bool expandPostRAPseudo(MachineInstr &MI) const override;
 
   void storeRegToStackSlot(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator MBBI, unsigned SrcReg,
@@ -56,9 +55,6 @@ public:
                         MachineBasicBlock *FBB, ArrayRef<MachineOperand> Cond,
                         const DebugLoc &DL,
                         int *BytesAdded = nullptr) const override;
-private:
-  void expandMEMCPY(MachineBasicBlock::iterator) const;
-
 };
 }
 

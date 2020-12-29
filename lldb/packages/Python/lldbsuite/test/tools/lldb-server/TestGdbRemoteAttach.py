@@ -1,3 +1,4 @@
+from __future__ import print_function
 
 
 import gdbremote_testcase
@@ -11,7 +12,6 @@ class TestGdbRemoteAttach(gdbremote_testcase.GdbRemoteTestCaseBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
-    @skipIfDarwinEmbedded # <rdar://problem/34539270> lldb-server tests not updated to work on ios etc yet
     def attach_with_vAttach(self):
         # Start the inferior, start the debug monitor, nothing is attached yet.
         procs = self.prep_debug_monitor_and_inferior(
@@ -58,7 +58,6 @@ class TestGdbRemoteAttach(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.set_inferior_startup_attach_manually()
         self.attach_with_vAttach()
 
-    @expectedFailureNetBSD
     @llgs_test
     def test_attach_with_vAttach_llgs(self):
         self.init_llgs_test()

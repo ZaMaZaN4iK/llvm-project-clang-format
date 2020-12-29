@@ -1,8 +1,9 @@
 //==-- llvm/Support/ThreadPool.cpp - A ThreadPool implementation -*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,15 +14,14 @@
 #include "llvm/Support/ThreadPool.h"
 
 #include "llvm/Config/llvm-config.h"
-#include "llvm/Support/Threading.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
 #if LLVM_ENABLE_THREADS
 
-// Default to hardware_concurrency
-ThreadPool::ThreadPool() : ThreadPool(hardware_concurrency()) {}
+// Default to std::thread::hardware_concurrency
+ThreadPool::ThreadPool() : ThreadPool(std::thread::hardware_concurrency()) {}
 
 ThreadPool::ThreadPool(unsigned ThreadCount)
     : ActiveThreads(0), EnableFlag(true) {
@@ -46,14 +46,18 @@ ThreadPool::ThreadPool(unsigned ThreadCount)
           // in order for wait() to properly detect that even if the queue is
           // empty, there is still a task in flight.
           {
-            std::unique_lock<std::mutex> LockGuard(CompletionLock);
             ++ActiveThreads;
+            std::unique_lock<std::mutex> LockGuard(CompletionLock);
           }
           Task = std::move(Tasks.front());
           Tasks.pop();
         }
         // Run the task we just grabbed
+#ifndef _MSC_VER
         Task();
+#else
+        Task(/* unused */ false);
+#endif
 
         {
           // Adjust `ActiveThreads`, in case someone waits on ThreadPool::wait()
@@ -78,7 +82,7 @@ void ThreadPool::wait() {
                            [&] { return !ActiveThreads && Tasks.empty(); });
 }
 
-std::shared_future<void> ThreadPool::asyncImpl(TaskTy Task) {
+std::shared_future<ThreadPool::VoidTy> ThreadPool::asyncImpl(TaskTy Task) {
   /// Wrap the Task in a packaged_task to return a future object.
   PackagedTaskTy PackagedTask(std::move(Task));
   auto Future = PackagedTask.get_future();
@@ -124,16 +128,25 @@ void ThreadPool::wait() {
   while (!Tasks.empty()) {
     auto Task = std::move(Tasks.front());
     Tasks.pop();
-    Task();
+#ifndef _MSC_VER
+        Task();
+#else
+        Task(/* unused */ false);
+#endif
   }
 }
 
-std::shared_future<void> ThreadPool::asyncImpl(TaskTy Task) {
+std::shared_future<ThreadPool::VoidTy> ThreadPool::asyncImpl(TaskTy Task) {
+#ifndef _MSC_VER
   // Get a Future with launch::deferred execution using std::async
   auto Future = std::async(std::launch::deferred, std::move(Task)).share();
   // Wrap the future so that both ThreadPool::wait() can operate and the
   // returned future can be sync'ed on.
   PackagedTaskTy PackagedTask([Future]() { Future.get(); });
+#else
+  auto Future = std::async(std::launch::deferred, std::move(Task), false).share();
+  PackagedTaskTy PackagedTask([Future](bool) -> bool { Future.get(); return false; });
+#endif
   Tasks.push(std::move(PackagedTask));
   return Future;
 }

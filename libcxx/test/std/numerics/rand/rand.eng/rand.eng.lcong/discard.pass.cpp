@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,8 +16,6 @@
 
 #include <random>
 #include <cassert>
-
-#include "test_macros.h"
 
 template <class T>
 void
@@ -48,17 +47,17 @@ other()
     assert(e1 == e2);
     e1.discard(1);
     assert(e1 != e2);
-    (void)e2();
+    e2();
     assert(e1 == e2);
     e1.discard(3);
     assert(e1 != e2);
-    (void)e2();
-    (void)e2();
-    (void)e2();
+    e2();
+    e2();
+    e2();
     assert(e1 == e2);
 }
 
-int main(int, char**)
+int main()
 {
     rand0<unsigned int>();
     rand0<unsigned long>();
@@ -71,6 +70,4 @@ int main(int, char**)
     other<unsigned int>();
     other<unsigned long>();
     other<unsigned long long>();
-
-  return 0;
 }

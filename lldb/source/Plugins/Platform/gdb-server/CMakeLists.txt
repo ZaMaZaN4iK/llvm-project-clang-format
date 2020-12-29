@@ -1,10 +1,3 @@
-add_lldb_library(lldbPluginPlatformGDB PLUGIN
+add_lldb_library(lldbPluginPlatformGDB
   PlatformRemoteGDBServer.cpp
-
-   LINK_LIBS
-    lldbBreakpoint
-    lldbCore
-    lldbHost
-    lldbTarget
-    lldbPluginProcessUtility
   )

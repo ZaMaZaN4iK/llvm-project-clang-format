@@ -1,8 +1,5 @@
-// REQUIRES: target-is-powerpc64le
-// RUN: %clang_builtins %s %librt -o %t && %run %t
 #include <stdint.h>
 #include <stdio.h>
-#include "int_lib.h"
 
 COMPILER_RT_ABI long double __floatunditf(uint64_t);
 

@@ -1,8 +1,9 @@
 //===---- LatencyPriorityQueue.cpp - A latency-oriented priority queue ----===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,7 +14,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/LatencyPriorityQueue.h"
-#include "llvm/Config/llvm-config.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
@@ -134,19 +134,7 @@ SUnit *LatencyPriorityQueue::pop() {
 void LatencyPriorityQueue::remove(SUnit *SU) {
   assert(!Queue.empty() && "Queue is empty!");
   std::vector<SUnit *>::iterator I = find(Queue, SU);
-  assert(I != Queue.end() && "Queue doesn't contain the SU being removed!");
   if (I != std::prev(Queue.end()))
     std::swap(*I, Queue.back());
   Queue.pop_back();
 }
-
-#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-LLVM_DUMP_METHOD void LatencyPriorityQueue::dump(ScheduleDAG *DAG) const {
-  dbgs() << "Latency Priority Queue\n";
-  dbgs() << "  Number of Queue Entries: " << Queue.size() << "\n";
-  for (const SUnit *SU : Queue) {
-    dbgs() << "    ";
-    DAG->dumpNode(*SU);
-  }
-}
-#endif

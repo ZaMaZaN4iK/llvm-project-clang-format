@@ -1,106 +1,66 @@
 //===-- X86AsmBackend.cpp - X86 Assembler Backend -------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "MCTargetDesc/X86BaseInfo.h"
 #include "MCTargetDesc/X86FixupKinds.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "llvm/BinaryFormat/ELF.h"
-#include "llvm/BinaryFormat/MachO.h"
 #include "llvm/MC/MCAsmBackend.h"
-#include "llvm/MC/MCAssembler.h"
-#include "llvm/MC/MCContext.h"
-#include "llvm/MC/MCDwarf.h"
 #include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCFixupKindInfo.h"
 #include "llvm/MC/MCInst.h"
-#include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCMachObjectWriter.h"
-#include "llvm/MC/MCObjectStreamer.h"
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/MC/MCSectionCOFF.h"
+#include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCSectionMachO.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/MCValue.h"
-#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/ELF.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MachO.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
-
 using namespace llvm;
 
-namespace {
-/// A wrapper for holding a mask of the values from X86::AlignBranchBoundaryKind
-class X86AlignBranchKind {
-private:
-  uint8_t AlignBranchKind = 0;
-
-public:
-  void operator=(const std::string &Val) {
-    if (Val.empty())
-      return;
-    SmallVector<StringRef, 6> BranchTypes;
-    StringRef(Val).split(BranchTypes, '+', -1, false);
-    for (auto BranchType : BranchTypes) {
-      if (BranchType == "fused")
-        addKind(X86::AlignBranchFused);
-      else if (BranchType == "jcc")
-        addKind(X86::AlignBranchJcc);
-      else if (BranchType == "jmp")
-        addKind(X86::AlignBranchJmp);
-      else if (BranchType == "call")
-        addKind(X86::AlignBranchCall);
-      else if (BranchType == "ret")
-        addKind(X86::AlignBranchRet);
-      else if (BranchType == "indirect")
-        addKind(X86::AlignBranchIndirect);
-      else {
-        report_fatal_error(
-            "'-x86-align-branch 'The branches's type is combination of jcc, "
-            "fused, jmp, call, ret, indirect.(plus separated)",
-            false);
-      }
-    }
+static unsigned getFixupKindLog2Size(unsigned Kind) {
+  switch (Kind) {
+  default:
+    llvm_unreachable("invalid fixup kind!");
+  case FK_PCRel_1:
+  case FK_SecRel_1:
+  case FK_Data_1:
+    return 0;
+  case FK_PCRel_2:
+  case FK_SecRel_2:
+  case FK_Data_2:
+    return 1;
+  case FK_PCRel_4:
+  case X86::reloc_riprel_4byte:
+  case X86::reloc_riprel_4byte_relax:
+  case X86::reloc_riprel_4byte_relax_rex:
+  case X86::reloc_riprel_4byte_movq_load:
+  case X86::reloc_signed_4byte:
+  case X86::reloc_signed_4byte_relax:
+  case X86::reloc_global_offset_table:
+  case FK_SecRel_4:
+  case FK_Data_4:
+    return 2;
+  case FK_PCRel_8:
+  case FK_SecRel_8:
+  case FK_Data_8:
+  case X86::reloc_global_offset_table8:
+    return 3;
   }
+}
 
-  operator uint8_t() const { return AlignBranchKind; }
-  void addKind(X86::AlignBranchBoundaryKind Value) { AlignBranchKind |= Value; }
-};
-
-X86AlignBranchKind X86AlignBranchKindLoc;
-
-cl::opt<unsigned> X86AlignBranchBoundary(
-    "x86-align-branch-boundary", cl::init(0),
-    cl::desc(
-        "Control how the assembler should align branches with NOP. If the "
-        "boundary's size is not 0, it should be a power of 2 and no less "
-        "than 32. Branches will be aligned to prevent from being across or "
-        "against the boundary of specified size. The default value 0 does not "
-        "align branches."));
-
-cl::opt<X86AlignBranchKind, true, cl::parser<std::string>> X86AlignBranch(
-    "x86-align-branch",
-    cl::desc(
-        "Specify types of branches to align. The branches's types are "
-        "combination of jcc, fused, jmp, call, ret, indirect. jcc indicates "
-        "conditional jumps, fused indicates fused conditional jumps, jmp "
-        "indicates unconditional jumps, call indicates direct and indirect "
-        "calls, ret indicates rets, indirect indicates indirect jumps."),
-    cl::value_desc("(plus separated list of types)"),
-    cl::location(X86AlignBranchKindLoc));
-
-cl::opt<bool> X86AlignBranchWithin32BBoundaries(
-    "x86-branches-within-32B-boundaries", cl::init(false),
-    cl::desc(
-        "Align selected instructions to mitigate negative performance impact "
-        "of Intel's micro code update for errata skx102.  May break "
-        "assumptions about labels corresponding to particular instructions, "
-        "and should be used with caution."));
+namespace {
 
 class X86ELFObjectWriter : public MCELFObjectTargetWriter {
 public:
@@ -110,62 +70,63 @@ public:
 };
 
 class X86AsmBackend : public MCAsmBackend {
-  const MCSubtargetInfo &STI;
-  std::unique_ptr<const MCInstrInfo> MCII;
-  X86AlignBranchKind AlignBranchType;
-  Align AlignBoundary;
-
-  bool isMacroFused(const MCInst &Cmp, const MCInst &Jcc) const;
-
-  bool needAlign(MCObjectStreamer &OS) const;
-  bool needAlignInst(const MCInst &Inst) const;
-  MCBoundaryAlignFragment *
-  getOrCreateBoundaryAlignFragment(MCObjectStreamer &OS) const;
-  MCInst PrevInst;
-
+  const StringRef CPU;
+  bool HasNopl;
+  const uint64_t MaxNopLength;
 public:
-  X86AsmBackend(const Target &T, const MCSubtargetInfo &STI)
-      : MCAsmBackend(support::little), STI(STI),
-        MCII(T.createMCInstrInfo()) {
-    if (X86AlignBranchWithin32BBoundaries) {
-      // At the moment, this defaults to aligning fused branches, unconditional
-      // jumps, and (unfused) conditional jumps with nops.  Both the
-      // instructions aligned and the alignment method (nop vs prefix) may
-      // change in the future.
-      AlignBoundary = assumeAligned(32);;
-      AlignBranchType.addKind(X86::AlignBranchFused);
-      AlignBranchType.addKind(X86::AlignBranchJcc);
-      AlignBranchType.addKind(X86::AlignBranchJmp);
-    }
-    // Allow overriding defaults set by master flag
-    if (X86AlignBranchBoundary.getNumOccurrences())
-      AlignBoundary = assumeAligned(X86AlignBranchBoundary);
-    if (X86AlignBranch.getNumOccurrences())
-      AlignBranchType = X86AlignBranchKindLoc;
+  X86AsmBackend(const Target &T, StringRef CPU)
+      : MCAsmBackend(), CPU(CPU),
+        MaxNopLength((CPU == "slm") ? 7 : 15) {
+    HasNopl = CPU != "generic" && CPU != "i386" && CPU != "i486" &&
+              CPU != "i586" && CPU != "pentium" && CPU != "pentium-mmx" &&
+              CPU != "i686" && CPU != "k6" && CPU != "k6-2" && CPU != "k6-3" &&
+              CPU != "geode" && CPU != "winchip-c6" && CPU != "winchip2" &&
+              CPU != "c3" && CPU != "c3-2" && CPU != "lakemont";
   }
-
-  bool allowAutoPadding() const override;
-  void alignBranchesBegin(MCObjectStreamer &OS, const MCInst &Inst) override;
-  void alignBranchesEnd(MCObjectStreamer &OS, const MCInst &Inst) override;
 
   unsigned getNumFixupKinds() const override {
     return X86::NumTargetFixupKinds;
   }
 
-  Optional<MCFixupKind> getFixupKind(StringRef Name) const override;
+  const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override {
+    const static MCFixupKindInfo Infos[X86::NumTargetFixupKinds] = {
+        {"reloc_riprel_4byte", 0, 32, MCFixupKindInfo::FKF_IsPCRel},
+        {"reloc_riprel_4byte_movq_load", 0, 32, MCFixupKindInfo::FKF_IsPCRel},
+        {"reloc_riprel_4byte_relax", 0, 32, MCFixupKindInfo::FKF_IsPCRel},
+        {"reloc_riprel_4byte_relax_rex", 0, 32, MCFixupKindInfo::FKF_IsPCRel},
+        {"reloc_signed_4byte", 0, 32, 0},
+        {"reloc_signed_4byte_relax", 0, 32, 0},
+        {"reloc_global_offset_table", 0, 32, 0},
+        {"reloc_global_offset_table8", 0, 64, 0},
+    };
 
-  const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override;
-  
-  bool shouldForceRelocation(const MCAssembler &Asm, const MCFixup &Fixup,
-                             const MCValue &Target) override;
+    if (Kind < FirstTargetFixupKind)
+      return MCAsmBackend::getFixupKindInfo(Kind);
 
-  void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
-                  const MCValue &Target, MutableArrayRef<char> Data,
-                  uint64_t Value, bool IsResolved,
-                  const MCSubtargetInfo *STI) const override;
+    assert(unsigned(Kind - FirstTargetFixupKind) < getNumFixupKinds() &&
+           "Invalid kind!");
+    return Infos[Kind - FirstTargetFixupKind];
+  }
 
-  bool mayNeedRelaxation(const MCInst &Inst,
-                         const MCSubtargetInfo &STI) const override;
+  void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
+                  uint64_t Value, bool IsPCRel) const override {
+    unsigned Size = 1 << getFixupKindLog2Size(Fixup.getKind());
+
+    assert(Fixup.getOffset() + Size <= DataSize &&
+           "Invalid fixup offset!");
+
+    // Check that uppper bits are either all zeros or all ones.
+    // Specifically ignore overflow/underflow as long as the leakage is
+    // limited to the lower bits. This is to remain compatible with
+    // other assemblers.
+    assert(isIntN(Size * 8 + 1, Value) &&
+           "Value does not fit in the Fixup field");
+
+    for (unsigned i = 0; i != Size; ++i)
+      Data[Fixup.getOffset() + i] = uint8_t(Value >> (i * 8));
+  }
+
+  bool mayNeedRelaxation(const MCInst &Inst) const override;
 
   bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                             const MCRelaxableFragment *DF,
@@ -174,7 +135,7 @@ public:
   void relaxInstruction(const MCInst &Inst, const MCSubtargetInfo &STI,
                         MCInst &Res) const override;
 
-  bool writeNopData(raw_ostream &OS, uint64_t Count) const override;
+  bool writeNopData(uint64_t Count, MCObjectWriter *OW) const override;
 };
 } // end anonymous namespace
 
@@ -183,10 +144,40 @@ static unsigned getRelaxedOpcodeBranch(const MCInst &Inst, bool is16BitMode) {
   switch (Op) {
   default:
     return Op;
-  case X86::JCC_1:
-    return (is16BitMode) ? X86::JCC_2 : X86::JCC_4;
+  case X86::JAE_1:
+    return (is16BitMode) ? X86::JAE_2 : X86::JAE_4;
+  case X86::JA_1:
+    return (is16BitMode) ? X86::JA_2 : X86::JA_4;
+  case X86::JBE_1:
+    return (is16BitMode) ? X86::JBE_2 : X86::JBE_4;
+  case X86::JB_1:
+    return (is16BitMode) ? X86::JB_2 : X86::JB_4;
+  case X86::JE_1:
+    return (is16BitMode) ? X86::JE_2 : X86::JE_4;
+  case X86::JGE_1:
+    return (is16BitMode) ? X86::JGE_2 : X86::JGE_4;
+  case X86::JG_1:
+    return (is16BitMode) ? X86::JG_2 : X86::JG_4;
+  case X86::JLE_1:
+    return (is16BitMode) ? X86::JLE_2 : X86::JLE_4;
+  case X86::JL_1:
+    return (is16BitMode) ? X86::JL_2 : X86::JL_4;
   case X86::JMP_1:
     return (is16BitMode) ? X86::JMP_2 : X86::JMP_4;
+  case X86::JNE_1:
+    return (is16BitMode) ? X86::JNE_2 : X86::JNE_4;
+  case X86::JNO_1:
+    return (is16BitMode) ? X86::JNO_2 : X86::JNO_4;
+  case X86::JNP_1:
+    return (is16BitMode) ? X86::JNP_2 : X86::JNP_4;
+  case X86::JNS_1:
+    return (is16BitMode) ? X86::JNS_2 : X86::JNS_4;
+  case X86::JO_1:
+    return (is16BitMode) ? X86::JO_2 : X86::JO_4;
+  case X86::JP_1:
+    return (is16BitMode) ? X86::JP_2 : X86::JP_4;
+  case X86::JS_1:
+    return (is16BitMode) ? X86::JS_2 : X86::JS_4;
   }
 }
 
@@ -282,309 +273,7 @@ static unsigned getRelaxedOpcode(const MCInst &Inst, bool is16BitMode) {
   return getRelaxedOpcodeBranch(Inst, is16BitMode);
 }
 
-static X86::CondCode getCondFromBranch(const MCInst &MI,
-                                       const MCInstrInfo &MCII) {
-  unsigned Opcode = MI.getOpcode();
-  switch (Opcode) {
-  default:
-    return X86::COND_INVALID;
-  case X86::JCC_1: {
-    const MCInstrDesc &Desc = MCII.get(Opcode);
-    return static_cast<X86::CondCode>(
-        MI.getOperand(Desc.getNumOperands() - 1).getImm());
-  }
-  }
-}
-
-static X86::SecondMacroFusionInstKind
-classifySecondInstInMacroFusion(const MCInst &MI, const MCInstrInfo &MCII) {
-  X86::CondCode CC = getCondFromBranch(MI, MCII);
-  return classifySecondCondCodeInMacroFusion(CC);
-}
-
-/// Check if the instruction uses RIP relative addressing.
-static bool isRIPRelative(const MCInst &MI, const MCInstrInfo &MCII) {
-  unsigned Opcode = MI.getOpcode();
-  const MCInstrDesc &Desc = MCII.get(Opcode);
-  uint64_t TSFlags = Desc.TSFlags;
-  unsigned CurOp = X86II::getOperandBias(Desc);
-  int MemoryOperand = X86II::getMemoryOperandNo(TSFlags);
-  if (MemoryOperand < 0)
-    return false;
-  unsigned BaseRegNum = MemoryOperand + CurOp + X86::AddrBaseReg;
-  unsigned BaseReg = MI.getOperand(BaseRegNum).getReg();
-  return (BaseReg == X86::RIP);
-}
-
-/// Check if the instruction is valid as the first instruction in macro fusion.
-static bool isFirstMacroFusibleInst(const MCInst &Inst,
-                                    const MCInstrInfo &MCII) {
-  // An Intel instruction with RIP relative addressing is not macro fusible.
-  if (isRIPRelative(Inst, MCII))
-    return false;
-  X86::FirstMacroFusionInstKind FIK =
-      X86::classifyFirstOpcodeInMacroFusion(Inst.getOpcode());
-  return FIK != X86::FirstMacroFusionInstKind::Invalid;
-}
-
-/// Check if the two instructions will be macro-fused on the target cpu.
-bool X86AsmBackend::isMacroFused(const MCInst &Cmp, const MCInst &Jcc) const {
-  const MCInstrDesc &InstDesc = MCII->get(Jcc.getOpcode());
-  if (!InstDesc.isConditionalBranch())
-    return false;
-  if (!isFirstMacroFusibleInst(Cmp, *MCII))
-    return false;
-  const X86::FirstMacroFusionInstKind CmpKind =
-      X86::classifyFirstOpcodeInMacroFusion(Cmp.getOpcode());
-  const X86::SecondMacroFusionInstKind BranchKind =
-      classifySecondInstInMacroFusion(Jcc, *MCII);
-  return X86::isMacroFused(CmpKind, BranchKind);
-}
-
-/// Check if the instruction has a variant symbol operand.
-static bool hasVariantSymbol(const MCInst &MI) {
-  for (auto &Operand : MI) {
-    if (!Operand.isExpr())
-      continue;
-    const MCExpr &Expr = *Operand.getExpr();
-    if (Expr.getKind() == MCExpr::SymbolRef &&
-        cast<MCSymbolRefExpr>(Expr).getKind() != MCSymbolRefExpr::VK_None)
-      return true;
-  }
-  return false;
-}
-
-bool X86AsmBackend::allowAutoPadding() const {
-  return (AlignBoundary != Align::None() &&
-          AlignBranchType != X86::AlignBranchNone);
-}
-
-bool X86AsmBackend::needAlign(MCObjectStreamer &OS) const {
-  if (!OS.getAllowAutoPadding())
-    return false;
-  assert(allowAutoPadding() && "incorrect initialization!");
-
-  MCAssembler &Assembler = OS.getAssembler();
-  MCSection *Sec = OS.getCurrentSectionOnly();
-  // To be Done: Currently don't deal with Bundle cases.
-  if (Assembler.isBundlingEnabled() && Sec->isBundleLocked())
-    return false;
-
-  // Branches only need to be aligned in 32-bit or 64-bit mode.
-  if (!(STI.hasFeature(X86::Mode64Bit) || STI.hasFeature(X86::Mode32Bit)))
-    return false;
-
-  return true;
-}
-
-/// Check if the instruction operand needs to be aligned. Padding is disabled
-/// before intruction which may be rewritten by linker(e.g. TLSCALL).
-bool X86AsmBackend::needAlignInst(const MCInst &Inst) const {
-  // Linker may rewrite the instruction with variant symbol operand.
-  if (hasVariantSymbol(Inst))
-    return false;
-
-  const MCInstrDesc &InstDesc = MCII->get(Inst.getOpcode());
-  return (InstDesc.isConditionalBranch() &&
-          (AlignBranchType & X86::AlignBranchJcc)) ||
-         (InstDesc.isUnconditionalBranch() &&
-          (AlignBranchType & X86::AlignBranchJmp)) ||
-         (InstDesc.isCall() &&
-          (AlignBranchType & X86::AlignBranchCall)) ||
-         (InstDesc.isReturn() &&
-          (AlignBranchType & X86::AlignBranchRet)) ||
-         (InstDesc.isIndirectBranch() &&
-          (AlignBranchType & X86::AlignBranchIndirect));
-}
-
-static bool canReuseBoundaryAlignFragment(const MCBoundaryAlignFragment &F) {
-  // If a MCBoundaryAlignFragment has not been used to emit NOP,we can reuse it.
-  return !F.canEmitNops();
-}
-
-MCBoundaryAlignFragment *
-X86AsmBackend::getOrCreateBoundaryAlignFragment(MCObjectStreamer &OS) const {
-  auto *F = dyn_cast_or_null<MCBoundaryAlignFragment>(OS.getCurrentFragment());
-  if (!F || !canReuseBoundaryAlignFragment(*F)) {
-    F = new MCBoundaryAlignFragment(AlignBoundary);
-    OS.insert(F);
-  }
-  return F;
-}
-
-/// Insert MCBoundaryAlignFragment before instructions to align branches.
-void X86AsmBackend::alignBranchesBegin(MCObjectStreamer &OS,
-                                       const MCInst &Inst) {
-  if (!needAlign(OS))
-    return;
-
-  MCFragment *CF = OS.getCurrentFragment();
-  bool NeedAlignFused = AlignBranchType & X86::AlignBranchFused;
-  if (NeedAlignFused && isMacroFused(PrevInst, Inst) && CF) {
-    // Macro fusion actually happens and there is no other fragment inserted
-    // after the previous instruction. NOP can be emitted in PF to align fused
-    // jcc.
-    if (auto *PF =
-            dyn_cast_or_null<MCBoundaryAlignFragment>(CF->getPrevNode())) {
-      const_cast<MCBoundaryAlignFragment *>(PF)->setEmitNops(true);
-      const_cast<MCBoundaryAlignFragment *>(PF)->setFused(true);
-    }
-  } else if (needAlignInst(Inst)) {
-    // Note: When there is at least one fragment, such as MCAlignFragment,
-    // inserted after the previous instruction, e.g.
-    //
-    // \code
-    //   cmp %rax %rcx
-    //   .align 16
-    //   je .Label0
-    // \ endcode
-    //
-    // We will treat the JCC as a unfused branch although it may be fused
-    // with the CMP.
-    auto *F = getOrCreateBoundaryAlignFragment(OS);
-    F->setEmitNops(true);
-    F->setFused(false);
-  } else if (NeedAlignFused && isFirstMacroFusibleInst(Inst, *MCII)) {
-    // We don't know if macro fusion happens until the reaching the next
-    // instruction, so a place holder is put here if necessary.
-    getOrCreateBoundaryAlignFragment(OS);
-  }
-
-  PrevInst = Inst;
-}
-
-/// Insert a MCBoundaryAlignFragment to mark the end of the branch to be aligned
-/// if necessary.
-void X86AsmBackend::alignBranchesEnd(MCObjectStreamer &OS, const MCInst &Inst) {
-  if (!needAlign(OS))
-    return;
-  // If the branch is emitted into a MCRelaxableFragment, we can determine the
-  // size of the branch easily in MCAssembler::relaxBoundaryAlign. When the
-  // branch is fused, the fused branch(macro fusion pair) must be emitted into
-  // two fragments. Or when the branch is unfused, the branch must be emitted
-  // into one fragment. The MCRelaxableFragment naturally marks the end of the
-  // fused or unfused branch.
-  // Otherwise, we need to insert a MCBoundaryAlignFragment to mark the end of
-  // the branch. This MCBoundaryAlignFragment may be reused to emit NOP to align
-  // other branch.
-  if (needAlignInst(Inst) && !isa<MCRelaxableFragment>(OS.getCurrentFragment()))
-    OS.insert(new MCBoundaryAlignFragment(AlignBoundary));
-
-  // Update the maximum alignment on the current section if necessary.
-  MCSection *Sec = OS.getCurrentSectionOnly();
-  if (AlignBoundary.value() > Sec->getAlignment())
-    Sec->setAlignment(AlignBoundary);
-}
-
-Optional<MCFixupKind> X86AsmBackend::getFixupKind(StringRef Name) const {
-  if (STI.getTargetTriple().isOSBinFormatELF()) {
-    if (STI.getTargetTriple().getArch() == Triple::x86_64) {
-      if (Name == "R_X86_64_NONE")
-        return FK_NONE;
-    } else {
-      if (Name == "R_386_NONE")
-        return FK_NONE;
-    }
-  }
-  return MCAsmBackend::getFixupKind(Name);
-}
-
-const MCFixupKindInfo &X86AsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
-  const static MCFixupKindInfo Infos[X86::NumTargetFixupKinds] = {
-      {"reloc_riprel_4byte", 0, 32, MCFixupKindInfo::FKF_IsPCRel},
-      {"reloc_riprel_4byte_movq_load", 0, 32, MCFixupKindInfo::FKF_IsPCRel},
-      {"reloc_riprel_4byte_relax", 0, 32, MCFixupKindInfo::FKF_IsPCRel},
-      {"reloc_riprel_4byte_relax_rex", 0, 32, MCFixupKindInfo::FKF_IsPCRel},
-      {"reloc_signed_4byte", 0, 32, 0},
-      {"reloc_signed_4byte_relax", 0, 32, 0},
-      {"reloc_global_offset_table", 0, 32, 0},
-      {"reloc_global_offset_table8", 0, 64, 0},
-      {"reloc_branch_4byte_pcrel", 0, 32, MCFixupKindInfo::FKF_IsPCRel},
-  };
-
-  if (Kind < FirstTargetFixupKind)
-    return MCAsmBackend::getFixupKindInfo(Kind);
-
-  assert(unsigned(Kind - FirstTargetFixupKind) < getNumFixupKinds() &&
-         "Invalid kind!");
-  assert(Infos[Kind - FirstTargetFixupKind].Name && "Empty fixup name!");
-  return Infos[Kind - FirstTargetFixupKind];
-}
-
-bool X86AsmBackend::shouldForceRelocation(const MCAssembler &,
-                                          const MCFixup &Fixup,
-                                          const MCValue &) {
-  return Fixup.getKind() == FK_NONE;
-}
-
-static unsigned getFixupKindSize(unsigned Kind) {
-  switch (Kind) {
-  default:
-    llvm_unreachable("invalid fixup kind!");
-  case FK_NONE:
-    return 0;
-  case FK_PCRel_1:
-  case FK_SecRel_1:
-  case FK_Data_1:
-    return 1;
-  case FK_PCRel_2:
-  case FK_SecRel_2:
-  case FK_Data_2:
-    return 2;
-  case FK_PCRel_4:
-  case X86::reloc_riprel_4byte:
-  case X86::reloc_riprel_4byte_relax:
-  case X86::reloc_riprel_4byte_relax_rex:
-  case X86::reloc_riprel_4byte_movq_load:
-  case X86::reloc_signed_4byte:
-  case X86::reloc_signed_4byte_relax:
-  case X86::reloc_global_offset_table:
-  case X86::reloc_branch_4byte_pcrel:
-  case FK_SecRel_4:
-  case FK_Data_4:
-    return 4;
-  case FK_PCRel_8:
-  case FK_SecRel_8:
-  case FK_Data_8:
-  case X86::reloc_global_offset_table8:
-    return 8;
-  }
-}
-
-void X86AsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
-                               const MCValue &Target,
-                               MutableArrayRef<char> Data,
-                               uint64_t Value, bool IsResolved,
-                               const MCSubtargetInfo *STI) const {
-  unsigned Size = getFixupKindSize(Fixup.getKind());
-
-  assert(Fixup.getOffset() + Size <= Data.size() && "Invalid fixup offset!");
-
-  int64_t SignedValue = static_cast<int64_t>(Value);
-  if ((Target.isAbsolute() || IsResolved) &&
-      getFixupKindInfo(Fixup.getKind()).Flags &
-      MCFixupKindInfo::FKF_IsPCRel) {
-    // check that PC relative fixup fits into the fixup size.
-    if (Size > 0 && !isIntN(Size * 8, SignedValue))
-      Asm.getContext().reportError(
-                                   Fixup.getLoc(), "value of " + Twine(SignedValue) +
-                                   " is too large for field of " + Twine(Size) +
-                                   ((Size == 1) ? " byte." : " bytes."));
-  } else {
-    // Check that uppper bits are either all zeros or all ones.
-    // Specifically ignore overflow/underflow as long as the leakage is
-    // limited to the lower bits. This is to remain compatible with
-    // other assemblers.
-    assert((Size == 0 || isIntN(Size * 8 + 1, SignedValue)) &&
-           "Value does not fit in the Fixup field");
-  }
-
-  for (unsigned i = 0; i != Size; ++i)
-    Data[Fixup.getOffset() + i] = uint8_t(Value >> (i * 8));
-}
-
-bool X86AsmBackend::mayNeedRelaxation(const MCInst &Inst,
-                                      const MCSubtargetInfo &STI) const {
+bool X86AsmBackend::mayNeedRelaxation(const MCInst &Inst) const {
   // Branches can always be relaxed in either mode.
   if (getRelaxedOpcodeBranch(Inst, false) != Inst.getOpcode())
     return true;
@@ -608,7 +297,7 @@ bool X86AsmBackend::fixupNeedsRelaxation(const MCFixup &Fixup,
                                          const MCRelaxableFragment *DF,
                                          const MCAsmLayout &Layout) const {
   // Relax if the value is too big for a (signed) i8.
-  return !isInt<8>(Value);
+  return int64_t(Value) != int64_t(int8_t(Value));
 }
 
 // FIXME: Can tblgen help at all here to verify there aren't other instructions
@@ -632,61 +321,52 @@ void X86AsmBackend::relaxInstruction(const MCInst &Inst,
   Res.setOpcode(RelaxedOp);
 }
 
-/// Write a sequence of optimal nops to the output, covering \p Count
+/// \brief Write a sequence of optimal nops to the output, covering \p Count
 /// bytes.
 /// \return - true on success, false on failure
-bool X86AsmBackend::writeNopData(raw_ostream &OS, uint64_t Count) const {
-  static const char Nops[10][11] = {
+bool X86AsmBackend::writeNopData(uint64_t Count, MCObjectWriter *OW) const {
+  static const uint8_t Nops[10][10] = {
     // nop
-    "\x90",
+    {0x90},
     // xchg %ax,%ax
-    "\x66\x90",
+    {0x66, 0x90},
     // nopl (%[re]ax)
-    "\x0f\x1f\x00",
+    {0x0f, 0x1f, 0x00},
     // nopl 0(%[re]ax)
-    "\x0f\x1f\x40\x00",
+    {0x0f, 0x1f, 0x40, 0x00},
     // nopl 0(%[re]ax,%[re]ax,1)
-    "\x0f\x1f\x44\x00\x00",
+    {0x0f, 0x1f, 0x44, 0x00, 0x00},
     // nopw 0(%[re]ax,%[re]ax,1)
-    "\x66\x0f\x1f\x44\x00\x00",
+    {0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00},
     // nopl 0L(%[re]ax)
-    "\x0f\x1f\x80\x00\x00\x00\x00",
+    {0x0f, 0x1f, 0x80, 0x00, 0x00, 0x00, 0x00},
     // nopl 0L(%[re]ax,%[re]ax,1)
-    "\x0f\x1f\x84\x00\x00\x00\x00\x00",
+    {0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00},
     // nopw 0L(%[re]ax,%[re]ax,1)
-    "\x66\x0f\x1f\x84\x00\x00\x00\x00\x00",
+    {0x66, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00},
     // nopw %cs:0L(%[re]ax,%[re]ax,1)
-    "\x66\x2e\x0f\x1f\x84\x00\x00\x00\x00\x00",
+    {0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00},
   };
 
   // This CPU doesn't support long nops. If needed add more.
+  // FIXME: Can we get this from the subtarget somehow?
   // FIXME: We could generated something better than plain 0x90.
-  if (!STI.getFeatureBits()[X86::FeatureNOPL]) {
+  if (!HasNopl) {
     for (uint64_t i = 0; i < Count; ++i)
-      OS << '\x90';
+      OW->write8(0x90);
     return true;
   }
 
-  // 15-bytes is the longest single NOP instruction, but 10-bytes is
-  // commonly the longest that can be efficiently decoded.
-  uint64_t MaxNopLength = 10;
-  if (STI.getFeatureBits()[X86::ProcIntelSLM])
-    MaxNopLength = 7;
-  else if (STI.getFeatureBits()[X86::FeatureFast15ByteNOP])
-    MaxNopLength = 15;
-  else if (STI.getFeatureBits()[X86::FeatureFast11ByteNOP])
-    MaxNopLength = 11;
-
-  // Emit as many MaxNopLength NOPs as needed, then emit a NOP of the remaining
-  // length.
+  // 15 is the longest single nop instruction.  Emit as many 15-byte nops as
+  // needed, then emit a nop of the remaining length.
   do {
     const uint8_t ThisNopLength = (uint8_t) std::min(Count, MaxNopLength);
     const uint8_t Prefixes = ThisNopLength <= 10 ? 0 : ThisNopLength - 10;
     for (uint8_t i = 0; i < Prefixes; i++)
-      OS << '\x66';
+      OW->write8(0x66);
     const uint8_t Rest = ThisNopLength - Prefixes;
-    if (Rest != 0)
-      OS.write(Nops[Rest - 1], Rest);
+    for (uint8_t i = 0; i < Rest; i++)
+      OW->write8(Nops[Rest - 1][i]);
     Count -= ThisNopLength;
   } while (Count != 0);
 
@@ -700,57 +380,49 @@ namespace {
 class ELFX86AsmBackend : public X86AsmBackend {
 public:
   uint8_t OSABI;
-  ELFX86AsmBackend(const Target &T, uint8_t OSABI, const MCSubtargetInfo &STI)
-      : X86AsmBackend(T, STI), OSABI(OSABI) {}
+  ELFX86AsmBackend(const Target &T, uint8_t OSABI, StringRef CPU)
+      : X86AsmBackend(T, CPU), OSABI(OSABI) {}
 };
 
 class ELFX86_32AsmBackend : public ELFX86AsmBackend {
 public:
-  ELFX86_32AsmBackend(const Target &T, uint8_t OSABI,
-                      const MCSubtargetInfo &STI)
-    : ELFX86AsmBackend(T, OSABI, STI) {}
+  ELFX86_32AsmBackend(const Target &T, uint8_t OSABI, StringRef CPU)
+    : ELFX86AsmBackend(T, OSABI, CPU) {}
 
-  std::unique_ptr<MCObjectTargetWriter>
-  createObjectTargetWriter() const override {
-    return createX86ELFObjectWriter(/*IsELF64*/ false, OSABI, ELF::EM_386);
+  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
+    return createX86ELFObjectWriter(OS, /*IsELF64*/ false, OSABI, ELF::EM_386);
   }
 };
 
 class ELFX86_X32AsmBackend : public ELFX86AsmBackend {
 public:
-  ELFX86_X32AsmBackend(const Target &T, uint8_t OSABI,
-                       const MCSubtargetInfo &STI)
-      : ELFX86AsmBackend(T, OSABI, STI) {}
+  ELFX86_X32AsmBackend(const Target &T, uint8_t OSABI, StringRef CPU)
+      : ELFX86AsmBackend(T, OSABI, CPU) {}
 
-  std::unique_ptr<MCObjectTargetWriter>
-  createObjectTargetWriter() const override {
-    return createX86ELFObjectWriter(/*IsELF64*/ false, OSABI,
+  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
+    return createX86ELFObjectWriter(OS, /*IsELF64*/ false, OSABI,
                                     ELF::EM_X86_64);
   }
 };
 
 class ELFX86_IAMCUAsmBackend : public ELFX86AsmBackend {
 public:
-  ELFX86_IAMCUAsmBackend(const Target &T, uint8_t OSABI,
-                         const MCSubtargetInfo &STI)
-      : ELFX86AsmBackend(T, OSABI, STI) {}
+  ELFX86_IAMCUAsmBackend(const Target &T, uint8_t OSABI, StringRef CPU)
+      : ELFX86AsmBackend(T, OSABI, CPU) {}
 
-  std::unique_ptr<MCObjectTargetWriter>
-  createObjectTargetWriter() const override {
-    return createX86ELFObjectWriter(/*IsELF64*/ false, OSABI,
+  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
+    return createX86ELFObjectWriter(OS, /*IsELF64*/ false, OSABI,
                                     ELF::EM_IAMCU);
   }
 };
 
 class ELFX86_64AsmBackend : public ELFX86AsmBackend {
 public:
-  ELFX86_64AsmBackend(const Target &T, uint8_t OSABI,
-                      const MCSubtargetInfo &STI)
-    : ELFX86AsmBackend(T, OSABI, STI) {}
+  ELFX86_64AsmBackend(const Target &T, uint8_t OSABI, StringRef CPU)
+    : ELFX86AsmBackend(T, OSABI, CPU) {}
 
-  std::unique_ptr<MCObjectTargetWriter>
-  createObjectTargetWriter() const override {
-    return createX86ELFObjectWriter(/*IsELF64*/ true, OSABI, ELF::EM_X86_64);
+  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
+    return createX86ELFObjectWriter(OS, /*IsELF64*/ true, OSABI, ELF::EM_X86_64);
   }
 };
 
@@ -758,9 +430,8 @@ class WindowsX86AsmBackend : public X86AsmBackend {
   bool Is64Bit;
 
 public:
-  WindowsX86AsmBackend(const Target &T, bool is64Bit,
-                       const MCSubtargetInfo &STI)
-    : X86AsmBackend(T, STI)
+  WindowsX86AsmBackend(const Target &T, bool is64Bit, StringRef CPU)
+    : X86AsmBackend(T, CPU)
     , Is64Bit(is64Bit) {
   }
 
@@ -772,9 +443,8 @@ public:
         .Default(MCAsmBackend::getFixupKind(Name));
   }
 
-  std::unique_ptr<MCObjectTargetWriter>
-  createObjectTargetWriter() const override {
-    return createX86WinCOFFObjectWriter(Is64Bit);
+  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
+    return createX86WinCOFFObjectWriter(OS, Is64Bit);
   }
 };
 
@@ -807,7 +477,7 @@ namespace CU {
 class DarwinX86AsmBackend : public X86AsmBackend {
   const MCRegisterInfo &MRI;
 
-  /// Number of registers that can be saved in a compact unwind encoding.
+  /// \brief Number of registers that can be saved in a compact unwind encoding.
   enum { CU_NUM_SAVED_REGS = 6 };
 
   mutable unsigned SavedRegs[CU_NUM_SAVED_REGS];
@@ -817,7 +487,7 @@ class DarwinX86AsmBackend : public X86AsmBackend {
   unsigned MoveInstrSize;                ///< Size of a "move" instruction.
   unsigned StackDivide;                  ///< Amount to adjust stack size by.
 protected:
-  /// Size of a "push" instruction for the given register.
+  /// \brief Size of a "push" instruction for the given register.
   unsigned PushInstrSize(unsigned Reg) const {
     switch (Reg) {
       case X86::EBX:
@@ -838,7 +508,7 @@ protected:
     return 1;
   }
 
-  /// Implementation of algorithm to generate the compact unwind encoding
+  /// \brief Implementation of algorithm to generate the compact unwind encoding
   /// for the CFI instructions.
   uint32_t
   generateCompactUnwindEncodingImpl(ArrayRef<MCCFIInstruction> Instrs) const {
@@ -857,6 +527,7 @@ protected:
     unsigned InstrOffset = 0;
     unsigned StackAdjust = 0;
     unsigned StackSize = 0;
+    unsigned PrevStackSize = 0;
     unsigned NumDefCFAOffsets = 0;
 
     for (unsigned i = 0, e = Instrs.size(); i != e; ++i) {
@@ -878,7 +549,7 @@ protected:
 
         // If the frame pointer is other than esp/rsp, we do not have a way to
         // generate a compact unwinding representation, so bail out.
-        if (*MRI.getLLVMRegNum(Inst.getRegister(), true) !=
+        if (MRI.getLLVMRegNum(Inst.getRegister(), true) !=
             (Is64Bit ? X86::RBP : X86::EBP))
           return 0;
 
@@ -904,6 +575,7 @@ protected:
         //  L0:
         //     .cfi_def_cfa_offset 80
         //
+        PrevStackSize = StackSize;
         StackSize = std::abs(Inst.getOffset()) / StackDivide;
         ++NumDefCFAOffsets;
         break;
@@ -926,7 +598,7 @@ protected:
           // unwind encoding.
           return CU::UNWIND_MODE_DWARF;
 
-        unsigned Reg = *MRI.getLLVMRegNum(Inst.getRegister(), true);
+        unsigned Reg = MRI.getLLVMRegNum(Inst.getRegister(), true);
         SavedRegs[SavedRegIdx++] = Reg;
         StackAdjust += OffsetSize;
         InstrOffset += PushInstrSize(Reg);
@@ -950,6 +622,16 @@ protected:
       CompactUnwindEncoding |= (StackAdjust & 0xFF) << 16;
       CompactUnwindEncoding |= RegEnc & CU::UNWIND_BP_FRAME_REGISTERS;
     } else {
+      // If the amount of the stack allocation is the size of a register, then
+      // we "push" the RAX/EAX register onto the stack instead of adjusting the
+      // stack pointer with a SUB instruction. We don't support the push of the
+      // RAX/EAX register with compact unwind. So we check for that situation
+      // here.
+      if ((NumDefCFAOffsets == SavedRegIdx + 1 &&
+           StackSize - PrevStackSize == 1) ||
+          (Instrs.size() == 1 && NumDefCFAOffsets == 1 && StackSize == 2))
+        return CU::UNWIND_MODE_DWARF;
+
       SubtractInstrIdx += InstrOffset;
       ++StackAdjust;
 
@@ -971,7 +653,8 @@ protected:
         // instruction.
         CompactUnwindEncoding |= (SubtractInstrIdx & 0xFF) << 16;
 
-        // Encode any extra stack adjustments (done via push instructions).
+        // Encode any extra stack stack adjustments (done via push
+        // instructions).
         CompactUnwindEncoding |= (StackAdjust & 0x7) << 13;
       }
 
@@ -993,7 +676,7 @@ protected:
   }
 
 private:
-  /// Get the compact unwind number for a given register. The number
+  /// \brief Get the compact unwind number for a given register. The number
   /// corresponds to the enum lists in compact_unwind_encoding.h.
   int getCompactUnwindRegNum(unsigned Reg) const {
     static const MCPhysReg CU32BitRegs[7] = {
@@ -1010,7 +693,7 @@ private:
     return -1;
   }
 
-  /// Return the registers encoded for a compact encoding with a frame
+  /// \brief Return the registers encoded for a compact encoding with a frame
   /// pointer.
   uint32_t encodeCompactUnwindRegistersWithFrame() const {
     // Encode the registers in the order they were saved --- 3-bits per
@@ -1034,7 +717,7 @@ private:
     return RegEnc;
   }
 
-  /// Create the permutation encoding used with frameless stacks. It is
+  /// \brief Create the permutation encoding used with frameless stacks. It is
   /// passed the number of registers to be saved and an array of the registers
   /// saved.
   uint32_t encodeCompactUnwindRegistersWithoutFrame(unsigned RegCount) const {
@@ -1105,9 +788,9 @@ private:
   }
 
 public:
-  DarwinX86AsmBackend(const Target &T, const MCRegisterInfo &MRI,
-                      const MCSubtargetInfo &STI, bool Is64Bit)
-    : X86AsmBackend(T, STI), MRI(MRI), Is64Bit(Is64Bit) {
+  DarwinX86AsmBackend(const Target &T, const MCRegisterInfo &MRI, StringRef CPU,
+                      bool Is64Bit)
+    : X86AsmBackend(T, CPU), MRI(MRI), Is64Bit(Is64Bit) {
     memset(SavedRegs, 0, sizeof(SavedRegs));
     OffsetSize = Is64Bit ? 8 : 4;
     MoveInstrSize = Is64Bit ? 3 : 2;
@@ -1118,17 +801,16 @@ public:
 class DarwinX86_32AsmBackend : public DarwinX86AsmBackend {
 public:
   DarwinX86_32AsmBackend(const Target &T, const MCRegisterInfo &MRI,
-                         const MCSubtargetInfo &STI)
-      : DarwinX86AsmBackend(T, MRI, STI, false) {}
+                         StringRef CPU)
+      : DarwinX86AsmBackend(T, MRI, CPU, false) {}
 
-  std::unique_ptr<MCObjectTargetWriter>
-  createObjectTargetWriter() const override {
-    return createX86MachObjectWriter(/*Is64Bit=*/false,
+  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
+    return createX86MachObjectWriter(OS, /*Is64Bit=*/false,
                                      MachO::CPU_TYPE_I386,
                                      MachO::CPU_SUBTYPE_I386_ALL);
   }
 
-  /// Generate the compact unwind encoding for the CFI instructions.
+  /// \brief Generate the compact unwind encoding for the CFI instructions.
   uint32_t generateCompactUnwindEncoding(
                              ArrayRef<MCCFIInstruction> Instrs) const override {
     return generateCompactUnwindEncodingImpl(Instrs);
@@ -1139,16 +821,15 @@ class DarwinX86_64AsmBackend : public DarwinX86AsmBackend {
   const MachO::CPUSubTypeX86 Subtype;
 public:
   DarwinX86_64AsmBackend(const Target &T, const MCRegisterInfo &MRI,
-                         const MCSubtargetInfo &STI, MachO::CPUSubTypeX86 st)
-      : DarwinX86AsmBackend(T, MRI, STI, true), Subtype(st) {}
+                         StringRef CPU, MachO::CPUSubTypeX86 st)
+      : DarwinX86AsmBackend(T, MRI, CPU, true), Subtype(st) {}
 
-  std::unique_ptr<MCObjectTargetWriter>
-  createObjectTargetWriter() const override {
-    return createX86MachObjectWriter(/*Is64Bit=*/true, MachO::CPU_TYPE_X86_64,
-                                     Subtype);
+  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
+    return createX86MachObjectWriter(OS, /*Is64Bit=*/true,
+                                     MachO::CPU_TYPE_X86_64, Subtype);
   }
 
-  /// Generate the compact unwind encoding for the CFI instructions.
+  /// \brief Generate the compact unwind encoding for the CFI instructions.
   uint32_t generateCompactUnwindEncoding(
                              ArrayRef<MCCFIInstruction> Instrs) const override {
     return generateCompactUnwindEncodingImpl(Instrs);
@@ -1158,43 +839,43 @@ public:
 } // end anonymous namespace
 
 MCAsmBackend *llvm::createX86_32AsmBackend(const Target &T,
-                                           const MCSubtargetInfo &STI,
                                            const MCRegisterInfo &MRI,
+                                           const Triple &TheTriple,
+                                           StringRef CPU,
                                            const MCTargetOptions &Options) {
-  const Triple &TheTriple = STI.getTargetTriple();
   if (TheTriple.isOSBinFormatMachO())
-    return new DarwinX86_32AsmBackend(T, MRI, STI);
+    return new DarwinX86_32AsmBackend(T, MRI, CPU);
 
   if (TheTriple.isOSWindows() && TheTriple.isOSBinFormatCOFF())
-    return new WindowsX86AsmBackend(T, false, STI);
+    return new WindowsX86AsmBackend(T, false, CPU);
 
   uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TheTriple.getOS());
 
   if (TheTriple.isOSIAMCU())
-    return new ELFX86_IAMCUAsmBackend(T, OSABI, STI);
+    return new ELFX86_IAMCUAsmBackend(T, OSABI, CPU);
 
-  return new ELFX86_32AsmBackend(T, OSABI, STI);
+  return new ELFX86_32AsmBackend(T, OSABI, CPU);
 }
 
 MCAsmBackend *llvm::createX86_64AsmBackend(const Target &T,
-                                           const MCSubtargetInfo &STI,
                                            const MCRegisterInfo &MRI,
+                                           const Triple &TheTriple,
+                                           StringRef CPU,
                                            const MCTargetOptions &Options) {
-  const Triple &TheTriple = STI.getTargetTriple();
   if (TheTriple.isOSBinFormatMachO()) {
     MachO::CPUSubTypeX86 CS =
         StringSwitch<MachO::CPUSubTypeX86>(TheTriple.getArchName())
             .Case("x86_64h", MachO::CPU_SUBTYPE_X86_64_H)
             .Default(MachO::CPU_SUBTYPE_X86_64_ALL);
-    return new DarwinX86_64AsmBackend(T, MRI, STI, CS);
+    return new DarwinX86_64AsmBackend(T, MRI, CPU, CS);
   }
 
   if (TheTriple.isOSWindows() && TheTriple.isOSBinFormatCOFF())
-    return new WindowsX86AsmBackend(T, true, STI);
+    return new WindowsX86AsmBackend(T, true, CPU);
 
   uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TheTriple.getOS());
 
   if (TheTriple.getEnvironment() == Triple::GNUX32)
-    return new ELFX86_X32AsmBackend(T, OSABI, STI);
-  return new ELFX86_64AsmBackend(T, OSABI, STI);
+    return new ELFX86_X32AsmBackend(T, OSABI, CPU);
+  return new ELFX86_64AsmBackend(T, OSABI, CPU);
 }

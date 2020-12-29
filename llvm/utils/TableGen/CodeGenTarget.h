@@ -1,8 +1,9 @@
 //===- CodeGenTarget.h - Target Class Wrapper -------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,11 +17,8 @@
 #ifndef LLVM_UTILS_TABLEGEN_CODEGENTARGET_H
 #define LLVM_UTILS_TABLEGEN_CODEGENTARGET_H
 
-#include "CodeGenHwModes.h"
 #include "CodeGenInstruction.h"
 #include "CodeGenRegisters.h"
-#include "InfoByHwMode.h"
-#include "SDNodeProperties.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TableGen/Record.h"
 #include <algorithm>
@@ -30,6 +28,25 @@ namespace llvm {
 struct CodeGenRegister;
 class CodeGenSchedModels;
 class CodeGenTarget;
+
+// SelectionDAG node properties.
+//  SDNPMemOperand: indicates that a node touches memory and therefore must
+//                  have an associated memory operand that describes the access.
+enum SDNP {
+  SDNPCommutative,
+  SDNPAssociative,
+  SDNPHasChain,
+  SDNPOutGlue,
+  SDNPInGlue,
+  SDNPOptInGlue,
+  SDNPMayLoad,
+  SDNPMayStore,
+  SDNPSideEffect,
+  SDNPMemOperand,
+  SDNPVariadic,
+  SDNPWantRoot,
+  SDNPWantParent
+};
 
 /// getValueType - Return the MVT::SimpleValueType that the specified TableGen
 /// record corresponds to.
@@ -52,8 +69,7 @@ class CodeGenTarget {
                    std::unique_ptr<CodeGenInstruction>> Instructions;
   mutable std::unique_ptr<CodeGenRegBank> RegBank;
   mutable std::vector<Record*> RegAltNameIndices;
-  mutable SmallVector<ValueTypeByHwMode, 8> LegalValueTypes;
-  CodeGenHwModes CGH;
+  mutable SmallVector<MVT::SimpleValueType, 8> LegalValueTypes;
   void ReadRegAltNameIndices() const;
   void ReadInstructions() const;
   void ReadLegalValueTypes() const;
@@ -61,7 +77,6 @@ class CodeGenTarget {
   mutable std::unique_ptr<CodeGenSchedModels> SchedModels;
 
   mutable std::vector<const CodeGenInstruction*> InstrsByEnum;
-  mutable unsigned NumPseudoInstructions = 0;
 public:
   CodeGenTarget(RecordKeeper &Records);
   ~CodeGenTarget();
@@ -71,27 +86,22 @@ public:
 
   /// getInstNamespace - Return the target-specific instruction namespace.
   ///
-  StringRef getInstNamespace() const;
+  std::string getInstNamespace() const;
 
   /// getInstructionSet - Return the InstructionSet object.
   ///
   Record *getInstructionSet() const;
 
-  /// getAllowRegisterRenaming - Return the AllowRegisterRenaming flag value for
-  /// this target.
-  ///
-  bool getAllowRegisterRenaming() const;
-
   /// getAsmParser - Return the AssemblyParser definition for this target.
   ///
   Record *getAsmParser() const;
 
-  /// getAsmParserVariant - Return the AssemblyParserVariant definition for
+  /// getAsmParserVariant - Return the AssmblyParserVariant definition for
   /// this target.
   ///
   Record *getAsmParserVariant(unsigned i) const;
 
-  /// getAsmParserVariantCount - Return the AssemblyParserVariant definition
+  /// getAsmParserVariantCount - Return the AssmblyParserVariant definition
   /// available for this target.
   ///
   unsigned getAsmParserVariantCount() const;
@@ -102,12 +112,6 @@ public:
 
   /// getRegBank - Return the register bank description.
   CodeGenRegBank &getRegBank() const;
-
-  /// Return the largest register class on \p RegBank which supports \p Ty and
-  /// covers \p SubIdx if it exists.
-  Optional<CodeGenRegisterClass *>
-  getSuperRegForSubReg(const ValueTypeByHwMode &Ty, CodeGenRegBank &RegBank,
-                       const CodeGenSubRegIndex *SubIdx) const;
 
   /// getRegisterByName - If there is a register with the specific AsmName,
   /// return it.
@@ -124,17 +128,21 @@ public:
 
   /// getRegisterVTs - Find the union of all possible SimpleValueTypes for the
   /// specified physical register.
-  std::vector<ValueTypeByHwMode> getRegisterVTs(Record *R) const;
+  std::vector<MVT::SimpleValueType> getRegisterVTs(Record *R) const;
 
-  ArrayRef<ValueTypeByHwMode> getLegalValueTypes() const {
-    if (LegalValueTypes.empty())
-      ReadLegalValueTypes();
+  ArrayRef<MVT::SimpleValueType> getLegalValueTypes() const {
+    if (LegalValueTypes.empty()) ReadLegalValueTypes();
     return LegalValueTypes;
   }
 
-  CodeGenSchedModels &getSchedModels() const;
+  /// isLegalValueType - Return true if the specified value type is natively
+  /// supported by the target (i.e. there are registers that directly hold it).
+  bool isLegalValueType(MVT::SimpleValueType VT) const {
+    ArrayRef<MVT::SimpleValueType> LegalVTs = getLegalValueTypes();
+    return is_contained(LegalVTs, VT);
+  }
 
-  const CodeGenHwModes &getHwModes() const { return CGH; }
+  CodeGenSchedModels &getSchedModels() const;
 
 private:
   DenseMap<const Record*, std::unique_ptr<CodeGenInstruction>> &
@@ -151,25 +159,11 @@ public:
     return *I->second;
   }
 
-  /// Returns the number of predefined instructions.
-  static unsigned getNumFixedInstructions();
-
-  /// Returns the number of pseudo instructions.
-  unsigned getNumPseudoInstructions() const {
-    if (InstrsByEnum.empty())
-      ComputeInstrsByEnum();
-    return NumPseudoInstructions;
-  }
-
-  /// Return all of the instructions defined by the target, ordered by their
-  /// enum value.
-  /// The following order of instructions is also guaranteed:
-  /// - fixed / generic instructions as declared in TargetOpcodes.def, in order;
-  /// - pseudo instructions in lexicographical order sorted by name;
-  /// - other instructions in lexicographical order sorted by name.
-  ArrayRef<const CodeGenInstruction *> getInstructionsByEnumValue() const {
-    if (InstrsByEnum.empty())
-      ComputeInstrsByEnum();
+  /// getInstructionsByEnumValue - Return all of the instructions defined by the
+  /// target, ordered by their enum value.
+  ArrayRef<const CodeGenInstruction *>
+  getInstructionsByEnumValue() const {
+    if (InstrsByEnum.empty()) ComputeInstrsByEnum();
     return InstrsByEnum;
   }
 

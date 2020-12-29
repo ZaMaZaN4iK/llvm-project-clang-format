@@ -1,8 +1,9 @@
 //== ObjCSelfInitChecker.cpp - Checker for 'self' initialization -*- C++ -*--=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -35,7 +36,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -85,11 +86,11 @@ public:
 
 namespace {
 enum SelfFlagEnum {
-  /// No flag set.
+  /// \brief No flag set.
   SelfFlag_None = 0x0,
-  /// Value came from 'self'.
+  /// \brief Value came from 'self'.
   SelfFlag_Self    = 0x1,
-  /// Value came from the result of an initializer (e.g. [super init]).
+  /// \brief Value came from the result of an initializer (e.g. [super init]).
   SelfFlag_InitRes = 0x2
 };
 }
@@ -97,7 +98,7 @@ enum SelfFlagEnum {
 REGISTER_MAP_WITH_PROGRAMSTATE(SelfFlag, SymbolRef, unsigned)
 REGISTER_TRAIT_WITH_PROGRAMSTATE(CalledInit, bool)
 
-/// A call receiving a reference to 'self' invalidates the object that
+/// \brief A call receiving a reference to 'self' invalidates the object that
 /// 'self' contains. This keeps the "self flags" assigned to the 'self'
 /// object before the call so we can assign them to the new object that 'self'
 /// points to after the call.
@@ -127,11 +128,11 @@ static bool hasSelfFlag(SVal val, SelfFlagEnum flag, CheckerContext &C) {
   return getSelfFlags(val, C) & flag;
 }
 
-/// Returns true of the value of the expression is the object that 'self'
+/// \brief Returns true of the value of the expression is the object that 'self'
 /// points to and is an object that did not come from the result of calling
 /// an initializer.
 static bool isInvalidSelf(const Expr *E, CheckerContext &C) {
-  SVal exprVal = C.getSVal(E);
+  SVal exprVal = C.getState()->getSVal(E, C.getLocationContext());
   if (!hasSelfFlag(exprVal, SelfFlag_Self, C))
     return false; // value did not come from 'self'.
   if (hasSelfFlag(exprVal, SelfFlag_InitRes, C))
@@ -159,7 +160,7 @@ void ObjCSelfInitChecker::checkForInvalidSelf(const Expr *E, CheckerContext &C,
   if (!BT)
     BT.reset(new BugType(this, "Missing \"self = [(super or self) init...]\"",
                          categories::CoreFoundationObjectiveC));
-  C.emitReport(std::make_unique<PathSensitiveBugReport>(*BT, errorStr, N));
+  C.emitReport(llvm::make_unique<BugReport>(*BT, errorStr, N));
 }
 
 void ObjCSelfInitChecker::checkPostObjCMessage(const ObjCMethodCall &Msg,
@@ -182,7 +183,7 @@ void ObjCSelfInitChecker::checkPostObjCMessage(const ObjCMethodCall &Msg,
     // value out when we return from this method.
     state = state->set<CalledInit>(true);
 
-    SVal V = C.getSVal(Msg.getOriginExpr());
+    SVal V = state->getSVal(Msg.getOriginExpr(), C.getLocationContext());
     addSelfFlag(state, V, SelfFlag_InitRes, C);
     return;
   }
@@ -406,7 +407,7 @@ static bool shouldRunOnFunctionOrMethod(const NamedDecl *ND) {
   return ID != nullptr;
 }
 
-/// Returns true if the location is 'self'.
+/// \brief Returns true if the location is 'self'.
 static bool isSelfVar(SVal location, CheckerContext &C) {
   AnalysisDeclContext *analCtx = C.getCurrentAnalysisDeclContext();
   if (!analCtx->getSelfDecl())
@@ -435,8 +436,4 @@ static bool isInitMessage(const ObjCMethodCall &Call) {
 
 void ento::registerObjCSelfInitChecker(CheckerManager &mgr) {
   mgr.registerChecker<ObjCSelfInitChecker>();
-}
-
-bool ento::shouldRegisterObjCSelfInitChecker(const LangOptions &LO) {
-  return true;
 }

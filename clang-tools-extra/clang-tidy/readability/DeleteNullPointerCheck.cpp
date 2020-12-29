@@ -1,13 +1,13 @@
 //===--- DeleteNullPointerCheck.cpp - clang-tidy---------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "DeleteNullPointerCheck.h"
-#include "../utils/LexerUtils.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Lex/Lexer.h"
@@ -24,15 +24,8 @@ void DeleteNullPointerCheck::registerMatchers(MatchFinder *Finder) {
                         to(decl(equalsBoundNode("deletedPointer"))))))))
           .bind("deleteExpr");
 
-  const auto DeleteMemberExpr =
-      cxxDeleteExpr(has(castExpr(has(memberExpr(hasDeclaration(
-                        fieldDecl(equalsBoundNode("deletedMemberPointer"))))))))
-          .bind("deleteMemberExpr");
-
-  const auto PointerExpr = ignoringImpCasts(anyOf(
-      declRefExpr(to(decl().bind("deletedPointer"))),
-      memberExpr(hasDeclaration(fieldDecl().bind("deletedMemberPointer")))));
-
+  const auto PointerExpr =
+      ignoringImpCasts(declRefExpr(to(decl().bind("deletedPointer"))));
   const auto PointerCondition = castExpr(hasCastKind(CK_PointerToBoolean),
                                          hasSourceExpression(PointerExpr));
   const auto BinaryPointerCheckCondition =
@@ -41,11 +34,9 @@ void DeleteNullPointerCheck::registerMatchers(MatchFinder *Finder) {
 
   Finder->addMatcher(
       ifStmt(hasCondition(anyOf(PointerCondition, BinaryPointerCheckCondition)),
-             hasThen(anyOf(
-                 DeleteExpr, DeleteMemberExpr,
-                 compoundStmt(anyOf(has(DeleteExpr), has(DeleteMemberExpr)),
-                              statementCountIs(1))
-                     .bind("compound"))))
+             hasThen(anyOf(DeleteExpr,
+                           compoundStmt(has(DeleteExpr), statementCountIs(1))
+                               .bind("compound"))))
           .bind("ifWithDelete"),
       this);
 }
@@ -55,24 +46,28 @@ void DeleteNullPointerCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *Compound = Result.Nodes.getNodeAs<CompoundStmt>("compound");
 
   auto Diag = diag(
-      IfWithDelete->getBeginLoc(),
+      IfWithDelete->getLocStart(),
       "'if' statement is unnecessary; deleting null pointer has no effect");
   if (IfWithDelete->getElse())
     return;
   // FIXME: generate fixit for this case.
 
   Diag << FixItHint::CreateRemoval(CharSourceRange::getTokenRange(
-      IfWithDelete->getBeginLoc(),
-      utils::lexer::getPreviousToken(IfWithDelete->getThen()->getBeginLoc(),
-                                     *Result.SourceManager,
-                                     Result.Context->getLangOpts())
-          .getLocation()));
-
+      IfWithDelete->getLocStart(),
+      Lexer::getLocForEndOfToken(IfWithDelete->getCond()->getLocEnd(), 0,
+                                 *Result.SourceManager,
+                                 Result.Context->getLangOpts())));
   if (Compound) {
-    Diag << FixItHint::CreateRemoval(
-        CharSourceRange::getTokenRange(Compound->getLBracLoc()));
-    Diag << FixItHint::CreateRemoval(
-        CharSourceRange::getTokenRange(Compound->getRBracLoc()));
+    Diag << FixItHint::CreateRemoval(CharSourceRange::getTokenRange(
+        Compound->getLBracLoc(),
+        Lexer::getLocForEndOfToken(Compound->getLBracLoc(), 0,
+                                   *Result.SourceManager,
+                                   Result.Context->getLangOpts())));
+    Diag << FixItHint::CreateRemoval(CharSourceRange::getTokenRange(
+        Compound->getRBracLoc(),
+        Lexer::getLocForEndOfToken(Compound->getRBracLoc(), 0,
+                                   *Result.SourceManager,
+                                   Result.Context->getLangOpts())));
   }
 }
 

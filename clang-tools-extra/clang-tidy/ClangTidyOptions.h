@@ -1,20 +1,19 @@
 //===--- ClangTidyOptions.h - clang-tidy ------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_CLANGTIDYOPTIONS_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_CLANGTIDYOPTIONS_H
 
-#include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorOr.h"
-#include "llvm/Support/VirtualFileSystem.h"
 #include <functional>
 #include <map>
 #include <string>
@@ -25,30 +24,30 @@
 namespace clang {
 namespace tidy {
 
-/// Contains a list of line ranges in a single file.
+/// \brief Contains a list of line ranges in a single file.
 struct FileFilter {
-  /// File name.
+  /// \brief File name.
   std::string Name;
 
-  /// LineRange is a pair<start, end> (inclusive).
+  /// \brief LineRange is a pair<start, end> (inclusive).
   typedef std::pair<unsigned, unsigned> LineRange;
 
-  /// A list of line ranges in this file, for which we show warnings.
+  /// \brief A list of line ranges in this file, for which we show warnings.
   std::vector<LineRange> LineRanges;
 };
 
-/// Global options. These options are neither stored nor read from
+/// \brief Global options. These options are neither stored nor read from
 /// configuration files.
 struct ClangTidyGlobalOptions {
-  /// Output warnings from certain line ranges of certain files only.
+  /// \brief Output warnings from certain line ranges of certain files only.
   /// If empty, no warnings will be filtered.
   std::vector<FileFilter> LineFilter;
 };
 
-/// Contains options for clang-tidy. These options may be read from
+/// \brief Contains options for clang-tidy. These options may be read from
 /// configuration files, and may be different for different translation units.
 struct ClangTidyOptions {
-  /// These options are used for all settings that haven't been
+  /// \brief These options are used for all settings that haven't been
   /// overridden by the \c OptionsProvider.
   ///
   /// Allow no checks and no headers by default. This method initializes
@@ -56,38 +55,27 @@ struct ClangTidyOptions {
   /// of each registered \c ClangTidyModule.
   static ClangTidyOptions getDefaults();
 
-  /// Creates a new \c ClangTidyOptions instance combined from all fields
+  /// \brief Creates a new \c ClangTidyOptions instance combined from all fields
   /// of this instance overridden by the fields of \p Other that have a value.
   ClangTidyOptions mergeWith(const ClangTidyOptions &Other) const;
 
-  /// Checks filter.
+  /// \brief Checks filter.
   llvm::Optional<std::string> Checks;
 
-  /// WarningsAsErrors filter.
+  /// \brief WarningsAsErrors filter.
   llvm::Optional<std::string> WarningsAsErrors;
 
-  /// Output warnings from headers matching this filter. Warnings from
+  /// \brief Output warnings from headers matching this filter. Warnings from
   /// main files will always be displayed.
   llvm::Optional<std::string> HeaderFilterRegex;
 
-  /// Output warnings from system headers matching \c HeaderFilterRegex.
+  /// \brief Output warnings from system headers matching \c HeaderFilterRegex.
   llvm::Optional<bool> SystemHeaders;
 
-  /// Format code around applied fixes with clang-format using this
-  /// style.
-  ///
-  /// Can be one of:
-  ///   * 'none' - don't format code around applied fixes;
-  ///   * 'llvm', 'google', 'mozilla' or other predefined clang-format style
-  ///     names;
-  ///   * 'file' - use the .clang-format file in the closest parent directory of
-  ///     each source file;
-  ///   * '{inline-formatting-style-in-yaml-format}'.
-  ///
-  /// See clang-format documentation for more about configuring format style.
-  llvm::Optional<std::string> FormatStyle;
+  /// \brief Turns on temporary destructor-based analysis.
+  llvm::Optional<bool> AnalyzeTemporaryDtors;
 
-  /// Specifies the name or e-mail of the user running clang-tidy.
+  /// \brief Specifies the name or e-mail of the user running clang-tidy.
   ///
   /// This option is used, for example, to place the correct user name in TODO()
   /// comments in the relevant check.
@@ -96,19 +84,19 @@ struct ClangTidyOptions {
   typedef std::pair<std::string, std::string> StringPair;
   typedef std::map<std::string, std::string> OptionMap;
 
-  /// Key-value mapping used to store check-specific options.
+  /// \brief Key-value mapping used to store check-specific options.
   OptionMap CheckOptions;
 
   typedef std::vector<std::string> ArgList;
 
-  /// Add extra compilation arguments to the end of the list.
+  /// \brief Add extra compilation arguments to the end of the list.
   llvm::Optional<ArgList> ExtraArgs;
 
-  /// Add extra compilation arguments to the start of the list.
+  /// \brief Add extra compilation arguments to the start of the list.
   llvm::Optional<ArgList> ExtraArgsBefore;
 };
 
-/// Abstract interface for retrieving various ClangTidy options.
+/// \brief Abstract interface for retrieving various ClangTidy options.
 class ClangTidyOptionsProvider {
 public:
   static const char OptionsSourceTypeDefaultBinary[];
@@ -117,10 +105,10 @@ public:
 
   virtual ~ClangTidyOptionsProvider() {}
 
-  /// Returns global options, which are independent of the file.
+  /// \brief Returns global options, which are independent of the file.
   virtual const ClangTidyGlobalOptions &getGlobalOptions() = 0;
 
-  /// ClangTidyOptions and its source.
+  /// \brief ClangTidyOptions and its source.
   //
   /// clang-tidy has 3 types of the sources in order of increasing priority:
   ///    * clang-tidy binary.
@@ -130,17 +118,17 @@ public:
   ///    * '-checks' commandline option.
   typedef std::pair<ClangTidyOptions, std::string> OptionsSource;
 
-  /// Returns an ordered vector of OptionsSources, in order of increasing
+  /// \brief Returns an ordered vector of OptionsSources, in order of increasing
   /// priority.
   virtual std::vector<OptionsSource>
   getRawOptions(llvm::StringRef FileName) = 0;
 
-  /// Returns options applying to a specific translation unit with the
+  /// \brief Returns options applying to a specific translation unit with the
   /// specified \p FileName.
   ClangTidyOptions getOptions(llvm::StringRef FileName);
 };
 
-/// Implementation of the \c ClangTidyOptionsProvider interface, which
+/// \brief Implementation of the \c ClangTidyOptionsProvider interface, which
 /// returns the same options for all files.
 class DefaultOptionsProvider : public ClangTidyOptionsProvider {
 public:
@@ -157,7 +145,7 @@ private:
   ClangTidyOptions DefaultOptions;
 };
 
-/// Implementation of ClangTidyOptions interface, which is used for
+/// \brief Implementation of ClangTidyOptions interface, which is used for
 /// '-config' command-line option.
 class ConfigOptionsProvider : public DefaultOptionsProvider {
 public:
@@ -172,7 +160,7 @@ private:
   ClangTidyOptions OverrideOptions;
 };
 
-/// Implementation of the \c ClangTidyOptionsProvider interface, which
+/// \brief Implementation of the \c ClangTidyOptionsProvider interface, which
 /// tries to find a configuration file in the closest parent directory of each
 /// source file.
 ///
@@ -182,13 +170,13 @@ private:
 /// specified using the appropriate constructor.
 class FileOptionsProvider : public DefaultOptionsProvider {
 public:
-  // A pair of configuration file base name and a function parsing
+  // \brief A pair of configuration file base name and a function parsing
   // configuration from text in the corresponding format.
   typedef std::pair<std::string, std::function<llvm::ErrorOr<ClangTidyOptions>(
                                      llvm::StringRef)>>
       ConfigFileHandler;
 
-  /// Configuration file handlers listed in the order of priority.
+  /// \brief Configuration file handlers listed in the order of priority.
   ///
   /// Custom configuration file formats can be supported by constructing the
   /// list of handlers and passing it to the appropriate \c FileOptionsProvider
@@ -199,7 +187,7 @@ public:
   /// FileOptionsProvider::ConfigFileHandlers ConfigHandlers;
   /// ConfigHandlers.emplace_back(".my-tidy-config", parseMyConfigFormat);
   /// ConfigHandlers.emplace_back(".clang-tidy", parseConfiguration);
-  /// return std::make_unique<FileOptionsProvider>(
+  /// return llvm::make_unique<FileOptionsProvider>(
   ///     GlobalOptions, DefaultOptions, OverrideOptions, ConfigHandlers);
   /// \endcode
   ///
@@ -207,7 +195,7 @@ public:
   /// take precedence over ".clang-tidy" if both reside in the same directory.
   typedef std::vector<ConfigFileHandler> ConfigFileHandlers;
 
-  /// Initializes the \c FileOptionsProvider instance.
+  /// \brief Initializes the \c FileOptionsProvider instance.
   ///
   /// \param GlobalOptions are just stored and returned to the caller of
   /// \c getGlobalOptions.
@@ -217,13 +205,11 @@ public:
   ///
   /// If any of the \param OverrideOptions fields are set, they will override
   /// whatever options are read from the configuration file.
-  FileOptionsProvider(
-      const ClangTidyGlobalOptions &GlobalOptions,
-      const ClangTidyOptions &DefaultOptions,
-      const ClangTidyOptions &OverrideOptions,
-      llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FS = nullptr);
+  FileOptionsProvider(const ClangTidyGlobalOptions &GlobalOptions,
+                      const ClangTidyOptions &DefaultOptions,
+                      const ClangTidyOptions &OverrideOptions);
 
-  /// Initializes the \c FileOptionsProvider instance with a custom set
+  /// \brief Initializes the \c FileOptionsProvider instance with a custom set
   /// of configuration file handlers.
   ///
   /// \param GlobalOptions are just stored and returned to the caller of
@@ -248,25 +234,24 @@ public:
   std::vector<OptionsSource> getRawOptions(llvm::StringRef FileName) override;
 
 protected:
-  /// Try to read configuration files from \p Directory using registered
+  /// \brief Try to read configuration files from \p Directory using registered
   /// \c ConfigHandlers.
   llvm::Optional<OptionsSource> tryReadConfigFile(llvm::StringRef Directory);
 
   llvm::StringMap<OptionsSource> CachedOptions;
   ClangTidyOptions OverrideOptions;
   ConfigFileHandlers ConfigHandlers;
-  llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem> FS;
 };
 
-/// Parses LineFilter from JSON and stores it to the \p Options.
+/// \brief Parses LineFilter from JSON and stores it to the \p Options.
 std::error_code parseLineFilter(llvm::StringRef LineFilter,
                                 ClangTidyGlobalOptions &Options);
 
-/// Parses configuration from JSON and returns \c ClangTidyOptions or an
+/// \brief Parses configuration from JSON and returns \c ClangTidyOptions or an
 /// error.
 llvm::ErrorOr<ClangTidyOptions> parseConfiguration(llvm::StringRef Config);
 
-/// Serializes configuration to a YAML-encoded string.
+/// \brief Serializes configuration to a YAML-encoded string.
 std::string configurationAsText(const ClangTidyOptions &Options);
 
 } // end namespace tidy

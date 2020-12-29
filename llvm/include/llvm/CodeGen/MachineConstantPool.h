@@ -1,8 +1,9 @@
-//===- CodeGen/MachineConstantPool.h - Abstract Constant Pool ---*- C++ -*-===//
+//===-- CodeGen/MachineConstantPool.h - Abstract Constant Pool --*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,28 +18,29 @@
 
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/MC/SectionKind.h"
+#include <cassert>
 #include <climits>
 #include <vector>
 
 namespace llvm {
 
 class Constant;
-class DataLayout;
 class FoldingSetNodeID;
+class DataLayout;
+class TargetMachine;
+class Type;
 class MachineConstantPool;
 class raw_ostream;
-class Type;
 
 /// Abstract base class for all machine specific constantpool value subclasses.
 ///
 class MachineConstantPoolValue {
   virtual void anchor();
-
   Type *Ty;
 
 public:
   explicit MachineConstantPoolValue(Type *ty) : Ty(ty) {}
-  virtual ~MachineConstantPoolValue() = default;
+  virtual ~MachineConstantPoolValue() {}
 
   /// getType - get type of this MachineConstantPoolValue.
   ///
@@ -62,7 +64,7 @@ inline raw_ostream &operator<<(raw_ostream &OS,
 /// This class is a data container for one entry in a MachineConstantPool.
 /// It contains a pointer to the value and an offset from the start of
 /// the constant pool.
-/// An entry in a MachineConstantPool
+/// @brief An entry in a MachineConstantPool
 class MachineConstantPoolEntry {
 public:
   /// The constant itself.
@@ -79,7 +81,6 @@ public:
     : Alignment(A) {
     Val.ConstVal = V;
   }
-
   MachineConstantPoolEntry(MachineConstantPoolValue *V, unsigned A)
       : Alignment(A) {
     Val.MachineCPVal = V;
@@ -116,7 +117,7 @@ public:
 /// the use of MO_ConstantPoolIndex values.  When emitting assembly or machine
 /// code, these virtual address references are converted to refer to the
 /// address of the function constant pool values.
-/// The machine constant pool.
+/// @brief The machine constant pool.
 class MachineConstantPool {
   unsigned PoolAlignment;       ///< The alignment for the pool.
   std::vector<MachineConstantPoolEntry> Constants; ///< The pool of constants.
@@ -127,7 +128,7 @@ class MachineConstantPool {
   const DataLayout &getDataLayout() const { return DL; }
 
 public:
-  /// The only constructor.
+  /// @brief The only constructor.
   explicit MachineConstantPool(const DataLayout &DL)
       : PoolAlignment(1), DL(DL) {}
   ~MachineConstantPool();
@@ -152,12 +153,13 @@ public:
 
   /// print - Used by the MachineFunction printer to print information about
   /// constant pool objects.  Implemented in MachineFunction.cpp
+  ///
   void print(raw_ostream &OS) const;
 
   /// dump - Call print(cerr) to be called from the debugger.
   void dump() const;
 };
 
-} // end namespace llvm
+} // End llvm namespace
 
-#endif // LLVM_CODEGEN_MACHINECONSTANTPOOL_H
+#endif

@@ -1,18 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// See bugs.llvm.org/PR20183
-//
-// XFAIL: with_system_cxx_lib=macosx10.11
-// XFAIL: with_system_cxx_lib=macosx10.10
-// XFAIL: with_system_cxx_lib=macosx10.9
-// XFAIL: with_system_cxx_lib=macosx10.8
-// XFAIL: with_system_cxx_lib=macosx10.7
 
 // <random>
 
@@ -22,11 +15,10 @@
 
 #include <random>
 #include <cassert>
-#include <system_error>
 
 #include "test_macros.h"
 
-int main(int, char**)
+int main()
 {
     {
         std::random_device r;
@@ -38,13 +30,11 @@ int main(int, char**)
     try
     {
         std::random_device r("/dev/null");
-        (void)r();
+        r();
         LIBCPP_ASSERT(false);
     }
     catch (const std::system_error&)
     {
     }
 #endif
-
-  return 0;
 }

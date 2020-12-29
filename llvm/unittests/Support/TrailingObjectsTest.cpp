@@ -1,8 +1,9 @@
 //=== - llvm/unittest/Support/TrailingObjectsTest.cpp ---------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -232,27 +233,6 @@ TEST(TrailingObjects, Realignment) {
   EXPECT_EQ(C->getTrailingObjects<char>(), reinterpret_cast<char *>(C + 1));
   EXPECT_EQ(C->getTrailingObjects<long>(),
             reinterpret_cast<long *>(llvm::alignAddr(
-                reinterpret_cast<char *>(C + 1) + 1, Align::Of<long>())));
+                reinterpret_cast<char *>(C + 1) + 1, alignof(long))));
 }
 }
-
-// Test the use of TrailingObjects with a template class. This
-// previously failed to compile due to a bug in MSVC's member access
-// control/lookup handling for OverloadToken.
-template <typename Derived>
-class Class5Tmpl : private llvm::TrailingObjects<Derived, float, int> {
-  using TrailingObjects = typename llvm::TrailingObjects<Derived, float>;
-  friend TrailingObjects;
-
-  size_t numTrailingObjects(
-      typename TrailingObjects::template OverloadToken<float>) const {
-    return 1;
-  }
-
-  size_t numTrailingObjects(
-      typename TrailingObjects::template OverloadToken<int>) const {
-    return 2;
-  }
-};
-
-class Class5 : public Class5Tmpl<Class5> {};

@@ -1,21 +1,33 @@
 //===-- ValueObjectList.cpp -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Core/ValueObjectList.h"
 
-#include "lldb/Core/ValueObject.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/SharingPtr.h"
-
-#include <utility>
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/ValueObjectChild.h"
+#include "lldb/Core/ValueObjectRegister.h"
+#include "lldb/Core/ValueObjectVariable.h"
+#include "lldb/Target/ExecutionContext.h"
+#include "lldb/Target/Process.h"
 
 using namespace lldb;
 using namespace lldb_private;
+
+ValueObjectList::ValueObjectList() : m_value_objects() {}
+
+ValueObjectList::ValueObjectList(const ValueObjectList &rhs)
+    : m_value_objects(rhs.m_value_objects) {}
+
+ValueObjectList::~ValueObjectList() {}
 
 const ValueObjectList &ValueObjectList::operator=(const ValueObjectList &rhs) {
   if (this != &rhs)
@@ -79,8 +91,8 @@ ValueObjectSP ValueObjectList::FindValueObjectByUID(lldb::user_id_t uid) {
   collection::iterator pos, end = m_value_objects.end();
 
   for (pos = m_value_objects.begin(); pos != end; ++pos) {
-    // Watch out for NULL objects in our list as the list might get resized to
-    // a specific size and lazily filled in
+    // Watch out for NULL objects in our list as the list
+    // might get resized to a specific size and lazily filled in
     ValueObject *valobj = (*pos).get();
     if (valobj && valobj->GetID() == uid) {
       valobj_sp = *pos;

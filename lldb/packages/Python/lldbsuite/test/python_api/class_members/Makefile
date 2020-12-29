@@ -1,3 +1,5 @@
+LEVEL = ../../make
+
 OBJCXX_SOURCES := main.mm
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

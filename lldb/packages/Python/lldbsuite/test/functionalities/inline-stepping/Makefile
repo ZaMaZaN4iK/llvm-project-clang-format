@@ -1,8 +1,9 @@
+LEVEL = ../../make
+
 CXX_SOURCES := calling.cpp
 
 ifneq (,$(findstring icc,$(CC)))
-    CXXFLAGS_EXTRAS := -debug inline-debug-info
+    CXXFLAGS += -debug inline-debug-info
 endif
 
-
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

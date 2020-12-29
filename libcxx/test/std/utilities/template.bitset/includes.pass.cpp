@@ -1,31 +1,32 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-// test that <bitset> includes <string> and <iosfwd>
+// test that <bitset> includes <cstddef>, <string>, <stdexcept> and <iosfwd>
 
 #include <bitset>
 
-#include "test_macros.h"
+#ifndef _LIBCPP_CSTDDEF
+#error <cstddef> has not been included
+#endif
 
-template <class> void test_typedef() {}
+#ifndef _LIBCPP_STRING
+#error <string> has not been included
+#endif
 
-int main(int, char**)
+#ifndef _LIBCPP_STDEXCEPT
+#error <stdexcept> has not been included
+#endif
+
+#ifndef _LIBCPP_IOSFWD
+#error <iosfwd> has not been included
+#endif
+
+int main()
 {
-  { // test for <string>
-    std::string s; ((void)s);
-  }
-  { // test for <iosfwd>
-    test_typedef<std::ios>();
-    test_typedef<std::wios>();
-    test_typedef<std::istream>();
-    test_typedef<std::ostream>();
-    test_typedef<std::iostream>();
-  }
-
-  return 0;
 }

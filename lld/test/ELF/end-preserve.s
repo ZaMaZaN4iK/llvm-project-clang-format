@@ -1,5 +1,5 @@
-// REQUIRES: x86
 // Should preserve the value of the "end" symbol if it is defined.
+// REQUIRES: x86
 
 // RUN: llvm-mc -filetype=obj -triple=x86_64-pc-linux %s -o %t.o
 // RUN: ld.lld %t.o -o %t

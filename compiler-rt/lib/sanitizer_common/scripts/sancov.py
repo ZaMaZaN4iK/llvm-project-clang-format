@@ -14,14 +14,12 @@ import sys
 prog_name = ""
 
 def Usage():
-  sys.stderr.write(
-    "Usage: \n" + \
-    " " + prog_name + " merge FILE [FILE...] > OUTPUT\n" \
-    " " + prog_name + " print FILE [FILE...]\n" \
-    " " + prog_name + " unpack FILE [FILE...]\n" \
-    " " + prog_name + " rawunpack FILE [FILE ...]\n" \
-    " " + prog_name + " missing BINARY < LIST_OF_PCS\n" \
-    "\n")
+  print >> sys.stderr, "Usage: \n" + \
+      " " + prog_name + " merge FILE [FILE...] > OUTPUT\n" \
+      " " + prog_name + " print FILE [FILE...]\n" \
+      " " + prog_name + " unpack FILE [FILE...]\n" \
+      " " + prog_name + " rawunpack FILE [FILE ...]\n" \
+      " " + prog_name + " missing BINARY < LIST_OF_PCS\n"
   exit(1)
 
 def CheckBits(bits):
@@ -70,19 +68,16 @@ def ReadOneFile(path):
       raise Exception('File %s is short (< 8 bytes)' % path)
     bits = ReadMagicAndReturnBitness(f, path)
     size -= 8
-    w = size * 8 // bits
-    s = struct.unpack_from(TypeCodeForStruct(bits) * (w), f.read(size))
-  sys.stderr.write(
-    "%s: read %d %d-bit PCs from %s\n" % (prog_name, w, bits, path))
+    s = struct.unpack_from(TypeCodeForStruct(bits) * (size * 8 / bits), f.read(size))
+  print >>sys.stderr, "%s: read %d %d-bit PCs from %s" % (prog_name, size * 8 / bits, bits, path)
   return s
 
 def Merge(files):
   s = set()
   for f in files:
     s = s.union(set(ReadOneFile(f)))
-  sys.stderr.write(
-    "%s: %d files merged; %d PCs total\n" % (prog_name, len(files), len(s))
-  )
+  print >> sys.stderr, "%s: %d files merged; %d PCs total" % \
+    (prog_name, len(files), len(s))
   return sorted(s)
 
 def PrintFiles(files):
@@ -90,9 +85,10 @@ def PrintFiles(files):
     s = Merge(files)
   else:  # If there is just on file, print the PCs in order.
     s = ReadOneFile(files[0])
-    sys.stderr.write("%s: 1 file merged; %d PCs total\n" % (prog_name, len(s)))
+    print >> sys.stderr, "%s: 1 file merged; %d PCs total" % \
+      (prog_name, len(s))
   for i in s:
-    print("0x%x" % i)
+    print "0x%x" % i
 
 def MergeAndPrint(files):
   if sys.stdout.isatty():
@@ -101,27 +97,27 @@ def MergeAndPrint(files):
   bits = 32
   if max(s) > 0xFFFFFFFF:
     bits = 64
-  stdout_buf = getattr(sys.stdout, 'buffer', sys.stdout)
-  array.array('I', MagicForBits(bits)).tofile(stdout_buf)
+  array.array('I', MagicForBits(bits)).tofile(sys.stdout)
   a = struct.pack(TypeCodeForStruct(bits) * len(s), *s)
-  stdout_buf.write(a)
+  sys.stdout.write(a)
 
 
 def UnpackOneFile(path):
   with open(path, mode="rb") as f:
-    sys.stderr.write("%s: unpacking %s\n" % (prog_name, path))
+    print >> sys.stderr, "%s: unpacking %s" % (prog_name, path)
     while True:
       header = f.read(12)
       if not header: return
       if len(header) < 12:
         break
       pid, module_length, blob_size = struct.unpack('iII', header)
-      module = f.read(module_length).decode('utf-8')
+      module = f.read(module_length)
       blob = f.read(blob_size)
       assert(len(module) == module_length)
       assert(len(blob) == blob_size)
       extracted_file = "%s.%d.sancov" % (module, pid)
-      sys.stderr.write("%s: extracting %s\n" % (prog_name, extracted_file))
+      print >> sys.stderr, "%s: extracting %s" % \
+        (prog_name, extracted_file)
       # The packed file may contain multiple blobs for the same pid/module
       # pair. Append to the end of the file instead of overwriting.
       with open(extracted_file, 'ab') as f2:
@@ -137,7 +133,7 @@ def Unpack(files):
 def UnpackOneRawFile(path, map_path):
   mem_map = []
   with open(map_path, mode="rt") as f_map:
-    sys.stderr.write("%s: reading map %s\n" % (prog_name, map_path))
+    print >> sys.stderr, "%s: reading map %s" % (prog_name, map_path)
     bits = int(f_map.readline())
     if bits != 32 and bits != 64:
       raise Exception('Wrong bits size in the map')
@@ -151,12 +147,12 @@ def UnpackOneRawFile(path, map_path):
   mem_map_keys = [m[0] for m in mem_map]
 
   with open(path, mode="rb") as f:
-    sys.stderr.write("%s: unpacking %s\n" % (prog_name, path))
+    print >> sys.stderr, "%s: unpacking %s" % (prog_name, path)
 
     f.seek(0, 2)
     size = f.tell()
     f.seek(0, 0)
-    pcs = struct.unpack_from(TypeCodeForStruct(bits) * (size * 8 // bits), f.read(size))
+    pcs = struct.unpack_from(TypeCodeForStruct(bits) * (size * 8 / bits), f.read(size))
     mem_map_pcs = [[] for i in range(0, len(mem_map))]
 
     for pc in pcs:
@@ -165,7 +161,7 @@ def UnpackOneRawFile(path, map_path):
       (start, end, base, module_path) = mem_map[map_idx]
       assert pc >= start
       if pc >= end:
-        sys.stderr.write("warning: %s: pc %x outside of any known mapping\n" % (prog_name, pc))
+        print >> sys.stderr, "warning: %s: pc %x outside of any known mapping" % (prog_name, pc)
         continue
       mem_map_pcs[map_idx].append(pc - base)
 
@@ -173,7 +169,7 @@ def UnpackOneRawFile(path, map_path):
       if len(pc_list) == 0: continue
       assert path.endswith('.sancov.raw')
       dst_path = module_path + '.' + os.path.basename(path)[:-4]
-      sys.stderr.write("%s: writing %d PCs to %s\n" % (prog_name, len(pc_list), dst_path))
+      print >> sys.stderr, "%s: writing %d PCs to %s" % (prog_name, len(pc_list), dst_path)
       sorted_pc_list = sorted(pc_list)
       pc_buffer = struct.pack(TypeCodeForStruct(bits) * len(pc_list), *sorted_pc_list)
       with open(dst_path, 'ab+') as f2:
@@ -194,7 +190,7 @@ def GetInstrumentedPCs(binary):
   # - with call or callq,
   # - directly or via PLT.
   cmd = "objdump -d %s | " \
-        "grep '^\s\+[0-9a-f]\+:.*\scall\(q\|\)\s\+[0-9a-f]\+ <__sanitizer_cov\(_with_check\|\|_trace_pc_guard\)\(@plt\|\)>' | " \
+        "grep '^\s\+[0-9a-f]\+:.*\scall\(q\|\)\s\+[0-9a-f]\+ <__sanitizer_cov\(_with_check\|\)\(@plt\|\)>' | " \
         "grep '^\s\+[0-9a-f]\+' -o" % binary
   proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                           shell=True)
@@ -208,19 +204,18 @@ def PrintMissing(binary):
   if not os.path.isfile(binary):
     raise Exception('File not found: %s' % binary)
   instrumented = GetInstrumentedPCs(binary)
-  sys.stderr.write("%s: found %d instrumented PCs in %s\n" % (prog_name,
-                                                              len(instrumented),
-                                                              binary))
+  print >> sys.stderr, "%s: found %d instrumented PCs in %s" % (prog_name,
+                                                                len(instrumented),
+                                                                binary)
   covered = set(int(line, 16) for line in sys.stdin)
-  sys.stderr.write("%s: read %d PCs from stdin\n" % (prog_name, len(covered)))
+  print >> sys.stderr, "%s: read %d PCs from stdin" % (prog_name, len(covered))
   missing = instrumented - covered
-  sys.stderr.write("%s: %d PCs missing from coverage\n" % (prog_name, len(missing)))
+  print >> sys.stderr, "%s: %d PCs missing from coverage" % (prog_name, len(missing))
   if (len(missing) > len(instrumented) - len(covered)):
-    sys.stderr.write(
-      "%s: WARNING: stdin contains PCs not found in binary\n" % prog_name
-    )
+    print >> sys.stderr, \
+        "%s: WARNING: stdin contains PCs not found in binary" % prog_name
   for pc in sorted(missing):
-    print("0x%x" % pc)
+    print "0x%x" % pc
 
 if __name__ == '__main__':
   prog_name = sys.argv[0]

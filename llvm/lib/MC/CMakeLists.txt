@@ -1,4 +1,4 @@
-add_llvm_component_library(LLVMMC
+add_llvm_library(LLVMMC
   ConstantPools.cpp
   ELFObjectWriter.cpp
   MCAsmBackend.cpp
@@ -6,9 +6,6 @@ add_llvm_component_library(LLVMMC
   MCAsmInfoCOFF.cpp
   MCAsmInfoDarwin.cpp
   MCAsmInfoELF.cpp
-  MCAsmInfoWasm.cpp
-  MCAsmInfoXCOFF.cpp
-  MCAsmMacro.cpp
   MCAsmStreamer.cpp
   MCAssembler.cpp
   MCCodeEmitter.cpp
@@ -37,27 +34,19 @@ add_llvm_component_library(LLVMMC
   MCSectionCOFF.cpp
   MCSectionELF.cpp
   MCSectionMachO.cpp
-  MCSectionWasm.cpp
-  MCSectionXCOFF.cpp
   MCStreamer.cpp
   MCSubtargetInfo.cpp
   MCSymbol.cpp
   MCSymbolELF.cpp
   MCTargetOptions.cpp
   MCValue.cpp
-  MCWasmObjectTargetWriter.cpp
-  MCWasmStreamer.cpp
   MCWin64EH.cpp
-  MCWinCOFFStreamer.cpp
   MCWinEH.cpp
-  MCXCOFFObjectTargetWriter.cpp
-  MCXCOFFStreamer.cpp
   MachObjectWriter.cpp
   StringTableBuilder.cpp
   SubtargetFeature.cpp
-  WasmObjectWriter.cpp
   WinCOFFObjectWriter.cpp
-  XCOFFObjectWriter.cpp
+  WinCOFFStreamer.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${LLVM_MAIN_INCLUDE_DIR}/llvm/MC

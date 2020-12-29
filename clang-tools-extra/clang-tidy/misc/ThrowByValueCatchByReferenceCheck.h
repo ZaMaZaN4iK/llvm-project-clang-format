@@ -1,21 +1,22 @@
 //===--- ThrowByValueCatchByReferenceCheck.h - clang-tidy--------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_MISC_THROW_BY_VALUE_CATCH_BY_REFERENCE_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_MISC_THROW_BY_VALUE_CATCH_BY_REFERENCE_H
 
-#include "../ClangTidyCheck.h"
+#include "../ClangTidy.h"
 
 namespace clang {
 namespace tidy {
 namespace misc {
 
-///checks for locations that do not throw by value
+///\brief checks for locations that do not throw by value
 // or catch by reference.
 // The check is C++ only. It checks that all throw locations
 // throw by value and not by pointer. Additionally it
@@ -41,8 +42,6 @@ private:
   bool isCatchVariable(const DeclRefExpr *declRefExpr);
   bool isFunctionOrCatchVar(const DeclRefExpr *declRefExpr);
   const bool CheckAnonymousTemporaries;
-  const bool WarnOnLargeObject;
-  uint64_t MaxSize; // No `const` because we have to set it in two steps.
 };
 
 } // namespace misc

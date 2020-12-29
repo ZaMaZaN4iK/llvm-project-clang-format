@@ -218,103 +218,14 @@ int FooBar();
 
 // rdar://14124644
 @interface test_vararg1
-/// @param[in] arg something
+/// @param[in] arg somthing
 /// @param[in] ... This is vararg
 - (void) VarArgMeth : (id)arg, ...;
 @end
 
 @implementation test_vararg1
-/// @param[in] arg something
+/// @param[in] arg somthing
 /// @param[in] ... This is vararg
 - (void) VarArgMeth : (id)arg, ... {}
 @end
 
-/**
- * blockPointerVariable
- *
- * @param i is integer.
- * @returns integer.
- */
-int (^blockPointerVariable)(int i);
-
-struct HasFields {
-  /**
-   * blockPointerField
-   *
-   * \param i is integer.
-   * \returns integer.
-   */
-  int (^blockPointerFields)(int i);
-};
-
-// expected-warning@+5 {{'\returns' command used in a comment that is attached to a function returning void}}
-/**
- * functionPointerVariable
- *
- * \param p not here.
- * \returns integer.
- */
-void (^_Nullable blockPointerVariableThatLeadsNowhere)();
-
-@interface CheckFunctionBlockPointerVars {
-  /**
-   * functionPointerIVar
-   *
-   * @param i is integer.
-   * @returns integer.
-   */
-  int (*functionPointerIVar)(int i);
-
-  /**
-   * blockPointerIVar
-   *
-   * \param i is integer.
-   * \returns integer.
-   */
-  int (^blockPointerIVar)(int i);
-}
-
-/**
- * functionPointerProperty
- *
- * @param i is integer.
- * @returns integer.
- */
-@property int (*functionPointerProperty)(int i);
-
-/**
- * blockPointerProperty
- *
- * \param i is integer.
- * \returns integer.
- */
-@property int (^blockPointerProperty)(int i);
-
-/**
- * blockReturnsNothing
- *
- * \returns Nothing, but can allow this as this pattern is used to document the
- * value that the property getter returns.
- */
-@property void (^blockReturnsNothing)();
-
-@end
-
-/*!
- * Block typedef with variadic params.
- *
- * @param a
- * works
- *
- * @param ...
- * now should work too.
- */
-typedef void (^VariadicBlockType)(int a, ...);
-
-// PR42844 - Assertion failures when using typedefed block pointers
-typedef void(^VoidBlockType)();
-typedef VoidBlockType VoidBlockTypeCall();
-VoidBlockTypeCall *d; ///< \return none
-// expected-warning@-1 {{'\return' command used in a comment that is not attached to a function or method declaration}}
-VoidBlockTypeCall ^e; ///< \return none
-// expected-warning@-1 {{'\return' command used in a comment that is not attached to a function or method declaration}}

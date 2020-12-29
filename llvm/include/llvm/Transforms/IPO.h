@@ -1,8 +1,9 @@
 //===- llvm/Transforms/IPO.h - Interprocedural Transformations --*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,7 +15,6 @@
 #ifndef LLVM_TRANSFORMS_IPO_H
 #define LLVM_TRANSFORMS_IPO_H
 
-#include "llvm/ADT/SmallVector.h"
 #include <functional>
 #include <vector>
 
@@ -44,14 +44,18 @@ ModulePass *createStripSymbolsPass(bool OnlyDebugInfo = false);
 //
 ModulePass *createStripNonDebugSymbolsPass();
 
+/// This function returns a new pass that downgrades the debug info in the
+/// module to line tables only.
+ModulePass *createStripNonLineTableDebugInfoPass();
+
 //===----------------------------------------------------------------------===//
 //
-// This pass removes llvm.dbg.declare intrinsics.
+// These pass removes llvm.dbg.declare intrinsics.
 ModulePass *createStripDebugDeclarePass();
 
 //===----------------------------------------------------------------------===//
 //
-// This pass removes unused symbols' debug info.
+// These pass removes unused symbols' debug info.
 ModulePass *createStripDeadDebugInfoPass();
 
 //===----------------------------------------------------------------------===//
@@ -104,8 +108,7 @@ Pass *createFunctionImportPass();
 /// threshold given here.
 Pass *createFunctionInliningPass();
 Pass *createFunctionInliningPass(int Threshold);
-Pass *createFunctionInliningPass(unsigned OptLevel, unsigned SizeOptLevel,
-                                 bool DisableInlineHotCallSite);
+Pass *createFunctionInliningPass(unsigned OptLevel, unsigned SizeOptLevel);
 Pass *createFunctionInliningPass(InlineParams &Params);
 
 //===----------------------------------------------------------------------===//
@@ -175,17 +178,10 @@ Pass *createLoopExtractorPass();
 ///
 Pass *createSingleLoopExtractorPass();
 
-/// createBlockExtractorPass - This pass extracts all the specified blocks
-/// from the functions in the module.
+/// createBlockExtractorPass - This pass extracts all blocks (except those
+/// specified in the argument list) from the functions in the module.
 ///
 ModulePass *createBlockExtractorPass();
-ModulePass *
-createBlockExtractorPass(const SmallVectorImpl<BasicBlock *> &BlocksToExtract,
-                         bool EraseFunctions);
-ModulePass *
-createBlockExtractorPass(const SmallVectorImpl<SmallVector<BasicBlock *, 16>>
-                             &GroupsOfBlocksToExtract,
-                         bool EraseFunctions);
 
 /// createStripDeadPrototypesPass - This pass removes any function declarations
 /// (prototypes) that are not used.
@@ -205,60 +201,41 @@ Pass *createReversePostOrderFunctionAttrsPass();
 ModulePass *createMergeFunctionsPass();
 
 //===----------------------------------------------------------------------===//
-/// createHotColdSplittingPass - This pass outlines cold blocks into a separate
-/// function(s).
-ModulePass *createHotColdSplittingPass();
-
-//===----------------------------------------------------------------------===//
 /// createPartialInliningPass - This pass inlines parts of functions.
 ///
 ModulePass *createPartialInliningPass();
+
+//===----------------------------------------------------------------------===//
+// createMetaRenamerPass - Rename everything with metasyntatic names.
+//
+ModulePass *createMetaRenamerPass();
 
 //===----------------------------------------------------------------------===//
 /// createBarrierNoopPass - This pass is purely a module pass barrier in a pass
 /// manager.
 ModulePass *createBarrierNoopPass();
 
-/// createCalledValuePropagationPass - Attach metadata to indirct call sites
-/// indicating the set of functions they may target at run-time.
-ModulePass *createCalledValuePropagationPass();
-
-/// What to do with the summary when running passes that operate on it.
-enum class PassSummaryAction {
+/// What to do with the summary when running the LowerTypeTests pass.
+enum class LowerTypeTestsSummaryAction {
   None,   ///< Do nothing.
-  Import, ///< Import information from summary.
-  Export, ///< Export information to summary.
+  Import, ///< Import typeid resolutions from summary and globals.
+  Export, ///< Export typeid resolutions to summary and globals.
 };
 
-/// This pass lowers type metadata and the llvm.type.test intrinsic to
+/// \brief This pass lowers type metadata and the llvm.type.test intrinsic to
 /// bitsets.
-///
-/// The behavior depends on the summary arguments:
-/// - If ExportSummary is non-null, this pass will export type identifiers to
-///   the given summary.
-/// - Otherwise, if ImportSummary is non-null, this pass will import type
-///   identifiers from the given summary.
-/// - Otherwise it does neither.
-/// It is invalid for both ExportSummary and ImportSummary to be non-null.
-ModulePass *createLowerTypeTestsPass(ModuleSummaryIndex *ExportSummary,
-                                     const ModuleSummaryIndex *ImportSummary);
+/// \param Action What to do with the summary passed as Index.
+/// \param Index The summary to use for importing or exporting, this can be null
+///              when Action is None.
+ModulePass *createLowerTypeTestsPass(LowerTypeTestsSummaryAction Action,
+                                     ModuleSummaryIndex *Index);
 
-/// This pass export CFI checks for use by external modules.
+/// \brief This pass export CFI checks for use by external modules.
 ModulePass *createCrossDSOCFIPass();
 
-/// This pass implements whole-program devirtualization using type
+/// \brief This pass implements whole-program devirtualization using type
 /// metadata.
-///
-/// The behavior depends on the summary arguments:
-/// - If ExportSummary is non-null, this pass will export type identifiers to
-///   the given summary.
-/// - Otherwise, if ImportSummary is non-null, this pass will import type
-///   identifiers from the given summary.
-/// - Otherwise it does neither.
-/// It is invalid for both ExportSummary and ImportSummary to be non-null.
-ModulePass *
-createWholeProgramDevirtPass(ModuleSummaryIndex *ExportSummary,
-                             const ModuleSummaryIndex *ImportSummary);
+ModulePass *createWholeProgramDevirtPass();
 
 /// This pass splits globals into pieces for the benefit of whole-program
 /// devirtualization and control-flow integrity.
@@ -271,8 +248,7 @@ ModulePass *createSampleProfileLoaderPass();
 ModulePass *createSampleProfileLoaderPass(StringRef Name);
 
 /// Write ThinLTO-ready bitcode to Str.
-ModulePass *createWriteThinLTOBitcodePass(raw_ostream &Str,
-                                          raw_ostream *ThinLinkOS = nullptr);
+ModulePass *createWriteThinLTOBitcodePass(raw_ostream &Str);
 
 } // End llvm namespace
 

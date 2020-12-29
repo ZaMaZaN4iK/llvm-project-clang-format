@@ -1,5 +1,5 @@
 ; RUN: llc -march=hexagon -mcpu=hexagonv5 -enable-pipeliner \
-; RUN:     -pipeliner-max-stages=2 < %s -pipeliner-experimental-cg=true | FileCheck %s
+; RUN:     -pipeliner-max-stages=2 < %s | FileCheck %s
 
 @A = global [8 x i32] [i32 4, i32 -3, i32 5, i32 -2, i32 -1, i32 2, i32 6, i32 -2], align 8
 
@@ -15,8 +15,8 @@ for.body.preheader:
 
 ; CHECK: loop0(.LBB0_[[LOOP:.]],
 ; CHECK: .LBB0_[[LOOP]]:
-; CHECK: [[REG1:(r[0-9]+)]] = max(r{{[0-9]+}},[[REG1]])
-; CHECK: [[REG0:(r[0-9]+)]] = add([[REG2:(r[0-9]+)]],[[REG0]])
+; CHECK: [[REG1:(r[0-9]+)]] = max(r{{[0-9]+}}, [[REG1]])
+; CHECK: [[REG0:(r[0-9]+)]] = add([[REG2:(r[0-9]+)]], [[REG0]])
 ; CHECK: [[REG2]] = memw
 ; CHECK: endloop0
 

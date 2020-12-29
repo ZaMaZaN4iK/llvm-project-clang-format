@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -80,7 +81,7 @@ void use_placeholders_to_prevent_unused_warning() {
 #endif
 }
 
-int main(int, char**)
+int main()
 {
     use_placeholders_to_prevent_unused_warning();
     test(std::placeholders::_1);
@@ -93,6 +94,4 @@ int main(int, char**)
     test(std::placeholders::_8);
     test(std::placeholders::_9);
     test(std::placeholders::_10);
-
-  return 0;
 }

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,7 +25,6 @@
 #include <type_traits>
 #include <cassert>
 
-#include "test_macros.h"
 #include "../cases.h"
 
 template <class T>
@@ -79,7 +79,7 @@ test(typename std::enable_if<!std::is_integral<T>::value>::type* = 0, typename s
     test(std::complex<T>(3, 4), std::complex<U>(5, 6));
 }
 
-int main(int, char**)
+int main()
 {
     test<int, float>();
     test<int, double>();
@@ -101,6 +101,4 @@ int main(int, char**)
 
     test<long double, float>();
     test<long double, double>();
-
-  return 0;
 }

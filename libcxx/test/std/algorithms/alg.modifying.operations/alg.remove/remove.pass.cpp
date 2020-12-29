@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,27 +12,16 @@
 // template<ForwardIterator Iter, class T>
 //   requires OutputIterator<Iter, RvalueOf<Iter::reference>::type>
 //         && HasEqualTo<Iter::value_type, T>
-//   constexpr Iter         // constexpr after C++17
+//   Iter
 //   remove(Iter first, Iter last, const T& value);
 
 #include <algorithm>
 #include <cassert>
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
 #include <memory>
-
-#include "test_macros.h"
-#include "test_iterators.h"
-
-#if TEST_STD_VER > 17
-TEST_CONSTEXPR bool test_constexpr() {
-    int ia[] = {1, 3, 5, 2, 5, 6};
-
-    auto it = std::remove(std::begin(ia), std::end(ia), 5);
-
-    return (std::begin(ia) + std::size(ia) - 2) == it  // we removed two elements
-        && std::none_of(std::begin(ia), it, [](int a) {return a == 5; })
-           ;
-    }
 #endif
+
+#include "test_iterators.h"
 
 template <class Iter>
 void
@@ -49,7 +39,8 @@ test()
     assert(ia[5] == 4);
 }
 
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
+
 template <class Iter>
 void
 test1()
@@ -71,25 +62,22 @@ test1()
     assert(*ia[4] == 3);
     assert(*ia[5] == 4);
 }
-#endif // TEST_STD_VER >= 11
 
-int main(int, char**)
+#endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
+
+int main()
 {
     test<forward_iterator<int*> >();
     test<bidirectional_iterator<int*> >();
     test<random_access_iterator<int*> >();
     test<int*>();
 
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
+
     test1<forward_iterator<std::unique_ptr<int>*> >();
     test1<bidirectional_iterator<std::unique_ptr<int>*> >();
     test1<random_access_iterator<std::unique_ptr<int>*> >();
     test1<std::unique_ptr<int>*>();
-#endif // TEST_STD_VER >= 11
 
-#if TEST_STD_VER > 17
-    static_assert(test_constexpr());
-#endif
-
-  return 0;
+#endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
 }

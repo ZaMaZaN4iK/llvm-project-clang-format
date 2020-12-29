@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,7 +27,7 @@ test(const T& a, const T& b, C c, const T& x)
     assert(&std::max(a, b, c) == &x);
 }
 
-int main(int, char**)
+int main()
 {
     {
     int x = 0;
@@ -54,6 +55,4 @@ int main(int, char**)
     static_assert(std::max(y, x, std::greater<int>()) == y, "" );
     }
 #endif
-
-  return 0;
 }

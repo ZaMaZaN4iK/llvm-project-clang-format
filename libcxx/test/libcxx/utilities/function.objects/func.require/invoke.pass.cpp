@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,7 +32,7 @@ struct Type
 #endif
 };
 
-int main(int, char**)
+int main()
 {
     static_assert(sizeof(std::__invoke(&Type::f1, std::declval<Type        >())) == 1, "");
     static_assert(sizeof(std::__invoke(&Type::f2, std::declval<Type const  >())) == 2, "");
@@ -41,6 +42,4 @@ int main(int, char**)
     static_assert(sizeof(std::__invoke(&Type::g3, std::declval<Type      &&>())) == 3, "");
     static_assert(sizeof(std::__invoke(&Type::g4, std::declval<Type const&&>())) == 4, "");
 #endif
-
-  return 0;
 }

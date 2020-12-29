@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,11 +12,6 @@
 
 // allocator:
 // pointer allocate(size_type n, allocator<void>::const_pointer hint=0);
-
-// When back-deploying to macosx10.7, the RTTI for exception classes
-// incorrectly provided by libc++.dylib is mixed with the one in
-// libc++abi.dylib and exceptions are not caught properly.
-// XFAIL: with_system_cxx_lib=macosx10.7
 
 #include <memory>
 #include <cassert>
@@ -27,7 +23,7 @@ void test_max(size_t count)
 {
     std::allocator<T> a;
     try {
-        TEST_IGNORE_NODISCARD a.allocate(count);
+        a.allocate(count);
         assert(false);
     } catch (const std::exception &) {
     }
@@ -44,10 +40,8 @@ void test()
     test_max<T> ((size_t) -1);                     // way too large
 }
 
-int main(int, char**)
+int main()
 {
     test<double>();
     LIBCPP_ONLY(test<const double>());
-
-  return 0;
 }

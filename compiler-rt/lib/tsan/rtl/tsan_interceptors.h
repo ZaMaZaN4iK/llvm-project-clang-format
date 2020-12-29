@@ -19,19 +19,9 @@ class ScopedInterceptor {
   bool ignoring_;
 };
 
-LibIgnore *libignore();
-
-#if !SANITIZER_GO
-INLINE bool in_symbolizer() {
-  cur_thread_init();
-  return UNLIKELY(cur_thread()->in_symbolizer);
-}
-#endif
-
 }  // namespace __tsan
 
 #define SCOPED_INTERCEPTOR_RAW(func, ...) \
-    cur_thread_init(); \
     ThreadState *thr = cur_thread(); \
     const uptr caller_pc = GET_CALLER_PC(); \
     ScopedInterceptor si(thr, #func, caller_pc); \
@@ -56,21 +46,5 @@ INLINE bool in_symbolizer() {
     si.EnableIgnores();
 
 #define TSAN_INTERCEPTOR(ret, func, ...) INTERCEPTOR(ret, func, __VA_ARGS__)
-
-#if SANITIZER_NETBSD
-# define TSAN_INTERCEPTOR_NETBSD_ALIAS(ret, func, ...) \
-  TSAN_INTERCEPTOR(ret, __libc_##func, __VA_ARGS__) \
-  ALIAS(WRAPPER_NAME(pthread_##func));
-# define TSAN_INTERCEPTOR_NETBSD_ALIAS_THR(ret, func, ...) \
-  TSAN_INTERCEPTOR(ret, __libc_thr_##func, __VA_ARGS__) \
-  ALIAS(WRAPPER_NAME(pthread_##func));
-# define TSAN_INTERCEPTOR_NETBSD_ALIAS_THR2(ret, func, func2, ...) \
-  TSAN_INTERCEPTOR(ret, __libc_thr_##func, __VA_ARGS__) \
-  ALIAS(WRAPPER_NAME(pthread_##func2));
-#else
-# define TSAN_INTERCEPTOR_NETBSD_ALIAS(ret, func, ...)
-# define TSAN_INTERCEPTOR_NETBSD_ALIAS_THR(ret, func, ...)
-# define TSAN_INTERCEPTOR_NETBSD_ALIAS_THR2(ret, func, func2, ...)
-#endif
 
 #endif  // TSAN_INTERCEPTORS_H

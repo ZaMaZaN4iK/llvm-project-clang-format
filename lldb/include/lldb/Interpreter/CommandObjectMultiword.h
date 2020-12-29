@@ -1,20 +1,26 @@
 //===-- CommandObjectMultiword.h --------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_CommandObjectMultiword_h_
 #define liblldb_CommandObjectMultiword_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Interpreter/CommandObject.h"
-#include "lldb/Utility/CompletionRequest.h"
 
 namespace lldb_private {
 
+//-------------------------------------------------------------------------
 // CommandObjectMultiword
+//-------------------------------------------------------------------------
 
 class CommandObjectMultiword : public CommandObject {
   // These two want to iterate over the subcommand dictionary.
@@ -50,7 +56,10 @@ public:
 
   bool WantsRawCommandString() override { return false; }
 
-  void HandleCompletion(CompletionRequest &request) override;
+  int HandleCompletion(Args &input, int &cursor_index,
+                       int &cursor_char_position, int match_start_point,
+                       int max_return_elements, bool &word_complete,
+                       StringList &matches) override;
 
   const char *GetRepeatCommand(Args &current_command_args,
                                uint32_t index) override;
@@ -78,8 +87,8 @@ public:
 
   ~CommandObjectProxy() override;
 
-  // Subclasses must provide a command object that will be transparently used
-  // for this object.
+  // Subclasses must provide a command object that will be transparently
+  // used for this object.
   virtual CommandObject *GetProxyCommandObject() = 0;
 
   llvm::StringRef GetHelpLong() override;
@@ -112,11 +121,17 @@ public:
 
   Options *GetOptions() override;
 
-  void HandleCompletion(CompletionRequest &request) override;
+  int HandleCompletion(Args &input, int &cursor_index,
+                       int &cursor_char_position, int match_start_point,
+                       int max_return_elements, bool &word_complete,
+                       StringList &matches) override;
 
-  void
-  HandleArgumentCompletion(CompletionRequest &request,
-                           OptionElementVector &opt_element_vector) override;
+  int HandleArgumentCompletion(Args &input, int &cursor_index,
+                               int &cursor_char_position,
+                               OptionElementVector &opt_element_vector,
+                               int match_start_point, int max_return_elements,
+                               bool &word_complete,
+                               StringList &matches) override;
 
   const char *GetRepeatCommand(Args &current_command_args,
                                uint32_t index) override;

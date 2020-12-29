@@ -1,16 +1,21 @@
 //===-- LanguageCategory.h----------------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef lldb_LanguageCategory_h_
 #define lldb_LanguageCategory_h_
 
+// C Includes
+// C++ Includes
 
+// Other libraries and framework includes
+// Project includes
 #include "lldb/DataFormatters/FormatCache.h"
 #include "lldb/DataFormatters/FormatClasses.h"
 #include "lldb/lldb-public.h"
@@ -25,11 +30,27 @@ public:
 
   LanguageCategory(lldb::LanguageType lang_type);
 
-  template <typename ImplSP>
-  bool Get(FormattersMatchData &match_data, ImplSP &format_sp);
-  template <typename ImplSP>
+  bool Get(FormattersMatchData &match_data, lldb::TypeFormatImplSP &format_sp);
+
+  bool Get(FormattersMatchData &match_data, lldb::TypeSummaryImplSP &format_sp);
+
+  bool Get(FormattersMatchData &match_data,
+           lldb::SyntheticChildrenSP &format_sp);
+
+  bool Get(FormattersMatchData &match_data,
+           lldb::TypeValidatorImplSP &format_sp);
+
   bool GetHardcoded(FormatManager &fmt_mgr, FormattersMatchData &match_data,
-                    ImplSP &format_sp);
+                    lldb::TypeFormatImplSP &format_sp);
+
+  bool GetHardcoded(FormatManager &fmt_mgr, FormattersMatchData &match_data,
+                    lldb::TypeSummaryImplSP &format_sp);
+
+  bool GetHardcoded(FormatManager &fmt_mgr, FormattersMatchData &match_data,
+                    lldb::SyntheticChildrenSP &format_sp);
+
+  bool GetHardcoded(FormatManager &fmt_mgr, FormattersMatchData &match_data,
+                    lldb::TypeValidatorImplSP &format_sp);
 
   lldb::TypeCategoryImplSP GetCategory() const;
 
@@ -47,9 +68,7 @@ private:
   HardcodedFormatters::HardcodedFormatFinder m_hardcoded_formats;
   HardcodedFormatters::HardcodedSummaryFinder m_hardcoded_summaries;
   HardcodedFormatters::HardcodedSyntheticFinder m_hardcoded_synthetics;
-
-  template <typename ImplSP>
-  auto &GetHardcodedFinder();
+  HardcodedFormatters::HardcodedValidatorFinder m_hardcoded_validators;
 
   lldb_private::FormatCache m_format_cache;
 

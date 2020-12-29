@@ -1,82 +1,87 @@
-# Needed for lit support in standalone builds.
+# Needed for lit support
 include(AddLLVM)
 
-pythonize_bool(LLVM_ENABLE_EXPENSIVE_CHECKS)
-configure_compiler_rt_lit_site_cfg(
+configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.common.configured.in
   ${CMAKE_CURRENT_BINARY_DIR}/lit.common.configured)
 
-# BlocksRuntime (and most of builtins) testsuites are not yet ported to lit.
+# BlocksRuntime and builtins testsuites are not yet ported to lit.
 # add_subdirectory(BlocksRuntime)
+# add_subdirectory(builtins)
 
 set(SANITIZER_COMMON_LIT_TEST_DEPS)
-
-if(COMPILER_RT_BUILD_PROFILE AND COMPILER_RT_HAS_PROFILE)
-  list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS profile)
+if(COMPILER_RT_STANDALONE_BUILD)
+  add_executable(FileCheck IMPORTED GLOBAL)
+  set_property(TARGET FileCheck PROPERTY IMPORTED_LOCATION ${LLVM_TOOLS_BINARY_DIR}/FileCheck)
+  list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS FileCheck)
 endif()
 
 # When ANDROID, we build tests with the host compiler (i.e. CMAKE_C_COMPILER),
 # and run tests with tools from the host toolchain.
 if(NOT ANDROID)
-  if(NOT COMPILER_RT_STANDALONE_BUILD AND NOT RUNTIMES_BUILD)
+  if(NOT COMPILER_RT_STANDALONE_BUILD)
     # Use LLVM utils and Clang from the same build tree.
     list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS
-      clang clang-resource-headers FileCheck count not llvm-config llvm-nm llvm-objdump
+      clang clang-headers FileCheck count not llvm-config llvm-nm llvm-objdump
       llvm-readobj llvm-symbolizer compiler-rt-headers sancov)
+    if (COMPILER_RT_HAS_PROFILE)
+      list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS profile)
+    endif()
     if (WIN32)
       list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS KillTheDoctor)
     endif()
   endif()
-endif()
-
-function(compiler_rt_test_runtime runtime)
-  string(TOUPPER ${runtime} runtime_uppercase)
-  if(COMPILER_RT_HAS_${runtime_uppercase})
-    add_subdirectory(${runtime})
-    foreach(directory ${ARGN})
-      add_subdirectory(${directory})
-    endforeach()
+  if(CMAKE_HOST_UNIX)
+    list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS SanitizerLintCheck)
   endif()
-endfunction()
+endif()
 
 # Run sanitizer tests only if we're sure that clang would produce
 # working binaries.
 if(COMPILER_RT_CAN_EXECUTE_TESTS)
-  if(COMPILER_RT_BUILD_BUILTINS)
-    add_subdirectory(builtins)
+  if(COMPILER_RT_HAS_ASAN)
+    add_subdirectory(asan)
   endif()
-  if(COMPILER_RT_BUILD_SANITIZERS)
-    compiler_rt_test_runtime(interception)
-
-    compiler_rt_test_runtime(lsan)
-    # CFI tests require diagnostic mode, which is implemented in UBSan.
-    compiler_rt_test_runtime(ubsan cfi)
-    compiler_rt_test_runtime(sanitizer_common)
-
-    # OpenBSD not supporting asan, cannot run the tests
-    if(COMPILER_RT_BUILD_LIBFUZZER AND NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "OpenBSD" AND NOT ANDROID)
-      compiler_rt_test_runtime(fuzzer)
-    endif()
-
-    foreach(sanitizer ${COMPILER_RT_SANITIZERS_TO_BUILD})
-      # cfi testing is gated on ubsan
-      if(NOT ${sanitizer} STREQUAL cfi)
-        compiler_rt_test_runtime(${sanitizer})
-      endif()
-    endforeach()
+  if(COMPILER_RT_HAS_DFSAN)
+    add_subdirectory(dfsan)
   endif()
-  if(COMPILER_RT_BUILD_PROFILE AND COMPILER_RT_HAS_PROFILE)
-    compiler_rt_test_runtime(profile)
+  if (COMPILER_RT_HAS_INTERCEPTION)
+    add_subdirectory(interception)
   endif()
-  if(COMPILER_RT_BUILD_XRAY)
-    compiler_rt_test_runtime(xray)
+  if(COMPILER_RT_HAS_LSAN)
+    add_subdirectory(lsan)
   endif()
-  if(COMPILER_RT_BUILD_CRT AND COMPILER_RT_HAS_CRT)
-    add_subdirectory(crt)
+  if(COMPILER_RT_HAS_MSAN)
+    add_subdirectory(msan)
   endif()
-  # ShadowCallStack does not yet provide a runtime with compiler-rt, the tests
-  # include their own minimal runtime
-  add_subdirectory(shadowcallstack)
+  if(COMPILER_RT_HAS_PROFILE)
+    add_subdirectory(profile)
+  endif()
+  if(COMPILER_RT_HAS_SANITIZER_COMMON)
+    add_subdirectory(sanitizer_common)
+  endif()
+  if(COMPILER_RT_HAS_TSAN)
+    add_subdirectory(tsan)
+  endif()
+  if(COMPILER_RT_HAS_UBSAN)
+    add_subdirectory(ubsan)
+  endif()
+  # CFI tests require diagnostic mode, which is implemented in UBSan.
+  if(COMPILER_RT_HAS_UBSAN)
+    add_subdirectory(cfi)
+  endif()
+  if(COMPILER_RT_HAS_SAFESTACK)
+    add_subdirectory(safestack)
+  endif()
+  if(COMPILER_RT_HAS_ESAN)
+    add_subdirectory(esan)
+  endif()
+  if(COMPILER_RT_HAS_SCUDO)
+    add_subdirectory(scudo)
+  endif()
+  if(COMPILER_RT_HAS_XRAY)
+    add_subdirectory(xray)
+  endif()
 endif()
 
 if(COMPILER_RT_STANDALONE_BUILD)

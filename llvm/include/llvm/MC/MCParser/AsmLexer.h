@@ -1,8 +1,9 @@
 //===- AsmLexer.h - Lexer for Assembly Files --------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,21 +16,25 @@
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCParser/MCAsmLexer.h"
+#include "llvm/Support/DataTypes.h"
 #include <string>
 
 namespace llvm {
-
+class MemoryBuffer;
 class MCAsmInfo;
 
 /// AsmLexer - Lexer class for assembly files.
 class AsmLexer : public MCAsmLexer {
   const MCAsmInfo &MAI;
 
-  const char *CurPtr = nullptr;
+  const char *CurPtr;
   StringRef CurBuf;
-  bool IsAtStartOfLine = true;
-  bool IsAtStartOfStatement = true;
-  bool IsPeeking = false;
+  bool IsAtStartOfLine;
+  bool IsAtStartOfStatement;
+  bool IsParsingMSInlineAsm;
+  bool IsPeeking;
+  void operator=(const AsmLexer&) = delete;
+  AsmLexer(const AsmLexer&) = delete;
 
 protected:
   /// LexToken - Read the next token and return its code.
@@ -37,11 +42,10 @@ protected:
 
 public:
   AsmLexer(const MCAsmInfo &MAI);
-  AsmLexer(const AsmLexer &) = delete;
-  AsmLexer &operator=(const AsmLexer &) = delete;
   ~AsmLexer() override;
 
   void setBuffer(StringRef Buf, const char *ptr = nullptr);
+  void setParsingMSInlineAsm(bool V) { IsParsingMSInlineAsm = V; }
 
   StringRef LexUntilEndOfStatement() override;
 
@@ -70,4 +74,4 @@ private:
 
 } // end namespace llvm
 
-#endif // LLVM_MC_MCPARSER_ASMLEXER_H
+#endif

@@ -6,8 +6,10 @@ add_lldb_library(lldbExpression
   DiagnosticManager.cpp
   DWARFExpression.cpp
   Expression.cpp
+  ExpressionSourceCode.cpp
   ExpressionVariable.cpp
   FunctionCaller.cpp
+  IRDynamicChecks.cpp
   IRExecutionUnit.cpp
   IRInterpreter.cpp
   IRMemoryMap.cpp
@@ -19,19 +21,4 @@ add_lldb_library(lldbExpression
 
   DEPENDS
   ${tablegen_deps}
-
-  LINK_LIBS
-    lldbCore
-    lldbHost
-    lldbInterpreter
-    lldbSymbol
-    lldbTarget
-    lldbUtility
-    lldbPluginCPlusPlusLanguage
-    lldbPluginObjectFileJIT
-
-  LINK_COMPONENTS
-    Core
-    ExecutionEngine
-    Support
   )

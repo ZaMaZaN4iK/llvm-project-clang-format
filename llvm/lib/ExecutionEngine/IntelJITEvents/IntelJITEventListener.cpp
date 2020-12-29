@@ -1,8 +1,9 @@
 //===-- IntelJITEventListener.cpp - Tell Intel profiler about JITed code --===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,11 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/Config/config.h"
 #include "IntelJITEventsWrapper.h"
-#include "llvm-c/ExecutionEngine.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/Config/config.h"
 #include "llvm/DebugInfo/DIContext.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
@@ -46,7 +46,7 @@ class IntelJITEventListener : public JITEventListener {
   typedef DenseMap<const void *, MethodAddressVector>  ObjectMap;
 
   ObjectMap  LoadedObjectMap;
-  std::map<ObjectKey, OwningBinary<ObjectFile>> DebugObjects;
+  std::map<const char*, OwningBinary<ObjectFile>> DebugObjects;
 
 public:
   IntelJITEventListener(IntelJITEventsWrapper* libraryWrapper) {
@@ -56,10 +56,10 @@ public:
   ~IntelJITEventListener() {
   }
 
-  void notifyObjectLoaded(ObjectKey Key, const ObjectFile &Obj,
-                          const RuntimeDyld::LoadedObjectInfo &L) override;
+  void NotifyObjectEmitted(const ObjectFile &Obj,
+                           const RuntimeDyld::LoadedObjectInfo &L) override;
 
-  void notifyFreeingObject(ObjectKey Key) override;
+  void NotifyFreeingObject(const ObjectFile &Obj) override;
 };
 
 static LineNumberInfo DILineInfoToIntelJITFormat(uintptr_t StartAddress,
@@ -95,22 +95,20 @@ static iJIT_Method_Load FunctionDescToIntelJITFormat(
   return Result;
 }
 
-void IntelJITEventListener::notifyObjectLoaded(
-    ObjectKey Key, const ObjectFile &Obj,
-    const RuntimeDyld::LoadedObjectInfo &L) {
+void IntelJITEventListener::NotifyObjectEmitted(
+                                       const ObjectFile &Obj,
+                                       const RuntimeDyld::LoadedObjectInfo &L) {
 
   OwningBinary<ObjectFile> DebugObjOwner = L.getObjectForDebug(Obj);
-  const ObjectFile *DebugObj = DebugObjOwner.getBinary();
-  if (!DebugObj)
-    return;
+  const ObjectFile &DebugObj = *DebugObjOwner.getBinary();
 
   // Get the address of the object image for use as a unique identifier
-  const void* ObjData = DebugObj->getData().data();
-  std::unique_ptr<DIContext> Context = DWARFContext::create(*DebugObj);
+  const void* ObjData = DebugObj.getData().data();
+  DIContext* Context = new DWARFContextInMemory(DebugObj);
   MethodAddressVector Functions;
 
   // Use symbol info to iterate functions in the object.
-  for (const std::pair<SymbolRef, uint64_t> &P : computeSymbolSizes(*DebugObj)) {
+  for (const std::pair<SymbolRef, uint64_t> &P : computeSymbolSizes(DebugObj)) {
     SymbolRef Sym = P.first;
     std::vector<LineNumberInfo> LineInfo;
     std::string SourceFileName;
@@ -141,25 +139,13 @@ void IntelJITEventListener::notifyObjectLoaded(
     uint64_t Addr = *AddrOrErr;
     uint64_t Size = P.second;
 
-    auto SecOrErr = Sym.getSection();
-    if (!SecOrErr) {
-      // TODO: Actually report errors helpfully.
-      consumeError(SecOrErr.takeError());
-      continue;
-    }
-    object::section_iterator Sec = *SecOrErr;
-    if (Sec == Obj.section_end())
-      continue;
-    uint64_t Index = Sec->getIndex();
-
     // Record this address in a local vector
     Functions.push_back((void*)Addr);
 
     // Build the function loaded notification message
     iJIT_Method_Load FunctionMessage =
       FunctionDescToIntelJITFormat(*Wrapper, Name->data(), Addr, Size);
-    DILineInfoTable Lines =
-      Context->getLineInfoForAddressRange({Addr, Index}, Size);
+    DILineInfoTable Lines = Context->getLineInfoForAddressRange(Addr, Size);
     DILineInfoTable::iterator Begin = Lines.begin();
     DILineInfoTable::iterator End = Lines.end();
     for (DILineInfoTable::iterator It = Begin; It != End; ++It) {
@@ -199,17 +185,17 @@ void IntelJITEventListener::notifyObjectLoaded(
   // registered function addresses for each loaded object.  We will
   // use the MethodIDs map to get the registered ID for each function.
   LoadedObjectMap[ObjData] = Functions;
-  DebugObjects[Key] = std::move(DebugObjOwner);
+  DebugObjects[Obj.getData().data()] = std::move(DebugObjOwner);
 }
 
-void IntelJITEventListener::notifyFreeingObject(ObjectKey Key) {
+void IntelJITEventListener::NotifyFreeingObject(const ObjectFile &Obj) {
   // This object may not have been registered with the listener. If it wasn't,
   // bail out.
-  if (DebugObjects.find(Key) == DebugObjects.end())
+  if (DebugObjects.find(Obj.getData().data()) == DebugObjects.end())
     return;
 
   // Get the address of the object image for use as a unique identifier
-  const ObjectFile &DebugObj = *DebugObjects[Key].getBinary();
+  const ObjectFile &DebugObj = *DebugObjects[Obj.getData().data()].getBinary();
   const void* ObjData = DebugObj.getData().data();
 
   // Get the object's function list from LoadedObjectMap
@@ -234,7 +220,7 @@ void IntelJITEventListener::notifyFreeingObject(ObjectKey Key) {
 
   // Erase the object from LoadedObjectMap
   LoadedObjectMap.erase(OI);
-  DebugObjects.erase(Key);
+  DebugObjects.erase(Obj.getData().data());
 }
 
 }  // anonymous namespace.
@@ -252,7 +238,3 @@ JITEventListener *JITEventListener::createIntelJITEventListener(
 
 } // namespace llvm
 
-LLVMJITEventListenerRef LLVMCreateIntelJITEventListener(void)
-{
-  return wrap(JITEventListener::createIntelJITEventListener());
-}

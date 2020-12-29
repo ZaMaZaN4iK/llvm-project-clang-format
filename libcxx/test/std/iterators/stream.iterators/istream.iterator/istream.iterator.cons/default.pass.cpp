@@ -1,14 +1,15 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // Usage of is_trivially_constructible is broken with these compilers.
-// See https://bugs.llvm.org/show_bug.cgi?id=31016
-// XFAIL: clang-3.7, apple-clang-7 && c++17
+// See https://llvm.org/bugs/show_bug.cgi?id=31016
+// XFAIL: clang-3.7, apple-clang-7, apple-clang-7.0
 
 // <iterator>
 
@@ -16,7 +17,7 @@
 
 // constexpr istream_iterator();
 // C++17 says: If is_trivially_default_constructible_v<T> is true, then this
-//    constructor is a constexpr constructor.
+//    constructor shall beis a constexpr constructor.
 
 #include <iterator>
 #include <cassert>
@@ -31,7 +32,6 @@ template <typename T, bool isTrivial = std::is_trivially_default_constructible_v
 struct test_trivial {
 void operator ()() const {
     constexpr std::istream_iterator<T> it;
-    (void)it;
     }
 };
 
@@ -42,7 +42,7 @@ void operator ()() const {}
 #endif
 
 
-int main(int, char**)
+int main()
 {
     {
     typedef std::istream_iterator<int> T;
@@ -50,7 +50,6 @@ int main(int, char**)
     assert(it == T());
 #if TEST_STD_VER >= 11
     constexpr T it2;
-    (void)it2;
 #endif
     }
 
@@ -61,6 +60,4 @@ int main(int, char**)
     test_trivial<S>()();
     test_trivial<std::string>()();
 #endif
-
-  return 0;
 }

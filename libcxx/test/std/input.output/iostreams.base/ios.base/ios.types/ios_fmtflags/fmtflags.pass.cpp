@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -32,9 +33,7 @@
 #include <ios>
 #include <cassert>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     assert(std::ios_base::boolalpha);
     assert(std::ios_base::dec);
@@ -79,6 +78,4 @@ int main(int, char**)
                                       | std::ios_base::hex));
     assert(std::ios_base::floatfield == (std::ios_base::scientific
                                        | std::ios_base::fixed));
-
-  return 0;
 }

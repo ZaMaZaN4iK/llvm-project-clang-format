@@ -1,18 +1,20 @@
 //===- NVVMReflect.cpp - NVVM Emulate conditional compilation -------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // This pass replaces occurrences of __nvvm_reflect("foo") and llvm.nvvm.reflect
 // with an integer.
 //
-// We choose the value we use by looking at metadata in the module itself.  Note
-// that we intentionally only have one way to choose these values, because other
-// parts of LLVM (particularly, InstCombineCall) rely on being able to predict
-// the values chosen by this pass.
+// We choose the value we use by looking, in this order, at:
+//
+//  * the -nvvm-reflect-list flag, which has the format "foo=1,bar=42",
+//  * the StringMap passed to the pass's constructor, and
+//  * metadata in the module itself.
 //
 // If we see an unknown string, we replace its call with 0.
 //
@@ -27,7 +29,6 @@
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/IntrinsicsNVPTX.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Pass.h"
@@ -48,20 +49,29 @@ namespace llvm { void initializeNVVMReflectPass(PassRegistry &); }
 
 namespace {
 class NVVMReflect : public FunctionPass {
+private:
+  StringMap<int> VarMap;
+
 public:
   static char ID;
-  unsigned int SmVersion;
-  NVVMReflect() : NVVMReflect(0) {}
-  explicit NVVMReflect(unsigned int Sm) : FunctionPass(ID), SmVersion(Sm) {
+  NVVMReflect() : NVVMReflect(StringMap<int>()) {}
+
+  NVVMReflect(const StringMap<int> &Mapping)
+      : FunctionPass(ID), VarMap(Mapping) {
     initializeNVVMReflectPass(*PassRegistry::getPassRegistry());
+    setVarMap();
   }
 
   bool runOnFunction(Function &) override;
+
+private:
+  void setVarMap();
 };
 }
 
-FunctionPass *llvm::createNVVMReflectPass(unsigned int SmVersion) {
-  return new NVVMReflect(SmVersion);
+FunctionPass *llvm::createNVVMReflectPass() { return new NVVMReflect(); }
+FunctionPass *llvm::createNVVMReflectPass(const StringMap<int> &Mapping) {
+  return new NVVMReflect(Mapping);
 }
 
 static cl::opt<bool>
@@ -72,6 +82,35 @@ char NVVMReflect::ID = 0;
 INITIALIZE_PASS(NVVMReflect, "nvvm-reflect",
                 "Replace occurrences of __nvvm_reflect() calls with 0/1", false,
                 false)
+
+static cl::list<std::string>
+ReflectList("nvvm-reflect-list", cl::value_desc("name=<int>"), cl::Hidden,
+            cl::desc("A list of string=num assignments"),
+            cl::ValueRequired);
+
+/// The command line can look as follows :
+/// -nvvm-reflect-list a=1,b=2 -nvvm-reflect-list c=3,d=0 -R e=2
+/// The strings "a=1,b=2", "c=3,d=0", "e=2" are available in the
+/// ReflectList vector. First, each of ReflectList[i] is 'split'
+/// using "," as the delimiter. Then each of this part is split
+/// using "=" as the delimiter.
+void NVVMReflect::setVarMap() {
+  for (unsigned i = 0, e = ReflectList.size(); i != e; ++i) {
+    DEBUG(dbgs() << "Option : "  << ReflectList[i] << "\n");
+    SmallVector<StringRef, 4> NameValList;
+    StringRef(ReflectList[i]).split(NameValList, ',');
+    for (unsigned j = 0, ej = NameValList.size(); j != ej; ++j) {
+      SmallVector<StringRef, 2> NameValPair;
+      NameValList[j].split(NameValPair, '=');
+      assert(NameValPair.size() == 2 && "name=val expected");
+      std::stringstream ValStream(NameValPair[1]);
+      int Val;
+      ValStream >> Val;
+      assert((!(ValStream.fail())) && "integer value expected");
+      VarMap[NameValPair[0]] = Val;
+    }
+  }
+}
 
 bool NVVMReflect::runOnFunction(Function &F) {
   if (!NVVMReflectEnabled)
@@ -157,18 +196,17 @@ bool NVVMReflect::runOnFunction(Function &F) {
 
     StringRef ReflectArg = cast<ConstantDataSequential>(Operand)->getAsString();
     ReflectArg = ReflectArg.substr(0, ReflectArg.size() - 1);
-    LLVM_DEBUG(dbgs() << "Arg of _reflect : " << ReflectArg << "\n");
+    DEBUG(dbgs() << "Arg of _reflect : " << ReflectArg << "\n");
 
     int ReflectVal = 0; // The default value is 0
-    if (ReflectArg == "__CUDA_FTZ") {
-      // Try to pull __CUDA_FTZ from the nvvm-reflect-ftz module flag.  Our
-      // choice here must be kept in sync with AutoUpgrade, which uses the same
-      // technique to detect whether ftz is enabled.
+    auto Iter = VarMap.find(ReflectArg);
+    if (Iter != VarMap.end())
+      ReflectVal = Iter->second;
+    else if (ReflectArg == "__CUDA_FTZ") {
+      // Try to pull __CUDA_FTZ from the nvvm-reflect-ftz module flag.
       if (auto *Flag = mdconst::extract_or_null<ConstantInt>(
               F.getParent()->getModuleFlag("nvvm-reflect-ftz")))
         ReflectVal = Flag->getSExtValue();
-    } else if (ReflectArg == "__CUDA_ARCH") {
-      ReflectVal = SmVersion * 10;
     }
     Call->replaceAllUsesWith(ConstantInt::get(Call->getType(), ReflectVal));
     ToRemove.push_back(Call);

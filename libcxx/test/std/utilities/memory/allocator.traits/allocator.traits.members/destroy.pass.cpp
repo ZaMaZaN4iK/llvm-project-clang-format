@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,7 +23,6 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "incomplete_type_helper.h"
 
 template <class T>
 struct A
@@ -54,7 +54,7 @@ struct A0
 
 int A0::count = 0;
 
-int main(int, char**)
+int main()
 {
     {
         A0::count = 0;
@@ -65,14 +65,7 @@ int main(int, char**)
         std::allocator_traits<A<int> >::destroy(a, (A0*)&a0);
         assert(A0::count == 1);
     }
-    {
-      typedef IncompleteHolder* VT;
-      typedef A<VT> Alloc;
-      Alloc a;
-      std::aligned_storage<sizeof(VT)>::type store;
-      std::allocator_traits<Alloc>::destroy(a, (VT*)&store);
-    }
-#if defined(_LIBCPP_VERSION) || TEST_STD_VER >= 11
+#if TEST_STD_VER >= 11
     {
         A0::count = 0;
         b_destroy = 0;
@@ -86,6 +79,4 @@ int main(int, char**)
         assert(b_destroy == 1);
     }
 #endif
-
-  return 0;
 }

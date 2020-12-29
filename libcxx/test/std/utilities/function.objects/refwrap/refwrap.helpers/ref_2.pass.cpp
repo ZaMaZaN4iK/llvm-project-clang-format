@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,16 +16,14 @@
 #include <functional>
 #include <cassert>
 
-#include "counting_predicates.h"
-
-#include "test_macros.h"
+#include "counting_predicates.hpp"
 
 bool is5 ( int i ) { return i == 5; }
 
 template <typename T>
 bool call_pred ( T pred ) { return pred(5); }
 
-int main(int, char**)
+int main()
 {
     {
     int i = 0;
@@ -41,6 +40,4 @@ int main(int, char**)
     assert(call_pred(std::ref(cp)));
     assert(cp.count() == 2);
     }
-
-  return 0;
 }

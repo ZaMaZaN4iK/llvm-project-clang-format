@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -42,7 +43,7 @@ public:
 struct Final final {};
 #endif
 
-int main(int, char**)
+int main()
 {
     {
         try
@@ -106,16 +107,6 @@ int main(int, char**)
             assert(i == 7);
         }
     }
-    {
-        try
-        {
-            std::throw_with_nested("String literal");
-            assert(false);
-        }
-        catch (const char *)
-        {
-        }
-    }
 #if TEST_STD_VER > 11
     {
         try
@@ -128,6 +119,4 @@ int main(int, char**)
         }
     }
 #endif
-
-  return 0;
 }

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,7 +12,6 @@
 // template<class InputIterator>
 //   basic_string(InputIterator begin, InputIterator end,
 //   const Allocator& a = Allocator());
-
 
 #include <string>
 #include <iterator>
@@ -29,6 +29,7 @@ test(It first, It last)
 {
     typedef typename std::iterator_traits<It>::value_type charT;
     typedef std::basic_string<charT, std::char_traits<charT>, test_allocator<charT> > S;
+    typedef typename S::traits_type T;
     typedef typename S::allocator_type A;
     S s2(first, last);
     LIBCPP_ASSERT(s2.__invariants());
@@ -46,6 +47,7 @@ test(It first, It last, const A& a)
 {
     typedef typename std::iterator_traits<It>::value_type charT;
     typedef std::basic_string<charT, std::char_traits<charT>, A> S;
+    typedef typename S::traits_type T;
     S s2(first, last, a);
     LIBCPP_ASSERT(s2.__invariants());
     assert(s2.size() == static_cast<std::size_t>(std::distance(first, last)));
@@ -56,7 +58,7 @@ test(It first, It last, const A& a)
     assert(s2.capacity() >= s2.size());
 }
 
-int main(int, char**)
+int main()
 {
     {
     typedef test_allocator<char> A;
@@ -116,15 +118,4 @@ int main(int, char**)
     test(input_iterator<const char*>(s), input_iterator<const char*>(s+50), A());
     }
 #endif
-    {
-      static_assert((!std::is_constructible<std::string, std::string,
-                                            std::string>::value),
-                    "");
-      static_assert(
-          (!std::is_constructible<std::string, std::string, std::string,
-                                  std::allocator<char> >::value),
-          "");
-    }
-
-  return 0;
 }

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,16 +25,14 @@
 #include <codecvt>
 #include <cassert>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     {
-        typedef std::codecvt_utf16<char32_t> C;
+        typedef std::codecvt_utf16<wchar_t> C;
         C c;
-        char32_t w = 0;
+        wchar_t w = 0;
         char n[4] = {char(0xD8), char(0xC0), char(0xDC), char(0x03)};
-        char32_t* wp = nullptr;
+        wchar_t* wp = nullptr;
         std::mbstate_t m;
         const char* np = nullptr;
         std::codecvt_base::result r = c.in(m, n, n+4, np, &w, &w+1, wp);
@@ -68,11 +67,11 @@ int main(int, char**)
         assert(w == 0x56);
     }
     {
-        typedef std::codecvt_utf16<char32_t, 0x1000> C;
+        typedef std::codecvt_utf16<wchar_t, 0x1000> C;
         C c;
-        char32_t w = 0;
+        wchar_t w = 0;
         char n[4] = {char(0xD8), char(0xC0), char(0xDC), char(0x03)};
-        char32_t* wp = nullptr;
+        wchar_t* wp = nullptr;
         std::mbstate_t m;
         const char* np = nullptr;
         std::codecvt_base::result r = c.in(m, n, n+4, np, &w, &w+1, wp);
@@ -107,11 +106,11 @@ int main(int, char**)
         assert(w == 0x56);
     }
     {
-        typedef std::codecvt_utf16<char32_t, 0x10ffff, std::consume_header> C;
+        typedef std::codecvt_utf16<wchar_t, 0x10ffff, std::consume_header> C;
         C c;
-        char32_t w = 0;
+        wchar_t w = 0;
         char n[6] = {char(0xFE), char(0xFF), char(0xD8), char(0xC0), char(0xDC), char(0x03)};
-        char32_t* wp = nullptr;
+        wchar_t* wp = nullptr;
         std::mbstate_t m;
         const char* np = nullptr;
         std::codecvt_base::result r = c.in(m, n, n+6, np, &w, &w+1, wp);
@@ -146,11 +145,11 @@ int main(int, char**)
         assert(w == 0x56);
     }
     {
-        typedef std::codecvt_utf16<char32_t, 0x10ffff, std::little_endian> C;
+        typedef std::codecvt_utf16<wchar_t, 0x10ffff, std::little_endian> C;
         C c;
-        char32_t w = 0;
+        wchar_t w = 0;
         char n[4] = {char(0xC0), char(0xD8), char(0x03), char(0xDC)};
-        char32_t* wp = nullptr;
+        wchar_t* wp = nullptr;
         std::mbstate_t m;
         const char* np = nullptr;
         std::codecvt_base::result r = c.in(m, n, n+4, np, &w, &w+1, wp);
@@ -185,11 +184,11 @@ int main(int, char**)
         assert(w == 0x56);
     }
     {
-        typedef std::codecvt_utf16<char32_t, 0x1000, std::little_endian> C;
+        typedef std::codecvt_utf16<wchar_t, 0x1000, std::little_endian> C;
         C c;
-        char32_t w = 0;
+        wchar_t w = 0;
         char n[4] = {char(0xC0), char(0xD8), char(0x03), char(0xDC)};
-        char32_t* wp = nullptr;
+        wchar_t* wp = nullptr;
         std::mbstate_t m;
         const char* np = nullptr;
         std::codecvt_base::result r = c.in(m, n, n+4, np, &w, &w+1, wp);
@@ -224,13 +223,13 @@ int main(int, char**)
         assert(w == 0x56);
     }
     {
-        typedef std::codecvt_utf16<char32_t, 0x10ffff,
-                                   std::codecvt_mode(std::consume_header | std::little_endian)> C;
-
+        typedef std::codecvt_utf16<wchar_t, 0x10ffff, std::codecvt_mode(
+                                                         std::consume_header |
+                                                         std::little_endian)> C;
         C c;
-        char32_t w = 0;
+        wchar_t w = 0;
         char n[6] = {char(0xFF), char(0xFE), char(0xC0), char(0xD8), char(0x03), char(0xDC)};
-        char32_t* wp = nullptr;
+        wchar_t* wp = nullptr;
         std::mbstate_t m;
         const char* np = nullptr;
         std::codecvt_base::result r = c.in(m, n, n+6, np, &w, &w+1, wp);
@@ -737,6 +736,4 @@ int main(int, char**)
         assert(np == n+2);
         assert(w == 0x56);
     }
-
-  return 0;
 }

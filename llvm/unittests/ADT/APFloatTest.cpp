@@ -1,17 +1,17 @@
 //===- llvm/unittest/ADT/APFloat.cpp - APFloat unit tests ---------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APSInt.h"
-#include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/raw_ostream.h"
 #include "gtest/gtest.h"
 #include <cmath>
 #include <ostream>
@@ -20,28 +20,16 @@
 
 using namespace llvm;
 
-static std::string convertToErrorFromString(StringRef Str) {
+static double convertToDoubleFromString(const char *Str) {
   llvm::APFloat F(0.0);
-  auto StatusOrErr =
-      F.convertFromString(Str, llvm::APFloat::rmNearestTiesToEven);
-  EXPECT_TRUE(!StatusOrErr);
-  return toString(StatusOrErr.takeError());
-}
-
-static double convertToDoubleFromString(StringRef Str) {
-  llvm::APFloat F(0.0);
-  auto StatusOrErr =
-      F.convertFromString(Str, llvm::APFloat::rmNearestTiesToEven);
-  EXPECT_FALSE(!StatusOrErr);
-  consumeError(StatusOrErr.takeError());
+  F.convertFromString(Str, llvm::APFloat::rmNearestTiesToEven);
   return F.convertToDouble();
 }
 
-static std::string convertToString(double d, unsigned Prec, unsigned Pad,
-                                   bool Tr = true) {
+static std::string convertToString(double d, unsigned Prec, unsigned Pad) {
   llvm::SmallVector<char, 100> Buffer;
   llvm::APFloat F(d);
-  F.toString(Buffer, Prec, Pad, Tr);
+  F.toString(Buffer, Prec, Pad);
   return std::string(Buffer.data(), Buffer.size());
 }
 
@@ -531,32 +519,15 @@ TEST(APFloatTest, FMA) {
 
   // Test x87 extended precision case from http://llvm.org/PR20728.
   {
-    APFloat M1(APFloat::x87DoubleExtended(), 1);
-    APFloat M2(APFloat::x87DoubleExtended(), 1);
-    APFloat A(APFloat::x87DoubleExtended(), 3);
+    APFloat M1(APFloat::x87DoubleExtended(), 1.0);
+    APFloat M2(APFloat::x87DoubleExtended(), 1.0);
+    APFloat A(APFloat::x87DoubleExtended(), 3.0);
 
     bool losesInfo = false;
     M1.fusedMultiplyAdd(M1, A, APFloat::rmNearestTiesToEven);
     M1.convert(APFloat::IEEEsingle(), APFloat::rmNearestTiesToEven, &losesInfo);
     EXPECT_FALSE(losesInfo);
     EXPECT_EQ(4.0f, M1.convertToFloat());
-  }
-
-  // Regression test that failed an assertion.
-  {
-    APFloat f1(-8.85242279E-41f);
-    APFloat f2(2.0f);
-    APFloat f3(8.85242279E-41f);
-    f1.fusedMultiplyAdd(f2, f3, APFloat::rmNearestTiesToEven);
-    EXPECT_EQ(-8.85242279E-41f, f1.convertToFloat());
-  }
-
-  // Test using only a single instance of APFloat.
-  {
-    APFloat F(1.5);
-
-    F.fusedMultiplyAdd(F, F, APFloat::rmNearestTiesToEven);
-    EXPECT_EQ(3.75, F.convertToDouble());
   }
 }
 
@@ -579,37 +550,7 @@ TEST(APFloatTest, MaxNum) {
   EXPECT_EQ(2.0, maxnum(f1, f2).convertToDouble());
   EXPECT_EQ(2.0, maxnum(f2, f1).convertToDouble());
   EXPECT_EQ(1.0, maxnum(f1, nan).convertToDouble());
-  EXPECT_EQ(1.0, maxnum(nan, f1).convertToDouble());
-}
-
-TEST(APFloatTest, Minimum) {
-  APFloat f1(1.0);
-  APFloat f2(2.0);
-  APFloat zp(0.0);
-  APFloat zn(-0.0);
-  APFloat nan = APFloat::getNaN(APFloat::IEEEdouble());
-
-  EXPECT_EQ(1.0, minimum(f1, f2).convertToDouble());
-  EXPECT_EQ(1.0, minimum(f2, f1).convertToDouble());
-  EXPECT_EQ(-0.0, minimum(zp, zn).convertToDouble());
-  EXPECT_EQ(-0.0, minimum(zn, zp).convertToDouble());
-  EXPECT_TRUE(std::isnan(minimum(f1, nan).convertToDouble()));
-  EXPECT_TRUE(std::isnan(minimum(nan, f1).convertToDouble()));
-}
-
-TEST(APFloatTest, Maximum) {
-  APFloat f1(1.0);
-  APFloat f2(2.0);
-  APFloat zp(0.0);
-  APFloat zn(-0.0);
-  APFloat nan = APFloat::getNaN(APFloat::IEEEdouble());
-
-  EXPECT_EQ(2.0, maximum(f1, f2).convertToDouble());
-  EXPECT_EQ(2.0, maximum(f2, f1).convertToDouble());
-  EXPECT_EQ(0.0, maximum(zp, zn).convertToDouble());
-  EXPECT_EQ(0.0, maximum(zn, zp).convertToDouble());
-  EXPECT_TRUE(std::isnan(maximum(f1, nan).convertToDouble()));
-  EXPECT_TRUE(std::isnan(maximum(nan, f1).convertToDouble()));
+  EXPECT_EQ(1.0, minnum(nan, f1).convertToDouble());
 }
 
 TEST(APFloatTest, Denormal) {
@@ -619,9 +560,9 @@ TEST(APFloatTest, Denormal) {
   {
     const char *MinNormalStr = "1.17549435082228750797e-38";
     EXPECT_FALSE(APFloat(APFloat::IEEEsingle(), MinNormalStr).isDenormal());
-    EXPECT_FALSE(APFloat(APFloat::IEEEsingle(), 0).isDenormal());
+    EXPECT_FALSE(APFloat(APFloat::IEEEsingle(), 0.0).isDenormal());
 
-    APFloat Val2(APFloat::IEEEsingle(), 2);
+    APFloat Val2(APFloat::IEEEsingle(), 2.0e0);
     APFloat T(APFloat::IEEEsingle(), MinNormalStr);
     T.divide(Val2, rdmd);
     EXPECT_TRUE(T.isDenormal());
@@ -631,9 +572,9 @@ TEST(APFloatTest, Denormal) {
   {
     const char *MinNormalStr = "2.22507385850720138309e-308";
     EXPECT_FALSE(APFloat(APFloat::IEEEdouble(), MinNormalStr).isDenormal());
-    EXPECT_FALSE(APFloat(APFloat::IEEEdouble(), 0).isDenormal());
+    EXPECT_FALSE(APFloat(APFloat::IEEEdouble(), 0.0).isDenormal());
 
-    APFloat Val2(APFloat::IEEEdouble(), 2);
+    APFloat Val2(APFloat::IEEEdouble(), 2.0e0);
     APFloat T(APFloat::IEEEdouble(), MinNormalStr);
     T.divide(Val2, rdmd);
     EXPECT_TRUE(T.isDenormal());
@@ -643,9 +584,9 @@ TEST(APFloatTest, Denormal) {
   {
     const char *MinNormalStr = "3.36210314311209350626e-4932";
     EXPECT_FALSE(APFloat(APFloat::x87DoubleExtended(), MinNormalStr).isDenormal());
-    EXPECT_FALSE(APFloat(APFloat::x87DoubleExtended(), 0).isDenormal());
+    EXPECT_FALSE(APFloat(APFloat::x87DoubleExtended(), 0.0).isDenormal());
 
-    APFloat Val2(APFloat::x87DoubleExtended(), 2);
+    APFloat Val2(APFloat::x87DoubleExtended(), 2.0e0);
     APFloat T(APFloat::x87DoubleExtended(), MinNormalStr);
     T.divide(Val2, rdmd);
     EXPECT_TRUE(T.isDenormal());
@@ -655,9 +596,9 @@ TEST(APFloatTest, Denormal) {
   {
     const char *MinNormalStr = "3.36210314311209350626267781732175260e-4932";
     EXPECT_FALSE(APFloat(APFloat::IEEEquad(), MinNormalStr).isDenormal());
-    EXPECT_FALSE(APFloat(APFloat::IEEEquad(), 0).isDenormal());
+    EXPECT_FALSE(APFloat(APFloat::IEEEquad(), 0.0).isDenormal());
 
-    APFloat Val2(APFloat::IEEEquad(), 2);
+    APFloat Val2(APFloat::IEEEquad(), 2.0e0);
     APFloat T(APFloat::IEEEquad(), MinNormalStr);
     T.divide(Val2, rdmd);
     EXPECT_TRUE(T.isDenormal());
@@ -677,12 +618,26 @@ TEST(APFloatTest, Zero) {
 TEST(APFloatTest, DecimalStringsWithoutNullTerminators) {
   // Make sure that we can parse strings without null terminators.
   // rdar://14323230.
-  EXPECT_EQ(convertToDoubleFromString(StringRef("0.00", 3)), 0.0);
-  EXPECT_EQ(convertToDoubleFromString(StringRef("0.01", 3)), 0.0);
-  EXPECT_EQ(convertToDoubleFromString(StringRef("0.09", 3)), 0.0);
-  EXPECT_EQ(convertToDoubleFromString(StringRef("0.095", 4)), 0.09);
-  EXPECT_EQ(convertToDoubleFromString(StringRef("0.00e+3", 7)), 0.00);
-  EXPECT_EQ(convertToDoubleFromString(StringRef("0e+3", 4)), 0.00);
+  APFloat Val(APFloat::IEEEdouble());
+  Val.convertFromString(StringRef("0.00", 3),
+                        llvm::APFloat::rmNearestTiesToEven);
+  EXPECT_EQ(Val.convertToDouble(), 0.0);
+  Val.convertFromString(StringRef("0.01", 3),
+                        llvm::APFloat::rmNearestTiesToEven);
+  EXPECT_EQ(Val.convertToDouble(), 0.0);
+  Val.convertFromString(StringRef("0.09", 3),
+                        llvm::APFloat::rmNearestTiesToEven);
+  EXPECT_EQ(Val.convertToDouble(), 0.0);
+  Val.convertFromString(StringRef("0.095", 4),
+                        llvm::APFloat::rmNearestTiesToEven);
+  EXPECT_EQ(Val.convertToDouble(), 0.09);
+  Val.convertFromString(StringRef("0.00e+3", 7),
+                        llvm::APFloat::rmNearestTiesToEven);
+  EXPECT_EQ(Val.convertToDouble(), 0.00);
+  Val.convertFromString(StringRef("0e+3", 4),
+                        llvm::APFloat::rmNearestTiesToEven);
+  EXPECT_EQ(Val.convertToDouble(), 0.00);
+
 }
 
 TEST(APFloatTest, fromZeroDecimalString) {
@@ -788,7 +743,7 @@ TEST(APFloatTest, fromZeroDecimalLargeExponentString) {
   EXPECT_EQ(0.0,  APFloat(APFloat::IEEEdouble(), "000.0000e1234").convertToDouble());
   EXPECT_EQ(0.0,  APFloat(APFloat::IEEEdouble(), "000.0000e-1234").convertToDouble());
 
-  EXPECT_EQ(0.0,  APFloat(APFloat::IEEEdouble(), StringRef("0e1234" "\0" "2", 6)).convertToDouble());
+  EXPECT_EQ(0.0,  APFloat(APFloat::IEEEdouble(), StringRef("0e1234\02", 6)).convertToDouble());
 }
 
 TEST(APFloatTest, fromZeroHexadecimalString) {
@@ -882,33 +837,6 @@ TEST(APFloatTest, fromDecimalString) {
   EXPECT_EQ(2.05e+12,  APFloat(APFloat::IEEEdouble(), "002.05000e+12").convertToDouble());
   EXPECT_EQ(2.05e-12,  APFloat(APFloat::IEEEdouble(), "002.05000e-12").convertToDouble());
 
-  EXPECT_EQ(1.0,      APFloat(APFloat::IEEEdouble(), "1e").convertToDouble());
-  EXPECT_EQ(1.0,      APFloat(APFloat::IEEEdouble(), "+1e").convertToDouble());
-  EXPECT_EQ(-1.0,      APFloat(APFloat::IEEEdouble(), "-1e").convertToDouble());
-
-  EXPECT_EQ(1.0,      APFloat(APFloat::IEEEdouble(), "1.e").convertToDouble());
-  EXPECT_EQ(1.0,      APFloat(APFloat::IEEEdouble(), "+1.e").convertToDouble());
-  EXPECT_EQ(-1.0,      APFloat(APFloat::IEEEdouble(), "-1.e").convertToDouble());
-
-  EXPECT_EQ(0.1,      APFloat(APFloat::IEEEdouble(), ".1e").convertToDouble());
-  EXPECT_EQ(0.1,      APFloat(APFloat::IEEEdouble(), "+.1e").convertToDouble());
-  EXPECT_EQ(-0.1,      APFloat(APFloat::IEEEdouble(), "-.1e").convertToDouble());
-
-  EXPECT_EQ(1.1,      APFloat(APFloat::IEEEdouble(), "1.1e").convertToDouble());
-  EXPECT_EQ(1.1,      APFloat(APFloat::IEEEdouble(), "+1.1e").convertToDouble());
-  EXPECT_EQ(-1.1,      APFloat(APFloat::IEEEdouble(), "-1.1e").convertToDouble());
-
-  EXPECT_EQ(1.0,      APFloat(APFloat::IEEEdouble(), "1e+").convertToDouble());
-  EXPECT_EQ(1.0,      APFloat(APFloat::IEEEdouble(), "1e-").convertToDouble());
-
-  EXPECT_EQ(0.1,      APFloat(APFloat::IEEEdouble(), ".1e").convertToDouble());
-  EXPECT_EQ(0.1,      APFloat(APFloat::IEEEdouble(), ".1e+").convertToDouble());
-  EXPECT_EQ(0.1,      APFloat(APFloat::IEEEdouble(), ".1e-").convertToDouble());
-
-  EXPECT_EQ(1.0,      APFloat(APFloat::IEEEdouble(), "1.0e").convertToDouble());
-  EXPECT_EQ(1.0,      APFloat(APFloat::IEEEdouble(), "1.0e+").convertToDouble());
-  EXPECT_EQ(1.0,      APFloat(APFloat::IEEEdouble(), "1.0e-").convertToDouble());
-
   // These are "carefully selected" to overflow the fast log-base
   // calculations in APFloat.cpp
   EXPECT_TRUE(APFloat(APFloat::IEEEdouble(), "99e99999").isInfinity());
@@ -917,23 +845,6 @@ TEST(APFloatTest, fromDecimalString) {
   EXPECT_TRUE(APFloat(APFloat::IEEEdouble(), "-1e-99999").isNegZero());
 
   EXPECT_EQ(2.71828, convertToDoubleFromString("2.71828"));
-}
-
-TEST(APFloatTest, fromToStringSpecials) {
-  auto expects = [] (const char *first, const char *second) {
-    std::string roundtrip = convertToString(convertToDoubleFromString(second), 0, 3);
-    EXPECT_STREQ(first, roundtrip.c_str());
-  };
-  expects("+Inf", "+Inf");
-  expects("+Inf", "INFINITY");
-  expects("+Inf", "inf");
-  expects("-Inf", "-Inf");
-  expects("-Inf", "-INFINITY");
-  expects("-Inf", "-inf");
-  expects("NaN", "NaN");
-  expects("NaN", "nan");
-  expects("NaN", "-NaN");
-  expects("NaN", "-nan");
 }
 
 TEST(APFloatTest, fromHexadecimalString) {
@@ -1037,29 +948,6 @@ TEST(APFloatTest, toString) {
   ASSERT_EQ("873.18340000000001", convertToString(873.1834, 0, 1));
   ASSERT_EQ("8.7318340000000001E+2", convertToString(873.1834, 0, 0));
   ASSERT_EQ("1.7976931348623157E+308", convertToString(1.7976931348623157E+308, 0, 0));
-  ASSERT_EQ("10", convertToString(10.0, 6, 3, false));
-  ASSERT_EQ("1.000000e+01", convertToString(10.0, 6, 0, false));
-  ASSERT_EQ("10100", convertToString(1.01E+4, 5, 2, false));
-  ASSERT_EQ("1.0100e+04", convertToString(1.01E+4, 4, 2, false));
-  ASSERT_EQ("1.01000e+04", convertToString(1.01E+4, 5, 1, false));
-  ASSERT_EQ("0.0101", convertToString(1.01E-2, 5, 2, false));
-  ASSERT_EQ("0.0101", convertToString(1.01E-2, 4, 2, false));
-  ASSERT_EQ("1.01000e-02", convertToString(1.01E-2, 5, 1, false));
-  ASSERT_EQ("0.78539816339744828",
-            convertToString(0.78539816339744830961, 0, 3, false));
-  ASSERT_EQ("4.94065645841246540e-324",
-            convertToString(4.9406564584124654e-324, 0, 3, false));
-  ASSERT_EQ("873.18340000000001", convertToString(873.1834, 0, 1, false));
-  ASSERT_EQ("8.73183400000000010e+02", convertToString(873.1834, 0, 0, false));
-  ASSERT_EQ("1.79769313486231570e+308",
-            convertToString(1.7976931348623157E+308, 0, 0, false));
-
-  {
-    SmallString<64> Str;
-    APFloat UnnormalZero(APFloat::x87DoubleExtended(), APInt(80, {0, 1}));
-    UnnormalZero.toString(Str);
-    ASSERT_EQ("NaN", Str);
-  }
 }
 
 TEST(APFloatTest, toInteger) {
@@ -1110,223 +998,237 @@ TEST(APFloatTest, toInteger) {
   EXPECT_EQ(APSInt::getMaxValue(5, false), result);
 }
 
-static APInt nanbitsFromAPInt(const fltSemantics &Sem, bool SNaN, bool Negative,
-                              uint64_t payload) {
-  APInt appayload(64, payload);
+static APInt nanbits(const fltSemantics &Sem,
+                     bool SNaN, bool Negative, uint64_t fill) {
+  APInt apfill(64, fill);
   if (SNaN)
-    return APFloat::getSNaN(Sem, Negative, &appayload).bitcastToAPInt();
+    return APFloat::getSNaN(Sem, Negative, &apfill).bitcastToAPInt();
   else
-    return APFloat::getQNaN(Sem, Negative, &appayload).bitcastToAPInt();
+    return APFloat::getQNaN(Sem, Negative, &apfill).bitcastToAPInt();
 }
 
 TEST(APFloatTest, makeNaN) {
-  const struct {
-    uint64_t expected;
-    const fltSemantics &semantics;
-    bool SNaN;
-    bool Negative;
-    uint64_t payload;
-  } tests[] = {
-    /*             expected              semantics   SNaN    Neg                payload */
-    {         0x7fc00000ULL, APFloat::IEEEsingle(), false, false,         0x00000000ULL },
-    {         0xffc00000ULL, APFloat::IEEEsingle(), false,  true,         0x00000000ULL },
-    {         0x7fc0ae72ULL, APFloat::IEEEsingle(), false, false,         0x0000ae72ULL },
-    {         0x7fffae72ULL, APFloat::IEEEsingle(), false, false,         0xffffae72ULL },
-    {         0x7fdaae72ULL, APFloat::IEEEsingle(), false, false,         0x00daae72ULL },
-    {         0x7fa00000ULL, APFloat::IEEEsingle(),  true, false,         0x00000000ULL },
-    {         0xffa00000ULL, APFloat::IEEEsingle(),  true,  true,         0x00000000ULL },
-    {         0x7f80ae72ULL, APFloat::IEEEsingle(),  true, false,         0x0000ae72ULL },
-    {         0x7fbfae72ULL, APFloat::IEEEsingle(),  true, false,         0xffffae72ULL },
-    {         0x7f9aae72ULL, APFloat::IEEEsingle(),  true, false,         0x001aae72ULL },
-    { 0x7ff8000000000000ULL, APFloat::IEEEdouble(), false, false, 0x0000000000000000ULL },
-    { 0xfff8000000000000ULL, APFloat::IEEEdouble(), false,  true, 0x0000000000000000ULL },
-    { 0x7ff800000000ae72ULL, APFloat::IEEEdouble(), false, false, 0x000000000000ae72ULL },
-    { 0x7fffffffffffae72ULL, APFloat::IEEEdouble(), false, false, 0xffffffffffffae72ULL },
-    { 0x7ffdaaaaaaaaae72ULL, APFloat::IEEEdouble(), false, false, 0x000daaaaaaaaae72ULL },
-    { 0x7ff4000000000000ULL, APFloat::IEEEdouble(),  true, false, 0x0000000000000000ULL },
-    { 0xfff4000000000000ULL, APFloat::IEEEdouble(),  true,  true, 0x0000000000000000ULL },
-    { 0x7ff000000000ae72ULL, APFloat::IEEEdouble(),  true, false, 0x000000000000ae72ULL },
-    { 0x7ff7ffffffffae72ULL, APFloat::IEEEdouble(),  true, false, 0xffffffffffffae72ULL },
-    { 0x7ff1aaaaaaaaae72ULL, APFloat::IEEEdouble(),  true, false, 0x0001aaaaaaaaae72ULL },
-  };
+  ASSERT_EQ(0x7fc00000, nanbits(APFloat::IEEEsingle(), false, false, 0));
+  ASSERT_EQ(0xffc00000, nanbits(APFloat::IEEEsingle(), false, true, 0));
+  ASSERT_EQ(0x7fc0ae72, nanbits(APFloat::IEEEsingle(), false, false, 0xae72));
+  ASSERT_EQ(0x7fffae72, nanbits(APFloat::IEEEsingle(), false, false, 0xffffae72));
+  ASSERT_EQ(0x7fa00000, nanbits(APFloat::IEEEsingle(), true, false, 0));
+  ASSERT_EQ(0xffa00000, nanbits(APFloat::IEEEsingle(), true, true, 0));
+  ASSERT_EQ(0x7f80ae72, nanbits(APFloat::IEEEsingle(), true, false, 0xae72));
+  ASSERT_EQ(0x7fbfae72, nanbits(APFloat::IEEEsingle(), true, false, 0xffffae72));
 
-  for (const auto &t : tests) {
-    ASSERT_EQ(t.expected, nanbitsFromAPInt(t.semantics, t.SNaN, t.Negative, t.payload));
-  }
+  ASSERT_EQ(0x7ff8000000000000ULL, nanbits(APFloat::IEEEdouble(), false, false, 0));
+  ASSERT_EQ(0xfff8000000000000ULL, nanbits(APFloat::IEEEdouble(), false, true, 0));
+  ASSERT_EQ(0x7ff800000000ae72ULL, nanbits(APFloat::IEEEdouble(), false, false, 0xae72));
+  ASSERT_EQ(0x7fffffffffffae72ULL, nanbits(APFloat::IEEEdouble(), false, false, 0xffffffffffffae72ULL));
+  ASSERT_EQ(0x7ff4000000000000ULL, nanbits(APFloat::IEEEdouble(), true, false, 0));
+  ASSERT_EQ(0xfff4000000000000ULL, nanbits(APFloat::IEEEdouble(), true, true, 0));
+  ASSERT_EQ(0x7ff000000000ae72ULL, nanbits(APFloat::IEEEdouble(), true, false, 0xae72));
+  ASSERT_EQ(0x7ff7ffffffffae72ULL, nanbits(APFloat::IEEEdouble(), true, false, 0xffffffffffffae72ULL));
 }
 
 #ifdef GTEST_HAS_DEATH_TEST
 #ifndef NDEBUG
 TEST(APFloatTest, SemanticsDeath) {
-  EXPECT_DEATH(APFloat(APFloat::IEEEsingle(), 0).convertToDouble(), "Float semantics are not IEEEdouble");
-  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), 0).convertToFloat(),  "Float semantics are not IEEEsingle");
+  EXPECT_DEATH(APFloat(APFloat::IEEEsingle(), 0.0f).convertToDouble(), "Float semantics are not IEEEdouble");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), 0.0 ).convertToFloat(),  "Float semantics are not IEEEsingle");
+}
+
+TEST(APFloatTest, StringDecimalDeath) {
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  ""), "Invalid string length");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+"), "String has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-"), "String has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("\0", 1)), "Invalid character in significand");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("1\0", 2)), "Invalid character in significand");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("1\02", 3)), "Invalid character in significand");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("1\02e1", 5)), "Invalid character in significand");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("1e\0", 3)), "Invalid character in exponent");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("1e1\0", 4)), "Invalid character in exponent");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("1e1\02", 5)), "Invalid character in exponent");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "1.0f"), "Invalid character in significand");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), ".."), "String contains multiple dots");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "..0"), "String contains multiple dots");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "1.0.0"), "String contains multiple dots");
+}
+
+TEST(APFloatTest, StringDecimalSignificandDeath) {
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "."), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+."), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-."), "Significand has no digits");
+
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "e"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+e"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-e"), "Significand has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "e1"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+e1"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-e1"), "Significand has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  ".e1"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+.e1"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-.e1"), "Significand has no digits");
+
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  ".e"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+.e"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-.e"), "Significand has no digits");
+}
+
+TEST(APFloatTest, StringDecimalExponentDeath) {
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),   "1e"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "+1e"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "-1e"), "Exponent has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),   "1.e"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "+1.e"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "-1.e"), "Exponent has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),   ".1e"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "+.1e"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "-.1e"), "Exponent has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),   "1.1e"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "+1.1e"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "-1.1e"), "Exponent has no digits");
+
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "1e+"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "1e-"), "Exponent has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  ".1e"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), ".1e+"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), ".1e-"), "Exponent has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "1.0e"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "1.0e+"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "1.0e-"), "Exponent has no digits");
+}
+
+TEST(APFloatTest, StringHexadecimalDeath) {
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x"), "Invalid string");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x"), "Invalid string");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x"), "Invalid string");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x0"), "Hex strings require an exponent");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x0"), "Hex strings require an exponent");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x0"), "Hex strings require an exponent");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x0."), "Hex strings require an exponent");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x0."), "Hex strings require an exponent");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x0."), "Hex strings require an exponent");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x.0"), "Hex strings require an exponent");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x.0"), "Hex strings require an exponent");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x.0"), "Hex strings require an exponent");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x0.0"), "Hex strings require an exponent");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x0.0"), "Hex strings require an exponent");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x0.0"), "Hex strings require an exponent");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("0x\0", 3)), "Invalid character in significand");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("0x1\0", 4)), "Invalid character in significand");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("0x1\02", 5)), "Invalid character in significand");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("0x1\02p1", 7)), "Invalid character in significand");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("0x1p\0", 5)), "Invalid character in exponent");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("0x1p1\0", 6)), "Invalid character in exponent");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), StringRef("0x1p1\02", 7)), "Invalid character in exponent");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "0x1p0f"), "Invalid character in exponent");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "0x..p1"), "String contains multiple dots");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "0x..0p1"), "String contains multiple dots");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "0x1.0.0p1"), "String contains multiple dots");
+}
+
+TEST(APFloatTest, StringHexadecimalSignificandDeath) {
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x."), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x."), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x."), "Significand has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0xp"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0xp"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0xp"), "Significand has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0xp+"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0xp+"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0xp+"), "Significand has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0xp-"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0xp-"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0xp-"), "Significand has no digits");
+
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x.p"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x.p"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x.p"), "Significand has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x.p+"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x.p+"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x.p+"), "Significand has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x.p-"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x.p-"), "Significand has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x.p-"), "Significand has no digits");
+}
+
+TEST(APFloatTest, StringHexadecimalExponentDeath) {
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x1p"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x1p"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x1p"), "Exponent has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x1p+"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x1p+"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x1p+"), "Exponent has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x1p-"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x1p-"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x1p-"), "Exponent has no digits");
+
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x1.p"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x1.p"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x1.p"), "Exponent has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x1.p+"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x1.p+"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x1.p+"), "Exponent has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x1.p-"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x1.p-"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x1.p-"), "Exponent has no digits");
+
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x.1p"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x.1p"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x.1p"), "Exponent has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x.1p+"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x.1p+"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x.1p+"), "Exponent has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x.1p-"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x.1p-"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x.1p-"), "Exponent has no digits");
+
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x1.1p"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x1.1p"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x1.1p"), "Exponent has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x1.1p+"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x1.1p+"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x1.1p+"), "Exponent has no digits");
+
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(),  "0x1.1p-"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "+0x1.1p-"), "Exponent has no digits");
+  EXPECT_DEATH(APFloat(APFloat::IEEEdouble(), "-0x1.1p-"), "Exponent has no digits");
 }
 #endif
 #endif
-
-TEST(APFloatTest, StringDecimalError) {
-  EXPECT_EQ("Invalid string length", convertToErrorFromString(""));
-  EXPECT_EQ("String has no digits", convertToErrorFromString("+"));
-  EXPECT_EQ("String has no digits", convertToErrorFromString("-"));
-
-  EXPECT_EQ("Invalid character in significand", convertToErrorFromString(StringRef("\0", 1)));
-  EXPECT_EQ("Invalid character in significand", convertToErrorFromString(StringRef("1\0", 2)));
-  EXPECT_EQ("Invalid character in significand", convertToErrorFromString(StringRef("1" "\0" "2", 3)));
-  EXPECT_EQ("Invalid character in significand", convertToErrorFromString(StringRef("1" "\0" "2e1", 5)));
-  EXPECT_EQ("Invalid character in exponent", convertToErrorFromString(StringRef("1e\0", 3)));
-  EXPECT_EQ("Invalid character in exponent", convertToErrorFromString(StringRef("1e1\0", 4)));
-  EXPECT_EQ("Invalid character in exponent", convertToErrorFromString(StringRef("1e1" "\0" "2", 5)));
-
-  EXPECT_EQ("Invalid character in significand", convertToErrorFromString("1.0f"));
-
-  EXPECT_EQ("String contains multiple dots", convertToErrorFromString(".."));
-  EXPECT_EQ("String contains multiple dots", convertToErrorFromString("..0"));
-  EXPECT_EQ("String contains multiple dots", convertToErrorFromString("1.0.0"));
-}
-
-TEST(APFloatTest, StringDecimalSignificandError) {
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString( "."));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("+."));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("-."));
-
-
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString( "e"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("+e"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("-e"));
-
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString( "e1"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("+e1"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("-e1"));
-
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString( ".e1"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("+.e1"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("-.e1"));
-
-
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString( ".e"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("+.e"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("-.e"));
-}
-
-TEST(APFloatTest, StringHexadecimalError) {
-  EXPECT_EQ("Invalid string", convertToErrorFromString( "0x"));
-  EXPECT_EQ("Invalid string", convertToErrorFromString("+0x"));
-  EXPECT_EQ("Invalid string", convertToErrorFromString("-0x"));
-
-  EXPECT_EQ("Hex strings require an exponent", convertToErrorFromString( "0x0"));
-  EXPECT_EQ("Hex strings require an exponent", convertToErrorFromString("+0x0"));
-  EXPECT_EQ("Hex strings require an exponent", convertToErrorFromString("-0x0"));
-
-  EXPECT_EQ("Hex strings require an exponent", convertToErrorFromString( "0x0."));
-  EXPECT_EQ("Hex strings require an exponent", convertToErrorFromString("+0x0."));
-  EXPECT_EQ("Hex strings require an exponent", convertToErrorFromString("-0x0."));
-
-  EXPECT_EQ("Hex strings require an exponent", convertToErrorFromString( "0x.0"));
-  EXPECT_EQ("Hex strings require an exponent", convertToErrorFromString("+0x.0"));
-  EXPECT_EQ("Hex strings require an exponent", convertToErrorFromString("-0x.0"));
-
-  EXPECT_EQ("Hex strings require an exponent", convertToErrorFromString( "0x0.0"));
-  EXPECT_EQ("Hex strings require an exponent", convertToErrorFromString("+0x0.0"));
-  EXPECT_EQ("Hex strings require an exponent", convertToErrorFromString("-0x0.0"));
-
-  EXPECT_EQ("Invalid character in significand", convertToErrorFromString(StringRef("0x\0", 3)));
-  EXPECT_EQ("Invalid character in significand", convertToErrorFromString(StringRef("0x1\0", 4)));
-  EXPECT_EQ("Invalid character in significand", convertToErrorFromString(StringRef("0x1" "\0" "2", 5)));
-  EXPECT_EQ("Invalid character in significand", convertToErrorFromString(StringRef("0x1" "\0" "2p1", 7)));
-  EXPECT_EQ("Invalid character in exponent", convertToErrorFromString(StringRef("0x1p\0", 5)));
-  EXPECT_EQ("Invalid character in exponent", convertToErrorFromString(StringRef("0x1p1\0", 6)));
-  EXPECT_EQ("Invalid character in exponent", convertToErrorFromString(StringRef("0x1p1" "\0" "2", 7)));
-
-  EXPECT_EQ("Invalid character in exponent", convertToErrorFromString("0x1p0f"));
-
-  EXPECT_EQ("String contains multiple dots", convertToErrorFromString("0x..p1"));
-  EXPECT_EQ("String contains multiple dots", convertToErrorFromString("0x..0p1"));
-  EXPECT_EQ("String contains multiple dots", convertToErrorFromString("0x1.0.0p1"));
-}
-
-TEST(APFloatTest, StringHexadecimalSignificandError) {
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString( "0x."));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("+0x."));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("-0x."));
-
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString( "0xp"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("+0xp"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("-0xp"));
-
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString( "0xp+"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("+0xp+"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("-0xp+"));
-
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString( "0xp-"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("+0xp-"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("-0xp-"));
-
-
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString( "0x.p"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("+0x.p"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("-0x.p"));
-
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString( "0x.p+"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("+0x.p+"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("-0x.p+"));
-
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString( "0x.p-"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("+0x.p-"));
-  EXPECT_EQ("Significand has no digits", convertToErrorFromString("-0x.p-"));
-}
-
-TEST(APFloatTest, StringHexadecimalExponentError) {
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString( "0x1p"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("+0x1p"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("-0x1p"));
-
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString( "0x1p+"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("+0x1p+"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("-0x1p+"));
-
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString( "0x1p-"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("+0x1p-"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("-0x1p-"));
-
-
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString( "0x1.p"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("+0x1.p"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("-0x1.p"));
-
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString( "0x1.p+"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("+0x1.p+"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("-0x1.p+"));
-
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString( "0x1.p-"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("+0x1.p-"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("-0x1.p-"));
-
-
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString( "0x.1p"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("+0x.1p"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("-0x.1p"));
-
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString( "0x.1p+"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("+0x.1p+"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("-0x.1p+"));
-
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString( "0x.1p-"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("+0x.1p-"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("-0x.1p-"));
-
-
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString( "0x1.1p"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("+0x1.1p"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("-0x1.1p"));
-
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString( "0x1.1p+"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("+0x1.1p+"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("-0x1.1p+"));
-
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString( "0x1.1p-"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("+0x1.1p-"));
-  EXPECT_EQ("Exponent has no digits", convertToErrorFromString("-0x1.1p-"));
-}
 
 TEST(APFloatTest, exactInverse) {
   APFloat inv(0.0f);
@@ -1429,24 +1331,6 @@ TEST(APFloatTest, isInteger) {
   EXPECT_TRUE(T.isInteger());
 }
 
-TEST(DoubleAPFloatTest, isInteger) {
-  APFloat F1(-0.0);
-  APFloat F2(-0.0);
-  llvm::detail::DoubleAPFloat T(APFloat::PPCDoubleDouble(), std::move(F1),
-                                std::move(F2));
-  EXPECT_TRUE(T.isInteger());
-  APFloat F3(3.14159);
-  APFloat F4(-0.0);
-  llvm::detail::DoubleAPFloat T2(APFloat::PPCDoubleDouble(), std::move(F3),
-                                std::move(F4));
-  EXPECT_FALSE(T2.isInteger());
-  APFloat F5(-0.0);
-  APFloat F6(3.14159);
-  llvm::detail::DoubleAPFloat T3(APFloat::PPCDoubleDouble(), std::move(F5),
-                                std::move(F6));
-  EXPECT_FALSE(T3.isInteger());
-}
-
 TEST(APFloatTest, getLargest) {
   EXPECT_EQ(3.402823466e+38f, APFloat::getLargest(APFloat::IEEEsingle()).convertToFloat());
   EXPECT_EQ(1.7976931348623158e+308, APFloat::getLargest(APFloat::IEEEdouble()).convertToDouble());
@@ -1535,16 +1419,16 @@ TEST(APFloatTest, getZero) {
   const unsigned NumGetZeroTests = 12;
   for (unsigned i = 0; i < NumGetZeroTests; ++i) {
     APFloat test = APFloat::getZero(*GetZeroTest[i].semantics,
-                                    GetZeroTest[i].sign);
+				    GetZeroTest[i].sign);
     const char *pattern = GetZeroTest[i].sign? "-0x0p+0" : "0x0p+0";
     APFloat expected = APFloat(*GetZeroTest[i].semantics,
-                               pattern);
+			       pattern);
     EXPECT_TRUE(test.isZero());
     EXPECT_TRUE(GetZeroTest[i].sign? test.isNegative() : !test.isNegative());
     EXPECT_TRUE(test.bitwiseIsEqual(expected));
     for (unsigned j = 0, je = GetZeroTest[i].bitPatternLength; j < je; ++j) {
       EXPECT_EQ(GetZeroTest[i].bitPattern[j],
-                test.bitcastToAPInt().getRawData()[j]);
+		test.bitcastToAPInt().getRawData()[j]);
     }
   }
 }
@@ -2340,28 +2224,21 @@ TEST(APFloatTest, multiply) {
   APFloat PSmallestValue = APFloat::getSmallest(APFloat::IEEEsingle(), false);
   APFloat MSmallestValue = APFloat::getSmallest(APFloat::IEEEsingle(), true);
   APFloat PSmallestNormalized =
-      APFloat::getSmallestNormalized(APFloat::IEEEsingle(), false);
+    APFloat::getSmallestNormalized(APFloat::IEEEsingle(), false);
   APFloat MSmallestNormalized =
-      APFloat::getSmallestNormalized(APFloat::IEEEsingle(), true);
-
-  APFloat MaxQuad(APFloat::IEEEquad(),
-                  "0x1.ffffffffffffffffffffffffffffp+16383");
-  APFloat MinQuad(APFloat::IEEEquad(),
-                  "0x0.0000000000000000000000000001p-16382");
-  APFloat NMinQuad(APFloat::IEEEquad(),
-                   "-0x0.0000000000000000000000000001p-16382");
+    APFloat::getSmallestNormalized(APFloat::IEEEsingle(), true);
 
   const int OverflowStatus = APFloat::opOverflow | APFloat::opInexact;
   const int UnderflowStatus = APFloat::opUnderflow | APFloat::opInexact;
 
+  const unsigned NumTests = 169;
   struct {
     APFloat x;
     APFloat y;
     const char *result;
     int status;
     int category;
-    APFloat::roundingMode roundingMode = APFloat::rmNearestTiesToEven;
-  } SpecialCaseTests[] = {
+  } SpecialCaseTests[NumTests] = {
     { PInf, PInf, "inf", APFloat::opOK, APFloat::fcInfinity },
     { PInf, MInf, "-inf", APFloat::opOK, APFloat::fcInfinity },
     { PInf, PZero, "nan", APFloat::opInvalidOp, APFloat::fcNaN },
@@ -2599,70 +2476,15 @@ TEST(APFloatTest, multiply) {
     { MSmallestNormalized, PSmallestValue, "-0x0p+0", UnderflowStatus, APFloat::fcZero },
     { MSmallestNormalized, MSmallestValue, "0x0p+0", UnderflowStatus, APFloat::fcZero },
     { MSmallestNormalized, PSmallestNormalized, "-0x0p+0", UnderflowStatus, APFloat::fcZero },
-    { MSmallestNormalized, MSmallestNormalized, "0x0p+0", UnderflowStatus, APFloat::fcZero },
-
-    {MaxQuad, MinQuad, "0x1.ffffffffffffffffffffffffffffp-111", APFloat::opOK,
-     APFloat::fcNormal, APFloat::rmNearestTiesToEven},
-    {MaxQuad, MinQuad, "0x1.ffffffffffffffffffffffffffffp-111", APFloat::opOK,
-     APFloat::fcNormal, APFloat::rmTowardPositive},
-    {MaxQuad, MinQuad, "0x1.ffffffffffffffffffffffffffffp-111", APFloat::opOK,
-     APFloat::fcNormal, APFloat::rmTowardNegative},
-    {MaxQuad, MinQuad, "0x1.ffffffffffffffffffffffffffffp-111", APFloat::opOK,
-     APFloat::fcNormal, APFloat::rmTowardZero},
-    {MaxQuad, MinQuad, "0x1.ffffffffffffffffffffffffffffp-111", APFloat::opOK,
-     APFloat::fcNormal, APFloat::rmNearestTiesToAway},
-
-    {MaxQuad, NMinQuad, "-0x1.ffffffffffffffffffffffffffffp-111", APFloat::opOK,
-     APFloat::fcNormal, APFloat::rmNearestTiesToEven},
-    {MaxQuad, NMinQuad, "-0x1.ffffffffffffffffffffffffffffp-111", APFloat::opOK,
-     APFloat::fcNormal, APFloat::rmTowardPositive},
-    {MaxQuad, NMinQuad, "-0x1.ffffffffffffffffffffffffffffp-111", APFloat::opOK,
-     APFloat::fcNormal, APFloat::rmTowardNegative},
-    {MaxQuad, NMinQuad, "-0x1.ffffffffffffffffffffffffffffp-111", APFloat::opOK,
-     APFloat::fcNormal, APFloat::rmTowardZero},
-    {MaxQuad, NMinQuad, "-0x1.ffffffffffffffffffffffffffffp-111", APFloat::opOK,
-     APFloat::fcNormal, APFloat::rmNearestTiesToAway},
-
-    {MaxQuad, MaxQuad, "inf", OverflowStatus, APFloat::fcInfinity,
-     APFloat::rmNearestTiesToEven},
-    {MaxQuad, MaxQuad, "inf", OverflowStatus, APFloat::fcInfinity,
-     APFloat::rmTowardPositive},
-    {MaxQuad, MaxQuad, "0x1.ffffffffffffffffffffffffffffp+16383",
-     APFloat::opInexact, APFloat::fcNormal, APFloat::rmTowardNegative},
-    {MaxQuad, MaxQuad, "0x1.ffffffffffffffffffffffffffffp+16383",
-     APFloat::opInexact, APFloat::fcNormal, APFloat::rmTowardZero},
-    {MaxQuad, MaxQuad, "inf", OverflowStatus, APFloat::fcInfinity,
-     APFloat::rmNearestTiesToAway},
-
-    {MinQuad, MinQuad, "0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmNearestTiesToEven},
-    {MinQuad, MinQuad, "0x0.0000000000000000000000000001p-16382",
-     UnderflowStatus, APFloat::fcNormal, APFloat::rmTowardPositive},
-    {MinQuad, MinQuad, "0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmTowardNegative},
-    {MinQuad, MinQuad, "0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmTowardZero},
-    {MinQuad, MinQuad, "0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmNearestTiesToAway},
-
-    {MinQuad, NMinQuad, "-0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmNearestTiesToEven},
-    {MinQuad, NMinQuad, "-0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmTowardPositive},
-    {MinQuad, NMinQuad, "-0x0.0000000000000000000000000001p-16382",
-     UnderflowStatus, APFloat::fcNormal, APFloat::rmTowardNegative},
-    {MinQuad, NMinQuad, "-0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmTowardZero},
-    {MinQuad, NMinQuad, "-0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmNearestTiesToAway},
+    { MSmallestNormalized, MSmallestNormalized, "0x0p+0", UnderflowStatus, APFloat::fcZero }
   };
 
-  for (size_t i = 0; i < array_lengthof(SpecialCaseTests); ++i) {
+  for (size_t i = 0; i < NumTests; ++i) {
     APFloat x(SpecialCaseTests[i].x);
     APFloat y(SpecialCaseTests[i].y);
-    APFloat::opStatus status = x.multiply(y, SpecialCaseTests[i].roundingMode);
+    APFloat::opStatus status = x.multiply(y, APFloat::rmNearestTiesToEven);
 
-    APFloat result(x.getSemantics(), SpecialCaseTests[i].result);
+    APFloat result(APFloat::IEEEsingle(), SpecialCaseTests[i].result);
 
     EXPECT_TRUE(result.bitwiseIsEqual(x));
     EXPECT_TRUE((int)status == SpecialCaseTests[i].status);
@@ -2691,28 +2513,21 @@ TEST(APFloatTest, divide) {
   APFloat PSmallestValue = APFloat::getSmallest(APFloat::IEEEsingle(), false);
   APFloat MSmallestValue = APFloat::getSmallest(APFloat::IEEEsingle(), true);
   APFloat PSmallestNormalized =
-      APFloat::getSmallestNormalized(APFloat::IEEEsingle(), false);
+    APFloat::getSmallestNormalized(APFloat::IEEEsingle(), false);
   APFloat MSmallestNormalized =
-      APFloat::getSmallestNormalized(APFloat::IEEEsingle(), true);
-
-  APFloat MaxQuad(APFloat::IEEEquad(),
-                  "0x1.ffffffffffffffffffffffffffffp+16383");
-  APFloat MinQuad(APFloat::IEEEquad(),
-                  "0x0.0000000000000000000000000001p-16382");
-  APFloat NMinQuad(APFloat::IEEEquad(),
-                   "-0x0.0000000000000000000000000001p-16382");
+    APFloat::getSmallestNormalized(APFloat::IEEEsingle(), true);
 
   const int OverflowStatus = APFloat::opOverflow | APFloat::opInexact;
   const int UnderflowStatus = APFloat::opUnderflow | APFloat::opInexact;
 
+  const unsigned NumTests = 169;
   struct {
     APFloat x;
     APFloat y;
     const char *result;
     int status;
     int category;
-    APFloat::roundingMode roundingMode = APFloat::rmNearestTiesToEven;
-  } SpecialCaseTests[] = {
+  } SpecialCaseTests[NumTests] = {
     { PInf, PInf, "nan", APFloat::opInvalidOp, APFloat::fcNaN },
     { PInf, MInf, "nan", APFloat::opInvalidOp, APFloat::fcNaN },
     { PInf, PZero, "inf", APFloat::opOK, APFloat::fcInfinity },
@@ -2951,47 +2766,14 @@ TEST(APFloatTest, divide) {
     { MSmallestNormalized, MSmallestValue, "0x1p+23", APFloat::opOK, APFloat::fcNormal },
     { MSmallestNormalized, PSmallestNormalized, "-0x1p+0", APFloat::opOK, APFloat::fcNormal },
     { MSmallestNormalized, MSmallestNormalized, "0x1p+0", APFloat::opOK, APFloat::fcNormal },
-
-    {MaxQuad, NMinQuad, "-inf", OverflowStatus, APFloat::fcInfinity,
-     APFloat::rmNearestTiesToEven},
-    {MaxQuad, NMinQuad, "-0x1.ffffffffffffffffffffffffffffp+16383",
-     APFloat::opInexact, APFloat::fcNormal, APFloat::rmTowardPositive},
-    {MaxQuad, NMinQuad, "-inf", OverflowStatus, APFloat::fcInfinity,
-     APFloat::rmTowardNegative},
-    {MaxQuad, NMinQuad, "-0x1.ffffffffffffffffffffffffffffp+16383",
-     APFloat::opInexact, APFloat::fcNormal, APFloat::rmTowardZero},
-    {MaxQuad, NMinQuad, "-inf", OverflowStatus, APFloat::fcInfinity,
-     APFloat::rmNearestTiesToAway},
-
-    {MinQuad, MaxQuad, "0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmNearestTiesToEven},
-    {MinQuad, MaxQuad, "0x0.0000000000000000000000000001p-16382",
-     UnderflowStatus, APFloat::fcNormal, APFloat::rmTowardPositive},
-    {MinQuad, MaxQuad, "0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmTowardNegative},
-    {MinQuad, MaxQuad, "0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmTowardZero},
-    {MinQuad, MaxQuad, "0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmNearestTiesToAway},
-
-    {NMinQuad, MaxQuad, "-0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmNearestTiesToEven},
-    {NMinQuad, MaxQuad, "-0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmTowardPositive},
-    {NMinQuad, MaxQuad, "-0x0.0000000000000000000000000001p-16382",
-     UnderflowStatus, APFloat::fcNormal, APFloat::rmTowardNegative},
-    {NMinQuad, MaxQuad, "-0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmTowardZero},
-    {NMinQuad, MaxQuad, "-0", UnderflowStatus, APFloat::fcZero,
-     APFloat::rmNearestTiesToAway},
   };
 
-  for (size_t i = 0; i < array_lengthof(SpecialCaseTests); ++i) {
+  for (size_t i = 0; i < NumTests; ++i) {
     APFloat x(SpecialCaseTests[i].x);
     APFloat y(SpecialCaseTests[i].y);
-    APFloat::opStatus status = x.divide(y, SpecialCaseTests[i].roundingMode);
+    APFloat::opStatus status = x.divide(y, APFloat::rmNearestTiesToEven);
 
-    APFloat result(x.getSemantics(), SpecialCaseTests[i].result);
+    APFloat result(APFloat::IEEEsingle(), SpecialCaseTests[i].result);
 
     EXPECT_TRUE(result.bitwiseIsEqual(x));
     EXPECT_TRUE((int)status == SpecialCaseTests[i].status);
@@ -3045,28 +2827,6 @@ TEST(APFloatTest, abs) {
   EXPECT_TRUE(PSmallestValue.bitwiseIsEqual(abs(MSmallestValue)));
   EXPECT_TRUE(PSmallestNormalized.bitwiseIsEqual(abs(PSmallestNormalized)));
   EXPECT_TRUE(PSmallestNormalized.bitwiseIsEqual(abs(MSmallestNormalized)));
-}
-
-TEST(APFloatTest, neg) {
-  APFloat One = APFloat(APFloat::IEEEsingle(), "1.0");
-  APFloat NegOne = APFloat(APFloat::IEEEsingle(), "-1.0");
-  APFloat Zero = APFloat::getZero(APFloat::IEEEsingle(), false);
-  APFloat NegZero = APFloat::getZero(APFloat::IEEEsingle(), true);
-  APFloat Inf = APFloat::getInf(APFloat::IEEEsingle(), false);
-  APFloat NegInf = APFloat::getInf(APFloat::IEEEsingle(), true);
-  APFloat QNaN = APFloat::getNaN(APFloat::IEEEsingle(), false);
-  APFloat NegQNaN = APFloat::getNaN(APFloat::IEEEsingle(), true);
-
-  EXPECT_TRUE(NegOne.bitwiseIsEqual(neg(One)));
-  EXPECT_TRUE(One.bitwiseIsEqual(neg(NegOne)));
-  EXPECT_TRUE(NegZero.bitwiseIsEqual(neg(Zero)));
-  EXPECT_TRUE(Zero.bitwiseIsEqual(neg(NegZero)));
-  EXPECT_TRUE(NegInf.bitwiseIsEqual(neg(Inf)));
-  EXPECT_TRUE(Inf.bitwiseIsEqual(neg(NegInf)));
-  EXPECT_TRUE(NegInf.bitwiseIsEqual(neg(Inf)));
-  EXPECT_TRUE(Inf.bitwiseIsEqual(neg(NegInf)));
-  EXPECT_TRUE(NegQNaN.bitwiseIsEqual(neg(QNaN)));
-  EXPECT_TRUE(QNaN.bitwiseIsEqual(neg(NegQNaN)));
 }
 
 TEST(APFloatTest, ilogb) {
@@ -3409,84 +3169,6 @@ TEST(APFloatTest, frexp) {
   EXPECT_TRUE(APFloat(APFloat::IEEEdouble(), "0x1.c60f120d9f87cp-1").bitwiseIsEqual(Frac));
 }
 
-TEST(APFloatTest, mod) {
-  {
-    APFloat f1(APFloat::IEEEdouble(), "1.5");
-    APFloat f2(APFloat::IEEEdouble(), "1.0");
-    APFloat expected(APFloat::IEEEdouble(), "0.5");
-    EXPECT_EQ(f1.mod(f2), APFloat::opOK);
-    EXPECT_TRUE(f1.bitwiseIsEqual(expected));
-  }
-  {
-    APFloat f1(APFloat::IEEEdouble(), "0.5");
-    APFloat f2(APFloat::IEEEdouble(), "1.0");
-    APFloat expected(APFloat::IEEEdouble(), "0.5");
-    EXPECT_EQ(f1.mod(f2), APFloat::opOK);
-    EXPECT_TRUE(f1.bitwiseIsEqual(expected));
-  }
-  {
-    APFloat f1(APFloat::IEEEdouble(), "0x1.3333333333333p-2"); // 0.3
-    APFloat f2(APFloat::IEEEdouble(), "0x1.47ae147ae147bp-7"); // 0.01
-    APFloat expected(APFloat::IEEEdouble(),
-                     "0x1.47ae147ae1471p-7"); // 0.009999999999999983
-    EXPECT_EQ(f1.mod(f2), APFloat::opOK);
-    EXPECT_TRUE(f1.bitwiseIsEqual(expected));
-  }
-  {
-    APFloat f1(APFloat::IEEEdouble(), "0x1p64"); // 1.8446744073709552e19
-    APFloat f2(APFloat::IEEEdouble(), "1.5");
-    APFloat expected(APFloat::IEEEdouble(), "1.0");
-    EXPECT_EQ(f1.mod(f2), APFloat::opOK);
-    EXPECT_TRUE(f1.bitwiseIsEqual(expected));
-  }
-  {
-    APFloat f1(APFloat::IEEEdouble(), "0x1p1000");
-    APFloat f2(APFloat::IEEEdouble(), "0x1p-1000");
-    APFloat expected(APFloat::IEEEdouble(), "0.0");
-    EXPECT_EQ(f1.mod(f2), APFloat::opOK);
-    EXPECT_TRUE(f1.bitwiseIsEqual(expected));
-  }
-  {
-    APFloat f1(APFloat::IEEEdouble(), "0.0");
-    APFloat f2(APFloat::IEEEdouble(), "1.0");
-    APFloat expected(APFloat::IEEEdouble(), "0.0");
-    EXPECT_EQ(f1.mod(f2), APFloat::opOK);
-    EXPECT_TRUE(f1.bitwiseIsEqual(expected));
-  }
-  {
-    APFloat f1(APFloat::IEEEdouble(), "1.0");
-    APFloat f2(APFloat::IEEEdouble(), "0.0");
-    EXPECT_EQ(f1.mod(f2), APFloat::opInvalidOp);
-    EXPECT_TRUE(f1.isNaN());
-  }
-  {
-    APFloat f1(APFloat::IEEEdouble(), "0.0");
-    APFloat f2(APFloat::IEEEdouble(), "0.0");
-    EXPECT_EQ(f1.mod(f2), APFloat::opInvalidOp);
-    EXPECT_TRUE(f1.isNaN());
-  }
-  {
-    APFloat f1 = APFloat::getInf(APFloat::IEEEdouble(), false);
-    APFloat f2(APFloat::IEEEdouble(), "1.0");
-    EXPECT_EQ(f1.mod(f2), APFloat::opInvalidOp);
-    EXPECT_TRUE(f1.isNaN());
-  }
-  {
-    APFloat f1(APFloat::IEEEdouble(), "-4.0");
-    APFloat f2(APFloat::IEEEdouble(), "-2.0");
-    APFloat expected(APFloat::IEEEdouble(), "-0.0");
-    EXPECT_EQ(f1.mod(f2), APFloat::opOK);
-    EXPECT_TRUE(f1.bitwiseIsEqual(expected));
-  }
-  {
-    APFloat f1(APFloat::IEEEdouble(), "-4.0");
-    APFloat f2(APFloat::IEEEdouble(), "2.0");
-    APFloat expected(APFloat::IEEEdouble(), "-0.0");
-    EXPECT_EQ(f1.mod(f2), APFloat::opOK);
-    EXPECT_TRUE(f1.bitwiseIsEqual(expected));
-  }
-}
-
 TEST(APFloatTest, PPCDoubleDoubleAddSpecial) {
   using DataType = std::tuple<uint64_t, uint64_t, uint64_t, uint64_t,
                               APFloat::fltCategory, APFloat::roundingMode>;
@@ -3499,7 +3181,7 @@ TEST(APFloatTest, PPCDoubleDoubleAddSpecial) {
                       0x7948000000000000ull, 0ull, APFloat::fcInfinity,
                       APFloat::rmNearestTiesToEven),
       // TODO: change the 4th 0x75effffffffffffe to 0x75efffffffffffff when
-      // semPPCDoubleDoubleLegacy is gone.
+      // PPCDoubleDoubleImpl is gone.
       // LDBL_MAX + (1.011111... >> (1023 - 106) + (1.1111111...0 >> (1023 -
       // 160))) = fcNormal
       std::make_tuple(0x7fefffffffffffffull, 0x7c8ffffffffffffeull,
@@ -3520,26 +3202,14 @@ TEST(APFloatTest, PPCDoubleDoubleAddSpecial) {
     APFloat::roundingMode RM;
     std::tie(Op1[0], Op1[1], Op2[0], Op2[1], Expected, RM) = Tp;
 
-    {
-      APFloat A1(APFloat::PPCDoubleDouble(), APInt(128, 2, Op1));
-      APFloat A2(APFloat::PPCDoubleDouble(), APInt(128, 2, Op2));
-      A1.add(A2, RM);
+    APFloat A1(APFloat::PPCDoubleDouble(), APInt(128, 2, Op1));
+    APFloat A2(APFloat::PPCDoubleDouble(), APInt(128, 2, Op2));
+    A1.add(A2, RM);
 
-      EXPECT_EQ(Expected, A1.getCategory())
-          << formatv("({0:x} + {1:x}) + ({2:x} + {3:x})", Op1[0], Op1[1],
-                     Op2[0], Op2[1])
-                 .str();
-    }
-    {
-      APFloat A1(APFloat::PPCDoubleDouble(), APInt(128, 2, Op1));
-      APFloat A2(APFloat::PPCDoubleDouble(), APInt(128, 2, Op2));
-      A2.add(A1, RM);
-
-      EXPECT_EQ(Expected, A2.getCategory())
-          << formatv("({0:x} + {1:x}) + ({2:x} + {3:x})", Op2[0], Op2[1],
-                     Op1[0], Op1[1])
-                 .str();
-    }
+    EXPECT_EQ(Expected, A1.getCategory())
+        << formatv("({0:x} + {1:x}) + ({2:x} + {3:x})", Op1[0], Op1[1], Op2[0],
+                   Op2[1])
+               .str();
   }
 }
 
@@ -3564,14 +3234,14 @@ TEST(APFloatTest, PPCDoubleDoubleAdd) {
                       0x3ff0000000000000ull, 0x0000000000000001ull,
                       APFloat::rmNearestTiesToEven),
       // TODO: change 0xf950000000000000 to 0xf940000000000000, when
-      // semPPCDoubleDoubleLegacy is gone.
+      // PPCDoubleDoubleImpl is gone.
       // (DBL_MAX - 1 << (1023 - 105)) + (1 << (1023 - 53) + 0) = DBL_MAX +
       // 1.11111... << (1023 - 52)
       std::make_tuple(0x7fefffffffffffffull, 0xf950000000000000ull,
                       0x7c90000000000000ull, 0, 0x7fefffffffffffffull,
                       0x7c8ffffffffffffeull, APFloat::rmNearestTiesToEven),
       // TODO: change 0xf950000000000000 to 0xf940000000000000, when
-      // semPPCDoubleDoubleLegacy is gone.
+      // PPCDoubleDoubleImpl is gone.
       // (1 << (1023 - 53) + 0) + (DBL_MAX - 1 << (1023 - 105)) = DBL_MAX +
       // 1.11111... << (1023 - 52)
       std::make_tuple(0x7c90000000000000ull, 0, 0x7fefffffffffffffull,
@@ -3584,34 +3254,18 @@ TEST(APFloatTest, PPCDoubleDoubleAdd) {
     APFloat::roundingMode RM;
     std::tie(Op1[0], Op1[1], Op2[0], Op2[1], Expected[0], Expected[1], RM) = Tp;
 
-    {
-      APFloat A1(APFloat::PPCDoubleDouble(), APInt(128, 2, Op1));
-      APFloat A2(APFloat::PPCDoubleDouble(), APInt(128, 2, Op2));
-      A1.add(A2, RM);
+    APFloat A1(APFloat::PPCDoubleDouble(), APInt(128, 2, Op1));
+    APFloat A2(APFloat::PPCDoubleDouble(), APInt(128, 2, Op2));
+    A1.add(A2, RM);
 
-      EXPECT_EQ(Expected[0], A1.bitcastToAPInt().getRawData()[0])
-          << formatv("({0:x} + {1:x}) + ({2:x} + {3:x})", Op1[0], Op1[1],
-                     Op2[0], Op2[1])
-                 .str();
-      EXPECT_EQ(Expected[1], A1.bitcastToAPInt().getRawData()[1])
-          << formatv("({0:x} + {1:x}) + ({2:x} + {3:x})", Op1[0], Op1[1],
-                     Op2[0], Op2[1])
-                 .str();
-    }
-    {
-      APFloat A1(APFloat::PPCDoubleDouble(), APInt(128, 2, Op1));
-      APFloat A2(APFloat::PPCDoubleDouble(), APInt(128, 2, Op2));
-      A2.add(A1, RM);
-
-      EXPECT_EQ(Expected[0], A2.bitcastToAPInt().getRawData()[0])
-          << formatv("({0:x} + {1:x}) + ({2:x} + {3:x})", Op2[0], Op2[1],
-                     Op1[0], Op1[1])
-                 .str();
-      EXPECT_EQ(Expected[1], A2.bitcastToAPInt().getRawData()[1])
-          << formatv("({0:x} + {1:x}) + ({2:x} + {3:x})", Op2[0], Op2[1],
-                     Op1[0], Op1[1])
-                 .str();
-    }
+    EXPECT_EQ(Expected[0], A1.bitcastToAPInt().getRawData()[0])
+        << formatv("({0:x} + {1:x}) + ({2:x} + {3:x})", Op1[0], Op1[1], Op2[0],
+                   Op2[1])
+               .str();
+    EXPECT_EQ(Expected[1], A1.getSecondFloat().bitcastToAPInt().getRawData()[0])
+        << formatv("({0:x} + {1:x}) + ({2:x} + {3:x})", Op1[0], Op1[1], Op2[0],
+                   Op2[1])
+               .str();
   }
 }
 
@@ -3642,117 +3296,22 @@ TEST(APFloatTest, PPCDoubleDoubleSubtract) {
         << formatv("({0:x} + {1:x}) - ({2:x} + {3:x})", Op1[0], Op1[1], Op2[0],
                    Op2[1])
                .str();
-    EXPECT_EQ(Expected[1], A1.bitcastToAPInt().getRawData()[1])
+    EXPECT_EQ(Expected[1], A1.getSecondFloat().bitcastToAPInt().getRawData()[0])
         << formatv("({0:x} + {1:x}) - ({2:x} + {3:x})", Op1[0], Op1[1], Op2[0],
                    Op2[1])
                .str();
   }
 }
 
-TEST(APFloatTest, PPCDoubleDoubleMultiplySpecial) {
-  using DataType = std::tuple<uint64_t, uint64_t, uint64_t, uint64_t,
-                              APFloat::fltCategory, APFloat::roundingMode>;
-  DataType Data[] = {
-      // fcNaN * fcNaN = fcNaN
-      std::make_tuple(0x7ff8000000000000ull, 0, 0x7ff8000000000000ull, 0,
-                      APFloat::fcNaN, APFloat::rmNearestTiesToEven),
-      // fcNaN * fcZero = fcNaN
-      std::make_tuple(0x7ff8000000000000ull, 0, 0, 0, APFloat::fcNaN,
-                      APFloat::rmNearestTiesToEven),
-      // fcNaN * fcInfinity = fcNaN
-      std::make_tuple(0x7ff8000000000000ull, 0, 0x7ff0000000000000ull, 0,
-                      APFloat::fcNaN, APFloat::rmNearestTiesToEven),
-      // fcNaN * fcNormal = fcNaN
-      std::make_tuple(0x7ff8000000000000ull, 0, 0x3ff0000000000000ull, 0,
-                      APFloat::fcNaN, APFloat::rmNearestTiesToEven),
-      // fcInfinity * fcInfinity = fcInfinity
-      std::make_tuple(0x7ff0000000000000ull, 0, 0x7ff0000000000000ull, 0,
-                      APFloat::fcInfinity, APFloat::rmNearestTiesToEven),
-      // fcInfinity * fcZero = fcNaN
-      std::make_tuple(0x7ff0000000000000ull, 0, 0, 0, APFloat::fcNaN,
-                      APFloat::rmNearestTiesToEven),
-      // fcInfinity * fcNormal = fcInfinity
-      std::make_tuple(0x7ff0000000000000ull, 0, 0x3ff0000000000000ull, 0,
-                      APFloat::fcInfinity, APFloat::rmNearestTiesToEven),
-      // fcZero * fcZero = fcZero
-      std::make_tuple(0, 0, 0, 0, APFloat::fcZero,
-                      APFloat::rmNearestTiesToEven),
-      // fcZero * fcNormal = fcZero
-      std::make_tuple(0, 0, 0x3ff0000000000000ull, 0, APFloat::fcZero,
-                      APFloat::rmNearestTiesToEven),
-  };
-
-  for (auto Tp : Data) {
-    uint64_t Op1[2], Op2[2];
-    APFloat::fltCategory Expected;
-    APFloat::roundingMode RM;
-    std::tie(Op1[0], Op1[1], Op2[0], Op2[1], Expected, RM) = Tp;
-
-    {
-      APFloat A1(APFloat::PPCDoubleDouble(), APInt(128, 2, Op1));
-      APFloat A2(APFloat::PPCDoubleDouble(), APInt(128, 2, Op2));
-      A1.multiply(A2, RM);
-
-      EXPECT_EQ(Expected, A1.getCategory())
-          << formatv("({0:x} + {1:x}) * ({2:x} + {3:x})", Op1[0], Op1[1],
-                     Op2[0], Op2[1])
-                 .str();
-    }
-    {
-      APFloat A1(APFloat::PPCDoubleDouble(), APInt(128, 2, Op1));
-      APFloat A2(APFloat::PPCDoubleDouble(), APInt(128, 2, Op2));
-      A2.multiply(A1, RM);
-
-      EXPECT_EQ(Expected, A2.getCategory())
-          << formatv("({0:x} + {1:x}) * ({2:x} + {3:x})", Op2[0], Op2[1],
-                     Op1[0], Op1[1])
-                 .str();
-    }
-  }
-}
-
 TEST(APFloatTest, PPCDoubleDoubleMultiply) {
   using DataType = std::tuple<uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
                               uint64_t, APFloat::roundingMode>;
+  // TODO: Only a sanity check for now. Add more edge cases when the
+  // double-double algorithm is implemented.
   DataType Data[] = {
       // 1/3 * 3 = 1.0
       std::make_tuple(0x3fd5555555555555ull, 0x3c75555555555556ull,
                       0x4008000000000000ull, 0, 0x3ff0000000000000ull, 0,
-                      APFloat::rmNearestTiesToEven),
-      // (1 + epsilon) * (1 + 0) = fcZero
-      std::make_tuple(0x3ff0000000000000ull, 0x0000000000000001ull,
-                      0x3ff0000000000000ull, 0, 0x3ff0000000000000ull,
-                      0x0000000000000001ull, APFloat::rmNearestTiesToEven),
-      // (1 + epsilon) * (1 + epsilon) = 1 + 2 * epsilon
-      std::make_tuple(0x3ff0000000000000ull, 0x0000000000000001ull,
-                      0x3ff0000000000000ull, 0x0000000000000001ull,
-                      0x3ff0000000000000ull, 0x0000000000000002ull,
-                      APFloat::rmNearestTiesToEven),
-      // -(1 + epsilon) * (1 + epsilon) = -1
-      std::make_tuple(0xbff0000000000000ull, 0x0000000000000001ull,
-                      0x3ff0000000000000ull, 0x0000000000000001ull,
-                      0xbff0000000000000ull, 0, APFloat::rmNearestTiesToEven),
-      // (0.5 + 0) * (1 + 2 * epsilon) = 0.5 + epsilon
-      std::make_tuple(0x3fe0000000000000ull, 0, 0x3ff0000000000000ull,
-                      0x0000000000000002ull, 0x3fe0000000000000ull,
-                      0x0000000000000001ull, APFloat::rmNearestTiesToEven),
-      // (0.5 + 0) * (1 + epsilon) = 0.5
-      std::make_tuple(0x3fe0000000000000ull, 0, 0x3ff0000000000000ull,
-                      0x0000000000000001ull, 0x3fe0000000000000ull, 0,
-                      APFloat::rmNearestTiesToEven),
-      // __LDBL_MAX__ * (1 + 1 << 106) = inf
-      std::make_tuple(0x7fefffffffffffffull, 0x7c8ffffffffffffeull,
-                      0x3ff0000000000000ull, 0x3950000000000000ull,
-                      0x7ff0000000000000ull, 0, APFloat::rmNearestTiesToEven),
-      // __LDBL_MAX__ * (1 + 1 << 107) > __LDBL_MAX__, but not inf, yes =_=|||
-      std::make_tuple(0x7fefffffffffffffull, 0x7c8ffffffffffffeull,
-                      0x3ff0000000000000ull, 0x3940000000000000ull,
-                      0x7fefffffffffffffull, 0x7c8fffffffffffffull,
-                      APFloat::rmNearestTiesToEven),
-      // __LDBL_MAX__ * (1 + 1 << 108) = __LDBL_MAX__
-      std::make_tuple(0x7fefffffffffffffull, 0x7c8ffffffffffffeull,
-                      0x3ff0000000000000ull, 0x3930000000000000ull,
-                      0x7fefffffffffffffull, 0x7c8ffffffffffffeull,
                       APFloat::rmNearestTiesToEven),
   };
 
@@ -3761,34 +3320,18 @@ TEST(APFloatTest, PPCDoubleDoubleMultiply) {
     APFloat::roundingMode RM;
     std::tie(Op1[0], Op1[1], Op2[0], Op2[1], Expected[0], Expected[1], RM) = Tp;
 
-    {
-      APFloat A1(APFloat::PPCDoubleDouble(), APInt(128, 2, Op1));
-      APFloat A2(APFloat::PPCDoubleDouble(), APInt(128, 2, Op2));
-      A1.multiply(A2, RM);
+    APFloat A1(APFloat::PPCDoubleDouble(), APInt(128, 2, Op1));
+    APFloat A2(APFloat::PPCDoubleDouble(), APInt(128, 2, Op2));
+    A1.multiply(A2, RM);
 
-      EXPECT_EQ(Expected[0], A1.bitcastToAPInt().getRawData()[0])
-          << formatv("({0:x} + {1:x}) * ({2:x} + {3:x})", Op1[0], Op1[1],
-                     Op2[0], Op2[1])
-                 .str();
-      EXPECT_EQ(Expected[1], A1.bitcastToAPInt().getRawData()[1])
-          << formatv("({0:x} + {1:x}) * ({2:x} + {3:x})", Op1[0], Op1[1],
-                     Op2[0], Op2[1])
-                 .str();
-    }
-    {
-      APFloat A1(APFloat::PPCDoubleDouble(), APInt(128, 2, Op1));
-      APFloat A2(APFloat::PPCDoubleDouble(), APInt(128, 2, Op2));
-      A2.multiply(A1, RM);
-
-      EXPECT_EQ(Expected[0], A2.bitcastToAPInt().getRawData()[0])
-          << formatv("({0:x} + {1:x}) * ({2:x} + {3:x})", Op2[0], Op2[1],
-                     Op1[0], Op1[1])
-                 .str();
-      EXPECT_EQ(Expected[1], A2.bitcastToAPInt().getRawData()[1])
-          << formatv("({0:x} + {1:x}) * ({2:x} + {3:x})", Op2[0], Op2[1],
-                     Op1[0], Op1[1])
-                 .str();
-    }
+    EXPECT_EQ(Expected[0], A1.bitcastToAPInt().getRawData()[0])
+        << formatv("({0:x} + {1:x}) * ({2:x} + {3:x})", Op1[0], Op1[1], Op2[0],
+                   Op2[1])
+               .str();
+    EXPECT_EQ(Expected[1], A1.bitcastToAPInt().getRawData()[1])
+        << formatv("({0:x} + {1:x}) * ({2:x} + {3:x})", Op1[0], Op1[1], Op2[0],
+                   Op2[1])
+               .str();
   }
 }
 
@@ -3953,51 +3496,10 @@ TEST(APFloatTest, PPCDoubleDoubleCompare) {
     APFloat A1(APFloat::PPCDoubleDouble(), APInt(128, 2, Op1));
     APFloat A2(APFloat::PPCDoubleDouble(), APInt(128, 2, Op2));
     EXPECT_EQ(Expected, A1.compare(A2))
-        << formatv("compare(({0:x} + {1:x}), ({2:x} + {3:x}))", Op1[0], Op1[1],
-                   Op2[0], Op2[1])
-               .str();
-  }
-}
-
-TEST(APFloatTest, PPCDoubleDoubleBitwiseIsEqual) {
-  using DataType = std::tuple<uint64_t, uint64_t, uint64_t, uint64_t, bool>;
-
-  DataType Data[] = {
-      // (1 + 0) = (1 + 0)
-      std::make_tuple(0x3ff0000000000000ull, 0, 0x3ff0000000000000ull, 0, true),
-      // (1 + 0) != (1.00...1 + 0)
-      std::make_tuple(0x3ff0000000000000ull, 0, 0x3ff0000000000001ull, 0,
-                      false),
-      // NaN = NaN
-      std::make_tuple(0x7ff8000000000000ull, 0, 0x7ff8000000000000ull, 0, true),
-      // NaN != NaN with a different bit pattern
-      std::make_tuple(0x7ff8000000000000ull, 0, 0x7ff8000000000000ull,
-                      0x3ff0000000000000ull, false),
-      // Inf = Inf
-      std::make_tuple(0x7ff0000000000000ull, 0, 0x7ff0000000000000ull, 0, true),
-  };
-
-  for (auto Tp : Data) {
-    uint64_t Op1[2], Op2[2];
-    bool Expected;
-    std::tie(Op1[0], Op1[1], Op2[0], Op2[1], Expected) = Tp;
-
-    APFloat A1(APFloat::PPCDoubleDouble(), APInt(128, 2, Op1));
-    APFloat A2(APFloat::PPCDoubleDouble(), APInt(128, 2, Op2));
-    EXPECT_EQ(Expected, A1.bitwiseIsEqual(A2))
-        << formatv("({0:x} + {1:x}) = ({2:x} + {3:x})", Op1[0], Op1[1], Op2[0],
+        << formatv("({0:x} + {1:x}) - ({2:x} + {3:x})", Op1[0], Op1[1], Op2[0],
                    Op2[1])
                .str();
   }
-}
-
-TEST(APFloatTest, PPCDoubleDoubleHashValue) {
-  uint64_t Data1[] = {0x3ff0000000000001ull, 0x0000000000000001ull};
-  uint64_t Data2[] = {0x3ff0000000000001ull, 0};
-  // The hash values are *hopefully* different.
-  EXPECT_NE(
-      hash_value(APFloat(APFloat::PPCDoubleDouble(), APInt(128, 2, Data1))),
-      hash_value(APFloat(APFloat::PPCDoubleDouble(), APInt(128, 2, Data2))));
 }
 
 TEST(APFloatTest, PPCDoubleDoubleChangeSign) {
@@ -4029,13 +3531,6 @@ TEST(APFloatTest, PPCDoubleDoubleFactories) {
   }
   {
     uint64_t Data[] = {
-        0x7fefffffffffffffull, 0x7c8ffffffffffffeull,
-    };
-    EXPECT_EQ(APInt(128, 2, Data),
-              APFloat::getLargest(APFloat::PPCDoubleDouble()).bitcastToAPInt());
-  }
-  {
-    uint64_t Data[] = {
         0x0000000000000001ull, 0,
     };
     EXPECT_EQ(
@@ -4058,72 +3553,24 @@ TEST(APFloatTest, PPCDoubleDoubleFactories) {
   }
   {
     uint64_t Data[] = {
-        0xffefffffffffffffull, 0xfc8ffffffffffffeull,
-    };
-    EXPECT_EQ(
-        APInt(128, 2, Data),
-        APFloat::getLargest(APFloat::PPCDoubleDouble(), true).bitcastToAPInt());
-  }
-  {
-    uint64_t Data[] = {
         0x8000000000000001ull, 0x0000000000000000ull,
     };
     EXPECT_EQ(APInt(128, 2, Data),
               APFloat::getSmallest(APFloat::PPCDoubleDouble(), true)
                   .bitcastToAPInt());
   }
-  {
-    uint64_t Data[] = {
-        0x8360000000000000ull, 0x0000000000000000ull,
-    };
-    EXPECT_EQ(APInt(128, 2, Data),
-              APFloat::getSmallestNormalized(APFloat::PPCDoubleDouble(), true)
-                  .bitcastToAPInt());
-  }
+
+  EXPECT_EQ(0x8360000000000000ull,
+            APFloat::getSmallestNormalized(APFloat::PPCDoubleDouble(), true)
+                .bitcastToAPInt()
+                .getRawData()[0]);
+  EXPECT_EQ(0x0000000000000000ull,
+            APFloat::getSmallestNormalized(APFloat::PPCDoubleDouble(), true)
+                .getSecondFloat()
+                .bitcastToAPInt()
+                .getRawData()[0]);
+
   EXPECT_TRUE(APFloat::getSmallest(APFloat::PPCDoubleDouble()).isSmallest());
   EXPECT_TRUE(APFloat::getLargest(APFloat::PPCDoubleDouble()).isLargest());
-}
-
-TEST(APFloatTest, PPCDoubleDoubleIsDenormal) {
-  EXPECT_TRUE(APFloat::getSmallest(APFloat::PPCDoubleDouble()).isDenormal());
-  EXPECT_FALSE(APFloat::getLargest(APFloat::PPCDoubleDouble()).isDenormal());
-  EXPECT_FALSE(
-      APFloat::getSmallestNormalized(APFloat::PPCDoubleDouble()).isDenormal());
-  {
-    // (4 + 3) is not normalized
-    uint64_t Data[] = {
-        0x4010000000000000ull, 0x4008000000000000ull,
-    };
-    EXPECT_TRUE(
-        APFloat(APFloat::PPCDoubleDouble(), APInt(128, 2, Data)).isDenormal());
-  }
-}
-
-TEST(APFloatTest, PPCDoubleDoubleScalbn) {
-  // 3.0 + 3.0 << 53
-  uint64_t Input[] = {
-      0x4008000000000000ull, 0x3cb8000000000000ull,
-  };
-  APFloat Result =
-      scalbn(APFloat(APFloat::PPCDoubleDouble(), APInt(128, 2, Input)), 1,
-             APFloat::rmNearestTiesToEven);
-  // 6.0 + 6.0 << 53
-  EXPECT_EQ(0x4018000000000000ull, Result.bitcastToAPInt().getRawData()[0]);
-  EXPECT_EQ(0x3cc8000000000000ull, Result.bitcastToAPInt().getRawData()[1]);
-}
-
-TEST(APFloatTest, PPCDoubleDoubleFrexp) {
-  // 3.0 + 3.0 << 53
-  uint64_t Input[] = {
-      0x4008000000000000ull, 0x3cb8000000000000ull,
-  };
-  int Exp;
-  // 0.75 + 0.75 << 53
-  APFloat Result =
-      frexp(APFloat(APFloat::PPCDoubleDouble(), APInt(128, 2, Input)), Exp,
-            APFloat::rmNearestTiesToEven);
-  EXPECT_EQ(2, Exp);
-  EXPECT_EQ(0x3fe8000000000000ull, Result.bitcastToAPInt().getRawData()[0]);
-  EXPECT_EQ(0x3c98000000000000ull, Result.bitcastToAPInt().getRawData()[1]);
 }
 }

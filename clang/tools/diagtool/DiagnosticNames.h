@@ -1,8 +1,9 @@
 //===- DiagnosticNames.h - Defines a table of all builtin diagnostics ------==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,7 +20,7 @@ namespace diagtool {
     const char *NameStr;
     short DiagID;
     uint8_t NameLen;
-
+    
     llvm::StringRef getName() const {
       return llvm::StringRef(NameStr, NameLen);
     }
@@ -29,10 +30,10 @@ namespace diagtool {
     }
   };
 
-  /// Get every diagnostic in the system, sorted by name.
+  /// \brief Get every diagnostic in the system, sorted by name.
   llvm::ArrayRef<DiagnosticRecord> getBuiltinDiagnosticsByName();
 
-  /// Get a diagnostic by its ID.
+  /// \brief Get a diagnostic by its ID.
   const DiagnosticRecord &getDiagnosticForID(short DiagID);
 
 
@@ -79,7 +80,7 @@ namespace diagtool {
       bool operator==(group_iterator &Other) const {
         return CurrentID == Other.CurrentID;
       }
-
+      
       bool operator!=(group_iterator &Other) const {
         return CurrentID != Other.CurrentID;
       }
@@ -88,19 +89,17 @@ namespace diagtool {
     typedef group_iterator<GroupRecord> subgroup_iterator;
     subgroup_iterator subgroup_begin() const;
     subgroup_iterator subgroup_end() const;
-    llvm::iterator_range<subgroup_iterator> subgroups() const;
 
     typedef group_iterator<DiagnosticRecord> diagnostics_iterator;
     diagnostics_iterator diagnostics_begin() const;
     diagnostics_iterator diagnostics_end() const;
-    llvm::iterator_range<diagnostics_iterator> diagnostics() const;
 
     bool operator<(llvm::StringRef Other) const {
       return getName() < Other;
     }
   };
 
-  /// Get every diagnostic group in the system, sorted by name.
+  /// \brief Get every diagnostic group in the system, sorted by name.
   llvm::ArrayRef<GroupRecord> getDiagnosticGroups();
 
   template<>

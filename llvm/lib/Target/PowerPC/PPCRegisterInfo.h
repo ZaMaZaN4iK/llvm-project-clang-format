@@ -1,8 +1,9 @@
 //===-- PPCRegisterInfo.h - PowerPC Register Information Impl ---*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,14 +15,13 @@
 #ifndef LLVM_LIB_TARGET_POWERPC_PPCREGISTERINFO_H
 #define LLVM_LIB_TARGET_POWERPC_PPCREGISTERINFO_H
 
-#include "MCTargetDesc/PPCMCTargetDesc.h"
+#include "PPC.h"
 #include "llvm/ADT/DenseMap.h"
 
 #define GET_REGINFO_HEADER
 #include "PPCGenRegisterInfo.inc"
 
 namespace llvm {
-class PPCTargetMachine;
 
 inline static unsigned getCRFromCRBit(unsigned SrcReg) {
   unsigned Reg = 0;
@@ -61,15 +61,6 @@ class PPCRegisterInfo : public PPCGenRegisterInfo {
 public:
   PPCRegisterInfo(const PPCTargetMachine &TM);
 
-  /// getMappedIdxOpcForImmOpc - Return the mapped index form load/store opcode
-  /// for a given imm form load/store opcode \p ImmFormOpcode.
-  /// FIXME: move this to PPCInstrInfo class.
-  unsigned getMappedIdxOpcForImmOpc(unsigned ImmOpcode) const {
-    if (!ImmToIdxMap.count(ImmOpcode))
-      return PPC::INSTRUCTION_LIST_END;
-    return ImmToIdxMap.find(ImmOpcode)->second;
-  }
-
   /// getPointerRegClass - Return the register class to use to hold pointers.
   /// This is used for addressing modes.
   const TargetRegisterClass *
@@ -92,14 +83,15 @@ public:
   void adjustStackMapLiveOutMask(uint32_t *Mask) const override;
 
   BitVector getReservedRegs(const MachineFunction &MF) const override;
-  bool isCallerPreservedPhysReg(unsigned PhysReg, const MachineFunction &MF) const override;
 
   /// We require the register scavenger.
   bool requiresRegisterScavenging(const MachineFunction &MF) const override {
     return true;
   }
 
-  bool requiresFrameIndexScavenging(const MachineFunction &MF) const override;
+  bool requiresFrameIndexScavenging(const MachineFunction &MF) const override {
+    return true;
+  }
 
   bool trackLivenessAfterRegAlloc(const MachineFunction &MF) const override {
     return true;
@@ -141,28 +133,11 @@ public:
                           int64_t Offset) const override;
 
   // Debug information queries.
-  Register getFrameRegister(const MachineFunction &MF) const override;
+  unsigned getFrameRegister(const MachineFunction &MF) const override;
 
   // Base pointer (stack realignment) support.
-  Register getBaseRegister(const MachineFunction &MF) const;
+  unsigned getBaseRegister(const MachineFunction &MF) const;
   bool hasBasePointer(const MachineFunction &MF) const;
-
-  /// stripRegisterPrefix - This method strips the character prefix from a
-  /// register name so that only the number is left.  Used by for linux asm.
-  static const char *stripRegisterPrefix(const char *RegName) {
-    switch (RegName[0]) {
-      case 'r':
-      case 'f':
-      case 'q': // for QPX
-      case 'v':
-        if (RegName[1] == 's')
-          return RegName + 2;
-        return RegName + 1;
-      case 'c': if (RegName[1] == 'r') return RegName + 2;
-    }
-
-    return RegName;
-  }
 };
 
 } // end namespace llvm

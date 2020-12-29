@@ -1,8 +1,9 @@
 //===- llvm/ADT/PostOrderIterator.h - PostOrder iterator --------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,9 +17,9 @@
 #define LLVM_ADT_POSTORDERITERATOR_H
 
 #include "llvm/ADT/GraphTraits.h"
+#include "llvm/ADT/iterator_range.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/iterator_range.h"
 #include <iterator>
 #include <set>
 #include <utility>
@@ -95,13 +96,23 @@ template <class GraphT,
 class po_iterator
     : public std::iterator<std::forward_iterator_tag, typename GT::NodeRef>,
       public po_iterator_storage<SetType, ExtStorage> {
-  using super = std::iterator<std::forward_iterator_tag, typename GT::NodeRef>;
-  using NodeRef = typename GT::NodeRef;
-  using ChildItTy = typename GT::ChildIteratorType;
+  typedef std::iterator<std::forward_iterator_tag, typename GT::NodeRef> super;
+  typedef typename GT::NodeRef NodeRef;
+  typedef typename GT::ChildIteratorType ChildItTy;
 
   // VisitStack - Used to maintain the ordering.  Top = current block
   // First element is basic block pointer, second is the 'next child' to visit
   std::vector<std::pair<NodeRef, ChildItTy>> VisitStack;
+
+  void traverseChild() {
+    while (VisitStack.back().second != GT::child_end(VisitStack.back().first)) {
+      NodeRef BB = *VisitStack.back().second++;
+      if (this->insertEdge(Optional<NodeRef>(VisitStack.back().first), BB)) {
+        // If the block is not visited...
+        VisitStack.push_back(std::make_pair(BB, GT::child_begin(BB)));
+      }
+    }
+  }
 
   po_iterator(NodeRef BB) {
     this->insertEdge(Optional<NodeRef>(), BB);
@@ -123,18 +134,8 @@ class po_iterator
       : po_iterator_storage<SetType, ExtStorage>(S) {
   } // End is when stack is empty.
 
-  void traverseChild() {
-    while (VisitStack.back().second != GT::child_end(VisitStack.back().first)) {
-      NodeRef BB = *VisitStack.back().second++;
-      if (this->insertEdge(Optional<NodeRef>(VisitStack.back().first), BB)) {
-        // If the block is not visited...
-        VisitStack.push_back(std::make_pair(BB, GT::child_begin(BB)));
-      }
-    }
-  }
-
 public:
-  using pointer = typename super::pointer;
+  typedef typename super::pointer pointer;
 
   // Provide static "constructors"...
   static po_iterator begin(GraphT G) {
@@ -267,10 +268,6 @@ inverse_post_order_ext(const T &G, SetType &S) {
 // with a postorder iterator to build the data structures).  The moral of this
 // story is: Don't create more ReversePostOrderTraversal classes than necessary.
 //
-// Because it does the traversal in its constructor, it won't invalidate when
-// BasicBlocks are removed, *but* it may contain erased blocks. Some places
-// rely on this behavior (i.e. GVN).
-//
 // This class should be used like this:
 // {
 //   ReversePostOrderTraversal<Function*> RPOT(FuncPtr); // Expensive to create
@@ -285,8 +282,7 @@ inverse_post_order_ext(const T &G, SetType &S) {
 
 template<class GraphT, class GT = GraphTraits<GraphT>>
 class ReversePostOrderTraversal {
-  using NodeRef = typename GT::NodeRef;
-
+  typedef typename GT::NodeRef NodeRef;
   std::vector<NodeRef> Blocks; // Block list in normal PO order
 
   void Initialize(NodeRef BB) {
@@ -294,16 +290,13 @@ class ReversePostOrderTraversal {
   }
 
 public:
-  using rpo_iterator = typename std::vector<NodeRef>::reverse_iterator;
-  using const_rpo_iterator = typename std::vector<NodeRef>::const_reverse_iterator;
+  typedef typename std::vector<NodeRef>::reverse_iterator rpo_iterator;
 
   ReversePostOrderTraversal(GraphT G) { Initialize(GT::getEntryNode(G)); }
 
   // Because we want a reverse post order, use reverse iterators from the vector
   rpo_iterator begin() { return Blocks.rbegin(); }
-  const_rpo_iterator begin() const { return Blocks.crbegin(); }
   rpo_iterator end() { return Blocks.rend(); }
-  const_rpo_iterator end() const { return Blocks.crend(); }
 };
 
 } // end namespace llvm

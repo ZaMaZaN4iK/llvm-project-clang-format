@@ -1,10 +1,6 @@
 // RUN: %clang_cc1 -verify -fopenmp -ast-print %s | FileCheck %s
 // RUN: %clang_cc1 -fopenmp -x c++ -std=c++11 -emit-pch -o %t %s
 // RUN: %clang_cc1 -fopenmp -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
-
-// RUN: %clang_cc1 -verify -fopenmp-simd -ast-print %s | FileCheck %s
-// RUN: %clang_cc1 -fopenmp-simd -x c++ -std=c++11 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp-simd -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
 // expected-no-diagnostics
 
 #ifndef HEADER
@@ -20,7 +16,7 @@ struct SS {
 #pragma omp parallel firstprivate(a, b, c)
 #pragma omp single copyprivate(a, this->b, (this)->c)
 // CHECK: #pragma omp parallel firstprivate(this->a,this->b,this->c)
-// CHECK-NEXT: #pragma omp single copyprivate(this->a,this->b,this->c){{$}}
+// CHECK-NEXT: #pragma omp single copyprivate(this->a,this->b,this->c)
     ++this->a, --b, (this)->c /= 1;
   }
 };
@@ -46,16 +42,16 @@ T tmain(T argc) {
   SST<T> sst;
 // CHECK: static T a;
 #pragma omp parallel private(g)
-#pragma omp single private(argc, b), firstprivate(c, d), nowait allocate(d)
+#pragma omp single private(argc, b), firstprivate(c, d), nowait
   foo();
   // CHECK: #pragma omp parallel private(g)
-  // CHECK-NEXT: #pragma omp single private(argc,b) firstprivate(c,d) nowait allocate(d)
+  // CHECK-NEXT: #pragma omp single private(argc,b) firstprivate(c,d) nowait
   // CHECK-NEXT: foo();
 #pragma omp parallel private(g)
-#pragma omp single allocate(argc) private(argc, b), firstprivate(c, d), copyprivate(g)
+#pragma omp single private(argc, b), firstprivate(c, d), copyprivate(g)
   foo();
   // CHECK-NEXT: #pragma omp parallel private(g)
-  // CHECK-NEXT: #pragma omp single allocate(argc) private(argc,b) firstprivate(c,d) copyprivate(g)
+  // CHECK-NEXT: #pragma omp single private(argc,b) firstprivate(c,d) copyprivate(g)
   // CHECK-NEXT: foo();
   return T();
 }

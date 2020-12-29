@@ -1,8 +1,6 @@
 llc - LLVM static compiler
 ==========================
 
-.. program:: llc
-
 SYNOPSIS
 --------
 
@@ -42,11 +40,6 @@ End-user Options
 .. option:: -help
 
  Print a summary of command line options.
-
-.. option:: -o <filename>
-
- Use ``<filename>`` as the output filename. See the summary above for more
- details.
 
 .. option:: -O=uint
 
@@ -94,9 +87,9 @@ End-user Options
 
    llvm-as < /dev/null | llc -march=xyz -mattr=help
 
-.. option:: --frame-pointer
+.. option:: --disable-fp-elim
 
- Specify effect of frame pointer elimination optimization (all,non-leaf,none).
+ Disable frame pointer elimination optimization.
 
 .. option:: --disable-excess-fp-precision
 
@@ -139,18 +132,6 @@ End-user Options
  Specify which EABI version should conform to.  Valid EABI versions are *gnu*,
  *4* and *5*.  Default value (*default*) depends on the triple.
 
-.. option:: -stack-size-section
-
- Emit the .stack_sizes section which contains stack size metadata. The section
- contains an array of pairs of function symbol values (pointer size) and stack
- sizes (unsigned LEB128). The stack size values only include the space allocated
- in the function prologue. Functions with dynamic stack allocations are not
- included.
-
-.. option:: -remarks-section
-
- Emit the __remarks (MachO) section which contains metadata about remark
- diagnostics.
 
 Tuning/Configuration Options
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -211,4 +192,5 @@ occurs, it will exit with a non-zero value.
 SEE ALSO
 --------
 
-:manpage:`lli(1)`
+lli
+

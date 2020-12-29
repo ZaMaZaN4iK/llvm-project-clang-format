@@ -1,8 +1,9 @@
 //===-- X86TargetFrameLowering.h - Define frame lowering for X86 -*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,24 +14,23 @@
 #ifndef LLVM_LIB_TARGET_X86_X86FRAMELOWERING_H
 #define LLVM_LIB_TARGET_X86_X86FRAMELOWERING_H
 
-#include "llvm/CodeGen/TargetFrameLowering.h"
+#include "llvm/Target/TargetFrameLowering.h"
 
 namespace llvm {
 
 class MachineInstrBuilder;
 class MCCFIInstruction;
-class X86InstrInfo;
 class X86Subtarget;
 class X86RegisterInfo;
 
 class X86FrameLowering : public TargetFrameLowering {
 public:
-  X86FrameLowering(const X86Subtarget &STI, MaybeAlign StackAlignOverride);
+  X86FrameLowering(const X86Subtarget &STI, unsigned StackAlignOverride);
 
   // Cached subtarget predicates.
 
   const X86Subtarget &STI;
-  const X86InstrInfo &TII;
+  const TargetInstrInfo &TII;
   const X86RegisterInfo *TRI;
 
   unsigned SlotSize;
@@ -88,7 +88,7 @@ public:
 
   bool restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
                                   MachineBasicBlock::iterator MI,
-                                  std::vector<CalleeSavedInfo> &CSI,
+                                  const std::vector<CalleeSavedInfo> &CSI,
                                   const TargetRegisterInfo *TRI) const override;
 
   bool hasFP(const MachineFunction &MF) const override;
@@ -99,10 +99,6 @@ public:
   int getFrameIndexReference(const MachineFunction &MF, int FI,
                              unsigned &FrameReg) const override;
 
-  int getWin64EHFrameIndexRef(const MachineFunction &MF,
-                              int FI, unsigned &SPReg) const;
-  int getFrameIndexReferenceSP(const MachineFunction &MF,
-                               int FI, unsigned &SPReg, int Adjustment) const;
   int getFrameIndexReferencePreferSP(const MachineFunction &MF, int FI,
                                      unsigned &FrameReg,
                                      bool IgnoreSPUpdates) const override;
@@ -126,7 +122,7 @@ public:
   /// Emit a series of instructions to increment / decrement the stack
   /// pointer by a constant value.
   void emitSPUpdate(MachineBasicBlock &MBB, MachineBasicBlock::iterator &MBBI,
-                    const DebugLoc &DL, int64_t NumBytes, bool InEpilogue) const;
+                    int64_t NumBytes, bool InEpilogue) const;
 
   /// Check that LEA can be used on SP in an epilogue sequence for \p MF.
   bool canUseLEAForSPInEpilogue(const MachineFunction &MF) const;
@@ -158,6 +154,15 @@ public:
   void orderFrameObjects(const MachineFunction &MF,
                          SmallVectorImpl<int> &ObjectsToAllocate) const override;
 
+  /// convertArgMovsToPushes - This method tries to convert a call sequence
+  /// that uses sub and mov instructions to put the argument onto the stack
+  /// into a series of pushes.
+  /// Returns true if the transformation succeeded, false if not.
+  bool convertArgMovsToPushes(MachineFunction &MF, 
+                              MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator I, 
+                              uint64_t Amount) const;
+
   /// Wraps up getting a CFI index and building a MachineInstr for it.
   void BuildCFI(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
                 const DebugLoc &DL, const MCCFIInstruction &CFIInst) const;
@@ -168,14 +173,6 @@ public:
   restoreWin32EHStackPointers(MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator MBBI,
                               const DebugLoc &DL, bool RestoreSP = false) const;
-
-  int getInitialCFAOffset(const MachineFunction &MF) const override;
-
-  unsigned getInitialCFARegister(const MachineFunction &MF) const override;
-
-  /// Return true if the function has a redzone (accessible bytes past the
-  /// frame of the top of stack function) as part of it's ABI.  
-  bool has128ByteRedZone(const MachineFunction& MF) const;
 
 private:
   uint64_t calculateMaxStackAlign(const MachineFunction &MF) const;
@@ -214,11 +211,6 @@ private:
   unsigned getPSPSlotOffsetFromSP(const MachineFunction &MF) const;
 
   unsigned getWinEHFuncletFrameSize(const MachineFunction &MF) const;
-
-  /// Materialize the catchret target MBB in RAX.
-  void emitCatchRetReturnValue(MachineBasicBlock &MBB,
-                               MachineBasicBlock::iterator MBBI,
-                               MachineInstr *CatchRet) const;
 };
 
 } // End llvm namespace

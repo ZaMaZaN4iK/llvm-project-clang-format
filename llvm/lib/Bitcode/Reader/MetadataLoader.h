@@ -1,8 +1,9 @@
 //===-- Bitcode/Reader/MetadataLoader.h - Load Metadatas -------*- C++ -*-====//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -64,7 +65,9 @@ public:
   /// necessary.
   Metadata *getMetadataFwdRefOrLoad(unsigned Idx);
 
-  /// Return the DISubprogram metadata for a Function if any, null otherwise.
+  MDNode *getMDNodeFwdRefOrNull(unsigned Idx);
+
+  /// Return the DISubprogra metadata for a Function if any, null otherwise.
   DISubprogram *lookupSubprogramForFunction(Function *F);
 
   /// Parse a `METADATA_ATTACHMENT` block for a function.
@@ -76,9 +79,6 @@ public:
 
   unsigned size() const;
   void shrinkTo(unsigned N);
-
-  /// Perform bitcode upgrades on llvm.dbg.* calls.
-  void upgradeDebugIntrinsics(Function &F);
 };
 }
 

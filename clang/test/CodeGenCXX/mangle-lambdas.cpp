@@ -26,24 +26,6 @@ void call_inline_func() {
   inline_func(17);
 }
 
-// CHECK-LABEL: define linkonce_odr i32* @_ZNK10inline_varMUlvE_clEv(
-// CHECK: @_ZZNK10inline_varMUlvE_clEvE1n
-inline auto inline_var = [] {
-  static int n = 5;
-  return &n;
-};
-
-int *use_inline_var = inline_var();
-
-// CHECK-LABEL: define linkonce_odr i32* @_ZNK12var_templateIiEMUlvE_clEv(
-// CHECK: @_ZZNK12var_templateIiEMUlvE_clEvE1n
-template<typename T> auto var_template = [] {
-  static int n = 9;
-  return &n;
-};
-
-int *use_var_template = var_template<int>();
-
 struct S {
   void f(int = []{return 1;}()
              + []{return 2;}(),
@@ -136,7 +118,7 @@ T StaticMembers<T>::z = accept_lambda([]{return 4;});
 template<typename T>
 int (*StaticMembers<T>::f)() = []{return 5;};
 
-// CHECK-LABEL: define internal void @__cxx_global_var_init
+// CHECK-LABEL: define internal void @__cxx_global_var_init()
 // CHECK: call i32 @_ZNK13StaticMembersIfE1xMUlvE_clEv
 // CHECK-NEXT: call i32 @_ZNK13StaticMembersIfE1xMUlvE0_clEv
 // CHECK-NEXT: add nsw
@@ -146,23 +128,23 @@ int (*StaticMembers<T>::f)() = []{return 5;};
 // CHECK: ret i32 2
 template float StaticMembers<float>::x;
 
-// CHECK-LABEL: define internal void @__cxx_global_var_init
+// CHECK-LABEL: define internal void @__cxx_global_var_init.1()
 // CHECK: call i32 @_ZNK13StaticMembersIfE1yMUlvE_clEv
 // CHECK-LABEL: define linkonce_odr i32 @_ZNK13StaticMembersIfE1yMUlvE_clEv
 // CHECK: ret i32 3
 template float StaticMembers<float>::y;
 
-// CHECK-LABEL: define internal void @__cxx_global_var_init
+// CHECK-LABEL: define internal void @__cxx_global_var_init.2()
 // CHECK: call i32 @_Z13accept_lambdaIN13StaticMembersIfE1zMUlvE_EEiT_
 // CHECK: declare i32 @_Z13accept_lambdaIN13StaticMembersIfE1zMUlvE_EEiT_()
 template float StaticMembers<float>::z;
 
-// CHECK-LABEL: define internal void @__cxx_global_var_init
+// CHECK-LABEL: define internal void @__cxx_global_var_init.3()
 // CHECK: call {{.*}} @_ZNK13StaticMembersIfE1fMUlvE_cvPFivEEv
 // CHECK-LABEL: define linkonce_odr i32 ()* @_ZNK13StaticMembersIfE1fMUlvE_cvPFivEEv
 template int (*StaticMembers<float>::f)();
 
-// CHECK-LABEL: define internal void @__cxx_global_var_init
+// CHECK-LABEL: define internal void @__cxx_global_var_init.4
 // CHECK: call i32 @"_ZNK13StaticMembersIdE3$_2clEv"
 // CHECK-LABEL: define internal i32 @"_ZNK13StaticMembersIdE3$_2clEv"
 // CHECK: ret i32 42
@@ -178,24 +160,18 @@ void use_func_template() {
 }
 
 namespace std {
-  struct type_info {
-    bool before(const type_info &) const noexcept;
-  };
+  struct type_info;
 }
 namespace PR12123 {
   struct A { virtual ~A(); } g;
-  struct C { virtual ~C(); } k;
   struct B {
     void f(const std::type_info& x = typeid([]()->A& { return g; }()));
     void h();
-    void j(bool cond = typeid([]() -> A & { return g; }()).before(typeid([]() -> C & { return k; }())));
   };
-  void B::h() { f(); j(); }
+  void B::h() { f(); }
 }
 
 // CHECK-LABEL: define linkonce_odr dereferenceable({{[0-9]+}}) %"struct.PR12123::A"* @_ZZN7PR121231B1fERKSt9type_infoEd_NKUlvE_clEv
-// CHECK-LABEL: define linkonce_odr dereferenceable({{[0-9]+}}) %"struct.PR12123::A"* @_ZZN7PR121231B1jEbEd_NKUlvE_clEv
-// CHECK-LABEL: define linkonce_odr dereferenceable({{[0-9]+}}) %"struct.PR12123::C"* @_ZZN7PR121231B1jEbEd_NKUlvE0_clEv
 
 // CHECK-LABEL: define {{.*}} @_Z{{[0-9]*}}testVarargsLambdaNumberingv(
 inline int testVarargsLambdaNumbering() {

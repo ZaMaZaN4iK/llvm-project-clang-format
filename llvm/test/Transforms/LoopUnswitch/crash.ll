@@ -1,5 +1,4 @@
 ; RUN: opt < %s -loop-unswitch -disable-output
-; RUN: opt < %s -loop-unswitch -enable-mssa-loop-dependency=true -verify-memoryssa -disable-output
 
 define void @test1(i32* %S2) {
 entry:
@@ -31,7 +30,7 @@ return:		; preds = %return.loopexit, %list_Length.exit9
 	ret void
 }
 
-define void @test2() nounwind {
+define void @test2(i32 %x1, i32 %y1, i32 %z1, i32 %r1) nounwind {
 entry:
   br label %bb.nph
 

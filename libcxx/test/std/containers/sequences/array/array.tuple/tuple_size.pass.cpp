@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,8 +12,6 @@
 // tuple_size<array<T, N> >::value
 
 #include <array>
-
-#include "test_macros.h"
 
 template <class T, std::size_t N>
 void test()
@@ -35,11 +34,9 @@ void test()
     }
 }
 
-int main(int, char**)
+int main()
 {
     test<double, 0>();
     test<double, 3>();
     test<double, 5>();
-
-  return 0;
 }

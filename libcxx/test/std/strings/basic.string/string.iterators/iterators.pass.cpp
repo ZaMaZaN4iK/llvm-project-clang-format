@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,9 +21,7 @@
 #include <string>
 #include <cassert>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     { // N3644 testing
         typedef std::string C;
@@ -48,20 +47,6 @@ int main(int, char**)
         assert ( !(ii1 != cii ));
     }
 
-#if defined(__cpp_lib_char8_t) && __cpp_lib_char8_t >= 201811L
-    {
-        typedef std::u8string C;
-        C::iterator ii1{}, ii2{};
-        C::iterator ii4 = ii1;
-        C::const_iterator cii{};
-        assert ( ii1 == ii2 );
-        assert ( ii1 == ii4 );
-        assert ( ii1 == cii );
-        assert ( !(ii1 != ii2 ));
-        assert ( !(ii1 != cii ));
-    }
-#endif
-
     { // N3644 testing
         typedef std::u16string C;
         C::iterator ii1{}, ii2{};
@@ -85,6 +70,4 @@ int main(int, char**)
         assert ( !(ii1 != ii2 ));
         assert ( !(ii1 != cii ));
     }
-
-  return 0;
 }

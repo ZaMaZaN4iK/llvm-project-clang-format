@@ -1,8 +1,9 @@
 //===- LoopUnrollAnalyzer.cpp - Unrolling Effect Estimation -----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,10 +14,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Analysis/LoopUnrollAnalyzer.h"
+#include "llvm/IR/Dominators.h"
 
 using namespace llvm;
 
-/// Try to simplify instruction \param I using its SCEV expression.
+/// \brief Try to simplify instruction \param I using its SCEV expression.
 ///
 /// The idea is that some AddRec expressions become constants, which then
 /// could trigger folding of other instructions. However, that only happens
@@ -78,7 +80,7 @@ bool UnrolledInstAnalyzer::visitBinaryOperator(BinaryOperator &I) {
   const DataLayout &DL = I.getModule()->getDataLayout();
   if (auto FI = dyn_cast<FPMathOperator>(&I))
     SimpleV =
-        SimplifyBinOp(I.getOpcode(), LHS, RHS, FI->getFastMathFlags(), DL);
+        SimplifyFPBinOp(I.getOpcode(), LHS, RHS, FI->getFastMathFlags(), DL);
   else
     SimpleV = SimplifyBinOp(I.getOpcode(), LHS, RHS, DL);
 

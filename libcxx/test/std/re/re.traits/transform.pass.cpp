@@ -1,14 +1,12 @@
 // -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-//
-// NetBSD does not support LC_COLLATE at the moment
-// XFAIL: netbsd
 
 // REQUIRES: locale.cs_CZ.ISO8859-2
 
@@ -25,7 +23,7 @@
 #include "test_iterators.h"
 #include "platform_support.h" // locale name macros
 
-int main(int, char**)
+int main()
 {
     {
         std::regex_traits<char> t;
@@ -45,6 +43,4 @@ int main(int, char**)
         t.imbue(std::locale(LOCALE_cs_CZ_ISO8859_2));
         assert(t.transform(F(a), F(a+1)) < t.transform(F(B), F(B+1)));
     }
-
-  return 0;
 }

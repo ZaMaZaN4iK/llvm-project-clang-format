@@ -1,15 +1,14 @@
 // -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
-
-// XFAIL: dylib-has-no-bad_variant_access && !libcpp-no-exceptions
 
 // <variant>
 // template <class Visitor, class... Variants>
@@ -24,7 +23,7 @@
 
 #include "test_macros.h"
 #include "type_id.h"
-#include "variant_test_helpers.h"
+#include "variant_test_helpers.hpp"
 
 enum CallType : unsigned {
   CT_None,
@@ -88,16 +87,6 @@ void test_call_operator_forwarding() {
   using Fn = ForwardingCallObject;
   Fn obj{};
   const Fn &cobj = obj;
-  { // test call operator forwarding - no variant
-    std::visit(obj);
-    assert(Fn::check_call<>(CT_NonConst | CT_LValue));
-    std::visit(cobj);
-    assert(Fn::check_call<>(CT_Const | CT_LValue));
-    std::visit(std::move(obj));
-    assert(Fn::check_call<>(CT_NonConst | CT_RValue));
-    std::visit(std::move(cobj));
-    assert(Fn::check_call<>(CT_Const | CT_RValue));
-  }
   { // test call operator forwarding - single variant, single arg
     using V = std::variant<int>;
     V v(42);
@@ -294,7 +283,7 @@ void test_exceptions() {
 #endif
 }
 
-// See https://bugs.llvm.org/show_bug.cgi?id=31916
+// See http://llvm.org/PR31916
 void test_caller_accepts_nonconst() {
   struct A {};
   struct Visitor {
@@ -304,12 +293,10 @@ void test_caller_accepts_nonconst() {
   std::visit(Visitor{}, v);
 }
 
-int main(int, char**) {
+int main() {
   test_call_operator_forwarding();
   test_argument_forwarding();
   test_constexpr();
   test_exceptions();
   test_caller_accepts_nonconst();
-
-  return 0;
 }

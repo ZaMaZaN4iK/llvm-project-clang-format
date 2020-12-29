@@ -2,8 +2,11 @@
 Test lldb data formatter subsystem.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -14,20 +17,20 @@ class LibcxxUnorderedDataFormatterTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
-    def setUp(self):
-        TestBase.setUp(self)
-        ns = 'ndk' if lldbplatformutil.target_is_android() else ''
-        self.namespace = 'std::__' + ns + '1'
-
-    @add_test_categories(["libc++"])
+    @skipIfWindows  # libc++ not ported to Windows yet
+    @skipIf(compiler="gcc")
     def test_with_run_command(self):
+        """Test that that file and class static variables display correctly."""
         self.build()
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_source_regexp(
             self, "Set break point at this line.")
 
         self.runCmd("run", RUN_SUCCEEDED)
+
+        lldbutil.skip_if_library_missing(
+            self, self.target(), lldbutil.PrintableRegex("libc\+\+"))
 
         # The stop reason of the thread should be breakpoint.
         self.expect("thread list", STOPPED_DUE_TO_BREAKPOINT,
@@ -48,30 +51,30 @@ class LibcxxUnorderedDataFormatterTestCase(TestBase):
         # Execute the cleanup function during test case tear down.
         self.addTearDownHook(cleanup)
 
-        ns = self.namespace
-        self.look_for_content_and_continue(
-            "map", ['%s::unordered_map' %
-                    ns, 'size=5 {', 'hello', 'world', 'this', 'is', 'me'])
+        self.expect('image list', substrs=self.getLibcPlusPlusLibs())
 
         self.look_for_content_and_continue(
-            "mmap", ['%s::unordered_multimap' % ns, 'size=6 {', 'first = 3', 'second = "this"',
-                     'first = 2', 'second = "hello"'])
+            "map", ['size=5 {', 'hello', 'world', 'this', 'is', 'me'])
 
         self.look_for_content_and_continue(
-            "iset", ['%s::unordered_set' %
-                     ns, 'size=5 {', '\[\d\] = 5', '\[\d\] = 3', '\[\d\] = 2'])
+            "mmap", ['size=6 {', 'first = 3', 'second = "this"',
+                                 'first = 2', 'second = "hello"'])
 
         self.look_for_content_and_continue(
-            "sset", ['%s::unordered_set' % ns, 'size=5 {', '\[\d\] = "is"', '\[\d\] = "world"',
-                     '\[\d\] = "hello"'])
+            "iset", ['size=5 {', '\[\d\] = 5', '\[\d\] = 3', '\[\d\] = 2'])
 
         self.look_for_content_and_continue(
-            "imset", ['%s::unordered_multiset' % ns, 'size=6 {', '(\[\d\] = 3(\\n|.)+){3}',
-                      '\[\d\] = 2', '\[\d\] = 1'])
+            "sset", ['size=5 {', '\[\d\] = "is"', '\[\d\] = "world"',
+                                 '\[\d\] = "hello"'])
 
         self.look_for_content_and_continue(
-            "smset", ['%s::unordered_multiset' % ns, 'size=5 {', '(\[\d\] = "is"(\\n|.)+){2}',
-                      '(\[\d\] = "world"(\\n|.)+){2}'])
+            "imset", ['size=6 {', '(\[\d\] = 3(\\n|.)+){3}',
+                                  '\[\d\] = 2', '\[\d\] = 1'])
+
+        self.look_for_content_and_continue(
+            "smset",
+            ['size=5 {', '(\[\d\] = "is"(\\n|.)+){2}',
+                         '(\[\d\] = "world"(\\n|.)+){2}'])
 
     def look_for_content_and_continue(self, var_name, patterns):
         self.expect(("frame variable %s" % var_name), patterns=patterns)

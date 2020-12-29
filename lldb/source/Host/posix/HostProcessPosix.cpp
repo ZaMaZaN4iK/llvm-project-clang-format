@@ -1,8 +1,9 @@
 //===-- HostProcessPosix.cpp ------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,9 +13,7 @@
 
 #include "llvm/ADT/STLExtras.h"
 
-#include <csignal>
 #include <limits.h>
-#include <unistd.h>
 
 using namespace lldb_private;
 
@@ -30,9 +29,9 @@ HostProcessPosix::HostProcessPosix(lldb::process_t process)
 
 HostProcessPosix::~HostProcessPosix() {}
 
-Status HostProcessPosix::Signal(int signo) const {
+Error HostProcessPosix::Signal(int signo) const {
   if (m_process == kInvalidPosixProcess) {
-    Status error;
+    Error error;
     error.SetErrorString("HostProcessPosix refers to an invalid process");
     return error;
   }
@@ -40,8 +39,8 @@ Status HostProcessPosix::Signal(int signo) const {
   return HostProcessPosix::Signal(m_process, signo);
 }
 
-Status HostProcessPosix::Signal(lldb::process_t process, int signo) {
-  Status error;
+Error HostProcessPosix::Signal(lldb::process_t process, int signo) {
+  Error error;
 
   if (-1 == ::kill(process, signo))
     error.SetErrorToErrno();
@@ -49,10 +48,10 @@ Status HostProcessPosix::Signal(lldb::process_t process, int signo) {
   return error;
 }
 
-Status HostProcessPosix::Terminate() { return Signal(SIGKILL); }
+Error HostProcessPosix::Terminate() { return Signal(SIGKILL); }
 
-Status HostProcessPosix::GetMainModule(FileSpec &file_spec) const {
-  Status error;
+Error HostProcessPosix::GetMainModule(FileSpec &file_spec) const {
+  Error error;
 
   // Use special code here because proc/[pid]/exe is a symbolic link.
   char link_path[PATH_MAX];
@@ -61,7 +60,7 @@ Status HostProcessPosix::GetMainModule(FileSpec &file_spec) const {
     return error;
   }
 
-  error = FileSystem::Instance().Readlink(FileSpec(link_path), file_spec);
+  error = FileSystem::Readlink(FileSpec{link_path, false}, file_spec);
   if (!error.Success())
     return error;
 
@@ -83,11 +82,11 @@ bool HostProcessPosix::IsRunning() const {
     return false;
 
   // Send this process the null signal.  If it succeeds the process is running.
-  Status error = Signal(0);
+  Error error = Signal(0);
   return error.Success();
 }
 
-llvm::Expected<HostThread> HostProcessPosix::StartMonitoring(
+HostThread HostProcessPosix::StartMonitoring(
     const Host::MonitorChildProcessCallback &callback, bool monitor_signals) {
   return Host::StartMonitoringChildProcess(callback, m_process,
                                            monitor_signals);

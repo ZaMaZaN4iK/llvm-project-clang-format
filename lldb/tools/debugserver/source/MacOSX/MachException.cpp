@@ -1,8 +1,9 @@
 //===-- MachException.cpp ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -46,13 +47,13 @@ extern "C" kern_return_t catch_mach_exception_raise_state_identity(
 extern "C" boolean_t mach_exc_server(mach_msg_header_t *InHeadP,
                                      mach_msg_header_t *OutHeadP);
 
-// Note: g_message points to the storage allocated to catch the data from
-// catching the current exception raise. It's populated when we catch a raised
-// exception which can't immediately be replied to.
-//
-// If it becomes possible to catch exceptions from multiple threads
-// simultaneously, accesses to g_message would need to be mutually exclusive.
+// Any access to the g_message variable should be done by locking the
+// g_message_mutex first, using the g_message variable, then unlocking
+// the g_message_mutex. See MachException::Message::CatchExceptionRaise()
+// for sample code.
+
 static MachException::Data *g_message = NULL;
+// static pthread_mutex_t g_message_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 extern "C" kern_return_t catch_mach_exception_raise_state(
     mach_port_t exc_port, exception_type_t exc_type,
@@ -85,6 +86,8 @@ extern "C" kern_return_t catch_mach_exception_raise_state_identity(
                    (uint64_t)(exc_data_count > 0 ? exc_data[0] : 0xBADDBADD),
                    (uint64_t)(exc_data_count > 1 ? exc_data[1] : 0xBADDBADD));
   }
+  mach_port_deallocate(mach_task_self(), task_port);
+  mach_port_deallocate(mach_task_self(), thread_port);
 
   return KERN_FAILURE;
 }
@@ -110,7 +113,8 @@ catch_mach_exception_raise(mach_port_t exc_port, mach_port_t thread_port,
     g_message->task_port = task_port;
     g_message->thread_port = thread_port;
     g_message->exc_type = exc_type;
-    g_message->AppendExceptionData(exc_data, exc_data_count);
+    for (mach_msg_type_number_t i=0; i<exc_data_count; ++i)
+      g_message->exc_data.push_back(exc_data[i]);
     return KERN_SUCCESS;
   } else if (!MachTask::IsValid(g_message->task_port)) {
     // Our original exception port isn't valid anymore check for a SIGTRAP
@@ -122,7 +126,8 @@ catch_mach_exception_raise(mach_port_t exc_port, mach_port_t thread_port,
       g_message->task_port = task_port;
       g_message->thread_port = thread_port;
       g_message->exc_type = exc_type;
-      g_message->AppendExceptionData(exc_data, exc_data_count);
+      for (mach_msg_type_number_t i=0; i<exc_data_count; ++i)
+        g_message->exc_data.push_back(exc_data[i]);
       return KERN_SUCCESS;
     }
   }
@@ -262,11 +267,14 @@ kern_return_t MachException::Message::Receive(mach_port_t port,
                     exc_msg.hdr.msgh_reserved, exc_msg.hdr.msgh_id, options, 0,
                     sizeof(exc_msg.data), port, mach_msg_timeout, notify_port);
   }
-  return err.Status();
+  return err.Error();
 }
 
 bool MachException::Message::CatchExceptionRaise(task_t task) {
   bool success = false;
+  // locker will keep a mutex locked until it goes out of scope
+  //    PThreadMutex::Locker locker(&g_message_mutex);
+  //    DNBLogThreaded("calling  mach_exc_server");
   state.task_port = task;
   g_message = &state;
   // The exc_server function is the MIG generated server handling function
@@ -341,7 +349,7 @@ kern_return_t MachException::Message::Reply(MachProcess *process, int signal) {
                    MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
 
   if (err.Fail()) {
-    if (err.Status() == MACH_SEND_INTERRUPTED) {
+    if (err.Error() == MACH_SEND_INTERRUPTED) {
       if (DNBLogCheckLogBit(LOG_EXCEPTIONS))
         err.LogThreaded("::mach_msg() - send interrupted");
       // TODO: keep retrying to reply???
@@ -349,7 +357,7 @@ kern_return_t MachException::Message::Reply(MachProcess *process, int signal) {
       if (state.task_port == process->Task().TaskPort()) {
         DNBLogThreaded("error: mach_msg() returned an error when replying to a "
                        "mach exception: error = %u",
-                       err.Status());
+                       err.Error());
       } else {
         if (DNBLogCheckLogBit(LOG_EXCEPTIONS))
           err.LogThreaded("::mach_msg() - failed (child of task)");
@@ -357,7 +365,7 @@ kern_return_t MachException::Message::Reply(MachProcess *process, int signal) {
     }
   }
 
-  return err.Status();
+  return err.Error();
 }
 
 void MachException::Data::Dump() const {
@@ -385,29 +393,24 @@ void MachException::Data::Dump() const {
   }
 }
 
-// The EXC_MASK_ALL value hard-coded here so that lldb can be built
-// on a new OS with an older deployment target .  The new OS may have
-// an addition to its EXC_MASK_ALL that the old OS will not recognize -
-// <mach/exception_types.h> doesn't vary the value based on the deployment
-// target.  So we need a known set of masks that can be assumed to be
-// valid when running on an older OS.  We'll fall back to trying
-// PREV_EXC_MASK_ALL if the EXC_MASK_ALL value lldb was compiled with is
-// not recognized.
+#define PREV_EXC_MASK_ALL                                                      \
+  (EXC_MASK_BAD_ACCESS | EXC_MASK_BAD_INSTRUCTION | EXC_MASK_ARITHMETIC |      \
+   EXC_MASK_EMULATION | EXC_MASK_SOFTWARE | EXC_MASK_BREAKPOINT |              \
+   EXC_MASK_SYSCALL | EXC_MASK_MACH_SYSCALL | EXC_MASK_RPC_ALERT |             \
+   EXC_MASK_MACHINE)
 
-#define PREV_EXC_MASK_ALL (EXC_MASK_BAD_ACCESS |                \
-                         EXC_MASK_BAD_INSTRUCTION |             \
-                         EXC_MASK_ARITHMETIC |                  \
-                         EXC_MASK_EMULATION |                   \
-                         EXC_MASK_SOFTWARE |                    \
-                         EXC_MASK_BREAKPOINT |                  \
-                         EXC_MASK_SYSCALL |                     \
-                         EXC_MASK_MACH_SYSCALL |                \
-                         EXC_MASK_RPC_ALERT |                   \
-                         EXC_MASK_RESOURCE |                    \
-                         EXC_MASK_GUARD |                       \
-                         EXC_MASK_MACHINE)
+// Don't listen for EXC_RESOURCE, it should really get handled by the system
+// handler.
 
-#define LLDB_EXC_MASK EXC_MASK_ALL
+#ifndef EXC_RESOURCE
+#define EXC_RESOURCE 11
+#endif
+
+#ifndef EXC_MASK_RESOURCE
+#define EXC_MASK_RESOURCE (1 << EXC_RESOURCE)
+#endif
+
+#define LLDB_EXC_MASK (EXC_MASK_ALL & ~EXC_MASK_RESOURCE)
 
 kern_return_t MachException::PortInfo::Save(task_t task) {
   DNBLogThreadedIf(LOG_EXCEPTIONS | LOG_VERBOSE,
@@ -427,7 +430,7 @@ kern_return_t MachException::PortInfo::Save(task_t task) {
                     "maskCnt => %u, ports, behaviors, flavors )",
                     task, mask, count);
 
-  if (err.Status() == KERN_INVALID_ARGUMENT && mask != PREV_EXC_MASK_ALL) {
+  if (err.Error() == KERN_INVALID_ARGUMENT && mask != PREV_EXC_MASK_ALL) {
     mask = PREV_EXC_MASK_ALL;
     count = (sizeof(ports) / sizeof(ports[0]));
     err = ::task_get_exception_ports(task, mask, masks, &count, ports,
@@ -441,7 +444,7 @@ kern_return_t MachException::PortInfo::Save(task_t task) {
     mask = 0;
     count = 0;
   }
-  return err.Status();
+  return err.Error();
 }
 
 kern_return_t MachException::PortInfo::Restore(task_t task) {
@@ -466,7 +469,7 @@ kern_return_t MachException::PortInfo::Restore(task_t task) {
     }
   }
   count = 0;
-  return err.Status();
+  return err.Error();
 }
 
 const char *MachException::Name(exception_type_t exc_type) {
@@ -492,20 +495,6 @@ const char *MachException::Name(exception_type_t exc_type) {
 #ifdef EXC_CRASH
   case EXC_CRASH:
     return "EXC_CRASH";
-#endif
-  case EXC_RESOURCE:
-    return "EXC_RESOURCE";
-#ifdef EXC_GUARD
-  case EXC_GUARD:
-    return "EXC_GUARD";
-#endif
-#ifdef EXC_CORPSE_NOTIFY
-  case EXC_CORPSE_NOTIFY:
-    return "EXC_CORPSE_NOTIFY";
-#endif
-#ifdef EXC_CORPSE_VARIANT_BIT
-  case EXC_CORPSE_VARIANT_BIT:
-    return "EXC_CORPSE_VARIANT_BIT";
 #endif
   default:
     break;

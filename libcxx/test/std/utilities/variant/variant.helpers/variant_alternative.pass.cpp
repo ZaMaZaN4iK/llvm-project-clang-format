@@ -1,9 +1,10 @@
 // -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,7 +27,7 @@
 #include <variant>
 
 #include "test_macros.h"
-#include "variant_test_helpers.h"
+#include "variant_test_helpers.hpp"
 
 template <class V, size_t I, class E> void test() {
   static_assert(
@@ -55,7 +56,7 @@ template <class V, size_t I, class E> void test() {
                 "");
 }
 
-int main(int, char**) {
+int main() {
   {
     using V = std::variant<int, void *, const void *, long double>;
     test<V, 0, int>();
@@ -73,6 +74,4 @@ int main(int, char**) {
     test<V, 4, long double>();
   }
 #endif
-
-  return 0;
 }

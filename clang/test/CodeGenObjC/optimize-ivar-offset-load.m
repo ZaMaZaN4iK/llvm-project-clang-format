@@ -1,17 +1,17 @@
 // RUN: %clang_cc1 -triple x86_64-apple-darwin10  -O0 -emit-llvm %s -o -  | FileCheck %s
 // rdar://16095748
 
-@interface MyNSObject 
+@interface NSObject 
 @end
 
-@interface SampleClass : MyNSObject {
+@interface SampleClass : NSObject {
     @public
     int _value;
 }
 + (SampleClass*) new;
 @end
 
-@interface AppDelegate  : MyNSObject
+@interface AppDelegate  : NSObject
 @end
 
 extern void foo(int);

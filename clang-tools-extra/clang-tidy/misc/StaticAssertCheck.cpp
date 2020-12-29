@@ -1,8 +1,9 @@
 //===--- StaticAssertCheck.cpp - clang-tidy -------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -32,11 +33,9 @@ void StaticAssertCheck::registerMatchers(MatchFinder *Finder) {
   if (!(getLangOpts().CPlusPlus11 || getLangOpts().C11))
     return;
 
-  auto NegatedString = unaryOperator(
-      hasOperatorName("!"), hasUnaryOperand(ignoringImpCasts(stringLiteral())));
   auto IsAlwaysFalse =
       expr(anyOf(cxxBoolLiteral(equals(false)), integerLiteral(equals(0)),
-                 cxxNullPtrLiteralExpr(), gnuNullExpr(), NegatedString))
+                 cxxNullPtrLiteralExpr(), gnuNullExpr()))
           .bind("isAlwaysFalse");
   auto IsAlwaysFalseWithCast = ignoringParenImpCasts(anyOf(
       IsAlwaysFalse, cStyleCastExpr(has(ignoringParenImpCasts(IsAlwaysFalse)))
@@ -87,7 +86,7 @@ void StaticAssertCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *AssertExprRoot =
       Result.Nodes.getNodeAs<BinaryOperator>("assertExprRoot");
   const auto *CastExpr = Result.Nodes.getNodeAs<CStyleCastExpr>("castExpr");
-  SourceLocation AssertExpansionLoc = CondStmt->getBeginLoc();
+  SourceLocation AssertExpansionLoc = CondStmt->getLocStart();
 
   if (!AssertExpansionLoc.isValid() || !AssertExpansionLoc.isMacroID())
     return;
@@ -128,7 +127,7 @@ void StaticAssertCheck::check(const MatchFinder::MatchResult &Result) {
       FixItHints.push_back(FixItHint::CreateRemoval(
           SourceRange(AssertExprRoot->getOperatorLoc())));
       FixItHints.push_back(FixItHint::CreateRemoval(
-          SourceRange(AssertMSG->getBeginLoc(), AssertMSG->getEndLoc())));
+          SourceRange(AssertMSG->getLocStart(), AssertMSG->getLocEnd())));
       StaticAssertMSG = (Twine(", \"") + AssertMSG->getString() + "\"").str();
     }
 
@@ -145,7 +144,7 @@ SourceLocation StaticAssertCheck::getLastParenLoc(const ASTContext *ASTCtx,
   const LangOptions &Opts = ASTCtx->getLangOpts();
   const SourceManager &SM = ASTCtx->getSourceManager();
 
-  const llvm::MemoryBuffer *Buffer = SM.getBuffer(SM.getFileID(AssertLoc));
+  llvm::MemoryBuffer *Buffer = SM.getBuffer(SM.getFileID(AssertLoc));
   if (!Buffer)
     return SourceLocation();
 

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,36 +19,18 @@
 #include <chrono>
 #include <cassert>
 
-#include "test_macros.h"
-#include "../../rep.h"
-
-int main(int, char**)
+int main()
 {
     {
-    typedef std::chrono::nanoseconds Dur;
-    Dur ns(15);
-    ASSERT_SAME_TYPE(Dur, decltype(ns % 6));
+    std::chrono::nanoseconds ns(15);
     ns = ns % 6;
     assert(ns.count() == 3);
     }
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_CONSTEXPR
     {
     constexpr std::chrono::nanoseconds ns(15);
     constexpr std::chrono::nanoseconds ns2 = ns % 6;
     static_assert(ns2.count() == 3, "");
     }
 #endif
-
-#if TEST_STD_VER >= 11
-    { // This is PR#41130
-    typedef std::chrono::seconds Duration;
-    Duration d(5);
-    NotARep n;
-    ASSERT_SAME_TYPE(Duration, decltype(d % n));
-    d = d % n;
-    assert(d.count() == 5);
-    }
-#endif
-
-  return 0;
 }

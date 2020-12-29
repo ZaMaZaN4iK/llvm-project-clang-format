@@ -1,8 +1,9 @@
 //===- VforkChecker.cpp -------- Vfork usage checks --------------*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -24,7 +25,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerHelpers.h"
@@ -132,7 +133,7 @@ void VforkChecker::reportBug(const char *What, CheckerContext &C,
     if (Details)
       os << "; " << Details;
 
-    auto Report = std::make_unique<PathSensitiveBugReport>(*BT, os.str(), N);
+    auto Report = llvm::make_unique<BugReport>(*BT, os.str(), N);
     // TODO: mark vfork call in BugReportVisitor
     C.emitReport(std::move(Report));
   }
@@ -214,8 +215,4 @@ void VforkChecker::checkPreStmt(const ReturnStmt *RS, CheckerContext &C) const {
 
 void ento::registerVforkChecker(CheckerManager &mgr) {
   mgr.registerChecker<VforkChecker>();
-}
-
-bool ento::shouldRegisterVforkChecker(const LangOptions &LO) {
-  return true;
 }

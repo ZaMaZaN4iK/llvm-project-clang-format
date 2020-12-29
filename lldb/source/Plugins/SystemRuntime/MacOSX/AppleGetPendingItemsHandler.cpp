@@ -1,16 +1,24 @@
 //===-- AppleGetPendingItemsHandler.cpp -------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "AppleGetPendingItemsHandler.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Core/Module.h"
+#include "lldb/Core/StreamString.h"
 #include "lldb/Core/Value.h"
 #include "lldb/Expression/DiagnosticManager.h"
 #include "lldb/Expression/FunctionCaller.h"
@@ -21,9 +29,6 @@
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/StreamString.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -116,10 +121,11 @@ void AppleGetPendingItemsHandler::Detach() {
   }
 }
 
-// Compile our __lldb_backtrace_recording_get_pending_items() function (from
-// the source above in g_get_pending_items_function_code) if we don't find that
-// function in the inferior already with USE_BUILTIN_FUNCTION defined.  (e.g.
-// this would be the case for testing.)
+// Compile our __lldb_backtrace_recording_get_pending_items() function (from the
+// source above in g_get_pending_items_function_code) if we don't find that
+// function in the inferior
+// already with USE_BUILTIN_FUNCTION defined.  (e.g. this would be the case for
+// testing.)
 //
 // Insert the __lldb_backtrace_recording_get_pending_items into the inferior
 // process if needed.
@@ -128,7 +134,8 @@ void AppleGetPendingItemsHandler::Detach() {
 // prepare for the call.
 //
 // Returns the address of the arguments written down in the inferior process,
-// which can be used to make the function call.
+// which can be used to
+// make the function call.
 
 lldb::addr_t AppleGetPendingItemsHandler::SetupGetPendingItemsFunction(
     Thread &thread, ValueList &get_pending_items_arglist) {
@@ -146,38 +153,39 @@ lldb::addr_t AppleGetPendingItemsHandler::SetupGetPendingItemsFunction(
 
     // First stage is to make the ClangUtility to hold our injected function:
 
-    if (!m_get_pending_items_impl_code) {
-      if (g_get_pending_items_function_code != nullptr) {
-        Status error;
+    if (!m_get_pending_items_impl_code.get()) {
+      if (g_get_pending_items_function_code != NULL) {
+        Error error;
         m_get_pending_items_impl_code.reset(
             exe_ctx.GetTargetRef().GetUtilityFunctionForLanguage(
                 g_get_pending_items_function_code, eLanguageTypeObjC,
                 g_get_pending_items_function_name, error));
         if (error.Fail()) {
-          LLDB_LOGF(log,
-                    "Failed to get UtilityFunction for pending-items "
-                    "introspection: %s.",
-                    error.AsCString());
+          if (log)
+            log->Printf("Failed to get UtilityFunction for pending-items "
+                        "introspection: %s.",
+                        error.AsCString());
           return args_addr;
         }
 
         if (!m_get_pending_items_impl_code->Install(diagnostics, exe_ctx)) {
           if (log) {
-            LLDB_LOGF(log, "Failed to install pending-items introspection.");
+            log->Printf("Failed to install pending-items introspection.");
             diagnostics.Dump(log);
           }
           m_get_pending_items_impl_code.reset();
           return args_addr;
         }
       } else {
-        LLDB_LOGF(log, "No pending-items introspection code found.");
+        if (log)
+          log->Printf("No pending-items introspection code found.");
         return LLDB_INVALID_ADDRESS;
       }
 
       // Next make the runner function for our implementation utility function.
-      Status error;
+      Error error;
       ClangASTContext *clang_ast_context =
-          ClangASTContext::GetScratch(thread.GetProcess()->GetTarget());
+          thread.GetProcess()->GetTarget().GetScratchClangASTContext();
       CompilerType get_pending_items_return_type =
           clang_ast_context->GetBasicType(eBasicTypeVoid).GetPointerType();
       get_pending_items_caller =
@@ -185,10 +193,10 @@ lldb::addr_t AppleGetPendingItemsHandler::SetupGetPendingItemsFunction(
               get_pending_items_return_type, get_pending_items_arglist,
               thread_sp, error);
       if (error.Fail() || get_pending_items_caller == nullptr) {
-        LLDB_LOGF(log,
-                  "Failed to install pending-items introspection function "
-                  "caller: %s.",
-                  error.AsCString());
+        if (log)
+          log->Printf("Failed to install pending-items introspection function "
+                      "caller: %s.",
+                      error.AsCString());
         m_get_pending_items_impl_code.reset();
         return args_addr;
       }
@@ -198,19 +206,21 @@ lldb::addr_t AppleGetPendingItemsHandler::SetupGetPendingItemsFunction(
   diagnostics.Clear();
 
   if (get_pending_items_caller == nullptr) {
-    LLDB_LOGF(log, "Failed to get get_pending_items_caller.");
+    if (log)
+      log->Printf("Failed to get get_pending_items_caller.");
     return LLDB_INVALID_ADDRESS;
   }
 
   // Now write down the argument values for this particular call.  This looks
-  // like it might be a race condition if other threads were calling into here,
-  // but actually it isn't because we allocate a new args structure for this
-  // call by passing args_addr = LLDB_INVALID_ADDRESS...
+  // like it might be a race condition
+  // if other threads were calling into here, but actually it isn't because we
+  // allocate a new args structure for
+  // this call by passing args_addr = LLDB_INVALID_ADDRESS...
 
   if (!get_pending_items_caller->WriteFunctionArguments(
           exe_ctx, args_addr, get_pending_items_arglist, diagnostics)) {
     if (log) {
-      LLDB_LOGF(log, "Error writing pending-items function arguments.");
+      log->Printf("Error writing pending-items function arguments.");
       diagnostics.Dump(log);
     }
 
@@ -224,11 +234,11 @@ AppleGetPendingItemsHandler::GetPendingItemsReturnInfo
 AppleGetPendingItemsHandler::GetPendingItems(Thread &thread, addr_t queue,
                                              addr_t page_to_free,
                                              uint64_t page_to_free_size,
-                                             Status &error) {
+                                             Error &error) {
   lldb::StackFrameSP thread_cur_frame = thread.GetStackFrameAtIndex(0);
   ProcessSP process_sp(thread.CalculateProcess());
   TargetSP target_sp(thread.CalculateTarget());
-  ClangASTContext *clang_ast_context = ClangASTContext::GetScratch(*target_sp);
+  ClangASTContext *clang_ast_context = target_sp->GetScratchClangASTContext();
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_SYSTEM_RUNTIME));
 
   GetPendingItemsReturnInfo return_value;
@@ -238,9 +248,10 @@ AppleGetPendingItemsHandler::GetPendingItems(Thread &thread, addr_t queue,
 
   error.Clear();
 
-  if (!thread.SafeToCallFunctions()) {
-    LLDB_LOGF(log, "Not safe to call functions on thread 0x%" PRIx64,
-              thread.GetID());
+  if (thread.SafeToCallFunctions() == false) {
+    if (log)
+      log->Printf("Not safe to call functions on thread 0x%" PRIx64,
+                  thread.GetID());
     error.SetErrorString("Not safe to call functions on this thread.");
     return return_value;
   }
@@ -268,7 +279,8 @@ AppleGetPendingItemsHandler::GetPendingItems(Thread &thread, addr_t queue,
   //                                             uint64_t page_to_free_size)
 
   // Where the return_buffer argument points to a 24 byte region of memory
-  // already allocated by lldb in the inferior process.
+  // already allocated by lldb in
+  // the inferior process.
 
   CompilerType clang_void_ptr_type =
       clang_ast_context->GetBasicType(eBasicTypeVoid).GetPointerType();
@@ -300,8 +312,9 @@ AppleGetPendingItemsHandler::GetPendingItems(Thread &thread, addr_t queue,
     addr_t bufaddr = process_sp->AllocateMemory(
         32, ePermissionsReadable | ePermissionsWritable, error);
     if (!error.Success() || bufaddr == LLDB_INVALID_ADDRESS) {
-      LLDB_LOGF(log, "Failed to allocate memory for return buffer for get "
-                     "current queues func call");
+      if (log)
+        log->Printf("Failed to allocate memory for return buffer for get "
+                    "current queues func call");
       return return_value;
     }
     m_get_pending_items_return_buffer_addr = bufaddr;
@@ -338,16 +351,11 @@ AppleGetPendingItemsHandler::GetPendingItems(Thread &thread, addr_t queue,
   options.SetUnwindOnError(true);
   options.SetIgnoreBreakpoints(true);
   options.SetStopOthers(true);
-#if __has_feature(address_sanitizer)
-  options.SetTimeout(process_sp->GetUtilityExpressionTimeout());
-#else
   options.SetTimeout(std::chrono::milliseconds(500));
-#endif
   options.SetTryAllThreads(false);
-  options.SetIsForUtilityExpr(true);
   thread.CalculateExecutionContext(exe_ctx);
 
-  if (get_pending_items_caller == nullptr) {
+  if (get_pending_items_caller == NULL) {
     error.SetErrorString("Unable to compile function to call "
                          "__introspection_dispatch_queue_get_pending_items");
     return return_value;
@@ -358,11 +366,11 @@ AppleGetPendingItemsHandler::GetPendingItems(Thread &thread, addr_t queue,
   func_call_ret = get_pending_items_caller->ExecuteFunction(
       exe_ctx, &args_addr, options, diagnostics, results);
   if (func_call_ret != eExpressionCompleted || !error.Success()) {
-    LLDB_LOGF(log,
-              "Unable to call "
-              "__introspection_dispatch_queue_get_pending_items(), got "
-              "ExpressionResults %d, error contains %s",
-              func_call_ret, error.AsCString(""));
+    if (log)
+      log->Printf("Unable to call "
+                  "__introspection_dispatch_queue_get_pending_items(), got "
+                  "ExpressionResults %d, error contains %s",
+                  func_call_ret, error.AsCString(""));
     error.SetErrorString("Unable to call "
                          "__introspection_dispatch_queue_get_pending_items() "
                          "for list of queues");
@@ -392,14 +400,14 @@ AppleGetPendingItemsHandler::GetPendingItems(Thread &thread, addr_t queue,
     return return_value;
   }
 
-  LLDB_LOGF(log,
-            "AppleGetPendingItemsHandler called "
-            "__introspection_dispatch_queue_get_pending_items "
-            "(page_to_free == 0x%" PRIx64 ", size = %" PRId64
-            "), returned page is at 0x%" PRIx64 ", size %" PRId64
-            ", count = %" PRId64,
-            page_to_free, page_to_free_size, return_value.items_buffer_ptr,
-            return_value.items_buffer_size, return_value.count);
+  if (log)
+    log->Printf("AppleGetPendingItemsHandler called "
+                "__introspection_dispatch_queue_get_pending_items "
+                "(page_to_free == 0x%" PRIx64 ", size = %" PRId64
+                "), returned page is at 0x%" PRIx64 ", size %" PRId64
+                ", count = %" PRId64,
+                page_to_free, page_to_free_size, return_value.items_buffer_ptr,
+                return_value.items_buffer_size, return_value.count);
 
   return return_value;
 }

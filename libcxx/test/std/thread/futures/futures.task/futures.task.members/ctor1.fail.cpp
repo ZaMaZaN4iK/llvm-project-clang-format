@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -25,13 +26,11 @@ typedef std::packaged_task<A(int, char)> PT;
 typedef volatile std::packaged_task<A(int, char)> VPT;
 
 
-int main(int, char**)
+int main()
 {
     VPT init{};
     auto const& c_init = init;
     PT p1{init}; // expected-error {{no matching constructor}}
     PT p2{c_init}; // expected-error {{no matching constructor}}
     PT p3{std::move(init)}; // expected-error {{no matching constructor for initialization of 'PT' (aka 'packaged_task<A (int, char)>')}}
-
-  return 0;
 }

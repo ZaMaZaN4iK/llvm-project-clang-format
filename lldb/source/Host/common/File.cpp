@@ -1,8 +1,9 @@
 //===-- File.cpp ------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,29 +19,22 @@
 #include "lldb/Host/windows/windows.h"
 #else
 #include <sys/ioctl.h>
-#include <sys/stat.h>
-#include <termios.h>
-#include <unistd.h>
 #endif
 
 #include "llvm/Support/ConvertUTF.h"
-#include "llvm/Support/Errno.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Process.h"
+#include "llvm/Support/Process.h" // for llvm::sys::Process::FileDescriptorHasColors()
 
+#include "lldb/Core/DataBufferHeap.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Host/Config.h"
+#include "lldb/Host/FileSpec.h"
 #include "lldb/Host/FileSystem.h"
-#include "lldb/Host/Host.h"
-#include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/FileSpec.h"
-#include "lldb/Utility/Log.h"
 
 using namespace lldb;
 using namespace lldb_private;
-using llvm::Expected;
 
-Expected<const char *>
-File::GetStreamOpenModeFromOptions(File::OpenOptions options) {
+static const char *GetStreamOpenModeFromOptions(uint32_t options) {
   if (options & File::eOpenOptionAppend) {
     if (options & File::eOpenOptionRead) {
       if (options & File::eOpenOptionCanCreateNewOnly)
@@ -67,195 +61,42 @@ File::GetStreamOpenModeFromOptions(File::OpenOptions options) {
   } else if (options & File::eOpenOptionWrite) {
     return "w";
   }
-  return llvm::createStringError(
-      llvm::inconvertibleErrorCode(),
-      "invalid options, cannot convert to mode string");
-}
-
-Expected<File::OpenOptions> File::GetOptionsFromMode(llvm::StringRef mode) {
-  OpenOptions opts =
-      llvm::StringSwitch<OpenOptions>(mode)
-          .Cases("r", "rb", eOpenOptionRead)
-          .Cases("w", "wb", eOpenOptionWrite)
-          .Cases("a", "ab",
-                 eOpenOptionWrite | eOpenOptionAppend | eOpenOptionCanCreate)
-          .Cases("r+", "rb+", "r+b", eOpenOptionRead | eOpenOptionWrite)
-          .Cases("w+", "wb+", "w+b",
-                 eOpenOptionRead | eOpenOptionWrite | eOpenOptionCanCreate |
-                     eOpenOptionTruncate)
-          .Cases("a+", "ab+", "a+b",
-                 eOpenOptionRead | eOpenOptionWrite | eOpenOptionAppend |
-                     eOpenOptionCanCreate)
-          .Default(OpenOptions());
-  if (opts)
-    return opts;
-  return llvm::createStringError(
-      llvm::inconvertibleErrorCode(),
-      "invalid mode, cannot convert to File::OpenOptions");
+  return NULL;
 }
 
 int File::kInvalidDescriptor = -1;
-FILE *File::kInvalidStream = nullptr;
+FILE *File::kInvalidStream = NULL;
 
-Status File::Read(void *buf, size_t &num_bytes) {
-  return std::error_code(ENOTSUP, std::system_category());
-}
-Status File::Write(const void *buf, size_t &num_bytes) {
-  return std::error_code(ENOTSUP, std::system_category());
-}
-
-bool File::IsValid() const { return false; }
-
-Status File::Close() { return Flush(); }
-
-IOObject::WaitableHandle File::GetWaitableHandle() {
-  return IOObject::kInvalidHandleValue;
+File::File(const char *path, uint32_t options, uint32_t permissions)
+    : IOObject(eFDTypeFile, false), m_descriptor(kInvalidDescriptor),
+      m_stream(kInvalidStream), m_options(), m_own_stream(false),
+      m_is_interactive(eLazyBoolCalculate),
+      m_is_real_terminal(eLazyBoolCalculate) {
+  Open(path, options, permissions);
 }
 
-Status File::GetFileSpec(FileSpec &file_spec) const {
-  file_spec.Clear();
-  return std::error_code(ENOTSUP, std::system_category());
-}
+File::File(const FileSpec &filespec, uint32_t options, uint32_t permissions)
+    : IOObject(eFDTypeFile, false), m_descriptor(kInvalidDescriptor),
+      m_stream(kInvalidStream), m_options(0), m_own_stream(false),
+      m_is_interactive(eLazyBoolCalculate),
+      m_is_real_terminal(eLazyBoolCalculate)
 
-int File::GetDescriptor() const { return kInvalidDescriptor; }
-
-FILE *File::GetStream() { return nullptr; }
-
-off_t File::SeekFromStart(off_t offset, Status *error_ptr) {
-  if (error_ptr)
-    *error_ptr = std::error_code(ENOTSUP, std::system_category());
-  return -1;
-}
-
-off_t File::SeekFromCurrent(off_t offset, Status *error_ptr) {
-  if (error_ptr)
-    *error_ptr = std::error_code(ENOTSUP, std::system_category());
-  return -1;
-}
-
-off_t File::SeekFromEnd(off_t offset, Status *error_ptr) {
-  if (error_ptr)
-    *error_ptr = std::error_code(ENOTSUP, std::system_category());
-  return -1;
-}
-
-Status File::Read(void *dst, size_t &num_bytes, off_t &offset) {
-  return std::error_code(ENOTSUP, std::system_category());
-}
-
-Status File::Write(const void *src, size_t &num_bytes, off_t &offset) {
-  return std::error_code(ENOTSUP, std::system_category());
-}
-
-Status File::Flush() { return Status(); }
-
-Status File::Sync() { return Flush(); }
-
-void File::CalculateInteractiveAndTerminal() {
-  const int fd = GetDescriptor();
-  if (!DescriptorIsValid(fd)) {
-    m_is_interactive = eLazyBoolNo;
-    m_is_real_terminal = eLazyBoolNo;
-    m_supports_colors = eLazyBoolNo;
-    return;
+{
+  if (filespec) {
+    Open(filespec.GetPath().c_str(), options, permissions);
   }
-  m_is_interactive = eLazyBoolNo;
-  m_is_real_terminal = eLazyBoolNo;
-#if defined(_WIN32)
-  if (_isatty(fd)) {
-    m_is_interactive = eLazyBoolYes;
-    m_is_real_terminal = eLazyBoolYes;
-#if defined(ENABLE_VIRTUAL_TERMINAL_PROCESSING)
-    m_supports_colors = eLazyBoolYes;
-#endif
-  }
-#else
-  if (isatty(fd)) {
-    m_is_interactive = eLazyBoolYes;
-    struct winsize window_size;
-    if (::ioctl(fd, TIOCGWINSZ, &window_size) == 0) {
-      if (window_size.ws_col > 0) {
-        m_is_real_terminal = eLazyBoolYes;
-        if (llvm::sys::Process::FileDescriptorHasColors(fd))
-          m_supports_colors = eLazyBoolYes;
-      }
-    }
-  }
-#endif
 }
 
-bool File::GetIsInteractive() {
-  if (m_is_interactive == eLazyBoolCalculate)
-    CalculateInteractiveAndTerminal();
-  return m_is_interactive == eLazyBoolYes;
-}
+File::~File() { Close(); }
 
-bool File::GetIsRealTerminal() {
-  if (m_is_real_terminal == eLazyBoolCalculate)
-    CalculateInteractiveAndTerminal();
-  return m_is_real_terminal == eLazyBoolYes;
-}
-
-bool File::GetIsTerminalWithColors() {
-  if (m_supports_colors == eLazyBoolCalculate)
-    CalculateInteractiveAndTerminal();
-  return m_supports_colors == eLazyBoolYes;
-}
-
-size_t File::Printf(const char *format, ...) {
-  va_list args;
-  va_start(args, format);
-  size_t result = PrintfVarArg(format, args);
-  va_end(args);
-  return result;
-}
-
-size_t File::PrintfVarArg(const char *format, va_list args) {
-  size_t result = 0;
-  char *s = nullptr;
-  result = vasprintf(&s, format, args);
-  if (s != nullptr) {
-    if (result > 0) {
-      size_t s_len = result;
-      Write(s, s_len);
-      result = s_len;
-    }
-    free(s);
-  }
-  return result;
-}
-
-Expected<File::OpenOptions> File::GetOptions() const {
-  return llvm::createStringError(
-      llvm::inconvertibleErrorCode(),
-      "GetOptions() not implemented for this File class");
-}
-
-uint32_t File::GetPermissions(Status &error) const {
-  int fd = GetDescriptor();
-  if (!DescriptorIsValid(fd)) {
-    error = std::error_code(ENOTSUP, std::system_category());
-    return 0;
-  }
-  struct stat file_stats;
-  if (::fstat(fd, &file_stats) == -1) {
-    error.SetErrorToErrno();
-    return 0;
-  }
-  error.Clear();
-  return file_stats.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
-}
-
-Expected<File::OpenOptions> NativeFile::GetOptions() const { return m_options; }
-
-int NativeFile::GetDescriptor() const {
+int File::GetDescriptor() const {
   if (DescriptorIsValid())
     return m_descriptor;
 
   // Don't open the file descriptor if we don't need to, just get it from the
   // stream if we have one.
   if (StreamIsValid()) {
-#if defined(_WIN32)
+#if defined(LLVM_ON_WIN32)
     return _fileno(m_stream);
 #else
     return fileno(m_stream);
@@ -266,37 +107,41 @@ int NativeFile::GetDescriptor() const {
   return kInvalidDescriptor;
 }
 
-IOObject::WaitableHandle NativeFile::GetWaitableHandle() {
-  return GetDescriptor();
+IOObject::WaitableHandle File::GetWaitableHandle() { return m_descriptor; }
+
+void File::SetDescriptor(int fd, bool transfer_ownership) {
+  if (IsValid())
+    Close();
+  m_descriptor = fd;
+  m_should_close_fd = transfer_ownership;
 }
 
-FILE *NativeFile::GetStream() {
+FILE *File::GetStream() {
   if (!StreamIsValid()) {
     if (DescriptorIsValid()) {
-      auto mode = GetStreamOpenModeFromOptions(m_options);
-      if (!mode)
-        llvm::consumeError(mode.takeError());
-      else {
-        if (!m_own_descriptor) {
-// We must duplicate the file descriptor if we don't own it because when you
-// call fdopen, the stream will own the fd
+      const char *mode = GetStreamOpenModeFromOptions(m_options);
+      if (mode) {
+        if (!m_should_close_fd) {
+// We must duplicate the file descriptor if we don't own it because
+// when you call fdopen, the stream will own the fd
 #ifdef _WIN32
           m_descriptor = ::_dup(GetDescriptor());
 #else
           m_descriptor = dup(GetDescriptor());
 #endif
-          m_own_descriptor = true;
+          m_should_close_fd = true;
         }
 
-        m_stream = llvm::sys::RetryAfterSignal(nullptr, ::fdopen, m_descriptor,
-                                               mode.get());
+        do {
+          m_stream = ::fdopen(m_descriptor, mode);
+        } while (m_stream == NULL && errno == EINTR);
 
-        // If we got a stream, then we own the stream and should no longer own
-        // the descriptor because fclose() will close it for us
+        // If we got a stream, then we own the stream and should no
+        // longer own the descriptor because fclose() will close it for us
 
         if (m_stream) {
           m_own_stream = true;
-          m_own_descriptor = false;
+          m_should_close_fd = false;
         }
       }
     }
@@ -304,40 +149,172 @@ FILE *NativeFile::GetStream() {
   return m_stream;
 }
 
-Status NativeFile::Close() {
-  Status error;
-  if (StreamIsValid()) {
-    if (m_own_stream) {
-      if (::fclose(m_stream) == EOF)
-        error.SetErrorToErrno();
-    } else if (m_options & eOpenOptionWrite) {
-      if (::fflush(m_stream) == EOF)
-        error.SetErrorToErrno();
-    }
+void File::SetStream(FILE *fh, bool transfer_ownership) {
+  if (IsValid())
+    Close();
+  m_stream = fh;
+  m_own_stream = transfer_ownership;
+}
+
+Error File::Open(const char *path, uint32_t options, uint32_t permissions) {
+  Error error;
+  if (IsValid())
+    Close();
+
+  int oflag = 0;
+  const bool read = options & eOpenOptionRead;
+  const bool write = options & eOpenOptionWrite;
+  if (write) {
+    if (read)
+      oflag |= O_RDWR;
+    else
+      oflag |= O_WRONLY;
+
+    if (options & eOpenOptionAppend)
+      oflag |= O_APPEND;
+
+    if (options & eOpenOptionTruncate)
+      oflag |= O_TRUNC;
+
+    if (options & eOpenOptionCanCreate)
+      oflag |= O_CREAT;
+
+    if (options & eOpenOptionCanCreateNewOnly)
+      oflag |= O_CREAT | O_EXCL;
+  } else if (read) {
+    oflag |= O_RDONLY;
+
+#ifndef _WIN32
+    if (options & eOpenOptionDontFollowSymlinks)
+      oflag |= O_NOFOLLOW;
+#endif
   }
-  if (DescriptorIsValid() && m_own_descriptor) {
+
+#ifndef _WIN32
+  if (options & eOpenOptionNonBlocking)
+    oflag |= O_NONBLOCK;
+  if (options & eOpenOptionCloseOnExec)
+    oflag |= O_CLOEXEC;
+#else
+  oflag |= O_BINARY;
+#endif
+
+  mode_t mode = 0;
+  if (oflag & O_CREAT) {
+    if (permissions & lldb::eFilePermissionsUserRead)
+      mode |= S_IRUSR;
+    if (permissions & lldb::eFilePermissionsUserWrite)
+      mode |= S_IWUSR;
+    if (permissions & lldb::eFilePermissionsUserExecute)
+      mode |= S_IXUSR;
+    if (permissions & lldb::eFilePermissionsGroupRead)
+      mode |= S_IRGRP;
+    if (permissions & lldb::eFilePermissionsGroupWrite)
+      mode |= S_IWGRP;
+    if (permissions & lldb::eFilePermissionsGroupExecute)
+      mode |= S_IXGRP;
+    if (permissions & lldb::eFilePermissionsWorldRead)
+      mode |= S_IROTH;
+    if (permissions & lldb::eFilePermissionsWorldWrite)
+      mode |= S_IWOTH;
+    if (permissions & lldb::eFilePermissionsWorldExecute)
+      mode |= S_IXOTH;
+  }
+
+  do {
+#ifdef _MSC_VER
+    std::wstring wpath;
+    if (!llvm::ConvertUTF8toWide(path, wpath)) {
+      m_descriptor = -1;
+      error.SetErrorString("Error converting path to UTF-16");
+      return error;
+    }
+    ::_wsopen_s(&m_descriptor, wpath.c_str(), oflag, _SH_DENYNO, mode);
+#else
+    m_descriptor = ::open(path, oflag, mode);
+#endif
+  } while (m_descriptor < 0 && errno == EINTR);
+
+  if (!DescriptorIsValid())
+    error.SetErrorToErrno();
+  else {
+    m_should_close_fd = true;
+    m_options = options;
+  }
+
+  return error;
+}
+
+uint32_t File::GetPermissions(const FileSpec &file_spec, Error &error) {
+  if (file_spec) {
+    struct stat file_stats;
+    int stat_result = FileSystem::Stat(file_spec.GetCString(), &file_stats);
+    if (stat_result == -1)
+      error.SetErrorToErrno();
+    else {
+      error.Clear();
+      return file_stats.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+    }
+  } else
+    error.SetErrorString("empty file spec");
+  return 0;
+}
+
+uint32_t File::GetPermissions(Error &error) const {
+  int fd = GetDescriptor();
+  if (fd != kInvalidDescriptor) {
+    struct stat file_stats;
+    if (::fstat(fd, &file_stats) == -1)
+      error.SetErrorToErrno();
+    else {
+      error.Clear();
+      return file_stats.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+    }
+  } else {
+    error.SetErrorString("invalid file descriptor");
+  }
+  return 0;
+}
+
+Error File::Close() {
+  Error error;
+  if (StreamIsValid() && m_own_stream) {
+    if (::fclose(m_stream) == EOF)
+      error.SetErrorToErrno();
+  }
+
+  if (DescriptorIsValid() && m_should_close_fd) {
     if (::close(m_descriptor) != 0)
       error.SetErrorToErrno();
   }
   m_descriptor = kInvalidDescriptor;
   m_stream = kInvalidStream;
-  m_options = OpenOptions(0);
+  m_options = 0;
   m_own_stream = false;
-  m_own_descriptor = false;
+  m_should_close_fd = false;
   m_is_interactive = eLazyBoolCalculate;
   m_is_real_terminal = eLazyBoolCalculate;
   return error;
 }
 
-Status NativeFile::GetFileSpec(FileSpec &file_spec) const {
-  Status error;
-#ifdef F_GETPATH
+void File::Clear() {
+  m_stream = nullptr;
+  m_descriptor = -1;
+  m_options = 0;
+  m_own_stream = false;
+  m_is_interactive = m_supports_colors = m_is_real_terminal =
+      eLazyBoolCalculate;
+}
+
+Error File::GetFileSpec(FileSpec &file_spec) const {
+  Error error;
+#ifdef LLDB_CONFIG_FCNTL_GETPATH_SUPPORTED
   if (IsValid()) {
     char path[PATH_MAX];
     if (::fcntl(GetDescriptor(), F_GETPATH, path) == -1)
       error.SetErrorToErrno();
     else
-      file_spec.SetFile(path, FileSpec::Style::native);
+      file_spec.SetFile(path, false);
   } else {
     error.SetErrorString("invalid file handle");
   }
@@ -352,12 +329,11 @@ Status NativeFile::GetFileSpec(FileSpec &file_spec) const {
       error.SetErrorToErrno();
     else {
       path[len] = '\0';
-      file_spec.SetFile(path, FileSpec::Style::native);
+      file_spec.SetFile(path, false);
     }
   }
 #else
-  error.SetErrorString(
-      "NativeFile::GetFileSpec is not supported on this platform");
+  error.SetErrorString("File::GetFileSpec is not supported on this platform");
 #endif
 
   if (error.Fail())
@@ -365,7 +341,7 @@ Status NativeFile::GetFileSpec(FileSpec &file_spec) const {
   return error;
 }
 
-off_t NativeFile::SeekFromStart(off_t offset, Status *error_ptr) {
+off_t File::SeekFromStart(off_t offset, Error *error_ptr) {
   off_t result = 0;
   if (DescriptorIsValid()) {
     result = ::lseek(m_descriptor, offset, SEEK_SET);
@@ -391,7 +367,7 @@ off_t NativeFile::SeekFromStart(off_t offset, Status *error_ptr) {
   return result;
 }
 
-off_t NativeFile::SeekFromCurrent(off_t offset, Status *error_ptr) {
+off_t File::SeekFromCurrent(off_t offset, Error *error_ptr) {
   off_t result = -1;
   if (DescriptorIsValid()) {
     result = ::lseek(m_descriptor, offset, SEEK_CUR);
@@ -417,7 +393,7 @@ off_t NativeFile::SeekFromCurrent(off_t offset, Status *error_ptr) {
   return result;
 }
 
-off_t NativeFile::SeekFromEnd(off_t offset, Status *error_ptr) {
+off_t File::SeekFromEnd(off_t offset, Error *error_ptr) {
   off_t result = -1;
   if (DescriptorIsValid()) {
     result = ::lseek(m_descriptor, offset, SEEK_END);
@@ -443,10 +419,15 @@ off_t NativeFile::SeekFromEnd(off_t offset, Status *error_ptr) {
   return result;
 }
 
-Status NativeFile::Flush() {
-  Status error;
+Error File::Flush() {
+  Error error;
   if (StreamIsValid()) {
-    if (llvm::sys::RetryAfterSignal(EOF, ::fflush, m_stream) == EOF)
+    int err = 0;
+    do {
+      err = ::fflush(m_stream);
+    } while (err == EOF && errno == EINTR);
+
+    if (err == EOF)
       error.SetErrorToErrno();
   } else if (!DescriptorIsValid()) {
     error.SetErrorString("invalid file handle");
@@ -454,15 +435,20 @@ Status NativeFile::Flush() {
   return error;
 }
 
-Status NativeFile::Sync() {
-  Status error;
+Error File::Sync() {
+  Error error;
   if (DescriptorIsValid()) {
 #ifdef _WIN32
     int err = FlushFileBuffers((HANDLE)_get_osfhandle(m_descriptor));
     if (err == 0)
       error.SetErrorToGenericError();
 #else
-    if (llvm::sys::RetryAfterSignal(-1, ::fsync, m_descriptor) == -1)
+    int err = 0;
+    do {
+      err = ::fsync(m_descriptor);
+    } while (err == -1 && errno == EINTR);
+
+    if (err == -1)
       error.SetErrorToErrno();
 #endif
   } else {
@@ -477,8 +463,8 @@ Status NativeFile::Sync() {
 #define MAX_WRITE_SIZE INT_MAX
 #endif
 
-Status NativeFile::Read(void *buf, size_t &num_bytes) {
-  Status error;
+Error File::Read(void *buf, size_t &num_bytes) {
+  Error error;
 
 #if defined(MAX_READ_SIZE)
   if (num_bytes > MAX_READ_SIZE) {
@@ -512,7 +498,10 @@ Status NativeFile::Read(void *buf, size_t &num_bytes) {
 
   ssize_t bytes_read = -1;
   if (DescriptorIsValid()) {
-    bytes_read = llvm::sys::RetryAfterSignal(-1, ::read, m_descriptor, buf, num_bytes);
+    do {
+      bytes_read = ::read(m_descriptor, buf, num_bytes);
+    } while (bytes_read < 0 && errno == EINTR);
+
     if (bytes_read == -1) {
       error.SetErrorToErrno();
       num_bytes = 0;
@@ -536,8 +525,8 @@ Status NativeFile::Read(void *buf, size_t &num_bytes) {
   return error;
 }
 
-Status NativeFile::Write(const void *buf, size_t &num_bytes) {
-  Status error;
+Error File::Write(const void *buf, size_t &num_bytes) {
+  Error error;
 
 #if defined(MAX_WRITE_SIZE)
   if (num_bytes > MAX_WRITE_SIZE) {
@@ -571,8 +560,10 @@ Status NativeFile::Write(const void *buf, size_t &num_bytes) {
 
   ssize_t bytes_written = -1;
   if (DescriptorIsValid()) {
-    bytes_written =
-        llvm::sys::RetryAfterSignal(-1, ::write, m_descriptor, buf, num_bytes);
+    do {
+      bytes_written = ::write(m_descriptor, buf, num_bytes);
+    } while (bytes_written < 0 && errno == EINTR);
+
     if (bytes_written == -1) {
       error.SetErrorToErrno();
       num_bytes = 0;
@@ -598,8 +589,8 @@ Status NativeFile::Write(const void *buf, size_t &num_bytes) {
   return error;
 }
 
-Status NativeFile::Read(void *buf, size_t &num_bytes, off_t &offset) {
-  Status error;
+Error File::Read(void *buf, size_t &num_bytes, off_t &offset) {
+  Error error;
 
 #if defined(MAX_READ_SIZE)
   if (num_bytes > MAX_READ_SIZE) {
@@ -634,8 +625,11 @@ Status NativeFile::Read(void *buf, size_t &num_bytes, off_t &offset) {
 #ifndef _WIN32
   int fd = GetDescriptor();
   if (fd != kInvalidDescriptor) {
-    ssize_t bytes_read =
-        llvm::sys::RetryAfterSignal(-1, ::pread, fd, buf, num_bytes, offset);
+    ssize_t bytes_read = -1;
+    do {
+      bytes_read = ::pread(fd, buf, num_bytes, offset);
+    } while (bytes_read < 0 && errno == EINTR);
+
     if (bytes_read < 0) {
       num_bytes = 0;
       error.SetErrorToErrno();
@@ -648,7 +642,6 @@ Status NativeFile::Read(void *buf, size_t &num_bytes, off_t &offset) {
     error.SetErrorString("invalid file handle");
   }
 #else
-  std::lock_guard<std::mutex> guard(offset_access_mutex);
   long cur = ::lseek(m_descriptor, 0, SEEK_CUR);
   SeekFromStart(offset);
   error = Read(buf, num_bytes);
@@ -658,8 +651,52 @@ Status NativeFile::Read(void *buf, size_t &num_bytes, off_t &offset) {
   return error;
 }
 
-Status NativeFile::Write(const void *buf, size_t &num_bytes, off_t &offset) {
-  Status error;
+Error File::Read(size_t &num_bytes, off_t &offset, bool null_terminate,
+                 DataBufferSP &data_buffer_sp) {
+  Error error;
+
+  if (num_bytes > 0) {
+    int fd = GetDescriptor();
+    if (fd != kInvalidDescriptor) {
+      struct stat file_stats;
+      if (::fstat(fd, &file_stats) == 0) {
+        if (file_stats.st_size > offset) {
+          const size_t bytes_left = file_stats.st_size - offset;
+          if (num_bytes > bytes_left)
+            num_bytes = bytes_left;
+
+          size_t num_bytes_plus_nul_char = num_bytes + (null_terminate ? 1 : 0);
+          std::unique_ptr<DataBufferHeap> data_heap_ap;
+          data_heap_ap.reset(new DataBufferHeap());
+          data_heap_ap->SetByteSize(num_bytes_plus_nul_char);
+
+          if (data_heap_ap.get()) {
+            error = Read(data_heap_ap->GetBytes(), num_bytes, offset);
+            if (error.Success()) {
+              // Make sure we read exactly what we asked for and if we got
+              // less, adjust the array
+              if (num_bytes_plus_nul_char < data_heap_ap->GetByteSize())
+                data_heap_ap->SetByteSize(num_bytes_plus_nul_char);
+              data_buffer_sp.reset(data_heap_ap.release());
+              return error;
+            }
+          }
+        } else
+          error.SetErrorString("file is empty");
+      } else
+        error.SetErrorToErrno();
+    } else
+      error.SetErrorString("invalid file handle");
+  } else
+    error.SetErrorString("invalid file handle");
+
+  num_bytes = 0;
+  data_buffer_sp.reset();
+  return error;
+}
+
+Error File::Write(const void *buf, size_t &num_bytes, off_t &offset) {
+  Error error;
 
 #if defined(MAX_WRITE_SIZE)
   if (num_bytes > MAX_WRITE_SIZE) {
@@ -694,8 +731,11 @@ Status NativeFile::Write(const void *buf, size_t &num_bytes, off_t &offset) {
   int fd = GetDescriptor();
   if (fd != kInvalidDescriptor) {
 #ifndef _WIN32
-    ssize_t bytes_written =
-        llvm::sys::RetryAfterSignal(-1, ::pwrite, m_descriptor, buf, num_bytes, offset);
+    ssize_t bytes_written = -1;
+    do {
+      bytes_written = ::pwrite(m_descriptor, buf, num_bytes, offset);
+    } while (bytes_written < 0 && errno == EINTR);
+
     if (bytes_written < 0) {
       num_bytes = 0;
       error.SetErrorToErrno();
@@ -704,9 +744,7 @@ Status NativeFile::Write(const void *buf, size_t &num_bytes, off_t &offset) {
       num_bytes = bytes_written;
     }
 #else
-    std::lock_guard<std::mutex> guard(offset_access_mutex);
     long cur = ::lseek(m_descriptor, 0, SEEK_CUR);
-    SeekFromStart(offset);
     error = Write(buf, num_bytes);
     long after = ::lseek(m_descriptor, 0, SEEK_CUR);
 
@@ -722,15 +760,40 @@ Status NativeFile::Write(const void *buf, size_t &num_bytes, off_t &offset) {
   return error;
 }
 
-size_t NativeFile::PrintfVarArg(const char *format, va_list args) {
-  if (StreamIsValid()) {
-    return ::vfprintf(m_stream, format, args);
-  } else {
-    return File::PrintfVarArg(format, args);
-  }
+//------------------------------------------------------------------
+// Print some formatted output to the stream.
+//------------------------------------------------------------------
+size_t File::Printf(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  size_t result = PrintfVarArg(format, args);
+  va_end(args);
+  return result;
 }
 
-mode_t File::ConvertOpenOptionsForPOSIXOpen(OpenOptions open_options) {
+//------------------------------------------------------------------
+// Print some formatted output to the stream.
+//------------------------------------------------------------------
+size_t File::PrintfVarArg(const char *format, va_list args) {
+  size_t result = 0;
+  if (DescriptorIsValid()) {
+    char *s = NULL;
+    result = vasprintf(&s, format, args);
+    if (s != NULL) {
+      if (result > 0) {
+        size_t s_len = result;
+        Write(s, s_len);
+        result = s_len;
+      }
+      free(s);
+    }
+  } else if (StreamIsValid()) {
+    result = ::vfprintf(m_stream, format, args);
+  }
+  return result;
+}
+
+mode_t File::ConvertOpenOptionsForPOSIXOpen(uint32_t open_options) {
   mode_t mode = 0;
   if (open_options & eOpenOptionRead && open_options & eOpenOptionWrite)
     mode |= O_RDWR;
@@ -754,5 +817,46 @@ mode_t File::ConvertOpenOptionsForPOSIXOpen(OpenOptions open_options) {
   return mode;
 }
 
-char File::ID = 0;
-char NativeFile::ID = 0;
+void File::CalculateInteractiveAndTerminal() {
+  const int fd = GetDescriptor();
+  if (fd >= 0) {
+    m_is_interactive = eLazyBoolNo;
+    m_is_real_terminal = eLazyBoolNo;
+#if defined(_WIN32)
+    if (_isatty(fd)) {
+      m_is_interactive = eLazyBoolYes;
+      m_is_real_terminal = eLazyBoolYes;
+    }
+#else
+    if (isatty(fd)) {
+      m_is_interactive = eLazyBoolYes;
+      struct winsize window_size;
+      if (::ioctl(fd, TIOCGWINSZ, &window_size) == 0) {
+        if (window_size.ws_col > 0) {
+          m_is_real_terminal = eLazyBoolYes;
+          if (llvm::sys::Process::FileDescriptorHasColors(fd))
+            m_supports_colors = eLazyBoolYes;
+        }
+      }
+    }
+#endif
+  }
+}
+
+bool File::GetIsInteractive() {
+  if (m_is_interactive == eLazyBoolCalculate)
+    CalculateInteractiveAndTerminal();
+  return m_is_interactive == eLazyBoolYes;
+}
+
+bool File::GetIsRealTerminal() {
+  if (m_is_real_terminal == eLazyBoolCalculate)
+    CalculateInteractiveAndTerminal();
+  return m_is_real_terminal == eLazyBoolYes;
+}
+
+bool File::GetIsTerminalWithColors() {
+  if (m_supports_colors == eLazyBoolCalculate)
+    CalculateInteractiveAndTerminal();
+  return m_supports_colors == eLazyBoolYes;
+}

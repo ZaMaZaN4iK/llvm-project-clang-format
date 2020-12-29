@@ -1,33 +1,33 @@
-//===-- ValueObjectConstResultImpl.cpp ---------------------------*- C++-*-===//
+//===-- ValueObjectConstResultImpl.cpp ---------------------------*- C++
+//-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Core/ValueObjectConstResultImpl.h"
 
-#include "lldb/Core/Value.h"
-#include "lldb/Core/ValueObject.h"
+#include "lldb/Core/DataExtractor.h"
+#include "lldb/Core/Module.h"
+#include "lldb/Core/ValueObjectChild.h"
 #include "lldb/Core/ValueObjectConstResult.h"
 #include "lldb/Core/ValueObjectConstResultCast.h"
 #include "lldb/Core/ValueObjectConstResultChild.h"
+#include "lldb/Core/ValueObjectList.h"
+#include "lldb/Core/ValueObjectMemory.h"
+
 #include "lldb/Symbol/CompilerType.h"
+#include "lldb/Symbol/ObjectFile.h"
+#include "lldb/Symbol/SymbolContext.h"
+#include "lldb/Symbol/Type.h"
+#include "lldb/Symbol/Variable.h"
+
 #include "lldb/Target/ExecutionContext.h"
-#include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/Endian.h"
-#include "lldb/Utility/Scalar.h"
-#include "lldb/Utility/SharingPtr.h"
-
-#include <string>
-
-namespace lldb_private {
-class DataExtractor;
-}
-namespace lldb_private {
-class Status;
-}
+#include "lldb/Target/Process.h"
+#include "lldb/Target/Target.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -38,8 +38,8 @@ ValueObjectConstResultImpl::ValueObjectConstResultImpl(
       m_live_address_type(eAddressTypeLoad), m_load_addr_backend(),
       m_address_of_backend() {}
 
-lldb::ValueObjectSP ValueObjectConstResultImpl::Dereference(Status &error) {
-  if (m_impl_backend == nullptr)
+lldb::ValueObjectSP ValueObjectConstResultImpl::Dereference(Error &error) {
+  if (m_impl_backend == NULL)
     return lldb::ValueObjectSP();
 
   return m_impl_backend->ValueObject::Dereference(error);
@@ -47,12 +47,12 @@ lldb::ValueObjectSP ValueObjectConstResultImpl::Dereference(Status &error) {
 
 ValueObject *ValueObjectConstResultImpl::CreateChildAtIndex(
     size_t idx, bool synthetic_array_member, int32_t synthetic_index) {
-  if (m_impl_backend == nullptr)
-    return nullptr;
+  if (m_impl_backend == NULL)
+    return NULL;
 
   m_impl_backend->UpdateValueIfNeeded(false);
 
-  ValueObjectConstResultChild *valobj = nullptr;
+  ValueObjectConstResultChild *valobj = NULL;
 
   bool omit_empty_base_classes = true;
   bool ignore_array_bounds = synthetic_array_member;
@@ -65,7 +65,7 @@ ValueObject *ValueObjectConstResultImpl::CreateChildAtIndex(
   bool child_is_deref_of_parent = false;
   uint64_t language_flags;
 
-  const bool transparent_pointers = !synthetic_array_member;
+  const bool transparent_pointers = synthetic_array_member == false;
   CompilerType compiler_type = m_impl_backend->GetCompilerType();
   CompilerType child_compiler_type;
 
@@ -76,13 +76,7 @@ ValueObject *ValueObjectConstResultImpl::CreateChildAtIndex(
       ignore_array_bounds, child_name_str, child_byte_size, child_byte_offset,
       child_bitfield_bit_size, child_bitfield_bit_offset, child_is_base_class,
       child_is_deref_of_parent, m_impl_backend, language_flags);
-
-  // One might think we should check that the size of the children
-  // is always strictly positive, hence we could avoid creating a
-  // ValueObject if that's not the case, but it turns out there
-  // are languages out there which allow zero-size types with
-  // children (e.g. Swift).
-  if (child_compiler_type) {
+  if (child_compiler_type && child_byte_size) {
     if (synthetic_index)
       child_byte_offset += child_byte_size * synthetic_index;
 
@@ -106,18 +100,18 @@ ValueObject *ValueObjectConstResultImpl::CreateChildAtIndex(
 lldb::ValueObjectSP ValueObjectConstResultImpl::GetSyntheticChildAtOffset(
     uint32_t offset, const CompilerType &type, bool can_create,
     ConstString name_const_str) {
-  if (m_impl_backend == nullptr)
+  if (m_impl_backend == NULL)
     return lldb::ValueObjectSP();
 
   return m_impl_backend->ValueObject::GetSyntheticChildAtOffset(
       offset, type, can_create, name_const_str);
 }
 
-lldb::ValueObjectSP ValueObjectConstResultImpl::AddressOf(Status &error) {
-  if (m_address_of_backend.get() != nullptr)
+lldb::ValueObjectSP ValueObjectConstResultImpl::AddressOf(Error &error) {
+  if (m_address_of_backend.get() != NULL)
     return m_address_of_backend;
 
-  if (m_impl_backend == nullptr)
+  if (m_impl_backend == NULL)
     return lldb::ValueObjectSP();
   if (m_live_address != LLDB_INVALID_ADDRESS) {
     CompilerType compiler_type(m_impl_backend->GetCompilerType());
@@ -143,7 +137,7 @@ lldb::ValueObjectSP ValueObjectConstResultImpl::AddressOf(Status &error) {
 
 lldb::ValueObjectSP
 ValueObjectConstResultImpl::Cast(const CompilerType &compiler_type) {
-  if (m_impl_backend == nullptr)
+  if (m_impl_backend == NULL)
     return lldb::ValueObjectSP();
 
   ValueObjectConstResultCast *result_cast =
@@ -156,7 +150,7 @@ lldb::addr_t
 ValueObjectConstResultImpl::GetAddressOf(bool scalar_is_load_address,
                                          AddressType *address_type) {
 
-  if (m_impl_backend == nullptr)
+  if (m_impl_backend == NULL)
     return 0;
 
   if (m_live_address == LLDB_INVALID_ADDRESS) {
@@ -173,7 +167,7 @@ ValueObjectConstResultImpl::GetAddressOf(bool scalar_is_load_address,
 size_t ValueObjectConstResultImpl::GetPointeeData(DataExtractor &data,
                                                   uint32_t item_idx,
                                                   uint32_t item_count) {
-  if (m_impl_backend == nullptr)
+  if (m_impl_backend == NULL)
     return 0;
   return m_impl_backend->ValueObject::GetPointeeData(data, item_idx,
                                                      item_count);

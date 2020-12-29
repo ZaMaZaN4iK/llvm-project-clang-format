@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -23,8 +24,6 @@
 #include <thread>
 #include <cassert>
 
-#include "test_macros.h"
-
 std::once_flag flg0;
 long global = 0;
 
@@ -39,13 +38,11 @@ void f0()
     assert(global == 1);
 }
 
-int main(int, char**)
+int main()
 {
     std::thread t0(f0);
     std::thread t1(f0);
     t0.join();
     t1.join();
     assert(global == 1);
-
-  return 0;
 }

@@ -1,8 +1,9 @@
 //===--- SelectorLocationsKind.cpp - Kind of selector locations -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -48,12 +49,12 @@ SourceLocation getArgLoc(T* Arg);
 
 template <>
 SourceLocation getArgLoc<Expr>(Expr *Arg) {
-  return Arg->getBeginLoc();
+  return Arg->getLocStart();
 }
 
 template <>
 SourceLocation getArgLoc<ParmVarDecl>(ParmVarDecl *Arg) {
-  SourceLocation Loc = Arg->getBeginLoc();
+  SourceLocation Loc = Arg->getLocStart();
   if (Loc.isInvalid())
     return Loc;
   // -1 to point to left paren of the method parameter's type.

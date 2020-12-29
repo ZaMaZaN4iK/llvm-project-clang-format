@@ -1,9 +1,3 @@
-add_lldb_library(lldbPluginPlatformNetBSD PLUGIN
+add_lldb_library(lldbPluginPlatformNetBSD
   PlatformNetBSD.cpp
-
-   LINK_LIBS
-    lldbBreakpoint
-    lldbCore
-    lldbHost
-    lldbTarget
   )

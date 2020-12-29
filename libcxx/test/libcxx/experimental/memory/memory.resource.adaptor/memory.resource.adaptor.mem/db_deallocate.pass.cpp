@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,16 +23,14 @@ int AssertCount = 0;
 #include <type_traits>
 #include <cassert>
 
-#include "test_memory_resource.h"
-
-#include "test_macros.h"
+#include "test_memory_resource.hpp"
 
 namespace ex = std::experimental::pmr;
 
-int main(int, char**)
+int main()
 {
     using Alloc = NullAllocator<char>;
-
+    using R = ex::resource_adaptor<Alloc>;
     AllocController P;
     ex::resource_adaptor<Alloc> r(Alloc{P});
     ex::memory_resource & m1 = r;
@@ -43,6 +42,4 @@ int main(int, char**)
     assert(AssertCount == 0);
     m1.deallocate(nullptr, maxSize + 1);
     assert(AssertCount >= 1);
-
-  return 0;
 }

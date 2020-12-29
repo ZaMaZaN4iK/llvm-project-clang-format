@@ -5,6 +5,8 @@ Test lldb Python event APIs.
 from __future__ import print_function
 
 
+import os
+import time
 import re
 import lldb
 from lldbsuite.test.decorators import *
@@ -13,11 +15,9 @@ from lldbsuite.test import lldbutil
 
 
 @skipIfLinux   # llvm.org/pr25924, sometimes generating SIGSEGV
-@skipIfDarwin
 class EventAPITestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
-    NO_DEBUG_INFO_TESTCASE = True
 
     def setUp(self):
         # Call super's setUp().
@@ -30,12 +30,10 @@ class EventAPITestCase(TestBase):
     @expectedFailureAll(
         oslist=["linux"],
         bugnumber="llvm.org/pr23730 Flaky, fails ~1/10 cases")
-    @skipIfWindows # This is flakey on Windows AND when it fails, it hangs: llvm.org/pr38373
-    @skipIfNetBSD
     def test_listen_for_and_print_event(self):
         """Exercise SBEvent API."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         self.dbg.SetAsync(True)
 
@@ -120,12 +118,11 @@ class EventAPITestCase(TestBase):
 
     @add_test_categories(['pyapi'])
     @expectedFlakeyLinux("llvm.org/pr23730")  # Flaky, fails ~1/100 cases
-    @skipIfWindows # This is flakey on Windows AND when it fails, it hangs: llvm.org/pr38373
-    @skipIfNetBSD
+    @expectedFlakeyOS(oslist=["windows"])
     def test_wait_for_event(self):
         """Exercise SBListener.WaitForEvent() API."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         self.dbg.SetAsync(True)
 
@@ -200,12 +197,11 @@ class EventAPITestCase(TestBase):
     @expectedFailureAll(
         oslist=["linux"],
         bugnumber="llvm.org/pr23617 Flaky, fails ~1/10 cases")
-    @skipIfWindows # This is flakey on Windows AND when it fails, it hangs: llvm.org/pr38373
-    @expectedFlakeyNetBSD
+    @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr24778")
     def test_add_listener_to_broadcaster(self):
         """Exercise some SBBroadcaster APIs."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         self.dbg.SetAsync(True)
 

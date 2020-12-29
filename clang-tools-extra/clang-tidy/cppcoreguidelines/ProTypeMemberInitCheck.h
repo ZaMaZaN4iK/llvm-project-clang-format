@@ -1,8 +1,9 @@
 //===--- ProTypeMemberInitCheck.h - clang-tidy-------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,7 +16,7 @@ namespace clang {
 namespace tidy {
 namespace cppcoreguidelines {
 
-/// Implements C++ Core Guidelines Type.6.
+/// \brief Implements C++ Core Guidelines Type.6.
 ///
 /// Checks that every user-provided constructor value-initializes all class
 /// members and base classes that would have undefined behavior otherwise. Also
@@ -64,11 +65,6 @@ private:
 
   // Whether arrays need to be initialized or not. Default is false.
   bool IgnoreArrays;
-
-  // Whether fix-its for initialization of fundamental type use assignment
-  // instead of brace initalization. Only effective in C++11 mode. Default is
-  // false.
-  bool UseAssignment;
 };
 
 } // namespace cppcoreguidelines

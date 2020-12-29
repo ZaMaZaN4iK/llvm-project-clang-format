@@ -1,8 +1,9 @@
 //===-- llvm/CodeGen/AllocationOrder.h - Allocation Order -*- C++ -*-------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -31,11 +32,7 @@ class LLVM_LIBRARY_VISIBILITY AllocationOrder {
   ArrayRef<MCPhysReg> Order;
   int Pos;
 
-  // If HardHints is true, *only* Hints will be returned.
-  bool HardHints;
-
 public:
-
   /// Create a new AllocationOrder for VirtReg.
   /// @param VirtReg      Virtual register to allocate for.
   /// @param VRM          Virtual register map for function.
@@ -54,8 +51,6 @@ public:
   unsigned next(unsigned Limit = 0) {
     if (Pos < 0)
       return Hints.end()[Pos++];
-    if (HardHints)
-      return 0;
     if (!Limit)
       Limit = Order.size();
     while (Pos < int(Limit)) {
@@ -73,8 +68,6 @@ public:
   unsigned nextWithDups(unsigned Limit) {
     if (Pos < 0)
       return Hints.end()[Pos++];
-    if (HardHints)
-      return 0;
     if (Pos < int(Limit))
       return Order[Pos++];
     return 0;

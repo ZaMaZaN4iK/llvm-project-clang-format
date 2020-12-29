@@ -1,8 +1,9 @@
 //===-- RemoteJITUtils.h - Utilities for remote-JITing with LLI -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,7 +14,7 @@
 #ifndef LLVM_TOOLS_LLI_REMOTEJITUTILS_H
 #define LLVM_TOOLS_LLI_REMOTEJITUTILS_H
 
-#include "llvm/ExecutionEngine/Orc/RPC/RawByteChannel.h"
+#include "llvm/ExecutionEngine/Orc/RawByteChannel.h"
 #include "llvm/ExecutionEngine/RTDyldMemoryManager.h"
 #include <mutex>
 
@@ -75,7 +76,7 @@ std::unique_ptr<FDRawChannel> launchRemote();
 
 namespace llvm {
 
-// ForwardingMM - Adapter to connect MCJIT to Orc's Remote
+// ForwardingMM - Adapter to connect MCJIT to Orc's Remote8
 // memory manager.
 class ForwardingMemoryManager : public llvm::RTDyldMemoryManager {
 public:
@@ -83,7 +84,7 @@ public:
     this->MemMgr = std::move(MemMgr);
   }
 
-  void setResolver(std::shared_ptr<LegacyJITSymbolResolver> Resolver) {
+  void setResolver(std::unique_ptr<JITSymbolResolver> Resolver) {
     this->Resolver = std::move(Resolver);
   }
 
@@ -117,8 +118,9 @@ public:
     MemMgr->registerEHFrames(Addr, LoadAddr, Size);
   }
 
-  void deregisterEHFrames() override {
-    MemMgr->deregisterEHFrames();
+  void deregisterEHFrames(uint8_t *Addr, uint64_t LoadAddr,
+                          size_t Size) override {
+    MemMgr->deregisterEHFrames(Addr, LoadAddr, Size);
   }
 
   bool finalizeMemory(std::string *ErrMsg = nullptr) override {
@@ -144,7 +146,7 @@ public:
 
 private:
   std::unique_ptr<RuntimeDyld::MemoryManager> MemMgr;
-  std::shared_ptr<LegacyJITSymbolResolver> Resolver;
+  std::unique_ptr<JITSymbolResolver> Resolver;
 };
 }
 

@@ -12,19 +12,17 @@
     <true/>
     <key>com.apple.frontboard.debugapplications</key>
     <true/>
+    <key>run-unsigned-code</key>
+    <true/>
     <key>seatbelt-profiles</key>
     <array>
         <string>debugserver</string>
     </array>
-    <key>com.apple.private.logging.diagnostic</key>
+    <key>com.apple.diagnosticd.diagnostic</key>
     <true/>
     <key>com.apple.security.network.server</key>
     <true/>
     <key>com.apple.security.network.client</key>
-    <true/>
-    <key>com.apple.private.memorystatus</key>
-    <true/>
-    <key>com.apple.private.cs.debugger</key>
     <true/>
 </dict>
 </plist>

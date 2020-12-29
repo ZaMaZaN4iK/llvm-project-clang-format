@@ -1,13 +1,14 @@
 //===- include/Core/Instrumentation.h - Instrumentation API ---------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Provide an Instrumentation API that optionally uses VTune interfaces.
+/// \brief Provide an Instrumentation API that optionally uses VTune interfaces.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -23,7 +24,7 @@
 
 namespace lld {
 #ifdef LLD_HAS_VTUNE
-/// A unique global scope for instrumentation data.
+/// \brief A unique global scope for instrumentation data.
 ///
 /// Domains last for the lifetime of the application and cannot be destroyed.
 /// Multiple Domains created with the same name represent the same domain.
@@ -37,7 +38,7 @@ public:
   __itt_domain *operator->() const { return _domain; }
 };
 
-/// A global reference to a string constant.
+/// \brief A global reference to a string constant.
 ///
 /// These are uniqued by the ITT runtime and cannot be deleted. They are not
 /// specific to a domain.
@@ -53,12 +54,12 @@ public:
   operator __itt_string_handle *() const { return _handle; }
 };
 
-/// A task on a single thread. Nests within other tasks.
+/// \brief A task on a single thread. Nests within other tasks.
 ///
 /// Each thread has its own task stack and tasks nest recursively on that stack.
 /// A task cannot transfer threads.
 ///
-/// SBRM is used to ensure task starts and ends are balanced. The lifetime of
+/// SBRM is used to ensure task starts and ends are ballanced. The lifetime of
 /// a task is either the lifetime of this object, or until end is called.
 class ScopedTask {
   __itt_domain *_domain;
@@ -67,7 +68,7 @@ class ScopedTask {
   ScopedTask &operator=(const ScopedTask &) = delete;
 
 public:
-  /// Create a task in Domain \p d named \p s.
+  /// \brief Create a task in Domain \p d named \p s.
   ScopedTask(const Domain &d, const StringHandle &s) : _domain(d) {
     __itt_task_begin(d, __itt_null, __itt_null, s);
   }
@@ -82,7 +83,7 @@ public:
     return *this;
   }
 
-  /// Prematurely end this task.
+  /// \brief Prematurely end this task.
   void end() {
     if (_domain)
       __itt_task_end(_domain);
@@ -92,7 +93,7 @@ public:
   ~ScopedTask() { end(); }
 };
 
-/// A specific point in time. Allows metadata to be associated.
+/// \brief A specific point in time. Allows metadata to be associated.
 class Marker {
 public:
   Marker(const Domain &d, const StringHandle &s) {

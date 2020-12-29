@@ -4,12 +4,8 @@
 
 ; SUMMARY:      GlobalValueMap:
 ; SUMMARY-NEXT:   42:
-; SUMMARY-NEXT:    - Linkage:             0
-; SUMMARY-NEXT:      NotEligibleToImport: false
-; SUMMARY-NEXT:      Live:                true
-; SUMMARY-NEXT:      Local:               false
-; SUMMARY-NEXT:      CanAutoHide:         false
-; SUMMARY-NEXT:      TypeTests: [ 123 ]
+; SUMMARY-NEXT:     - TypeTests:
+; SUMMARY-NEXT:         - 123
 ; SUMMARY-NEXT: TypeIdMap:
 ; SUMMARY-NEXT:   typeid1:
 ; SUMMARY-NEXT:     TTRes:

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,11 +11,6 @@
 
 // basic_string<charT,traits,Allocator>&
 //   insert(size_type pos1, const basic_string& str);
-
-// When back-deploying to macosx10.7, the RTTI for exception classes
-// incorrectly provided by libc++.dylib is mixed with the one in
-// libc++abi.dylib and exceptions are not caught properly.
-// XFAIL: with_system_cxx_lib=macosx10.7
 
 #include <string>
 #include <stdexcept>
@@ -52,7 +48,7 @@ test(S s, typename S::size_type pos, S str, S expected)
 #endif
 }
 
-int main(int, char**)
+int main()
 {
     {
     typedef std::string S;
@@ -222,15 +218,4 @@ int main(int, char**)
     test(S("abcdefghijklmnopqrst"), 21, S("12345678901234567890"), S("can't happen"));
     }
 #endif
-
-#if TEST_STD_VER > 3
-    {   // LWG 2946
-    std::string s;
-    s.insert(0, {"abc", 1});
-    assert(s.size() == 1);
-    assert(s == "a");
-    }
-#endif
-
-  return 0;
 }

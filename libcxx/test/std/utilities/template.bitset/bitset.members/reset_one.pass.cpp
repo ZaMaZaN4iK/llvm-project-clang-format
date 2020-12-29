@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,7 +11,6 @@
 
 #include <bitset>
 #include <cassert>
-#include <stdexcept>
 
 #include "test_macros.h"
 
@@ -43,7 +43,7 @@ void test_reset_one(bool test_throws)
 #endif
 }
 
-int main(int, char**)
+int main()
 {
     test_reset_one<0>(true);
     test_reset_one<1>(true);
@@ -54,6 +54,4 @@ int main(int, char**)
     test_reset_one<64>(false);
     test_reset_one<65>(false);
     test_reset_one<1000>(false);
-
-  return 0;
 }

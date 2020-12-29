@@ -1,15 +1,16 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
 // <optional>
 
-// template <class U> constexpr T optional<T>::value_or(U&& v) &&;
+// template <class U> T optional<T>::value_or(U&& v) &&;
 
 #include <optional>
 #include <type_traits>
@@ -25,22 +26,22 @@ struct Y
 {
     int i_;
 
-    constexpr Y(int i) : i_(i) {}
+    Y(int i) : i_(i) {}
 };
 
 struct X
 {
     int i_;
 
-    constexpr X(int i) : i_(i) {}
-    constexpr X(X&& x) : i_(x.i_) {x.i_ = 0;}
-    constexpr X(const Y& y) : i_(y.i_) {}
-    constexpr X(Y&& y) : i_(y.i_+1) {}
+    X(int i) : i_(i) {}
+    X(X&& x) : i_(x.i_) {x.i_ = 0;}
+    X(const Y& y) : i_(y.i_) {}
+    X(Y&& y) : i_(y.i_+1) {}
     friend constexpr bool operator==(const X& x, const X& y)
         {return x.i_ == y.i_;}
 };
 
-constexpr int test()
+int main()
 {
     {
         optional<X> opt(in_place, 2);
@@ -64,12 +65,4 @@ constexpr int test()
         assert(std::move(opt).value_or(Y(3)) == 4);
         assert(!opt);
     }
-    return 0;
-}
-
-int main(int, char**)
-{
-    static_assert(test() == 0);
-
-  return 0;
 }

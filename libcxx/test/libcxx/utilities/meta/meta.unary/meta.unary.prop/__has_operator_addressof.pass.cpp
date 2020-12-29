@@ -1,12 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// UNSUPPORTED: c++98, c++03
 
 // type_traits
 
@@ -17,8 +16,7 @@
 
 #include <type_traits>
 
-#include "test_macros.h"
-
+#ifndef _LIBCPP_HAS_NO_CONSTEXPR
 
 struct A
 {
@@ -56,9 +54,11 @@ struct J
     constexpr J* operator&() const &&;
 };
 
+#endif  // _LIBCPP_HAS_NO_CONSTEXPR
 
-int main(int, char**)
+int main()
 {
+#ifndef _LIBCPP_HAS_NO_CONSTEXPR
     static_assert(std::__has_operator_addressof<int>::value == false, "");
     static_assert(std::__has_operator_addressof<A>::value == false, "");
     static_assert(std::__has_operator_addressof<B>::value == true, "");
@@ -67,6 +67,5 @@ int main(int, char**)
     static_assert(std::__has_operator_addressof<G>::value == true, "");
     static_assert(std::__has_operator_addressof<H>::value == true, "");
     static_assert(std::__has_operator_addressof<J>::value == true, "");
-
-  return 0;
+#endif  // _LIBCPP_HAS_NO_CONSTEXPR
 }

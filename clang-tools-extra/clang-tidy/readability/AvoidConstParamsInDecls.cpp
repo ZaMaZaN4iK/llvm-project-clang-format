@@ -1,8 +1,9 @@
 //===--- AvoidConstParamsInDecls.cpp - clang-tidy--------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,8 +22,8 @@ namespace {
 
 SourceRange getTypeRange(const ParmVarDecl &Param) {
   if (Param.getIdentifier() != nullptr)
-    return SourceRange(Param.getBeginLoc(),
-                       Param.getEndLoc().getLocWithOffset(-1));
+    return SourceRange(Param.getLocStart(),
+                       Param.getLocEnd().getLocWithOffset(-1));
   return Param.getSourceRange();
 }
 
@@ -81,7 +82,7 @@ void AvoidConstParamsInDecls::check(const MatchFinder::MatchResult &Result) {
   if (!Param->getType().isLocalConstQualified())
     return;
 
-  auto Diag = diag(Param->getBeginLoc(),
+  auto Diag = diag(Param->getLocStart(),
                    "parameter %0 is const-qualified in the function "
                    "declaration; const-qualification of parameters only has an "
                    "effect in function definitions");
@@ -96,7 +97,7 @@ void AvoidConstParamsInDecls::check(const MatchFinder::MatchResult &Result) {
     Diag << Param;
   }
 
-  if (Param->getBeginLoc().isMacroID() != Param->getEndLoc().isMacroID()) {
+  if (Param->getLocStart().isMacroID() != Param->getLocEnd().isMacroID()) {
     // Do not offer a suggestion if the part of the variable declaration comes
     // from a macro.
     return;

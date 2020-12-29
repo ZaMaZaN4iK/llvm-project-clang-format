@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,34 +17,12 @@
 #include <memory>
 #include <cassert>
 
-#include "poisoned_hash_helper.h"
 
-#include "test_macros.h"
-
-struct A {};
-struct B {};
-
-namespace std {
-
-template <>
-struct hash<B> {
-  size_t operator()(B const&) TEST_NOEXCEPT_FALSE { return 0; }
-};
-
-}
-
-int main(int, char**)
+int main()
 {
     using std::optional;
     const std::size_t nullopt_hash =
         std::hash<optional<double>>{}(optional<double>{});
-
-
-    {
-        optional<B> opt;
-        ASSERT_NOT_NOEXCEPT(std::hash<optional<B>>()(opt));
-        ASSERT_NOT_NOEXCEPT(std::hash<optional<const B>>()(opt));
-    }
 
     {
         typedef int T;
@@ -66,18 +45,4 @@ int main(int, char**)
         opt = std::unique_ptr<int>(new int(3));
         assert(std::hash<optional<T>>{}(opt) == std::hash<T>{}(*opt));
     }
-    {
-      test_hash_enabled_for_type<std::optional<int> >();
-      test_hash_enabled_for_type<std::optional<int*> >();
-      test_hash_enabled_for_type<std::optional<const int> >();
-      test_hash_enabled_for_type<std::optional<int* const> >();
-
-      test_hash_disabled_for_type<std::optional<A>>();
-      test_hash_disabled_for_type<std::optional<const A>>();
-
-      test_hash_enabled_for_type<std::optional<B>>();
-      test_hash_enabled_for_type<std::optional<const B>>();
-    }
-
-  return 0;
 }

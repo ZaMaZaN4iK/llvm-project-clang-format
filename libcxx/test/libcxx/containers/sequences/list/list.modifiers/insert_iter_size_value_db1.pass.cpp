@@ -1,13 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// Can't test the system lib because this test enables debug mode
-// UNSUPPORTED: with_system_cxx_lib
 
 // <list>
 
@@ -20,14 +18,10 @@
 #include <cstdlib>
 #include <cassert>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     std::list<int> c1(100);
     std::list<int> c2;
     std::list<int>::iterator i = c1.insert(next(c2.cbegin(), 10), 5, 1);
     assert(false);
-
-  return 0;
 }

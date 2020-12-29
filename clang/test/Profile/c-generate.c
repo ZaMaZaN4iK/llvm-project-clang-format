@@ -5,8 +5,7 @@
 //
 // PROF-INSTR-PATH: constant [24 x i8] c"c-generate-test.profraw\00"
 //
-// PROF-INSTR-NONE-NOT: __llvm_prf
-//
+// PROF-INSTR-NONE-NOT: @__profn_main
 // PROF-INSTR-GARBAGE: invalid PGO instrumentor in argument '-fprofile-instrument=garbage'
 
 int main(void) {

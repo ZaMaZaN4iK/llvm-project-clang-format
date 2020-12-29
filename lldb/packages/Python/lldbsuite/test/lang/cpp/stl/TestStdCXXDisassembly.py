@@ -7,10 +7,11 @@ from __future__ import print_function
 
 import unittest2
 import os
+import time
 import lldb
 from lldbsuite.test.lldbtest import *
 import lldbsuite.test.lldbutil as lldbutil
-from lldbsuite.test.decorators import *
+
 
 class StdCXXDisassembleTestCase(TestBase):
 
@@ -22,12 +23,15 @@ class StdCXXDisassembleTestCase(TestBase):
         # Find the line number to break inside main().
         self.line = line_number('main.cpp', '// Set break point at this line.')
 
-    @skipIfWindows
-    @expectedFailureNetBSD
+    # rdar://problem/8504895
+    # Crash while doing 'disassemble -n "-[NSNumber descriptionWithLocale:]"
+    @unittest2.skipIf(
+        TestBase.skipLongRunningTest(),
+        "Skip this long running test")
     def test_stdcxx_disasm(self):
         """Do 'disassemble' on each and every 'Code' symbol entry from the std c++ lib."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # rdar://problem/8543077

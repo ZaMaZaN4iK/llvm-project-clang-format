@@ -1,14 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include <limits>
-
-#include "test_macros.h"
 
 /*
 <limits>:
@@ -38,8 +37,8 @@
         round_style
 */
 
-template <class T>
-void test(const T &) {}
+template <class _Tp>
+void test(const _Tp &) {}
 
 #define TEST_NUMERIC_LIMITS(type) \
   test(std::numeric_limits<type>::is_specialized); \
@@ -68,7 +67,7 @@ void test(const T &) {}
 
 struct other {};
 
-int main(int, char**)
+int main()
 {
     // bool
     TEST_NUMERIC_LIMITS(bool)
@@ -99,14 +98,6 @@ int main(int, char**)
     TEST_NUMERIC_LIMITS(const wchar_t)
     TEST_NUMERIC_LIMITS(volatile wchar_t)
     TEST_NUMERIC_LIMITS(const volatile wchar_t)
-
-#if TEST_STD_VER > 17 && defined(__cpp_char8_t)
-    // char8_t
-    TEST_NUMERIC_LIMITS(char8_t)
-    TEST_NUMERIC_LIMITS(const char8_t)
-    TEST_NUMERIC_LIMITS(volatile char8_t)
-    TEST_NUMERIC_LIMITS(const volatile char8_t)
-#endif
 
     // char16_t
     TEST_NUMERIC_LIMITS(char16_t)
@@ -205,6 +196,4 @@ int main(int, char**)
     TEST_NUMERIC_LIMITS(const other)
     TEST_NUMERIC_LIMITS(volatile other)
     TEST_NUMERIC_LIMITS(const volatile other)
-
-  return 0;
 }

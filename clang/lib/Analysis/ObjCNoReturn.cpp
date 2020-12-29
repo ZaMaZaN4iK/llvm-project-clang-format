@@ -1,8 +1,9 @@
 //= ObjCNoReturn.cpp - Handling of Cocoa APIs known not to return --*- C++ -*---
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -31,13 +32,13 @@ ObjCNoReturn::ObjCNoReturn(ASTContext &C)
 {
   // Generate selectors.
   SmallVector<IdentifierInfo*, 3> II;
-
+  
   // raise:format:
   II.push_back(&C.Idents.get("raise"));
   II.push_back(&C.Idents.get("format"));
   NSExceptionInstanceRaiseSelectors[0] =
     C.Selectors.getSelector(II.size(), &II[0]);
-
+    
   // raise:format:arguments:
   II.push_back(&C.Idents.get("arguments"));
   NSExceptionInstanceRaiseSelectors[1] =
@@ -47,7 +48,7 @@ ObjCNoReturn::ObjCNoReturn(ASTContext &C)
 
 bool ObjCNoReturn::isImplicitNoReturn(const ObjCMessageExpr *ME) {
   Selector S = ME->getSelector();
-
+  
   if (ME->isInstanceMessage()) {
     // Check for the "raise" message.
     return S == RaiseSel;
@@ -61,6 +62,6 @@ bool ObjCNoReturn::isImplicitNoReturn(const ObjCMessageExpr *ME) {
       }
     }
   }
-
+  
   return false;
 }

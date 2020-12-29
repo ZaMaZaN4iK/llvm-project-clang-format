@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,10 +21,9 @@
 #include <scoped_allocator>
 #include <cassert>
 
-#include "test_macros.h"
 #include "allocators.h"
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::scoped_allocator_adaptor<A1<int>> A;
@@ -107,13 +107,5 @@ int main(int, char**)
         assert((a.inner_allocator() ==
             std::scoped_allocator_adaptor<A2<int>, A3<int>>(A2<int>(5), A3<int>(6))));
     }
-//  Test for LWG2782
-    {
-        static_assert(!std::is_convertible<A1<int>, A2<int>>::value, "");
-        static_assert(!std::is_convertible<
-             std::scoped_allocator_adaptor<A1<int>>,
-             std::scoped_allocator_adaptor<A2<int>>>::value, "");
-    }
 
-  return 0;
 }

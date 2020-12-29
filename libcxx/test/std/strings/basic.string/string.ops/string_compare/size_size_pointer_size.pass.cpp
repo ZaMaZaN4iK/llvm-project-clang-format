@@ -1,19 +1,15 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // <string>
 
 // int compare(size_type pos, size_type n1, const charT *s, size_type n2) const;
-
-// When back-deploying to macosx10.7, the RTTI for exception classes
-// incorrectly provided by libc++.dylib is mixed with the one in
-// libc++abi.dylib and exceptions are not caught properly.
-// XFAIL: with_system_cxx_lib=macosx10.7
 
 #include <string>
 #include <stdexcept>
@@ -44,7 +40,7 @@ test(const S& s, typename S::size_type pos, typename S::size_type n1,
     {
         try
         {
-            TEST_IGNORE_NODISCARD s.compare(pos, n1, str, n2);
+            s.compare(pos, n1, str, n2);
             assert(false);
         }
         catch (std::out_of_range&)
@@ -1299,7 +1295,7 @@ void test11()
     test(S("abcdefghijklmnopqrst"), 21, 0, "abcdefghijklmnopqrst", 20, 0);
 }
 
-int main(int, char**)
+int main()
 {
     {
     typedef std::string S;
@@ -1333,6 +1329,4 @@ int main(int, char**)
     test11<S>();
     }
 #endif
-
-  return 0;
 }

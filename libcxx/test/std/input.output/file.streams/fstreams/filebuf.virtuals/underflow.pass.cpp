@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,7 +19,6 @@
 #include <cstddef>
 #include <cassert>
 
-#include "test_macros.h"
 #include "platform_support.h" // locale name macros
 
 template <class CharT>
@@ -37,7 +37,7 @@ struct test_buf
     virtual int_type underflow() {return base::underflow();}
 };
 
-int main(int, char**)
+int main()
 {
     {
         test_buf<char> f;
@@ -122,6 +122,4 @@ int main(int, char**)
         assert(f.sbumpc() == 0x4E53);
         assert(f.sbumpc() == static_cast<Traits::int_type>(-1));
     }
-
-  return 0;
 }

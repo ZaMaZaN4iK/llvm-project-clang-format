@@ -1,11 +1,8 @@
 add_lldb_unittest(ScriptInterpreterPythonTests
   PythonDataObjectsTests.cpp
+  PythonExceptionStateTests.cpp
   PythonTestSuite.cpp
-
-  LINK_LIBS
-    lldbHost
-    lldbPluginScriptInterpreterPython
-    LLVMTestingSupport
-  LINK_COMPONENTS
-    Support
   )
+
+  target_link_libraries(ScriptInterpreterPythonTests lldbPluginScriptInterpreterPython ${PYTHON_LIBRARY})
+  

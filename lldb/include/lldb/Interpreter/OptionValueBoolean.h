@@ -1,14 +1,19 @@
 //===-- OptionValueBoolean.h ------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_OptionValueBoolean_h_
 #define liblldb_OptionValueBoolean_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Interpreter/OptionValue.h"
 
 namespace lldb_private {
@@ -23,17 +28,19 @@ public:
 
   ~OptionValueBoolean() override {}
 
+  //---------------------------------------------------------------------
   // Virtual subclass pure virtual overrides
+  //---------------------------------------------------------------------
 
   OptionValue::Type GetType() const override { return eTypeBoolean; }
 
   void DumpValue(const ExecutionContext *exe_ctx, Stream &strm,
                  uint32_t dump_mask) override;
 
-  Status
+  Error
   SetValueFromString(llvm::StringRef value,
                      VarSetOperationType op = eVarSetOperationAssign) override;
-  Status
+  Error
   SetValueFromString(const char *,
                      VarSetOperationType = eVarSetOperationAssign) = delete;
 
@@ -43,24 +50,29 @@ public:
     return true;
   }
 
-  void AutoComplete(CommandInterpreter &interpreter,
-                    CompletionRequest &request) override;
+  size_t AutoComplete(CommandInterpreter &interpreter, llvm::StringRef s,
+                      int match_start_point, int max_return_elements,
+                      bool &word_complete, StringList &matches) override;
 
+  //---------------------------------------------------------------------
   // Subclass specific functions
+  //---------------------------------------------------------------------
 
+  //------------------------------------------------------------------
   /// Convert to bool operator.
   ///
   /// This allows code to check a OptionValueBoolean in conditions.
   ///
-  /// \code
+  /// @code
   /// OptionValueBoolean bool_value(...);
   /// if (bool_value)
   /// { ...
-  /// \endcode
+  /// @endcode
   ///
-  /// \return
+  /// @return
   ///     /b True this object contains a valid namespace decl, \b
   ///     false otherwise.
+  //------------------------------------------------------------------
   explicit operator bool() const { return m_current_value; }
 
   const bool &operator=(bool b) {

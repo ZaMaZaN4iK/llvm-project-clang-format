@@ -1,8 +1,9 @@
 //===-- AbstractSocket.cpp --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,8 +14,8 @@
 using namespace lldb;
 using namespace lldb_private;
 
-AbstractSocket::AbstractSocket(bool child_processes_inherit)
-    : DomainSocket(ProtocolUnixAbstract, child_processes_inherit) {}
+AbstractSocket::AbstractSocket(bool child_processes_inherit, Error &error)
+    : DomainSocket(ProtocolUnixAbstract, child_processes_inherit, error) {}
 
 size_t AbstractSocket::GetNameOffset() const { return 1; }
 

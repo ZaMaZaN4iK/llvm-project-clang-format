@@ -1,8 +1,9 @@
 //===---------- PPCTLSDynamicCall.cpp - TLS Dynamic Call Fixup ------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,20 +21,23 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "PPCInstrInfo.h"
 #include "PPC.h"
 #include "PPCInstrBuilder.h"
-#include "PPCInstrInfo.h"
 #include "PPCTargetMachine.h"
-#include "llvm/CodeGen/LiveIntervals.h"
+#include "llvm/CodeGen/LiveIntervalAnalysis.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "ppc-tls-dynamic-call"
+
+namespace llvm {
+  void initializePPCTLSDynamicCallPass(PassRegistry&);
+}
 
 namespace {
   struct PPCTLSDynamicCall : public MachineFunctionPass {
@@ -48,7 +52,6 @@ namespace {
 protected:
     bool processBlock(MachineBasicBlock &MBB) {
       bool Changed = false;
-      bool NeedFence = true;
       bool Is64Bit = MBB.getParent()->getSubtarget<PPCSubtarget>().isPPC64();
 
       for (MachineBasicBlock::iterator I = MBB.begin(), IE = MBB.end();
@@ -59,24 +62,14 @@ protected:
             MI.getOpcode() != PPC::ADDItlsldLADDR &&
             MI.getOpcode() != PPC::ADDItlsgdLADDR32 &&
             MI.getOpcode() != PPC::ADDItlsldLADDR32) {
-
-          // Although we create ADJCALLSTACKDOWN and ADJCALLSTACKUP
-          // as scheduling fences, we skip creating fences if we already
-          // have existing ADJCALLSTACKDOWN/UP to avoid nesting,
-          // which causes verification error with -verify-machineinstrs.
-          if (MI.getOpcode() == PPC::ADJCALLSTACKDOWN)
-            NeedFence = false;
-          else if (MI.getOpcode() == PPC::ADJCALLSTACKUP)
-            NeedFence = true;
-
           ++I;
           continue;
         }
 
-        LLVM_DEBUG(dbgs() << "TLS Dynamic Call Fixup:\n    " << MI);
+        DEBUG(dbgs() << "TLS Dynamic Call Fixup:\n    " << MI);
 
-        Register OutReg = MI.getOperand(0).getReg();
-        Register InReg = MI.getOperand(1).getReg();
+        unsigned OutReg = MI.getOperand(0).getReg();
+        unsigned InReg = MI.getOperand(1).getReg();
         DebugLoc DL = MI.getDebugLoc();
         unsigned GPR3 = Is64Bit ? PPC::X3 : PPC::R3;
         unsigned Opc1, Opc2;
@@ -103,15 +96,10 @@ protected:
           break;
         }
 
-        // We create ADJCALLSTACKUP and ADJCALLSTACKDOWN around _tls_get_addr
-        // as scheduling fence to avoid it is scheduled before
-        // mflr in the prologue and the address in LR is clobbered (PR25839).
-        // We don't really need to save data to the stack - the clobbered
+        // Don't really need to save data to the stack - the clobbered
         // registers are already saved when the SDNode (e.g. PPCaddiTlsgdLAddr)
         // gets translated to the pseudo instruction (e.g. ADDItlsgdLADDR).
-        if (NeedFence)
-          BuildMI(MBB, I, DL, TII->get(PPC::ADJCALLSTACKDOWN)).addImm(0)
-                                                              .addImm(0);
+        BuildMI(MBB, I, DL, TII->get(PPC::ADJCALLSTACKDOWN)).addImm(0);
 
         // Expand into two ops built prior to the existing instruction.
         MachineInstr *Addi = BuildMI(MBB, I, DL, TII->get(Opc1), GPR3)
@@ -127,8 +115,7 @@ protected:
                               .addReg(GPR3));
         Call->addOperand(MI.getOperand(3));
 
-        if (NeedFence)
-          BuildMI(MBB, I, DL, TII->get(PPC::ADJCALLSTACKUP)).addImm(0).addImm(0);
+        BuildMI(MBB, I, DL, TII->get(PPC::ADJCALLSTACKUP)).addImm(0).addImm(0);
 
         BuildMI(MBB, I, DL, TII->get(TargetOpcode::COPY), OutReg)
           .addReg(GPR3);

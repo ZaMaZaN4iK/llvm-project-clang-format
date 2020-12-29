@@ -1,25 +1,29 @@
 //===-- OptionValueString.h -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_OptionValueString_h_
 #define liblldb_OptionValueString_h_
 
+// C Includes
+// C++ Includes
 #include <string>
 
-#include "lldb/Utility/Flags.h"
-
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/Flags.h"
 #include "lldb/Interpreter/OptionValue.h"
 
 namespace lldb_private {
 
 class OptionValueString : public OptionValue {
 public:
-  typedef Status (*ValidatorCallback)(const char *string, void *baton);
+  typedef Error (*ValidatorCallback)(const char *string, void *baton);
 
   enum Options { eOptionEncodeCharacterEscapeSequences = (1u << 0) };
 
@@ -71,17 +75,19 @@ public:
 
   ~OptionValueString() override = default;
 
+  //---------------------------------------------------------------------
   // Virtual subclass pure virtual overrides
+  //---------------------------------------------------------------------
 
   OptionValue::Type GetType() const override { return eTypeString; }
 
   void DumpValue(const ExecutionContext *exe_ctx, Stream &strm,
                  uint32_t dump_mask) override;
 
-  Status
+  Error
   SetValueFromString(llvm::StringRef value,
                      VarSetOperationType op = eVarSetOperationAssign) override;
-  Status
+  Error
   SetValueFromString(const char *,
                      VarSetOperationType = eVarSetOperationAssign) = delete;
 
@@ -93,7 +99,9 @@ public:
 
   lldb::OptionValueSP DeepCopy() const override;
 
+  //---------------------------------------------------------------------
   // Subclass specific functions
+  //---------------------------------------------------------------------
 
   Flags &GetOptions() { return m_options; }
 
@@ -110,10 +118,10 @@ public:
   const char *GetDefaultValue() const { return m_default_value.c_str(); }
   llvm::StringRef GetDefaultValueAsRef() const { return m_default_value; }
 
-  Status SetCurrentValue(const char *) = delete;
-  Status SetCurrentValue(llvm::StringRef value);
+  Error SetCurrentValue(const char *) = delete;
+  Error SetCurrentValue(llvm::StringRef value);
 
-  Status AppendToCurrentValue(const char *value);
+  Error AppendToCurrentValue(const char *value);
 
   void SetDefaultValue(const char *value) {
     if (value && value[0])

@@ -1,7 +1,10 @@
 """Test that the expression parser doesn't get confused by 'id' and 'Class'"""
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -26,7 +29,7 @@ class TestObjCBuiltinTypes(TestBase):
     def test_with_python_api(self):
         """Test expression parser respect for ObjC built-in types."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)

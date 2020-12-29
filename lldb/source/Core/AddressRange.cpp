@@ -1,28 +1,17 @@
 //===-- AddressRange.cpp ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Core/AddressRange.h"
 #include "lldb/Core/Module.h"
+#include "lldb/Core/Stream.h"
+#include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/FileSpec.h"
-#include "lldb/Utility/Stream.h"
-#include "lldb/lldb-defines.h"
-
-#include "llvm/Support/Compiler.h"
-
-#include <memory>
-
-#include <inttypes.h>
-
-namespace lldb_private {
-class SectionList;
-}
 
 using namespace lldb;
 using namespace lldb_private;
@@ -122,24 +111,6 @@ bool AddressRange::ContainsLoadAddress(addr_t load_addr, Target *target) const {
   return false;
 }
 
-bool AddressRange::Extend(const AddressRange &rhs_range) {
-  addr_t lhs_end_addr = GetBaseAddress().GetFileAddress() + GetByteSize();
-  addr_t rhs_base_addr = rhs_range.GetBaseAddress().GetFileAddress();
-
-  if (!ContainsFileAddress(rhs_range.GetBaseAddress()) &&
-      lhs_end_addr != rhs_base_addr)
-    // The ranges don't intersect at all on the right side of this range.
-    return false;
-
-  addr_t rhs_end_addr = rhs_base_addr + rhs_range.GetByteSize();
-  if (lhs_end_addr >= rhs_end_addr)
-    // The rhs range totally overlaps this one, nothing to add.
-    return false;
-
-  m_byte_size += rhs_end_addr - lhs_end_addr;
-  return true;
-}
-
 void AddressRange::Clear() {
   m_base_addr.Clear();
   m_byte_size = 0;
@@ -161,8 +132,7 @@ bool AddressRange::Dump(Stream *s, Target *target, Address::DumpStyle style,
     s->PutChar('[');
     m_base_addr.Dump(s, target, style, fallback_style);
     s->PutChar('-');
-    DumpAddress(s->AsRawOstream(), m_base_addr.GetOffset() + GetByteSize(),
-                addr_size);
+    s->Address(m_base_addr.GetOffset() + GetByteSize(), addr_size);
     s->PutChar(')');
     return true;
     break;
@@ -186,8 +156,7 @@ bool AddressRange::Dump(Stream *s, Target *target, Address::DumpStyle style,
         s->Printf("%s", module_sp->GetFileSpec().GetFilename().AsCString(
                             "<Unknown>"));
     }
-    DumpAddressRange(s->AsRawOstream(), vmaddr, vmaddr + GetByteSize(),
-                     addr_size);
+    s->AddressRange(vmaddr, vmaddr + GetByteSize(), addr_size);
     return true;
   } else if (fallback_style != Address::DumpStyleInvalid) {
     return Dump(s, target, fallback_style, Address::DumpStyleInvalid);

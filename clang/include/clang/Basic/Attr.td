@@ -1,8 +1,9 @@
 //==--- Attr.td - attribute definitions -----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,11 +15,8 @@ class DocumentationCategory<string name> {
 }
 def DocCatFunction : DocumentationCategory<"Function Attributes">;
 def DocCatVariable : DocumentationCategory<"Variable Attributes">;
-def DocCatField : DocumentationCategory<"Field Attributes">;
 def DocCatType : DocumentationCategory<"Type Attributes">;
 def DocCatStmt : DocumentationCategory<"Statement Attributes">;
-def DocCatDecl : DocumentationCategory<"Declaration Attributes">;
-
 // Attributes listed under the Undocumented category do not generate any public
 // documentation. Ideally, this category should be used for internal-only
 // attributes which contain no spellings.
@@ -71,60 +69,44 @@ include "clang/Basic/StmtNodes.td"
 //
 // The code fragment is a boolean expression that will confirm that the subject
 // meets the requirements; the subject will have the name S, and will have the
-// type specified by the base. It should be a simple boolean expression. The
-// diagnostic string should be a comma-separated list of subject names.
-class SubsetSubject<AttrSubject base, code check, string diag> : AttrSubject {
+// type specified by the base. It should be a simple boolean expression.
+class SubsetSubject<AttrSubject base, code check> : AttrSubject {
   AttrSubject Base = base;
   code CheckCode = check;
-  string DiagSpelling = diag;
 }
 
-def LocalVar : SubsetSubject<Var,
-                              [{S->hasLocalStorage() && !isa<ParmVarDecl>(S)}],
-                              "local variables">;
+// This is the type of a variable which C++11 allows alignas(...) to appertain
+// to.
+def NormalVar : SubsetSubject<Var,
+                              [{S->getStorageClass() != VarDecl::Register &&
+                                S->getKind() != Decl::ImplicitParam &&
+                                S->getKind() != Decl::ParmVar &&
+                                S->getKind() != Decl::NonTypeTemplateParm}]>;
 def NonParmVar : SubsetSubject<Var,
-                               [{S->getKind() != Decl::ParmVar}],
-                               "variables">;
-def NonLocalVar : SubsetSubject<Var,
-                                [{!S->hasLocalStorage()}],
-                                "variables with non-local storage">;
+                               [{S->getKind() != Decl::ParmVar}]>;
 def NonBitField : SubsetSubject<Field,
-                                [{!S->isBitField()}],
-                                "non-bit-field non-static data members">;
-
-def NonStaticCXXMethod : SubsetSubject<CXXMethod,
-                                       [{!S->isStatic()}],
-                                       "non-static member functions">;
-
-def NonStaticNonConstCXXMethod
-    : SubsetSubject<CXXMethod,
-                    [{!S->isStatic() && !S->isConst()}],
-                    "non-static non-const member functions">;
+                                [{!S->isBitField()}]>;
 
 def ObjCInstanceMethod : SubsetSubject<ObjCMethod,
-                                       [{S->isInstanceMethod()}],
-                                       "Objective-C instance methods">;
+                                       [{S->isInstanceMethod()}]>;
+
+def ObjCInterfaceDeclInitMethod : SubsetSubject<ObjCMethod,
+                               [{S->getMethodFamily() == OMF_init &&
+                                 (isa<ObjCInterfaceDecl>(S->getDeclContext()) ||
+                                  (isa<ObjCCategoryDecl>(S->getDeclContext()) &&
+            cast<ObjCCategoryDecl>(S->getDeclContext())->IsClassExtension()))}]>;
 
 def Struct : SubsetSubject<Record,
-                           [{!S->isUnion()}], "structs">;
+                           [{!S->isUnion()}]>;
 
 def TLSVar : SubsetSubject<Var,
-                           [{S->getTLSKind() != 0}], "thread-local variables">;
+                           [{S->getTLSKind() != 0}]>;
 
 def SharedVar : SubsetSubject<Var,
-                              [{S->hasGlobalStorage() && !S->getTLSKind()}],
-                              "global variables">;
+                              [{S->hasGlobalStorage() && !S->getTLSKind()}]>;
 
 def GlobalVar : SubsetSubject<Var,
-                             [{S->hasGlobalStorage()}], "global variables">;
-
-def InlineFunction : SubsetSubject<Function,
-                             [{S->isInlineSpecified()}], "inline functions">;
-
-def FunctionTmpl
-    : SubsetSubject<Function, [{S->getTemplatedKind() ==
-                                 FunctionDecl::TK_FunctionTemplate}],
-                    "function templates">;
+                             [{S->hasGlobalStorage()}]>;
 
 // FIXME: this hack is needed because DeclNodes.td defines the base Decl node
 // type to be a class, not a definition. This makes it impossible to create an
@@ -133,12 +115,11 @@ def FunctionTmpl
 // the case of a SubsetSubject, there's no way to express it without this hack.
 def DeclBase : AttrSubject;
 def FunctionLike : SubsetSubject<DeclBase,
-                                 [{S->getFunctionType(false) != nullptr}],
-                                 "functions, function pointers">;
+                                  [{S->getFunctionType(false) != nullptr}]>;
 
-def OpenCLKernelFunction
-    : SubsetSubject<Function, [{S->hasAttr<OpenCLKernelAttr>()}],
-                    "kernel functions">;
+def OpenCLKernelFunction : SubsetSubject<Function, [{
+  S->hasAttr<OpenCLKernelAttr>()
+}]>;
 
 // HasFunctionProto is a more strict version of FunctionLike, so it should
 // never be specified in a Subjects list along with FunctionLike (due to the
@@ -147,16 +128,7 @@ def HasFunctionProto : SubsetSubject<DeclBase,
                                      [{(S->getFunctionType(true) != nullptr &&
                               isa<FunctionProtoType>(S->getFunctionType())) ||
                                        isa<ObjCMethodDecl>(S) ||
-                                       isa<BlockDecl>(S)}],
-                                     "non-K&R-style functions">;
-
-// A subject that matches the implicit object parameter of a non-static member
-// function. Accepted as a function type attribute on the type of such a
-// member function.
-// FIXME: This does not actually ever match currently.
-def ImplicitObjectParameter
-    : SubsetSubject<Function, [{static_cast<void>(S), false}],
-                    "implicit object parameters">;
+                                       isa<BlockDecl>(S)}]>;
 
 // A single argument to an attribute
 class Argument<string name, bit optional, bit fake = 0> {
@@ -177,24 +149,11 @@ class ExprArgument<string name, bit opt = 0> : Argument<name, opt>;
 class FunctionArgument<string name, bit opt = 0, bit fake = 0> : Argument<name,
                                                                           opt,
                                                                           fake>;
-class NamedArgument<string name, bit opt = 0, bit fake = 0> : Argument<name,
-                                                                       opt,
-                                                                       fake>;
 class TypeArgument<string name, bit opt = 0> : Argument<name, opt>;
 class UnsignedArgument<string name, bit opt = 0> : Argument<name, opt>;
 class VariadicUnsignedArgument<string name> : Argument<name, 1>;
 class VariadicExprArgument<string name> : Argument<name, 1>;
 class VariadicStringArgument<string name> : Argument<name, 1>;
-class VariadicIdentifierArgument<string name> : Argument<name, 1>;
-
-// Like VariadicUnsignedArgument except values are ParamIdx.
-class VariadicParamIdxArgument<string name> : Argument<name, 1>;
-
-// A list of identifiers matching parameters or ParamIdx indices.
-class VariadicParamOrParamIdxArgument<string name> : Argument<name, 1>;
-
-// Like VariadicParamIdxArgument but for a single function parameter index.
-class ParamIdxArgument<string name, bit opt = 0> : Argument<name, opt>;
 
 // A version of the form major.minor[.subminor].
 class VersionArgument<string name, bit opt = 0> : Argument<name, opt>;
@@ -205,8 +164,7 @@ class VersionArgument<string name, bit opt = 0> : Argument<name, opt>;
 class AlignedArgument<string name, bit opt = 0> : Argument<name, opt>;
 
 // A bool argument with a default value
-class DefaultBoolArgument<string name, bit default, bit fake = 0>
-    : BoolArgument<name, 1, fake> {
+class DefaultBoolArgument<string name, bit default> : BoolArgument<name, 1> {
   bit Default = default;
 }
 
@@ -249,27 +207,16 @@ class CXX11<string namespace, string name, int version = 1>
   string Namespace = namespace;
   int Version = version;
 }
-class C2x<string namespace, string name> : Spelling<name, "C2x"> {
-  string Namespace = namespace;
-}
-
 class Keyword<string name> : Spelling<name, "Keyword">;
 class Pragma<string namespace, string name> : Spelling<name, "Pragma"> {
   string Namespace = namespace;
 }
 
-// The GCC spelling implies GNU<name> and CXX11<"gnu", name> and also sets
-// KnownToGCC to 1. This spelling should be used for any GCC-compatible
+// The GCC spelling implies GNU<name, "GNU"> and CXX11<"gnu", name> and also
+// sets KnownToGCC to 1. This spelling should be used for any GCC-compatible
 // attributes.
 class GCC<string name> : Spelling<name, "GCC"> {
   let KnownToGCC = 1;
-}
-
-// The Clang spelling implies GNU<name>, CXX11<"clang", name>, and optionally,
-// C2x<"clang", name>. This spelling should be used for any Clang-specific
-// attributes.
-class Clang<string name, bit allowInC = 1> : Spelling<name, "Clang"> {
-  bit AllowInC = allowInC;
 }
 
 class Accessor<string name, list<Spelling> spellings> {
@@ -290,184 +237,37 @@ class SubjectList<list<AttrSubject> subjects, SubjectDiag diag = WarnDiag,
   string CustomDiag = customDiag;
 }
 
-class LangOpt<string name, code customCode = [{}]> {
+class LangOpt<string name, bit negated = 0> {
   string Name = name;
-
-  // A custom predicate, written as an expression evaluated in a context with
-  // "LangOpts" bound.
-  code CustomCode = customCode;
+  bit Negated = negated;
 }
 def MicrosoftExt : LangOpt<"MicrosoftExt">;
 def Borland : LangOpt<"Borland">;
 def CUDA : LangOpt<"CUDA">;
-def HIP : LangOpt<"HIP">;
-def SYCL : LangOpt<"SYCLIsDevice">;
-def COnly : LangOpt<"COnly", "!LangOpts.CPlusPlus">;
+def COnly : LangOpt<"CPlusPlus", 1>;
 def CPlusPlus : LangOpt<"CPlusPlus">;
 def OpenCL : LangOpt<"OpenCL">;
 def RenderScript : LangOpt<"RenderScript">;
-def ObjC : LangOpt<"ObjC">;
-def BlocksSupported : LangOpt<"Blocks">;
-def ObjCAutoRefCount : LangOpt<"ObjCAutoRefCount">;
-def ObjCNonFragileRuntime : LangOpt<"ObjCNonFragileRuntime",
-                                    "LangOpts.ObjCRuntime.allowsClassStubs()">;
 
-// Language option for CMSE extensions
-def Cmse : LangOpt<"Cmse">;
-
-// Defines targets for target-specific attributes. Empty lists are unchecked.
-class TargetSpec {
-  // Specifies Architectures for which the target applies, based off the
-  // ArchType enumeration in Triple.h.
-  list<string> Arches = [];
-  // Specifies Operating Systems for which the target applies, based off the
-  // OSType enumeration in Triple.h
+// Defines targets for target-specific attributes. The list of strings should
+// specify architectures for which the target applies, based off the ArchType
+// enumeration in Triple.h.
+class TargetArch<list<string> arches> {
+  list<string> Arches = arches;
   list<string> OSes;
-  // Specifies Object Formats for which the target applies, based off the
-  // ObjectFormatType enumeration in Triple.h
-  list<string> ObjectFormats;
-  // A custom predicate, written as an expression evaluated in a context
-  // with the following declarations in scope:
-  //   const clang::TargetInfo &Target;
-  //   const llvm::Triple &T = Target.getTriple();
-  code CustomCode = [{}];
-}
-
-class TargetArch<list<string> arches> : TargetSpec {
-  let Arches = arches;
+  list<string> CXXABIs;
 }
 def TargetARM : TargetArch<["arm", "thumb", "armeb", "thumbeb"]>;
-def TargetAVR : TargetArch<["avr"]>;
-def TargetBPF : TargetArch<["bpfel", "bpfeb"]>;
-def TargetMips32 : TargetArch<["mips", "mipsel"]>;
-def TargetAnyMips : TargetArch<["mips", "mipsel", "mips64", "mips64el"]>;
+def TargetMips : TargetArch<["mips", "mipsel"]>;
 def TargetMSP430 : TargetArch<["msp430"]>;
-def TargetRISCV : TargetArch<["riscv32", "riscv64"]>;
 def TargetX86 : TargetArch<["x86"]>;
 def TargetAnyX86 : TargetArch<["x86", "x86_64"]>;
-def TargetWebAssembly : TargetArch<["wasm32", "wasm64"]>;
-def TargetWindows : TargetArch<["x86", "x86_64", "arm", "thumb", "aarch64"]> {
+def TargetWindows : TargetArch<["x86", "x86_64", "arm", "thumb"]> {
   let OSes = ["Win32"];
 }
-def TargetItaniumCXXABI : TargetSpec {
-  let CustomCode = [{ Target.getCXXABI().isItaniumFamily() }];
+def TargetMicrosoftCXXABI : TargetArch<["x86", "x86_64", "arm", "thumb"]> {
+  let CXXABIs = ["Microsoft"];
 }
-def TargetMicrosoftCXXABI : TargetArch<["x86", "x86_64", "arm", "thumb", "aarch64"]> {
-  let CustomCode = [{ Target.getCXXABI().isMicrosoft() }];
-}
-def TargetELF : TargetSpec {
-  let ObjectFormats = ["ELF"];
-}
-
-// Attribute subject match rules that are used for #pragma clang attribute.
-//
-// A instance of AttrSubjectMatcherRule represents an individual match rule.
-// An individual match rule can correspond to a number of different attribute
-// subjects, e.g. "record" matching rule corresponds to the Record and
-// CXXRecord attribute subjects.
-//
-// Match rules are used in the subject list of the #pragma clang attribute.
-// Match rules can have sub-match rules that are instances of
-// AttrSubjectMatcherSubRule. A sub-match rule can correspond to a number
-// of different attribute subjects, and it can have a negated spelling as well.
-// For example, "variable(unless(is_parameter))" matching rule corresponds to
-// the NonParmVar attribute subject.
-class AttrSubjectMatcherSubRule<string name, list<AttrSubject> subjects,
-                                bit negated = 0> {
-  string Name = name;
-  list<AttrSubject> Subjects = subjects;
-  bit Negated = negated;
-  // Lists language options, one of which is required to be true for the
-  // attribute to be applicable. If empty, the language options are taken
-  // from the parent matcher rule.
-  list<LangOpt> LangOpts = [];
-}
-class AttrSubjectMatcherRule<string name, list<AttrSubject> subjects,
-                             list<AttrSubjectMatcherSubRule> subrules = []> {
-  string Name = name;
-  list<AttrSubject> Subjects = subjects;
-  list<AttrSubjectMatcherSubRule> Constraints = subrules;
-  // Lists language options, one of which is required to be true for the
-  // attribute to be applicable. If empty, no language options are required.
-  list<LangOpt> LangOpts = [];
-}
-
-// function(is_member)
-def SubRuleForCXXMethod : AttrSubjectMatcherSubRule<"is_member", [CXXMethod]> {
-  let LangOpts = [CPlusPlus];
-}
-def SubjectMatcherForFunction : AttrSubjectMatcherRule<"function", [Function], [
-  SubRuleForCXXMethod
-]>;
-// hasType is abstract, it should be used with one of the sub-rules.
-def SubjectMatcherForType : AttrSubjectMatcherRule<"hasType", [], [
-  AttrSubjectMatcherSubRule<"functionType", [FunctionLike]>
-
-  // FIXME: There's a matcher ambiguity with objc methods and blocks since
-  // functionType excludes them but functionProtoType includes them.
-  // AttrSubjectMatcherSubRule<"functionProtoType", [HasFunctionProto]>
-]>;
-def SubjectMatcherForTypedef : AttrSubjectMatcherRule<"type_alias",
-                                                      [TypedefName]>;
-def SubjectMatcherForRecord : AttrSubjectMatcherRule<"record", [Record,
-                                                                CXXRecord], [
-  // unless(is_union)
-  AttrSubjectMatcherSubRule<"is_union", [Struct], 1>
-]>;
-def SubjectMatcherForEnum : AttrSubjectMatcherRule<"enum", [Enum]>;
-def SubjectMatcherForEnumConstant : AttrSubjectMatcherRule<"enum_constant",
-                                                           [EnumConstant]>;
-def SubjectMatcherForVar : AttrSubjectMatcherRule<"variable", [Var], [
-  AttrSubjectMatcherSubRule<"is_thread_local", [TLSVar]>,
-  AttrSubjectMatcherSubRule<"is_global", [GlobalVar]>,
-  AttrSubjectMatcherSubRule<"is_parameter", [ParmVar]>,
-  // unless(is_parameter)
-  AttrSubjectMatcherSubRule<"is_parameter", [NonParmVar], 1>
-]>;
-def SubjectMatcherForField : AttrSubjectMatcherRule<"field", [Field]>;
-def SubjectMatcherForNamespace : AttrSubjectMatcherRule<"namespace",
-                                                        [Namespace]> {
-  let LangOpts = [CPlusPlus];
-}
-def SubjectMatcherForObjCInterface : AttrSubjectMatcherRule<"objc_interface",
-                                                            [ObjCInterface]> {
-  let LangOpts = [ObjC];
-}
-def SubjectMatcherForObjCProtocol : AttrSubjectMatcherRule<"objc_protocol",
-                                                           [ObjCProtocol]> {
-  let LangOpts = [ObjC];
-}
-def SubjectMatcherForObjCCategory : AttrSubjectMatcherRule<"objc_category",
-                                                           [ObjCCategory]> {
-  let LangOpts = [ObjC];
-}
-def SubjectMatcherForObjCImplementation :
-    AttrSubjectMatcherRule<"objc_implementation", [ObjCImpl]> {
-  let LangOpts = [ObjC];
-}
-def SubjectMatcherForObjCMethod : AttrSubjectMatcherRule<"objc_method",
-                                                         [ObjCMethod], [
-  AttrSubjectMatcherSubRule<"is_instance", [ObjCInstanceMethod]>
-]> {
-  let LangOpts = [ObjC];
-}
-def SubjectMatcherForObjCProperty : AttrSubjectMatcherRule<"objc_property",
-                                                           [ObjCProperty]> {
-  let LangOpts = [ObjC];
-}
-def SubjectMatcherForBlock : AttrSubjectMatcherRule<"block", [Block]> {
-  let LangOpts = [BlocksSupported];
-}
-
-// Aggregate attribute subject match rules are abstract match rules that can't
-// be used directly in #pragma clang attribute. Instead, users have to use
-// subject match rules that correspond to attribute subjects that derive from
-// the specified subject.
-class AttrSubjectMatcherAggregateRule<AttrSubject subject> {
-  AttrSubject Subject = subject;
-}
-
-def SubjectMatcherForNamed : AttrSubjectMatcherAggregateRule<Named>;
 
 class Attr {
   // The various ways in which an attribute can be spelled in source
@@ -498,16 +298,9 @@ class Attr {
   // Set to true if all of the attribute's arguments should be parsed in an
   // unevaluated context.
   bit ParseArgumentsAsUnevaluated = 0;
-  // Set to true if this attribute meaningful when applied to or inherited
-  // in a class template definition.
-  bit MeaningfulToClassTemplateDefinition = 0;
-  // Set to true if this attribute can be used with '#pragma clang attribute'.
-  // By default, an attribute is supported by the '#pragma clang attribute'
-  // only when:
-  // - It has a subject list whose subjects can be represented using subject
-  //   match rules.
-  // - It has GNU/CXX11 spelling and doesn't require delayed parsing.
-  bit PragmaAttributeSupport;
+  // Set to true if this attribute can be duplicated on a subject when merging
+  // attributes. By default, attributes are not merged.
+  bit DuplicatesAllowedWhileMerging = 0;
   // Lists language options, one of which is required to be true for the
   // attribute to be applicable. If empty, no language options are required.
   list<LangOpt> LangOpts = [];
@@ -522,38 +315,32 @@ class Attr {
 }
 
 /// A type attribute is not processed on a declaration or a statement.
-class TypeAttr : Attr;
+class TypeAttr : Attr {
+  // By default, type attributes do not get an AST node.
+  let ASTNode = 0;
+}
 
 /// A stmt attribute is not processed on a declaration or a type.
 class StmtAttr : Attr;
 
 /// An inheritable attribute is inherited by later redeclarations.
-class InheritableAttr : Attr {
-  // Set to true if this attribute can be duplicated on a subject when inheriting
-  // attributes from prior declarations.
-  bit InheritEvenIfAlreadyPresent = 0;
-}
-
-/// Some attributes, like calling conventions, can appear in either the
-/// declaration or the type position. These attributes are morally type
-/// attributes, but have historically been written on declarations.
-class DeclOrTypeAttr : InheritableAttr;
+class InheritableAttr : Attr;
 
 /// A target-specific attribute.  This class is meant to be used as a mixin
 /// with InheritableAttr or Attr depending on the attribute's needs.
-class TargetSpecificAttr<TargetSpec target> {
-  TargetSpec Target = target;
+class TargetSpecificAttr<TargetArch target> {
+  TargetArch Target = target;
   // Attributes are generally required to have unique spellings for their names
   // so that the parser can determine what kind of attribute it has parsed.
   // However, target-specific attributes are special in that the attribute only
   // "exists" for a given target. So two target-specific attributes can share
   // the same name when they exist in different targets. To support this, a
   // Kind can be explicitly specified for a target-specific attribute. This
-  // corresponds to the ParsedAttr::AT_* enum that is generated and it
+  // corresponds to the AttributeList::AT_* enum that is generated and it
   // should contain a shared value between the attributes.
   //
   // Target-specific attributes which use this feature should ensure that the
-  // spellings match exactly between the attributes, and if the arguments or
+  // spellings match exactly betweeen the attributes, and if the arguments or
   // subjects differ, should specify HasCustomParsing = 1 and implement their
   // own parsing and semantic handling requirements as-needed.
   string ParseKind;
@@ -583,13 +370,13 @@ class IgnoredAttr : Attr {
 def AbiTag : Attr {
   let Spellings = [GCC<"abi_tag">];
   let Args = [VariadicStringArgument<"Tags">];
-  let Subjects = SubjectList<[Struct, Var, Function, Namespace], ErrorDiag>;
-  let MeaningfulToClassTemplateDefinition = 1;
+  let Subjects = SubjectList<[Struct, Var, Function, Namespace], ErrorDiag,
+      "ExpectedStructClassVariableFunctionOrInlineNamespace">;
   let Documentation = [AbiTagsDocs];
 }
 
 def AddressSpace : TypeAttr {
-  let Spellings = [Clang<"address_space">];
+  let Spellings = [GNU<"address_space">];
   let Args = [IntArgument<"AddressSpace">];
   let Documentation = [Undocumented];
 }
@@ -597,20 +384,15 @@ def AddressSpace : TypeAttr {
 def Alias : Attr {
   let Spellings = [GCC<"alias">];
   let Args = [StringArgument<"Aliasee">];
-  let Subjects = SubjectList<[Function, GlobalVar], ErrorDiag>;
+  let Subjects = SubjectList<[Function, GlobalVar], ErrorDiag,
+                             "ExpectedFunctionOrGlobalVar">;
   let Documentation = [Undocumented];
-}
-
-def ArmMveAlias : InheritableAttr, TargetSpecificAttr<TargetARM> {
-  let Spellings = [Clang<"__clang_arm_mve_alias">];
-  let Args = [IdentifierArgument<"BuiltinName">];
-  let Subjects = SubjectList<[Function], ErrorDiag>;
-  let Documentation = [ArmMveAliasDocs];
 }
 
 def Aligned : InheritableAttr {
   let Spellings = [GCC<"aligned">, Declspec<"align">, Keyword<"alignas">,
                    Keyword<"_Alignas">];
+//  let Subjects = SubjectList<[NonBitField, NormalVar, Tag]>;
   let Args = [AlignedArgument<"Alignment", 1>];
   let Accessors = [Accessor<"isGNU", [GCC<"aligned">]>,
                    Accessor<"isC11", [Keyword<"_Alignas">]>,
@@ -628,15 +410,13 @@ def AlignValue : Attr {
     // the future (and a corresponding C++ attribute), but this can be done
     // later once we decide if we also want them to have slightly-different
     // semantics than Intel's align_value.
-    //
-    // Does not get a [[]] spelling because the attribute is not exposed as such
-    // by Intel.
     GNU<"align_value">
     // Intel's compiler on Windows also supports:
     // , Declspec<"align_value">
   ];
   let Args = [ExprArgument<"Alignment">];
-  let Subjects = SubjectList<[Var, TypedefName]>;
+  let Subjects = SubjectList<[Var, TypedefName], WarnDiag,
+                             "ExpectedVariableOrTypedef">;
   let Documentation = [AlignValueDocs];
 }
 
@@ -653,74 +433,44 @@ def AlwaysInline : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-def Artificial : InheritableAttr {
-  let Spellings = [GCC<"artificial">];
-  let Subjects = SubjectList<[InlineFunction], WarnDiag>;
-  let Documentation = [ArtificialDocs];
-}
-
 def XRayInstrument : InheritableAttr {
-  let Spellings = [Clang<"xray_always_instrument">,
-                   Clang<"xray_never_instrument">];
-  let Subjects = SubjectList<[Function, ObjCMethod]>;
+  let Spellings = [GNU<"xray_always_instrument">,
+                   CXX11<"clang", "xray_always_instrument">,
+                   GNU<"xray_never_instrument">,
+                   CXX11<"clang", "xray_never_instrument">];
+  let Subjects = SubjectList<[CXXMethod, ObjCMethod, Function], WarnDiag,
+                              "ExpectedFunctionOrMethod">;
   let Accessors = [Accessor<"alwaysXRayInstrument",
-                     [Clang<"xray_always_instrument">]>,
+                     [GNU<"xray_always_instrument">,
+                      CXX11<"clang", "xray_always_instrument">]>,
                    Accessor<"neverXRayInstrument",
-                     [Clang<"xray_never_instrument">]>];
+                     [GNU<"xray_never_instrument">,
+                      CXX11<"clang", "xray_never_instrument">]>];
   let Documentation = [XRayDocs];
-}
-
-def XRayLogArgs : InheritableAttr {
-  let Spellings = [Clang<"xray_log_args">];
-  let Subjects = SubjectList<[Function, ObjCMethod]>;
-  // This argument is a count not an index, so it has the same encoding (base
-  // 1 including C++ implicit this parameter) at the source and LLVM levels of
-  // representation, so ParamIdxArgument is inappropriate.  It is never used
-  // at the AST level of representation, so it never needs to be adjusted not
-  // to include any C++ implicit this parameter.  Thus, we just store it and
-  // use it as an unsigned that never needs adjustment.
-  let Args = [UnsignedArgument<"ArgumentCount">];
-  let Documentation = [XRayDocs];
-}
-
-def PatchableFunctionEntry
-    : InheritableAttr,
-      TargetSpecificAttr<TargetArch<["aarch64", "aarch64_be", "x86", "x86_64"]>> {
-  let Spellings = [GCC<"patchable_function_entry">];
-  let Subjects = SubjectList<[Function, ObjCMethod]>;
-  let Args = [UnsignedArgument<"Count">, DefaultIntArgument<"Offset", 0>];
-  let Documentation = [PatchableFunctionEntryDocs];
 }
 
 def TLSModel : InheritableAttr {
   let Spellings = [GCC<"tls_model">];
-  let Subjects = SubjectList<[TLSVar], ErrorDiag>;
+  let Subjects = SubjectList<[TLSVar], ErrorDiag, "ExpectedTLSVar">;
   let Args = [StringArgument<"Model">];
   let Documentation = [TLSModelDocs];
 }
 
 def AnalyzerNoReturn : InheritableAttr {
-  // TODO: should this attribute be exposed with a [[]] spelling under the clang
-  // vendor namespace, or should it use a vendor namespace specific to the
-  // analyzer?
   let Spellings = [GNU<"analyzer_noreturn">];
-  // TODO: Add subject list.
   let Documentation = [Undocumented];
 }
 
 def Annotate : InheritableParamAttr {
-  let Spellings = [Clang<"annotate">];
+  let Spellings = [GNU<"annotate">];
   let Args = [StringArgument<"Annotation">];
-  // Ensure that the annotate attribute can be used with
-  // '#pragma clang attribute' even though it has no subject list.
-  let PragmaAttributeSupport = 1;
   let Documentation = [Undocumented];
 }
 
 def ARMInterrupt : InheritableAttr, TargetSpecificAttr<TargetARM> {
   // NOTE: If you add any additional spellings, MSP430Interrupt's,
   // MipsInterrupt's and AnyX86Interrupt's spellings must match.
-  let Spellings = [GCC<"interrupt">];
+  let Spellings = [GNU<"interrupt">];
   let Args = [EnumArgument<"Interrupt", "InterruptType",
                            ["IRQ", "FIQ", "SWI", "ABORT", "UNDEF", ""],
                            ["IRQ", "FIQ", "SWI", "ABORT", "UNDEF", "Generic"],
@@ -730,49 +480,19 @@ def ARMInterrupt : InheritableAttr, TargetSpecificAttr<TargetARM> {
   let Documentation = [ARMInterruptDocs];
 }
 
-def AVRInterrupt : InheritableAttr, TargetSpecificAttr<TargetAVR> {
-  let Spellings = [GCC<"interrupt">];
-  let Subjects = SubjectList<[Function]>;
-  let ParseKind = "Interrupt";
-  let Documentation = [AVRInterruptDocs];
-}
-
-def AVRSignal : InheritableAttr, TargetSpecificAttr<TargetAVR> {
-  let Spellings = [GCC<"signal">];
-  let Subjects = SubjectList<[Function]>;
-  let Documentation = [AVRSignalDocs];
-}
-
 def AsmLabel : InheritableAttr {
   let Spellings = [Keyword<"asm">, Keyword<"__asm__">];
-  let Args = [
-    // Label specifies the mangled name for the decl.
-    StringArgument<"Label">,
-
-    // IsLiteralLabel specifies whether the label is literal (i.e. suppresses
-    // the global C symbol prefix) or not. If not, the mangle-suppression prefix
-    // ('\01') is omitted from the decl name at the LLVM IR level.
-    //
-    // Non-literal labels are used by some external AST sources like LLDB.
-    BoolArgument<"IsLiteralLabel", /*optional=*/0, /*fake=*/1>
-  ];
+  let Args = [StringArgument<"Label">];
   let SemaHandler = 0;
-  let Documentation = [AsmLabelDocs];
-  let AdditionalMembers =
-[{
-bool isEquivalent(AsmLabelAttr *Other) const {
-  return getLabel() == Other->getLabel() && getIsLiteralLabel() == Other->getIsLiteralLabel();
-}
-}];
+  let Documentation = [Undocumented];
 }
 
 def Availability : InheritableAttr {
-  let Spellings = [Clang<"availability">];
+  let Spellings = [GNU<"availability">];
   let Args = [IdentifierArgument<"platform">, VersionArgument<"introduced">,
               VersionArgument<"deprecated">, VersionArgument<"obsoleted">,
               BoolArgument<"unavailable">, StringArgument<"message">,
-              BoolArgument<"strict">, StringArgument<"replacement">,
-              IntArgument<"priority">];
+              BoolArgument<"strict">, StringArgument<"replacement">];
   let AdditionalMembers =
 [{static llvm::StringRef getPrettyPlatformName(llvm::StringRef Platform) {
     return llvm::StringSwitch<llvm::StringRef>(Platform)
@@ -785,57 +505,21 @@ def Availability : InheritableAttr {
              .Case("macos_app_extension", "macOS (App Extension)")
              .Case("tvos_app_extension", "tvOS (App Extension)")
              .Case("watchos_app_extension", "watchOS (App Extension)")
-             .Case("swift", "Swift")
              .Default(llvm::StringRef());
-}
-static llvm::StringRef getPlatformNameSourceSpelling(llvm::StringRef Platform) {
-    return llvm::StringSwitch<llvm::StringRef>(Platform)
-             .Case("ios", "iOS")
-             .Case("macos", "macOS")
-             .Case("tvos", "tvOS")
-             .Case("watchos", "watchOS")
-             .Case("ios_app_extension", "iOSApplicationExtension")
-             .Case("macos_app_extension", "macOSApplicationExtension")
-             .Case("tvos_app_extension", "tvOSApplicationExtension")
-             .Case("watchos_app_extension", "watchOSApplicationExtension")
-             .Default(Platform);
-}
-static llvm::StringRef canonicalizePlatformName(llvm::StringRef Platform) {
-    return llvm::StringSwitch<llvm::StringRef>(Platform)
-             .Case("iOS", "ios")
-             .Case("macOS", "macos")
-             .Case("tvOS", "tvos")
-             .Case("watchOS", "watchos")
-             .Case("iOSApplicationExtension", "ios_app_extension")
-             .Case("macOSApplicationExtension", "macos_app_extension")
-             .Case("tvOSApplicationExtension", "tvos_app_extension")
-             .Case("watchOSApplicationExtension", "watchos_app_extension")
-             .Default(Platform);
 } }];
   let HasCustomParsing = 1;
-  let InheritEvenIfAlreadyPresent = 1;
-  let Subjects = SubjectList<[Named]>;
+  let DuplicatesAllowedWhileMerging = 1;
+//  let Subjects = SubjectList<[Named]>;
   let Documentation = [AvailabilityDocs];
 }
 
-def ExternalSourceSymbol : InheritableAttr {
-  let Spellings = [Clang<"external_source_symbol">];
-  let Args = [StringArgument<"language", 1>,
-              StringArgument<"definedIn", 1>,
-              BoolArgument<"generatedDeclaration", 1>];
-  let HasCustomParsing = 1;
-  let Subjects = SubjectList<[Named]>;
-  let Documentation = [ExternalSourceSymbolDocs];
-}
-
 def Blocks : InheritableAttr {
-  let Spellings = [Clang<"blocks">];
+  let Spellings = [GNU<"blocks">];
   let Args = [EnumArgument<"Type", "BlockType", ["byref"], ["ByRef"]>];
   let Documentation = [Undocumented];
 }
 
 def Bounded : IgnoredAttr {
-  // Does not have a [[]] spelling because the attribute is ignored.
   let Spellings = [GNU<"bounded">];
 }
 
@@ -846,7 +530,7 @@ def CarriesDependency : InheritableParamAttr {
   let Documentation = [CarriesDependencyDocs];
 }
 
-def CDecl : DeclOrTypeAttr {
+def CDecl : InheritableAttr {
   let Spellings = [GCC<"cdecl">, Keyword<"__cdecl">, Keyword<"_cdecl">];
 //  let Subjects = [Function, ObjCMethod];
   let Documentation = [Undocumented];
@@ -857,7 +541,7 @@ def CDecl : DeclOrTypeAttr {
 // cf_returns_retained attributes.  It is generally applied by
 // '#pragma clang arc_cf_code_audited' rather than explicitly.
 def CFAuditedTransfer : InheritableAttr {
-  let Spellings = [Clang<"cf_audited_transfer">];
+  let Spellings = [GNU<"cf_audited_transfer">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [Undocumented];
 }
@@ -866,70 +550,33 @@ def CFAuditedTransfer : InheritableAttr {
 // It indicates that the function has unknown or unautomatable
 // transfer semantics.
 def CFUnknownTransfer : InheritableAttr {
-  let Spellings = [Clang<"cf_unknown_transfer">];
+  let Spellings = [GNU<"cf_unknown_transfer">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [Undocumented];
 }
 
 def CFReturnsRetained : InheritableAttr {
-  let Spellings = [Clang<"cf_returns_retained">];
+  let Spellings = [GNU<"cf_returns_retained">];
 //  let Subjects = SubjectList<[ObjCMethod, ObjCProperty, Function]>;
-  let Documentation = [RetainBehaviorDocs];
+  let Documentation = [Undocumented];
 }
 
 def CFReturnsNotRetained : InheritableAttr {
-  let Spellings = [Clang<"cf_returns_not_retained">];
+  let Spellings = [GNU<"cf_returns_not_retained">];
 //  let Subjects = SubjectList<[ObjCMethod, ObjCProperty, Function]>;
-  let Documentation = [RetainBehaviorDocs];
+  let Documentation = [Undocumented];
 }
 
 def CFConsumed : InheritableParamAttr {
-  let Spellings = [Clang<"cf_consumed">];
+  let Spellings = [GNU<"cf_consumed">];
   let Subjects = SubjectList<[ParmVar]>;
-  let Documentation = [RetainBehaviorDocs];
-}
-
-// OSObject-based attributes.
-def OSConsumed : InheritableParamAttr {
-  let Spellings = [Clang<"os_consumed">];
-  let Subjects = SubjectList<[ParmVar]>;
-  let Documentation = [RetainBehaviorDocs];
-}
-
-def OSReturnsRetained : InheritableAttr {
-  let Spellings = [Clang<"os_returns_retained">];
-  let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty, ParmVar]>;
-  let Documentation = [RetainBehaviorDocs];
-}
-
-def OSReturnsNotRetained : InheritableAttr {
-  let Spellings = [Clang<"os_returns_not_retained">];
-  let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty, ParmVar]>;
-  let Documentation = [RetainBehaviorDocs];
-}
-
-def OSReturnsRetainedOnZero : InheritableAttr {
-  let Spellings = [Clang<"os_returns_retained_on_zero">];
-  let Subjects = SubjectList<[ParmVar]>;
-  let Documentation = [RetainBehaviorDocs];
-}
-
-def OSReturnsRetainedOnNonZero : InheritableAttr {
-  let Spellings = [Clang<"os_returns_retained_on_non_zero">];
-  let Subjects = SubjectList<[ParmVar]>;
-  let Documentation = [RetainBehaviorDocs];
-}
-
-def OSConsumesThis : InheritableAttr {
-  let Spellings = [Clang<"os_consumes_this">];
-  let Subjects = SubjectList<[NonStaticCXXMethod]>;
-  let Documentation = [RetainBehaviorDocs];
+  let Documentation = [Undocumented];
 }
 
 def Cleanup : InheritableAttr {
   let Spellings = [GCC<"cleanup">];
   let Args = [FunctionArgument<"FunctionDecl">];
-  let Subjects = SubjectList<[LocalVar]>;
+  let Subjects = SubjectList<[Var]>;
   let Documentation = [Undocumented];
 }
 
@@ -950,17 +597,6 @@ def Const : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-def ConstInit : InheritableAttr {
-  // This attribute does not have a C [[]] spelling because it requires the
-  // CPlusPlus language option.
-  let Spellings = [Keyword<"constinit">,
-                   Clang<"require_constant_initialization", 0>];
-  let Subjects = SubjectList<[GlobalVar], ErrorDiag>;
-  let Accessors = [Accessor<"isConstinit", [Keyword<"constinit">]>];
-  let Documentation = [ConstInitDocs];
-  let LangOpts = [CPlusPlus];
-}
-
 def Constructor : InheritableAttr {
   let Spellings = [GCC<"constructor">];
   let Args = [DefaultIntArgument<"Priority", 65535>];
@@ -968,27 +604,8 @@ def Constructor : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-def CPUSpecific : InheritableAttr {
-  let Spellings = [Clang<"cpu_specific">, Declspec<"cpu_specific">];
-  let Args = [VariadicIdentifierArgument<"Cpus">];
-  let Subjects = SubjectList<[Function]>;
-  let Documentation = [CPUSpecificCPUDispatchDocs];
-  let AdditionalMembers = [{
-    IdentifierInfo *getCPUName(unsigned Index) const {
-      return *(cpus_begin() + Index);
-    }
-  }];
-}
+// CUDA attributes are spelled __attribute__((attr)) or __declspec(__attr__).
 
-def CPUDispatch : InheritableAttr {
-  let Spellings = [Clang<"cpu_dispatch">, Declspec<"cpu_dispatch">];
-  let Args = [VariadicIdentifierArgument<"Cpus">];
-  let Subjects = SubjectList<[Function]>;
-  let Documentation = [CPUSpecificCPUDispatchDocs];
-}
-
-// CUDA attributes are spelled __attribute__((attr)) or __declspec(__attr__),
-// and they do not receive a [[]] spelling.
 def CUDAConstant : InheritableAttr {
   let Spellings = [GNU<"constant">, Declspec<"__constant__">];
   let Subjects = SubjectList<[Var]>;
@@ -1006,13 +623,6 @@ def CUDADevice : InheritableAttr {
   let Subjects = SubjectList<[Function, Var]>;
   let LangOpts = [CUDA];
   let Documentation = [Undocumented];
-}
-
-def HIPPinnedShadow : InheritableAttr {
-  let Spellings = [GNU<"hip_pinned_shadow">, Declspec<"__hip_pinned_shadow__">];
-  let Subjects = SubjectList<[Var]>;
-  let LangOpts = [HIP];
-  let Documentation = [HIPPinnedShadowDocs];
 }
 
 def CUDADeviceBuiltin : IgnoredAttr {
@@ -1057,7 +667,8 @@ def CUDALaunchBounds : InheritableAttr {
   let Spellings = [GNU<"launch_bounds">, Declspec<"__launch_bounds__">];
   let Args = [ExprArgument<"MaxThreads">, ExprArgument<"MinBlocks", 1>];
   let LangOpts = [CUDA];
-  let Subjects = SubjectList<[ObjCMethod, FunctionLike]>;
+  let Subjects = SubjectList<[ObjCMethod, FunctionLike], WarnDiag,
+                             "ExpectedFunctionOrMethod">;
   // An AST node is created for this attribute, but is not used by other parts
   // of the compiler. However, this node needs to exist in the AST because
   // non-LLVM backends may be relying on the attribute's presence.
@@ -1071,13 +682,6 @@ def CUDAShared : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-def SYCLKernel : InheritableAttr {
-  let Spellings = [Clang<"sycl_kernel">];
-  let Subjects = SubjectList<[FunctionTmpl]>;
-  let LangOpts = [SYCL];
-  let Documentation = [SYCLKernelDocs];
-}
-
 def C11NoReturn : InheritableAttr {
   let Spellings = [Keyword<"_Noreturn">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
@@ -1086,13 +690,11 @@ def C11NoReturn : InheritableAttr {
 }
 
 def CXX11NoReturn : InheritableAttr {
-  let Spellings = [CXX11<"", "noreturn", 200809>];
+  let Spellings = [CXX11<"","noreturn", 200809>];
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [CXX11NoReturnDocs];
 }
 
-// Similar to CUDA, OpenCL attributes do not receive a [[]] spelling because
-// the specification does not expose them with one currently.
 def OpenCLKernel : InheritableAttr {
   let Spellings = [Keyword<"__kernel">, Keyword<"kernel">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
@@ -1105,20 +707,14 @@ def OpenCLUnrollHint : InheritableAttr {
   let Documentation = [OpenCLUnrollHintDocs];
 }
 
-def OpenCLIntelReqdSubGroupSize: InheritableAttr {
-  let Spellings = [GNU<"intel_reqd_sub_group_size">];
-  let Args = [UnsignedArgument<"SubGroupSize">];
-  let Subjects = SubjectList<[Function], ErrorDiag>;
-  let Documentation = [OpenCLIntelReqdSubGroupSizeDocs];
-}
-
 // This attribute is both a type attribute, and a declaration attribute (for
 // parameter variables).
 def OpenCLAccess : Attr {
   let Spellings = [Keyword<"__read_only">, Keyword<"read_only">,
                    Keyword<"__write_only">, Keyword<"write_only">,
                    Keyword<"__read_write">, Keyword<"read_write">];
-  let Subjects = SubjectList<[ParmVar, TypedefName], ErrorDiag>;
+  let Subjects = SubjectList<[ParmVar, TypedefName], ErrorDiag,
+                             "ExpectedParameterOrTypedef">;
   let Accessors = [Accessor<"isReadOnly", [Keyword<"__read_only">,
                                            Keyword<"read_only">]>,
                    Accessor<"isReadWrite", [Keyword<"__read_write">,
@@ -1129,27 +725,27 @@ def OpenCLAccess : Attr {
 }
 
 def OpenCLPrivateAddressSpace : TypeAttr {
-  let Spellings = [Keyword<"__private">, Keyword<"private">, Clang<"opencl_private">];
+  let Spellings = [Keyword<"__private">, Keyword<"private">];
   let Documentation = [OpenCLAddressSpacePrivateDocs];
 }
 
 def OpenCLGlobalAddressSpace : TypeAttr {
-  let Spellings = [Keyword<"__global">, Keyword<"global">, Clang<"opencl_global">];
+  let Spellings = [Keyword<"__global">, Keyword<"global">];
   let Documentation = [OpenCLAddressSpaceGlobalDocs];
 }
 
 def OpenCLLocalAddressSpace : TypeAttr {
-  let Spellings = [Keyword<"__local">, Keyword<"local">, Clang<"opencl_local">];
+  let Spellings = [Keyword<"__local">, Keyword<"local">];
   let Documentation = [OpenCLAddressSpaceLocalDocs];
 }
 
 def OpenCLConstantAddressSpace : TypeAttr {
-  let Spellings = [Keyword<"__constant">, Keyword<"constant">, Clang<"opencl_constant">];
+  let Spellings = [Keyword<"__constant">, Keyword<"constant">];
   let Documentation = [OpenCLAddressSpaceConstantDocs];
 }
 
 def OpenCLGenericAddressSpace : TypeAttr {
-  let Spellings = [Keyword<"__generic">, Keyword<"generic">, Clang<"opencl_generic">];
+  let Spellings = [Keyword<"__generic">, Keyword<"generic">];
   let Documentation = [OpenCLAddressSpaceGenericDocs];
 }
 
@@ -1170,12 +766,11 @@ def RenderScriptKernel : Attr {
 
 def Deprecated : InheritableAttr {
   let Spellings = [GCC<"deprecated">, Declspec<"deprecated">,
-                   CXX11<"","deprecated", 201309>, C2x<"", "deprecated">];
+                   CXX11<"","deprecated", 201309>];
   let Args = [StringArgument<"Message", 1>,
               // An optional string argument that enables us to provide a
               // Fix-It.
               StringArgument<"Replacement", 1>];
-  let MeaningfulToClassTemplateDefinition = 1;
   let Documentation = [DeprecatedDocs];
 }
 
@@ -1195,16 +790,12 @@ def EmptyBases : InheritableAttr, TargetSpecificAttr<TargetMicrosoftCXXABI> {
 def AllocSize : InheritableAttr {
   let Spellings = [GCC<"alloc_size">];
   let Subjects = SubjectList<[Function]>;
-  let Args = [ParamIdxArgument<"ElemSizeParam">,
-              ParamIdxArgument<"NumElemsParam", /*opt*/ 1>];
+  let Args = [IntArgument<"ElemSizeParam">, IntArgument<"NumElemsParam", 1>];
   let TemplateDependent = 1;
   let Documentation = [AllocSizeDocs];
 }
 
 def EnableIf : InheritableAttr {
-  // Does not have a [[]] spelling because this attribute requires the ability
-  // to parse function arguments but the attribute is not written in the type
-  // position.
   let Spellings = [GNU<"enable_if">];
   let Subjects = SubjectList<[Function]>;
   let Args = [ExprArgument<"Cond">, StringArgument<"Message">];
@@ -1213,33 +804,28 @@ def EnableIf : InheritableAttr {
 }
 
 def ExtVectorType : Attr {
-  // This is an OpenCL-related attribute and does not receive a [[]] spelling.
   let Spellings = [GNU<"ext_vector_type">];
-  // FIXME: This subject list is wrong; this is a type attribute.
   let Subjects = SubjectList<[TypedefName], ErrorDiag>;
   let Args = [ExprArgument<"NumElements">];
   let ASTNode = 0;
   let Documentation = [Undocumented];
-  // This is a type attribute with an incorrect subject list, so should not be
-  // permitted by #pragma clang attribute.
-  let PragmaAttributeSupport = 0;
 }
 
 def FallThrough : StmtAttr {
-  let Spellings = [CXX11<"", "fallthrough", 201603>, C2x<"", "fallthrough">,
-                   CXX11<"clang", "fallthrough">, GCC<"fallthrough">];
+  let Spellings = [CXX11<"", "fallthrough", 201603>,
+                   CXX11<"clang", "fallthrough">];
 //  let Subjects = [NullStmt];
   let Documentation = [FallthroughDocs];
 }
 
-def FastCall : DeclOrTypeAttr {
+def FastCall : InheritableAttr {
   let Spellings = [GCC<"fastcall">, Keyword<"__fastcall">,
                    Keyword<"_fastcall">];
 //  let Subjects = [Function, ObjCMethod];
   let Documentation = [FastCallDocs];
 }
 
-def RegCall : DeclOrTypeAttr {
+def RegCall : InheritableAttr {
   let Spellings = [GCC<"regcall">, Keyword<"__regcall">];
   let Documentation = [RegCallDocs];
 }
@@ -1252,23 +838,16 @@ def Final : InheritableAttr {
 }
 
 def MinSize : InheritableAttr {
-  let Spellings = [Clang<"minsize">];
+  let Spellings = [GNU<"minsize">];
   let Subjects = SubjectList<[Function, ObjCMethod], ErrorDiag>;
   let Documentation = [Undocumented];
 }
 
 def FlagEnum : InheritableAttr {
-  let Spellings = [Clang<"flag_enum">];
+  let Spellings = [GNU<"flag_enum">];
   let Subjects = SubjectList<[Enum]>;
   let Documentation = [FlagEnumDocs];
-}
-
-def EnumExtensibility : InheritableAttr {
-  let Spellings = [Clang<"enum_extensibility">];
-  let Subjects = SubjectList<[Enum]>;
-  let Args = [EnumArgument<"Extensibility", "Kind",
-              ["closed", "open"], ["Closed", "Open"]>];
-  let Documentation = [EnumExtensibilityDocs];
+  let LangOpts = [COnly];
 }
 
 def Flatten : InheritableAttr {
@@ -1281,28 +860,23 @@ def Format : InheritableAttr {
   let Spellings = [GCC<"format">];
   let Args = [IdentifierArgument<"Type">, IntArgument<"FormatIdx">,
               IntArgument<"FirstArg">];
-  let Subjects = SubjectList<[ObjCMethod, Block, HasFunctionProto]>;
+  let Subjects = SubjectList<[ObjCMethod, Block, HasFunctionProto], WarnDiag,
+                             "ExpectedFunctionWithProtoType">;
   let Documentation = [FormatDocs];
 }
 
 def FormatArg : InheritableAttr {
   let Spellings = [GCC<"format_arg">];
-  let Args = [ParamIdxArgument<"FormatIdx">];
-  let Subjects = SubjectList<[ObjCMethod, HasFunctionProto]>;
+  let Args = [IntArgument<"FormatIdx">];
+  let Subjects = SubjectList<[ObjCMethod, HasFunctionProto], WarnDiag,
+                             "ExpectedFunctionWithProtoType">;
   let Documentation = [Undocumented];
-}
-
-def Callback : InheritableAttr {
-  let Spellings = [Clang<"callback">];
-  let Args = [VariadicParamOrParamIdxArgument<"Encoding">];
-  let Subjects = SubjectList<[Function]>;
-  let Documentation = [CallbackDocs];
 }
 
 def GNUInline : InheritableAttr {
   let Spellings = [GCC<"gnu_inline">];
   let Subjects = SubjectList<[Function]>;
-  let Documentation = [GnuInlineDocs];
+  let Documentation = [Undocumented];
 }
 
 def Hot : InheritableAttr {
@@ -1314,8 +888,9 @@ def Hot : InheritableAttr {
 }
 
 def IBAction : InheritableAttr {
-  let Spellings = [Clang<"ibaction">];
-  let Subjects = SubjectList<[ObjCInstanceMethod]>;
+  let Spellings = [GNU<"ibaction">];
+  let Subjects = SubjectList<[ObjCInstanceMethod], WarnDiag,
+                             "ExpectedObjCInstanceMethod">;
   // An AST node is created for this attribute, but is not used by other parts
   // of the compiler. However, this node needs to exist in the AST because
   // external tools rely on it.
@@ -1323,19 +898,19 @@ def IBAction : InheritableAttr {
 }
 
 def IBOutlet : InheritableAttr {
-  let Spellings = [Clang<"iboutlet">];
+  let Spellings = [GNU<"iboutlet">];
 //  let Subjects = [ObjCIvar, ObjCProperty];
   let Documentation = [Undocumented];
 }
 
 def IBOutletCollection : InheritableAttr {
-  let Spellings = [Clang<"iboutletcollection">];
+  let Spellings = [GNU<"iboutletcollection">];
   let Args = [TypeArgument<"Interface", 1>];
 //  let Subjects = [ObjCIvar, ObjCProperty];
   let Documentation = [Undocumented];
 }
 
-def IFunc : Attr, TargetSpecificAttr<TargetELF> {
+def IFunc : Attr {
   let Spellings = [GCC<"ifunc">];
   let Args = [StringArgument<"Resolver">];
   let Subjects = SubjectList<[Function]>;
@@ -1355,22 +930,6 @@ def LayoutVersion : InheritableAttr, TargetSpecificAttr<TargetMicrosoftCXXABI> {
   let Documentation = [LayoutVersionDocs];
 }
 
-def LifetimeBound : DeclOrTypeAttr {
-  let Spellings = [Clang<"lifetimebound", 0>];
-  let Subjects = SubjectList<[ParmVar, ImplicitObjectParameter], ErrorDiag>;
-  let Documentation = [LifetimeBoundDocs];
-  let LangOpts = [CPlusPlus];
-}
-
-def TrivialABI : InheritableAttr {
-  // This attribute does not have a C [[]] spelling because it requires the
-  // CPlusPlus language option.
-  let Spellings = [Clang<"trivial_abi", 0>];
-  let Subjects = SubjectList<[CXXRecord]>;
-  let Documentation = [TrivialABIDocs];
-  let LangOpts = [CPlusPlus];
-}
-
 def MaxFieldAlignment : InheritableAttr {
   // This attribute has no spellings as it is only ever created implicitly.
   let Spellings = [];
@@ -1385,13 +944,7 @@ def MayAlias : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-def MIGServerRoutine : InheritableAttr {
-  let Spellings = [Clang<"mig_server_routine">];
-  let Subjects = SubjectList<[Function, ObjCMethod, Block]>;
-  let Documentation = [MIGConventionDocs];
-}
-
-def MSABI : DeclOrTypeAttr {
+def MSABI : InheritableAttr {
   let Spellings = [GCC<"ms_abi">];
 //  let Subjects = [Function, ObjCMethod];
   let Documentation = [MSABIDocs];
@@ -1400,23 +953,23 @@ def MSABI : DeclOrTypeAttr {
 def MSP430Interrupt : InheritableAttr, TargetSpecificAttr<TargetMSP430> {
   // NOTE: If you add any additional spellings, ARMInterrupt's, MipsInterrupt's
   // and AnyX86Interrupt's spellings must match.
-  let Spellings = [GCC<"interrupt">];
+  let Spellings = [GNU<"interrupt">];
   let Args = [UnsignedArgument<"Number">];
   let ParseKind = "Interrupt";
   let HasCustomParsing = 1;
   let Documentation = [Undocumented];
 }
 
-def Mips16 : InheritableAttr, TargetSpecificAttr<TargetMips32> {
+def Mips16 : InheritableAttr, TargetSpecificAttr<TargetMips> {
   let Spellings = [GCC<"mips16">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [Undocumented];
 }
 
-def MipsInterrupt : InheritableAttr, TargetSpecificAttr<TargetMips32> {
+def MipsInterrupt : InheritableAttr, TargetSpecificAttr<TargetMips> {
   // NOTE: If you add any additional spellings, ARMInterrupt's,
   // MSP430Interrupt's and AnyX86Interrupt's spellings must match.
-  let Spellings = [GCC<"interrupt">];
+  let Spellings = [GNU<"interrupt">];
   let Subjects = SubjectList<[Function]>;
   let Args = [EnumArgument<"Interrupt", "InterruptType",
                            ["vector=sw0", "vector=sw1", "vector=hw0",
@@ -1429,32 +982,12 @@ def MipsInterrupt : InheritableAttr, TargetSpecificAttr<TargetMips32> {
   let Documentation = [MipsInterruptDocs];
 }
 
-def MicroMips : InheritableAttr, TargetSpecificAttr<TargetMips32> {
-  let Spellings = [GCC<"micromips">];
-  let Subjects = SubjectList<[Function], ErrorDiag>;
-  let Documentation = [MicroMipsDocs];
-}
-
-def MipsLongCall : InheritableAttr, TargetSpecificAttr<TargetAnyMips> {
-  let Spellings = [GCC<"long_call">, GCC<"far">];
-  let Subjects = SubjectList<[Function]>;
-  let Documentation = [MipsLongCallStyleDocs];
-}
-
-def MipsShortCall : InheritableAttr, TargetSpecificAttr<TargetAnyMips> {
-  let Spellings = [GCC<"short_call">, GCC<"near">];
-  let Subjects = SubjectList<[Function]>;
-  let Documentation = [MipsShortCallStyleDocs];
-}
-
 def Mode : Attr {
   let Spellings = [GCC<"mode">];
-  let Subjects = SubjectList<[Var, Enum, TypedefName, Field], ErrorDiag>;
+  let Subjects = SubjectList<[Var, Enum, TypedefName, Field], ErrorDiag,
+                             "ExpectedVariableEnumFieldOrTypedef">;
   let Args = [IdentifierArgument<"Mode">];
   let Documentation = [Undocumented];
-  // This is notionally a type attribute, which #pragma clang attribute
-  // generally does not support.
-  let PragmaAttributeSupport = 0;
 }
 
 def Naked : InheritableAttr {
@@ -1464,25 +997,15 @@ def Naked : InheritableAttr {
 }
 
 def NeonPolyVectorType : TypeAttr {
-  let Spellings = [Clang<"neon_polyvector_type">];
+  let Spellings = [GNU<"neon_polyvector_type">];
   let Args = [IntArgument<"NumElements">];
   let Documentation = [Undocumented];
-  // Represented as VectorType instead.
-  let ASTNode = 0;
 }
 
 def NeonVectorType : TypeAttr {
-  let Spellings = [Clang<"neon_vector_type">];
+  let Spellings = [GNU<"neon_vector_type">];
   let Args = [IntArgument<"NumElements">];
   let Documentation = [Undocumented];
-  // Represented as VectorType instead.
-  let ASTNode = 0;
-}
-
-def NoUniqueAddress : InheritableAttr, TargetSpecificAttr<TargetItaniumCXXABI> {
-  let Spellings = [CXX11<"", "no_unique_address", 201803>];
-  let Subjects = SubjectList<[NonBitField], ErrorDiag>;
-  let Documentation = [NoUniqueAddressDocs];
 }
 
 def ReturnsTwice : InheritableAttr {
@@ -1492,7 +1015,8 @@ def ReturnsTwice : InheritableAttr {
 }
 
 def DisableTailCalls : InheritableAttr {
-  let Spellings = [Clang<"disable_tail_calls">];
+  let Spellings = [GNU<"disable_tail_calls">,
+                   CXX11<"clang", "disable_tail_calls">];
   let Subjects = SubjectList<[Function, ObjCMethod]>;
   let Documentation = [DisableTailCallsDocs];
 }
@@ -1511,18 +1035,19 @@ def NoCommon : InheritableAttr {
 
 def NoDebug : InheritableAttr {
   let Spellings = [GCC<"nodebug">];
-  let Subjects = SubjectList<[TypedefName, FunctionLike, ObjCMethod, NonParmVar]>;
+  let Subjects = SubjectList<[FunctionLike, ObjCMethod, NonParmVar], WarnDiag,
+                              "ExpectedVariableOrFunction">;
   let Documentation = [NoDebugDocs];
 }
 
 def NoDuplicate : InheritableAttr {
-  let Spellings = [Clang<"noduplicate">];
+  let Spellings = [GNU<"noduplicate">, CXX11<"clang", "noduplicate">];
   let Subjects = SubjectList<[Function]>;
   let Documentation = [NoDuplicateDocs];
 }
 
 def Convergent : InheritableAttr {
-  let Spellings = [Clang<"convergent">];
+  let Spellings = [GNU<"convergent">, CXX11<"clang", "convergent">];
   let Subjects = SubjectList<[Function]>;
   let Documentation = [ConvergentDocs];
 }
@@ -1533,27 +1058,10 @@ def NoInline : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-def NoMips16 : InheritableAttr, TargetSpecificAttr<TargetMips32> {
+def NoMips16 : InheritableAttr, TargetSpecificAttr<TargetMips> {
   let Spellings = [GCC<"nomips16">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [Undocumented];
-}
-
-def NoMicroMips : InheritableAttr, TargetSpecificAttr<TargetMips32> {
-  let Spellings = [GCC<"nomicromips">];
-  let Subjects = SubjectList<[Function], ErrorDiag>;
-  let Documentation = [MicroMipsDocs];
-}
-
-def RISCVInterrupt : InheritableAttr, TargetSpecificAttr<TargetRISCV> {
-  let Spellings = [GCC<"interrupt">];
-  let Subjects = SubjectList<[Function]>;
-  let Args = [EnumArgument<"Interrupt", "InterruptType",
-                           ["user", "supervisor", "machine"],
-                           ["user", "supervisor", "machine"],
-                           1>];
-  let ParseKind = "Interrupt";
-  let Documentation = [RISCVInterruptDocs];
 }
 
 // This is not a TargetSpecificAttr so that is silently accepted and
@@ -1574,63 +1082,31 @@ def RISCVInterrupt : InheritableAttr, TargetSpecificAttr<TargetRISCV> {
 // this should be rejected on non-kernels.
 
 def AMDGPUFlatWorkGroupSize : InheritableAttr {
-  let Spellings = [Clang<"amdgpu_flat_work_group_size", 0>];
-  let Args = [ExprArgument<"Min">, ExprArgument<"Max">];
+  let Spellings = [GNU<"amdgpu_flat_work_group_size">];
+  let Args = [UnsignedArgument<"Min">, UnsignedArgument<"Max">];
   let Documentation = [AMDGPUFlatWorkGroupSizeDocs];
-  let Subjects = SubjectList<[Function], ErrorDiag, "kernel functions">;
+  let Subjects = SubjectList<[Function], ErrorDiag, "ExpectedKernelFunction">;
 }
 
 def AMDGPUWavesPerEU : InheritableAttr {
-  let Spellings = [Clang<"amdgpu_waves_per_eu", 0>];
-  let Args = [ExprArgument<"Min">, ExprArgument<"Max", 1>];
+  let Spellings = [GNU<"amdgpu_waves_per_eu">];
+  let Args = [UnsignedArgument<"Min">, UnsignedArgument<"Max", 1>];
   let Documentation = [AMDGPUWavesPerEUDocs];
-  let Subjects = SubjectList<[Function], ErrorDiag, "kernel functions">;
+  let Subjects = SubjectList<[Function], ErrorDiag, "ExpectedKernelFunction">;
 }
 
 def AMDGPUNumSGPR : InheritableAttr {
-  let Spellings = [Clang<"amdgpu_num_sgpr", 0>];
+  let Spellings = [GNU<"amdgpu_num_sgpr">];
   let Args = [UnsignedArgument<"NumSGPR">];
   let Documentation = [AMDGPUNumSGPRNumVGPRDocs];
-  let Subjects = SubjectList<[Function], ErrorDiag, "kernel functions">;
+  let Subjects = SubjectList<[Function], ErrorDiag, "ExpectedKernelFunction">;
 }
 
 def AMDGPUNumVGPR : InheritableAttr {
-  let Spellings = [Clang<"amdgpu_num_vgpr", 0>];
+  let Spellings = [GNU<"amdgpu_num_vgpr">];
   let Args = [UnsignedArgument<"NumVGPR">];
   let Documentation = [AMDGPUNumSGPRNumVGPRDocs];
-  let Subjects = SubjectList<[Function], ErrorDiag, "kernel functions">;
-}
-
-def BPFPreserveAccessIndex : InheritableAttr,
-                             TargetSpecificAttr<TargetBPF>  {
-  let Spellings = [Clang<"preserve_access_index">];
-  let Subjects = SubjectList<[Record], ErrorDiag>;
-  let Documentation = [BPFPreserveAccessIndexDocs];
-  let LangOpts = [COnly];
-}
-
-def WebAssemblyExportName : InheritableAttr,
-                            TargetSpecificAttr<TargetWebAssembly> {
-  let Spellings = [Clang<"export_name">];
-  let Args = [StringArgument<"ExportName">];
-  let Documentation = [WebAssemblyExportNameDocs];
-  let Subjects = SubjectList<[Function], ErrorDiag>;
-}
-
-def WebAssemblyImportModule : InheritableAttr,
-                              TargetSpecificAttr<TargetWebAssembly> {
-  let Spellings = [Clang<"import_module">];
-  let Args = [StringArgument<"ImportModule">];
-  let Documentation = [WebAssemblyImportModuleDocs];
-  let Subjects = SubjectList<[Function], ErrorDiag>;
-}
-
-def WebAssemblyImportName : InheritableAttr,
-                            TargetSpecificAttr<TargetWebAssembly> {
-  let Spellings = [Clang<"import_name">];
-  let Args = [StringArgument<"ImportName">];
-  let Documentation = [WebAssemblyImportNameDocs];
-  let Subjects = SubjectList<[Function], ErrorDiag>;
+  let Subjects = SubjectList<[Function], ErrorDiag, "ExpectedKernelFunction">;
 }
 
 def NoSplitStack : InheritableAttr {
@@ -1639,37 +1115,36 @@ def NoSplitStack : InheritableAttr {
   let Documentation = [NoSplitStackDocs];
 }
 
-def NonNull : InheritableParamAttr {
+def NonNull : InheritableAttr {
   let Spellings = [GCC<"nonnull">];
   let Subjects = SubjectList<[ObjCMethod, HasFunctionProto, ParmVar], WarnDiag,
-                             "functions, methods, and parameters">;
-  let Args = [VariadicParamIdxArgument<"Args">];
-  let AdditionalMembers = [{
-    bool isNonNull(unsigned IdxAST) const {
-      if (!args_size())
+                             "ExpectedFunctionMethodOrParameter">;
+  let Args = [VariadicUnsignedArgument<"Args">];
+  let AdditionalMembers =
+[{bool isNonNull(unsigned idx) const {
+    if (!args_size())
+      return true;
+    for (const auto &V : args())
+      if (V == idx)
         return true;
-      return args_end() != std::find_if(
-          args_begin(), args_end(),
-          [=](const ParamIdx &Idx) { return Idx.getASTIndex() == IdxAST; });
-    }
-  }];
+    return false;
+  } }];
   // FIXME: We should merge duplicates into a single nonnull attribute.
-  let InheritEvenIfAlreadyPresent = 1;
+  let DuplicatesAllowedWhileMerging = 1;
   let Documentation = [NonNullDocs];
 }
 
 def ReturnsNonNull : InheritableAttr {
   let Spellings = [GCC<"returns_nonnull">];
-  let Subjects = SubjectList<[ObjCMethod, Function]>;
+  let Subjects = SubjectList<[ObjCMethod, Function], WarnDiag,
+                             "ExpectedFunctionOrMethod">;
   let Documentation = [ReturnsNonNullDocs];
 }
 
 // pass_object_size(N) indicates that the parameter should have
 // __builtin_object_size with Type=N evaluated on the parameter at the callsite.
 def PassObjectSize : InheritableParamAttr {
-  let Spellings = [Clang<"pass_object_size">,
-                   Clang<"pass_dynamic_object_size">];
-  let Accessors = [Accessor<"isDynamic", [Clang<"pass_dynamic_object_size">]>];
+  let Spellings = [GNU<"pass_object_size">];
   let Args = [IntArgument<"Type">];
   let Subjects = SubjectList<[ParmVar]>;
   let Documentation = [PassObjectSizeDocs];
@@ -1691,23 +1166,9 @@ def TypeNullUnspecified : TypeAttr {
   let Documentation = [TypeNullUnspecifiedDocs];
 }
 
-// This is a marker used to indicate that an __unsafe_unretained qualifier was
-// ignored because ARC is not enabled. The usual representation for this
-// qualifier is as an ObjCOwnership attribute with Kind == "none".
-def ObjCInertUnsafeUnretained : TypeAttr {
-  let Spellings = [Keyword<"__unsafe_unretained">];
-  let Documentation = [Undocumented];
-}
-
 def ObjCKindOf : TypeAttr {
   let Spellings = [Keyword<"__kindof">];
   let Documentation = [Undocumented];
-}
-
-def NoEscape : Attr {
-  let Spellings = [Clang<"noescape">];
-  let Subjects = SubjectList<[ParmVar]>;
-  let Documentation = [NoEscapeDocs];
 }
 
 def AssumeAligned : InheritableAttr {
@@ -1715,13 +1176,6 @@ def AssumeAligned : InheritableAttr {
   let Subjects = SubjectList<[ObjCMethod, Function]>;
   let Args = [ExprArgument<"Alignment">, ExprArgument<"Offset", 1>];
   let Documentation = [AssumeAlignedDocs];
-}
-
-def AllocAlign : InheritableAttr {
-  let Spellings = [GCC<"alloc_align">];
-  let Subjects = SubjectList<[HasFunctionProto]>;
-  let Args = [ParamIdxArgument<"ParamIndex">];
-  let Documentation = [AllocAlignDocs];
 }
 
 def NoReturn : InheritableAttr {
@@ -1737,93 +1191,86 @@ def NoInstrumentFunction : InheritableAttr {
 }
 
 def NotTailCalled : InheritableAttr {
-  let Spellings = [Clang<"not_tail_called">];
+  let Spellings = [GNU<"not_tail_called">, CXX11<"clang", "not_tail_called">];
   let Subjects = SubjectList<[Function]>;
   let Documentation = [NotTailCalledDocs];
 }
 
-def NoStackProtector : InheritableAttr {
-  let Spellings = [Clang<"no_stack_protector">];
-  let Subjects = SubjectList<[Function]>;
-  let Documentation = [NoStackProtectorDocs];
-}
-
 def NoThrow : InheritableAttr {
   let Spellings = [GCC<"nothrow">, Declspec<"nothrow">];
-  let Subjects = SubjectList<[FunctionLike]>;
-  let Documentation = [NoThrowDocs];
+  let Documentation = [Undocumented];
 }
 
 def NvWeak : IgnoredAttr {
   // No Declspec spelling of this attribute; the CUDA headers use
-  // __attribute__((nv_weak)) unconditionally. Does not receive an [[]]
-  // spelling because it is a CUDA attribute.
+  // __attribute__((nv_weak)) unconditionally.
   let Spellings = [GNU<"nv_weak">];
   let LangOpts = [CUDA];
 }
 
 def ObjCBridge : InheritableAttr {
-  let Spellings = [Clang<"objc_bridge">];
-  let Subjects = SubjectList<[Record, TypedefName], ErrorDiag>;
+  let Spellings = [GNU<"objc_bridge">];
+  let Subjects = SubjectList<[Record, TypedefName], ErrorDiag,
+                             "ExpectedStructOrUnionOrTypedef">;
   let Args = [IdentifierArgument<"BridgedType">];
   let Documentation = [Undocumented];
 }
 
 def ObjCBridgeMutable : InheritableAttr {
-  let Spellings = [Clang<"objc_bridge_mutable">];
+  let Spellings = [GNU<"objc_bridge_mutable">];
   let Subjects = SubjectList<[Record], ErrorDiag>;
   let Args = [IdentifierArgument<"BridgedType">];
   let Documentation = [Undocumented];
 }
 
 def ObjCBridgeRelated : InheritableAttr {
-  let Spellings = [Clang<"objc_bridge_related">];
+  let Spellings = [GNU<"objc_bridge_related">];
   let Subjects = SubjectList<[Record], ErrorDiag>;
   let Args = [IdentifierArgument<"RelatedClass">,
-          IdentifierArgument<"ClassMethod">,
-          IdentifierArgument<"InstanceMethod">];
+          IdentifierArgument<"ClassMethod", 1>,
+          IdentifierArgument<"InstanceMethod", 1>];
   let HasCustomParsing = 1;
   let Documentation = [Undocumented];
 }
 
-def NSReturnsRetained : DeclOrTypeAttr {
-  let Spellings = [Clang<"ns_returns_retained">];
+def NSReturnsRetained : InheritableAttr {
+  let Spellings = [GNU<"ns_returns_retained">];
 //  let Subjects = SubjectList<[ObjCMethod, ObjCProperty, Function]>;
-  let Documentation = [RetainBehaviorDocs];
+  let Documentation = [Undocumented];
 }
 
 def NSReturnsNotRetained : InheritableAttr {
-  let Spellings = [Clang<"ns_returns_not_retained">];
+  let Spellings = [GNU<"ns_returns_not_retained">];
 //  let Subjects = SubjectList<[ObjCMethod, ObjCProperty, Function]>;
-  let Documentation = [RetainBehaviorDocs];
+  let Documentation = [Undocumented];
 }
 
 def NSReturnsAutoreleased : InheritableAttr {
-  let Spellings = [Clang<"ns_returns_autoreleased">];
+  let Spellings = [GNU<"ns_returns_autoreleased">];
 //  let Subjects = SubjectList<[ObjCMethod, ObjCProperty, Function]>;
-  let Documentation = [RetainBehaviorDocs];
+  let Documentation = [Undocumented];
 }
 
 def NSConsumesSelf : InheritableAttr {
-  let Spellings = [Clang<"ns_consumes_self">];
+  let Spellings = [GNU<"ns_consumes_self">];
   let Subjects = SubjectList<[ObjCMethod]>;
-  let Documentation = [RetainBehaviorDocs];
+  let Documentation = [Undocumented];
 }
 
 def NSConsumed : InheritableParamAttr {
-  let Spellings = [Clang<"ns_consumed">];
+  let Spellings = [GNU<"ns_consumed">];
   let Subjects = SubjectList<[ParmVar]>;
-  let Documentation = [RetainBehaviorDocs];
+  let Documentation = [Undocumented];
 }
 
 def ObjCException : InheritableAttr {
-  let Spellings = [Clang<"objc_exception">];
+  let Spellings = [GNU<"objc_exception">];
   let Subjects = SubjectList<[ObjCInterface], ErrorDiag>;
   let Documentation = [Undocumented];
 }
 
 def ObjCMethodFamily : InheritableAttr {
-  let Spellings = [Clang<"objc_method_family">];
+  let Spellings = [GNU<"objc_method_family">];
   let Subjects = SubjectList<[ObjCMethod], ErrorDiag>;
   let Args = [EnumArgument<"Family", "FamilyKind",
                ["none", "alloc", "copy", "init", "mutableCopy", "new"],
@@ -1833,128 +1280,101 @@ def ObjCMethodFamily : InheritableAttr {
 }
 
 def ObjCNSObject : InheritableAttr {
-  let Spellings = [Clang<"NSObject">];
+  let Spellings = [GNU<"NSObject">];
   let Documentation = [Undocumented];
 }
 
 def ObjCIndependentClass : InheritableAttr {
-  let Spellings = [Clang<"objc_independent_class">];
+  let Spellings = [GNU<"objc_independent_class">];
   let Documentation = [Undocumented];
 }
 
 def ObjCPreciseLifetime : InheritableAttr {
-  let Spellings = [Clang<"objc_precise_lifetime">];
+  let Spellings = [GNU<"objc_precise_lifetime">];
   let Subjects = SubjectList<[Var], ErrorDiag>;
   let Documentation = [Undocumented];
 }
 
 def ObjCReturnsInnerPointer : InheritableAttr {
-  let Spellings = [Clang<"objc_returns_inner_pointer">];
+  let Spellings = [GNU<"objc_returns_inner_pointer">];
   let Subjects = SubjectList<[ObjCMethod, ObjCProperty], ErrorDiag>;
   let Documentation = [Undocumented];
 }
 
 def ObjCRequiresSuper : InheritableAttr {
-  let Spellings = [Clang<"objc_requires_super">];
+  let Spellings = [GNU<"objc_requires_super">];
   let Subjects = SubjectList<[ObjCMethod], ErrorDiag>;
   let Documentation = [ObjCRequiresSuperDocs];
 }
 
 def ObjCRootClass : InheritableAttr {
-  let Spellings = [Clang<"objc_root_class">];
+  let Spellings = [GNU<"objc_root_class">];
   let Subjects = SubjectList<[ObjCInterface], ErrorDiag>;
   let Documentation = [Undocumented];
 }
 
-def ObjCNonLazyClass : Attr {
-  let Spellings = [Clang<"objc_nonlazy_class">];
-  let Subjects = SubjectList<[ObjCInterface, ObjCImpl], ErrorDiag>;
-  let LangOpts = [ObjC];
-  let Documentation = [ObjCNonLazyClassDocs];
-}
-
 def ObjCSubclassingRestricted : InheritableAttr {
-  let Spellings = [Clang<"objc_subclassing_restricted">];
+  let Spellings = [GNU<"objc_subclassing_restricted">];
   let Subjects = SubjectList<[ObjCInterface], ErrorDiag>;
   let Documentation = [ObjCSubclassingRestrictedDocs];
 }
 
 def ObjCExplicitProtocolImpl : InheritableAttr {
-  let Spellings = [Clang<"objc_protocol_requires_explicit_implementation">];
+  let Spellings = [GNU<"objc_protocol_requires_explicit_implementation">];
   let Subjects = SubjectList<[ObjCProtocol], ErrorDiag>;
   let Documentation = [Undocumented];
 }
 
 def ObjCDesignatedInitializer : Attr {
-  let Spellings = [Clang<"objc_designated_initializer">];
-  let Subjects = SubjectList<[ObjCMethod], ErrorDiag>;
+  let Spellings = [GNU<"objc_designated_initializer">];
+  let Subjects = SubjectList<[ObjCInterfaceDeclInitMethod], ErrorDiag,
+                             "ExpectedObjCInterfaceDeclInitMethod">;
   let Documentation = [Undocumented];
 }
 
-def ObjCDirect : Attr {
-  let Spellings = [Clang<"objc_direct">];
-  let Subjects = SubjectList<[ObjCMethod], ErrorDiag>;
-  let LangOpts = [ObjC];
-  let Documentation = [ObjCDirectDocs];
-}
-
-def ObjCDirectMembers : Attr {
-  let Spellings = [Clang<"objc_direct_members">];
-  let Subjects = SubjectList<[ObjCImpl, ObjCCategory], ErrorDiag>;
-  let LangOpts = [ObjC];
-  let Documentation = [ObjCDirectMembersDocs];
-}
-
 def ObjCRuntimeName : Attr {
-  let Spellings = [Clang<"objc_runtime_name">];
+  let Spellings = [GNU<"objc_runtime_name">];
   let Subjects = SubjectList<[ObjCInterface, ObjCProtocol], ErrorDiag>;
   let Args = [StringArgument<"MetadataName">];
   let Documentation = [ObjCRuntimeNameDocs];
 }
 
 def ObjCRuntimeVisible : Attr {
-  let Spellings = [Clang<"objc_runtime_visible">];
+  let Spellings = [GNU<"objc_runtime_visible">];
   let Subjects = SubjectList<[ObjCInterface], ErrorDiag>;
   let Documentation = [ObjCRuntimeVisibleDocs];
 }
 
-def ObjCClassStub : Attr {
-  let Spellings = [Clang<"objc_class_stub">];
-  let Subjects = SubjectList<[ObjCInterface], ErrorDiag>;
-  let Documentation = [ObjCClassStubDocs];
-  let LangOpts = [ObjCNonFragileRuntime];
-}
-
 def ObjCBoxable : Attr {
-  let Spellings = [Clang<"objc_boxable">];
-  let Subjects = SubjectList<[Record], ErrorDiag>;
+  let Spellings = [GNU<"objc_boxable">];
+  let Subjects = SubjectList<[Record], ErrorDiag, "ExpectedStructOrUnion">;
   let Documentation = [ObjCBoxableDocs];
 }
 
 def OptimizeNone : InheritableAttr {
-  let Spellings = [Clang<"optnone">];
+  let Spellings = [GNU<"optnone">, CXX11<"clang", "optnone">];
   let Subjects = SubjectList<[Function, ObjCMethod]>;
   let Documentation = [OptnoneDocs];
 }
 
 def Overloadable : Attr {
-  let Spellings = [Clang<"overloadable">];
+  let Spellings = [GNU<"overloadable">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [OverloadableDocs];
 }
 
-def Override : InheritableAttr {
+def Override : InheritableAttr { 
   let Spellings = [Keyword<"override">];
   let SemaHandler = 0;
   let Documentation = [Undocumented];
 }
 
 def Ownership : InheritableAttr {
-  let Spellings = [Clang<"ownership_holds">, Clang<"ownership_returns">,
-                   Clang<"ownership_takes">];
-  let Accessors = [Accessor<"isHolds", [Clang<"ownership_holds">]>,
-                   Accessor<"isReturns", [Clang<"ownership_returns">]>,
-                   Accessor<"isTakes", [Clang<"ownership_takes">]>];
+  let Spellings = [GNU<"ownership_holds">, GNU<"ownership_returns">,
+                   GNU<"ownership_takes">];
+  let Accessors = [Accessor<"isHolds", [GNU<"ownership_holds">]>,
+                   Accessor<"isReturns", [GNU<"ownership_returns">]>,
+                   Accessor<"isTakes", [GNU<"ownership_takes">]>];
   let AdditionalMembers = [{
     enum OwnershipKind { Holds, Returns, Takes };
     OwnershipKind getOwnKind() const {
@@ -1963,9 +1383,9 @@ def Ownership : InheritableAttr {
              Returns;
     }
   }];
-  let Args = [IdentifierArgument<"Module">,
-              VariadicParamIdxArgument<"Args">];
-  let Subjects = SubjectList<[HasFunctionProto]>;
+  let Args = [IdentifierArgument<"Module">, VariadicUnsignedArgument<"Args">];
+  let Subjects = SubjectList<[HasFunctionProto], WarnDiag,
+                             "ExpectedFunctionWithProtoType">;
   let Documentation = [Undocumented];
 }
 
@@ -1975,24 +1395,19 @@ def Packed : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-def IntelOclBicc : DeclOrTypeAttr {
-  let Spellings = [Clang<"intel_ocl_bicc", 0>];
+def IntelOclBicc : InheritableAttr {
+  let Spellings = [GNU<"intel_ocl_bicc">];
 //  let Subjects = [Function, ObjCMethod];
   let Documentation = [Undocumented];
 }
 
-def Pcs : DeclOrTypeAttr {
+def Pcs : InheritableAttr {
   let Spellings = [GCC<"pcs">];
   let Args = [EnumArgument<"PCS", "PCSType",
                            ["aapcs", "aapcs-vfp"],
                            ["AAPCS", "AAPCS_VFP"]>];
 //  let Subjects = [Function, ObjCMethod];
   let Documentation = [PcsDocs];
-}
-
-def AArch64VectorPcs: DeclOrTypeAttr {
-  let Spellings = [Clang<"aarch64_vector_pcs">];
-  let Documentation = [AArch64VectorPcsDocs];
 }
 
 def Pure : InheritableAttr {
@@ -2004,17 +1419,9 @@ def Regparm : TypeAttr {
   let Spellings = [GCC<"regparm">];
   let Args = [UnsignedArgument<"NumParams">];
   let Documentation = [RegparmDocs];
-  // Represented as part of the enclosing function type.
-  let ASTNode = 0;
-}
-
-def NoDeref : TypeAttr {
-  let Spellings = [Clang<"noderef">];
-  let Documentation = [NoDerefDocs];
 }
 
 def ReqdWorkGroupSize : InheritableAttr {
-  // Does not have a [[]] spelling because it is an OpenCL-related attribute.
   let Spellings = [GNU<"reqd_work_group_size">];
   let Args = [UnsignedArgument<"XDim">, UnsignedArgument<"YDim">,
               UnsignedArgument<"ZDim">];
@@ -2022,10 +1429,18 @@ def ReqdWorkGroupSize : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
+def RequireConstantInit : InheritableAttr {
+  let Spellings = [GNU<"require_constant_initialization">,
+                   CXX11<"clang", "require_constant_initialization">];
+  let Subjects = SubjectList<[GlobalVar], ErrorDiag,
+                              "ExpectedStaticOrTLSVar">;
+  let Documentation = [RequireConstantInitDocs];
+  let LangOpts = [CPlusPlus];
+}
+
 def WorkGroupSizeHint :  InheritableAttr {
-  // Does not have a [[]] spelling because it is an OpenCL-related attribute.
   let Spellings = [GNU<"work_group_size_hint">];
-  let Args = [UnsignedArgument<"XDim">,
+  let Args = [UnsignedArgument<"XDim">, 
               UnsignedArgument<"YDim">,
               UnsignedArgument<"ZDim">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
@@ -2033,7 +1448,7 @@ def WorkGroupSizeHint :  InheritableAttr {
 }
 
 def InitPriority : InheritableAttr {
-  let Spellings = [GCC<"init_priority">];
+  let Spellings = [GNU<"init_priority">];
   let Args = [UnsignedArgument<"Priority">];
   let Subjects = SubjectList<[Var], ErrorDiag>;
   let Documentation = [Undocumented];
@@ -2042,58 +1457,10 @@ def InitPriority : InheritableAttr {
 def Section : InheritableAttr {
   let Spellings = [GCC<"section">, Declspec<"allocate">];
   let Args = [StringArgument<"Name">];
-  let Subjects =
-      SubjectList<[ Function, GlobalVar, ObjCMethod, ObjCProperty ], ErrorDiag>;
+  let Subjects = SubjectList<[Function, GlobalVar,
+                              ObjCMethod, ObjCProperty], ErrorDiag,
+                             "ExpectedFunctionGlobalVarMethodOrProperty">;
   let Documentation = [SectionDocs];
-}
-
-// This is used for `__declspec(code_seg("segname"))`, but not for
-// `#pragma code_seg("segname")`.
-def CodeSeg : InheritableAttr {
-  let Spellings = [Declspec<"code_seg">];
-  let Args = [StringArgument<"Name">];
-  let Subjects = SubjectList<[Function, CXXRecord], ErrorDiag>;
-  let Documentation = [CodeSegDocs];
-}
-
-def PragmaClangBSSSection : InheritableAttr {
-  // This attribute has no spellings as it is only ever created implicitly.
-  let Spellings = [];
-  let Args = [StringArgument<"Name">];
-  let Subjects = SubjectList<[GlobalVar], ErrorDiag>;
-  let Documentation = [Undocumented];
-}
-
-def PragmaClangDataSection : InheritableAttr {
-  // This attribute has no spellings as it is only ever created implicitly.
-  let Spellings = [];
-  let Args = [StringArgument<"Name">];
-  let Subjects = SubjectList<[GlobalVar], ErrorDiag>;
-  let Documentation = [Undocumented];
-}
-
-def PragmaClangRodataSection : InheritableAttr {
-  // This attribute has no spellings as it is only ever created implicitly.
-  let Spellings = [];
-  let Args = [StringArgument<"Name">];
-  let Subjects = SubjectList<[GlobalVar], ErrorDiag>;
-  let Documentation = [Undocumented];
-}
-
-def PragmaClangRelroSection : InheritableAttr {
-  // This attribute has no spellings as it is only ever created implicitly.
-  let Spellings = [];
-  let Args = [StringArgument<"Name">];
-  let Subjects = SubjectList<[GlobalVar], ErrorDiag>;
-  let Documentation = [Undocumented];
-}
-
-def PragmaClangTextSection : InheritableAttr {
-  // This attribute has no spellings as it is only ever created implicitly.
-  let Spellings = [];
-  let Args = [StringArgument<"Name">];
-  let Subjects = SubjectList<[Function], ErrorDiag>;
-  let Documentation = [Undocumented];
 }
 
 def Sentinel : InheritableAttr {
@@ -2104,72 +1471,66 @@ def Sentinel : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-def StdCall : DeclOrTypeAttr {
+def StdCall : InheritableAttr {
   let Spellings = [GCC<"stdcall">, Keyword<"__stdcall">, Keyword<"_stdcall">];
 //  let Subjects = [Function, ObjCMethod];
   let Documentation = [StdCallDocs];
 }
 
-def SwiftCall : DeclOrTypeAttr {
-  let Spellings = [Clang<"swiftcall">];
+def SwiftCall : InheritableAttr {
+  let Spellings = [GCC<"swiftcall">];
 //  let Subjects = SubjectList<[Function]>;
   let Documentation = [SwiftCallDocs];
 }
 
 def SwiftContext : ParameterABIAttr {
-  let Spellings = [Clang<"swift_context">];
+  let Spellings = [GCC<"swift_context">];
   let Documentation = [SwiftContextDocs];
 }
 
 def SwiftErrorResult : ParameterABIAttr {
-  let Spellings = [Clang<"swift_error_result">];
+  let Spellings = [GCC<"swift_error_result">];
   let Documentation = [SwiftErrorResultDocs];
 }
 
 def SwiftIndirectResult : ParameterABIAttr {
-  let Spellings = [Clang<"swift_indirect_result">];
+  let Spellings = [GCC<"swift_indirect_result">];
   let Documentation = [SwiftIndirectResultDocs];
 }
 
-def Suppress : StmtAttr {
-  let Spellings = [CXX11<"gsl", "suppress">];
-  let Args = [VariadicStringArgument<"DiagnosticIdentifiers">];
-  let Documentation = [SuppressDocs];
-}
-
-def SysVABI : DeclOrTypeAttr {
+def SysVABI : InheritableAttr {
   let Spellings = [GCC<"sysv_abi">];
 //  let Subjects = [Function, ObjCMethod];
   let Documentation = [Undocumented];
 }
 
-def ThisCall : DeclOrTypeAttr {
+def ThisCall : InheritableAttr {
   let Spellings = [GCC<"thiscall">, Keyword<"__thiscall">,
                    Keyword<"_thiscall">];
 //  let Subjects = [Function, ObjCMethod];
   let Documentation = [ThisCallDocs];
 }
 
-def VectorCall : DeclOrTypeAttr {
-  let Spellings = [Clang<"vectorcall">, Keyword<"__vectorcall">,
+def VectorCall : InheritableAttr {
+  let Spellings = [GNU<"vectorcall">, Keyword<"__vectorcall">,
                    Keyword<"_vectorcall">];
 //  let Subjects = [Function, ObjCMethod];
   let Documentation = [VectorCallDocs];
 }
 
-def Pascal : DeclOrTypeAttr {
-  let Spellings = [Clang<"pascal">, Keyword<"__pascal">, Keyword<"_pascal">];
+def Pascal : InheritableAttr {
+  let Spellings = [GNU<"pascal">, Keyword<"__pascal">, Keyword<"_pascal">];
 //  let Subjects = [Function, ObjCMethod];
   let Documentation = [Undocumented];
 }
 
-def PreserveMost : DeclOrTypeAttr {
-  let Spellings = [Clang<"preserve_most">];
+def PreserveMost : InheritableAttr {
+  let Spellings = [GNU<"preserve_most">];
   let Documentation = [PreserveMostDocs];
 }
 
-def PreserveAll : DeclOrTypeAttr {
-  let Spellings = [Clang<"preserve_all">];
+def PreserveAll : InheritableAttr {
+  let Spellings = [GNU<"preserve_all">];
   let Documentation = [PreserveAllDocs];
 }
 
@@ -2179,57 +1540,11 @@ def Target : InheritableAttr {
   let Subjects = SubjectList<[Function], ErrorDiag>;
   let Documentation = [TargetDocs];
   let AdditionalMembers = [{
+    typedef std::pair<std::vector<std::string>, StringRef> ParsedTargetAttr;
     ParsedTargetAttr parse() const {
-      return parse(getFeaturesStr());
-    }
-
-    StringRef getArchitecture() const {
-      StringRef Features = getFeaturesStr();
-      if (Features == "default") return {};
-
-      SmallVector<StringRef, 1> AttrFeatures;
-      Features.split(AttrFeatures, ",");
-
-      for (auto &Feature : AttrFeatures) {
-        Feature = Feature.trim();
-        if (Feature.startswith("arch="))
-          return Feature.drop_front(sizeof("arch=") - 1);
-      }
-      return "";
-    }
-
-    // Gets the list of features as simple string-refs with no +/- or 'no-'.
-    // Only adds the items to 'Out' that are additions.
-    void getAddedFeatures(llvm::SmallVectorImpl<StringRef> &Out) const {
-      StringRef Features = getFeaturesStr();
-      if (Features == "default") return;
-
-      SmallVector<StringRef, 1> AttrFeatures;
-      Features.split(AttrFeatures, ",");
-
-      for (auto &Feature : AttrFeatures) {
-        Feature = Feature.trim();
-
-        if (!Feature.startswith("no-") && !Feature.startswith("arch=") &&
-            !Feature.startswith("fpmath=") && !Feature.startswith("tune="))
-          Out.push_back(Feature);
-      }
-    }
-
-    template<class Compare>
-    ParsedTargetAttr parse(Compare cmp) const {
-      ParsedTargetAttr Attrs = parse();
-      llvm::sort(std::begin(Attrs.Features), std::end(Attrs.Features), cmp);
-      return Attrs;
-    }
-
-    bool isDefaultVersion() const { return getFeaturesStr() == "default"; }
-
-    static ParsedTargetAttr parse(StringRef Features) {
       ParsedTargetAttr Ret;
-      if (Features == "default") return Ret;
       SmallVector<StringRef, 1> AttrFeatures;
-      Features.split(AttrFeatures, ",");
+      getFeaturesStr().split(AttrFeatures, ",");
 
       // Grab the various features and prepend a "+" to turn on the feature to
       // the backend and add them to our existing set of features.
@@ -2243,34 +1558,19 @@ def Target : InheritableAttr {
         // overall feature validity for the function with the rest of the
         // attributes on the function.
         if (Feature.startswith("fpmath=") || Feature.startswith("tune="))
-          continue;
-
-        if (Feature.startswith("branch-protection=")) {
-          Ret.BranchProtection = Feature.split('=').second.trim();
-          continue;
-        }
+	  continue;
 
         // While we're here iterating check for a different target cpu.
-        if (Feature.startswith("arch=")) {
-          if (!Ret.Architecture.empty())
-            Ret.DuplicateArchitecture = true;
-          else
-            Ret.Architecture = Feature.split("=").second.trim();
-        } else if (Feature.startswith("no-"))
-          Ret.Features.push_back("-" + Feature.split("-").second.str());
+        if (Feature.startswith("arch="))
+          Ret.second = Feature.split("=").second.trim();
+        else if (Feature.startswith("no-"))
+          Ret.first.push_back("-" + Feature.split("-").second.str());
         else
-          Ret.Features.push_back("+" + Feature.str());
+          Ret.first.push_back("+" + Feature.str());
       }
       return Ret;
     }
   }];
-}
-
-def MinVectorWidth : InheritableAttr {
-  let Spellings = [Clang<"min_vector_width">];
-  let Args = [UnsignedArgument<"VectorWidth">];
-  let Subjects = SubjectList<[Function], ErrorDiag>;
-  let Documentation = [MinVectorWidthDocs];
 }
 
 def TransparentUnion : InheritableAttr {
@@ -2281,7 +1581,7 @@ def TransparentUnion : InheritableAttr {
 }
 
 def Unavailable : InheritableAttr {
-  let Spellings = [Clang<"unavailable">];
+  let Spellings = [GNU<"unavailable">];
   let Args = [StringArgument<"Message", 1>,
               EnumArgument<"ImplicitReason", "ImplicitReason",
                 ["", "", "", ""],
@@ -2295,19 +1595,16 @@ def Unavailable : InheritableAttr {
 }
 
 def DiagnoseIf : InheritableAttr {
-  // Does not have a [[]] spelling because this attribute requires the ability
-  // to parse function arguments but the attribute is not written in the type
-  // position.
   let Spellings = [GNU<"diagnose_if">];
-  let Subjects = SubjectList<[Function, ObjCMethod, ObjCProperty]>;
+  let Subjects = SubjectList<[Function]>;
   let Args = [ExprArgument<"Cond">, StringArgument<"Message">,
               EnumArgument<"DiagnosticType",
                            "DiagnosticType",
                            ["error", "warning"],
                            ["DT_Error", "DT_Warning"]>,
               BoolArgument<"ArgDependent", 0, /*fake*/ 1>,
-              NamedArgument<"Parent", 0, /*fake*/ 1>];
-  let InheritEvenIfAlreadyPresent = 1;
+              FunctionArgument<"Parent", 0, /*fake*/ 1>];
+  let DuplicatesAllowedWhileMerging = 1;
   let LateParsed = 1;
   let AdditionalMembers = [{
     bool isError() const { return diagnosticType == DT_Error; }
@@ -2318,47 +1615,47 @@ def DiagnoseIf : InheritableAttr {
 }
 
 def ArcWeakrefUnavailable : InheritableAttr {
-  let Spellings = [Clang<"objc_arc_weak_reference_unavailable">];
+  let Spellings = [GNU<"objc_arc_weak_reference_unavailable">];
   let Subjects = SubjectList<[ObjCInterface], ErrorDiag>;
   let Documentation = [Undocumented];
 }
 
 def ObjCGC : TypeAttr {
-  let Spellings = [Clang<"objc_gc">];
+  let Spellings = [GNU<"objc_gc">];
   let Args = [IdentifierArgument<"Kind">];
   let Documentation = [Undocumented];
 }
 
-def ObjCOwnership : DeclOrTypeAttr {
-  let Spellings = [Clang<"objc_ownership">];
+def ObjCOwnership : InheritableAttr {
+  let Spellings = [GNU<"objc_ownership">];
   let Args = [IdentifierArgument<"Kind">];
+  let ASTNode = 0;
   let Documentation = [Undocumented];
 }
 
 def ObjCRequiresPropertyDefs : InheritableAttr {
-  let Spellings = [Clang<"objc_requires_property_definitions">];
+  let Spellings = [GNU<"objc_requires_property_definitions">];
   let Subjects = SubjectList<[ObjCInterface], ErrorDiag>;
   let Documentation = [Undocumented];
 }
 
 def Unused : InheritableAttr {
-  let Spellings = [CXX11<"", "maybe_unused", 201603>, GCC<"unused">,
-                   C2x<"", "maybe_unused">];
+  let Spellings = [CXX11<"", "maybe_unused", 201603>, GCC<"unused">];
   let Subjects = SubjectList<[Var, ObjCIvar, Type, Enum, EnumConstant, Label,
-                              Field, ObjCMethod, FunctionLike]>;
+                              Field, ObjCMethod, FunctionLike], WarnDiag,
+                             "ExpectedForMaybeUnused">;
   let Documentation = [WarnMaybeUnusedDocs];
 }
 
 def Used : InheritableAttr {
   let Spellings = [GCC<"used">];
-  let Subjects = SubjectList<[NonLocalVar, Function, ObjCMethod]>;
   let Documentation = [Undocumented];
 }
 
 def Uuid : InheritableAttr {
   let Spellings = [Declspec<"uuid">, Microsoft<"uuid">];
   let Args = [StringArgument<"Guid">];
-  let Subjects = SubjectList<[Record, Enum]>;
+  let Subjects = SubjectList<[Record, Enum], WarnDiag, "ExpectedEnumOrClass">;
   // FIXME: Allow expressing logical AND for LangOpts. Our condition should be:
   // CPlusPlus && (MicrosoftExt || Borland)
   let LangOpts = [MicrosoftExt, Borland];
@@ -2369,12 +1666,9 @@ def VectorSize : TypeAttr {
   let Spellings = [GCC<"vector_size">];
   let Args = [ExprArgument<"NumBytes">];
   let Documentation = [Undocumented];
-  // Represented as VectorType instead.
-  let ASTNode = 0;
 }
 
 def VecTypeHint : InheritableAttr {
-  // Does not have a [[]] spelling because it is an OpenCL-related attribute.
   let Spellings = [GNU<"vec_type_hint">];
   let Args = [TypeArgument<"TypeHint">];
   let Subjects = SubjectList<[Function], ErrorDiag>;
@@ -2387,13 +1681,12 @@ def Visibility : InheritableAttr {
   let Args = [EnumArgument<"Visibility", "VisibilityType",
                            ["default", "hidden", "internal", "protected"],
                            ["Default", "Hidden", "Hidden", "Protected"]>];
-  let MeaningfulToClassTemplateDefinition = 1;
   let Documentation = [Undocumented];
 }
 
 def TypeVisibility : InheritableAttr {
   let Clone = 0;
-  let Spellings = [Clang<"type_visibility">];
+  let Spellings = [GNU<"type_visibility">, CXX11<"clang", "type_visibility">];
   let Args = [EnumArgument<"Visibility", "VisibilityType",
                            ["default", "hidden", "internal", "protected"],
                            ["Default", "Hidden", "Hidden", "Protected"]>];
@@ -2402,34 +1695,24 @@ def TypeVisibility : InheritableAttr {
 }
 
 def VecReturn : InheritableAttr {
-  // This attribute does not have a C [[]] spelling because it only appertains
-  // to C++ struct/class/union.
-  // FIXME: should this attribute have a CPlusPlus language option?
-  let Spellings = [Clang<"vecreturn", 0>];
+  let Spellings = [GNU<"vecreturn">];
   let Subjects = SubjectList<[CXXRecord], ErrorDiag>;
   let Documentation = [Undocumented];
 }
 
 def WarnUnused : InheritableAttr {
-  let Spellings = [GCC<"warn_unused">];
+  let Spellings = [GNU<"warn_unused">];
   let Subjects = SubjectList<[Record]>;
   let Documentation = [Undocumented];
 }
 
 def WarnUnusedResult : InheritableAttr {
-  let Spellings = [CXX11<"", "nodiscard", 201907>, C2x<"", "nodiscard">,
+  let Spellings = [CXX11<"", "nodiscard", 201603>,
                    CXX11<"clang", "warn_unused_result">,
                    GCC<"warn_unused_result">];
-  let Subjects = SubjectList<[ObjCMethod, Enum, Record, FunctionLike]>;
-  let Args = [StringArgument<"Message", 1>];
+  let Subjects = SubjectList<[ObjCMethod, Enum, CXXRecord, FunctionLike],
+                             WarnDiag, "ExpectedFunctionMethodEnumOrClass">;
   let Documentation = [WarnUnusedResultsDocs];
-  let AdditionalMembers = [{
-    // Check whether this the C++11 nodiscard version, even in non C++11
-    // spellings.
-    bool IsCXX11NoDiscard() const {
-      return this->getSemanticSpelling() == CXX11_nodiscard;
-    }
-  }];
 }
 
 def Weak : InheritableAttr {
@@ -2439,7 +1722,7 @@ def Weak : InheritableAttr {
 }
 
 def WeakImport : InheritableAttr {
-  let Spellings = [Clang<"weak_import">];
+  let Spellings = [GNU<"weak_import">];
   let Documentation = [Undocumented];
 }
 
@@ -2452,7 +1735,7 @@ def WeakRef : InheritableAttr {
 }
 
 def LTOVisibilityPublic : InheritableAttr {
-  let Spellings = [Clang<"lto_visibility_public">];
+  let Spellings = [CXX11<"clang", "lto_visibility_public">];
   let Subjects = SubjectList<[Record]>;
   let Documentation = [LTOVisibilityDocs];
 }
@@ -2460,41 +1743,30 @@ def LTOVisibilityPublic : InheritableAttr {
 def AnyX86Interrupt : InheritableAttr, TargetSpecificAttr<TargetAnyX86> {
   // NOTE: If you add any additional spellings, ARMInterrupt's,
   // MSP430Interrupt's and MipsInterrupt's spellings must match.
-  let Spellings = [GCC<"interrupt">];
+  let Spellings = [GNU<"interrupt">];
   let Subjects = SubjectList<[HasFunctionProto]>;
   let ParseKind = "Interrupt";
   let HasCustomParsing = 1;
-  let Documentation = [Undocumented];
+  let Documentation = [AnyX86InterruptDocs];
 }
 
-def AnyX86NoCallerSavedRegisters : InheritableAttr,
-                                   TargetSpecificAttr<TargetAnyX86> {
-  let Spellings = [GCC<"no_caller_saved_registers">];
-  let Documentation = [AnyX86NoCallerSavedRegistersDocs];
-}
-
-def AnyX86NoCfCheck : DeclOrTypeAttr, TargetSpecificAttr<TargetAnyX86>{
-  let Spellings = [GCC<"nocf_check">];
-  let Subjects = SubjectList<[FunctionLike]>;
-  let Documentation = [AnyX86NoCfCheckDocs];
-}
-
-def X86ForceAlignArgPointer : InheritableAttr, TargetSpecificAttr<TargetAnyX86> {
-  let Spellings = [GCC<"force_align_arg_pointer">];
+def X86ForceAlignArgPointer : InheritableAttr, TargetSpecificAttr<TargetX86> {
+  let Spellings = [GNU<"force_align_arg_pointer">];
   // Technically, this appertains to a FunctionDecl, but the target-specific
   // code silently allows anything function-like (such as typedefs or function
   // pointers), but does not apply the attribute to them.
-  let Documentation = [X86ForceAlignArgPointerDocs];
+  let Documentation = [Undocumented];
 }
 
 def NoSanitize : InheritableAttr {
-  let Spellings = [Clang<"no_sanitize">];
+  let Spellings = [GNU<"no_sanitize">, CXX11<"clang", "no_sanitize">];
   let Args = [VariadicStringArgument<"Sanitizers">];
-  let Subjects = SubjectList<[Function, ObjCMethod, GlobalVar], ErrorDiag>;
+  let Subjects = SubjectList<[Function, ObjCMethod, GlobalVar], ErrorDiag,
+    "ExpectedFunctionMethodOrGlobalVar">;
   let Documentation = [NoSanitizeDocs];
   let AdditionalMembers = [{
     SanitizerMask getMask() const {
-      SanitizerMask Mask;
+      SanitizerMask Mask = 0;
       for (auto SanitizerName : sanitizers()) {
         SanitizerMask ParsedMask =
             parseSanitizerValue(SanitizerName, /*AllowGroups=*/true);
@@ -2511,34 +1783,27 @@ def NoSanitizeSpecific : InheritableAttr {
   let Spellings = [GCC<"no_address_safety_analysis">,
                    GCC<"no_sanitize_address">,
                    GCC<"no_sanitize_thread">,
-                   Clang<"no_sanitize_memory">];
-  let Subjects = SubjectList<[Function, GlobalVar], ErrorDiag>;
+                   GNU<"no_sanitize_memory">];
+  let Subjects = SubjectList<[Function, GlobalVar], ErrorDiag,
+        "ExpectedFunctionOrGlobalVar">;
   let Documentation = [NoSanitizeAddressDocs, NoSanitizeThreadDocs,
                        NoSanitizeMemoryDocs];
   let ASTNode = 0;
 }
 
-def CFICanonicalJumpTable : InheritableAttr {
-  let Spellings = [Clang<"cfi_canonical_jump_table">];
-  let Subjects = SubjectList<[Function], ErrorDiag>;
-  let Documentation = [CFICanonicalJumpTableDocs];
-}
-
 // C/C++ Thread safety attributes (e.g. for deadlock, data race checking)
-// Not all of these attributes will be given a [[]] spelling. The attributes
-// which require access to function parameter names cannot use the [[]] spelling
-// because they are not written in the type position. Some attributes are given
-// an updated captability-based name and the older name will only be supported
-// under the GNU-style spelling.
+
 def GuardedVar : InheritableAttr {
-  let Spellings = [Clang<"guarded_var", 0>];
-  let Subjects = SubjectList<[Field, SharedVar]>;
+  let Spellings = [GNU<"guarded_var">];
+  let Subjects = SubjectList<[Field, SharedVar], WarnDiag,
+                             "ExpectedFieldOrGlobalVar">;
   let Documentation = [Undocumented];
 }
 
 def PtGuardedVar : InheritableAttr {
-  let Spellings = [Clang<"pt_guarded_var", 0>];
-  let Subjects = SubjectList<[Field, SharedVar]>;
+  let Spellings = [GNU<"pt_guarded_var">];
+  let Subjects = SubjectList<[Field, SharedVar], WarnDiag,
+                             "ExpectedFieldOrGlobalVar">;
   let Documentation = [Undocumented];
 }
 
@@ -2550,17 +1815,21 @@ def Lockable : InheritableAttr {
 }
 
 def ScopedLockable : InheritableAttr {
-  let Spellings = [Clang<"scoped_lockable", 0>];
+  let Spellings = [GNU<"scoped_lockable">];
   let Subjects = SubjectList<[Record]>;
   let Documentation = [Undocumented];
 }
 
 def Capability : InheritableAttr {
-  let Spellings = [Clang<"capability", 0>, Clang<"shared_capability", 0>];
-  let Subjects = SubjectList<[Record, TypedefName], ErrorDiag>;
+  let Spellings = [GNU<"capability">, CXX11<"clang", "capability">,
+                   GNU<"shared_capability">,
+                   CXX11<"clang", "shared_capability">];
+  let Subjects = SubjectList<[Record, TypedefName], ErrorDiag,
+                             "ExpectedStructOrUnionOrTypedef">;
   let Args = [StringArgument<"Name">];
   let Accessors = [Accessor<"isShared",
-                    [Clang<"shared_capability", 0>]>];
+                    [GNU<"shared_capability">,
+                     CXX11<"clang","shared_capability">]>];
   let Documentation = [Undocumented];
   let AdditionalMembers = [{
     bool isMutex() const { return getName().equals_lower("mutex"); }
@@ -2569,88 +1838,105 @@ def Capability : InheritableAttr {
 }
 
 def AssertCapability : InheritableAttr {
-  let Spellings = [Clang<"assert_capability", 0>,
-                   Clang<"assert_shared_capability", 0>];
+  let Spellings = [GNU<"assert_capability">,
+                   CXX11<"clang", "assert_capability">,
+                   GNU<"assert_shared_capability">,
+                   CXX11<"clang", "assert_shared_capability">];
   let Subjects = SubjectList<[Function]>;
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
-  let Args = [VariadicExprArgument<"Args">];
+  let DuplicatesAllowedWhileMerging = 1;
+  let Args = [ExprArgument<"Expr">];
   let Accessors = [Accessor<"isShared",
-                    [Clang<"assert_shared_capability", 0>]>];
+                    [GNU<"assert_shared_capability">,
+                     CXX11<"clang", "assert_shared_capability">]>];
   let Documentation = [AssertCapabilityDocs];
 }
 
 def AcquireCapability : InheritableAttr {
-  let Spellings = [Clang<"acquire_capability", 0>,
-                   Clang<"acquire_shared_capability", 0>,
+  let Spellings = [GNU<"acquire_capability">,
+                   CXX11<"clang", "acquire_capability">,
+                   GNU<"acquire_shared_capability">,
+                   CXX11<"clang", "acquire_shared_capability">,
                    GNU<"exclusive_lock_function">,
                    GNU<"shared_lock_function">];
   let Subjects = SubjectList<[Function]>;
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
+  let DuplicatesAllowedWhileMerging = 1;
   let Args = [VariadicExprArgument<"Args">];
   let Accessors = [Accessor<"isShared",
-                    [Clang<"acquire_shared_capability", 0>,
+                    [GNU<"acquire_shared_capability">,
+                     CXX11<"clang", "acquire_shared_capability">,
                      GNU<"shared_lock_function">]>];
   let Documentation = [AcquireCapabilityDocs];
 }
 
 def TryAcquireCapability : InheritableAttr {
-  let Spellings = [Clang<"try_acquire_capability", 0>,
-                   Clang<"try_acquire_shared_capability", 0>];
+  let Spellings = [GNU<"try_acquire_capability">,
+                   CXX11<"clang", "try_acquire_capability">,
+                   GNU<"try_acquire_shared_capability">,
+                   CXX11<"clang", "try_acquire_shared_capability">];
   let Subjects = SubjectList<[Function],
                              ErrorDiag>;
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
+  let DuplicatesAllowedWhileMerging = 1;
   let Args = [ExprArgument<"SuccessValue">, VariadicExprArgument<"Args">];
   let Accessors = [Accessor<"isShared",
-                    [Clang<"try_acquire_shared_capability", 0>]>];
+                    [GNU<"try_acquire_shared_capability">,
+                     CXX11<"clang", "try_acquire_shared_capability">]>];
   let Documentation = [TryAcquireCapabilityDocs];
 }
 
 def ReleaseCapability : InheritableAttr {
-  let Spellings = [Clang<"release_capability", 0>,
-                   Clang<"release_shared_capability", 0>,
-                   Clang<"release_generic_capability", 0>,
-                   Clang<"unlock_function", 0>];
+  let Spellings = [GNU<"release_capability">,
+                   CXX11<"clang", "release_capability">,
+                   GNU<"release_shared_capability">,
+                   CXX11<"clang", "release_shared_capability">,
+                   GNU<"release_generic_capability">,
+                   CXX11<"clang", "release_generic_capability">,
+                   GNU<"unlock_function">];
   let Subjects = SubjectList<[Function]>;
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
+  let DuplicatesAllowedWhileMerging = 1;
   let Args = [VariadicExprArgument<"Args">];
   let Accessors = [Accessor<"isShared",
-                    [Clang<"release_shared_capability", 0>]>,
+                    [GNU<"release_shared_capability">,
+                     CXX11<"clang", "release_shared_capability">]>,
                    Accessor<"isGeneric",
-                     [Clang<"release_generic_capability", 0>,
-                      Clang<"unlock_function", 0>]>];
+                     [GNU<"release_generic_capability">,
+                      CXX11<"clang", "release_generic_capability">,
+                      GNU<"unlock_function">]>];
   let Documentation = [ReleaseCapabilityDocs];
 }
 
 def RequiresCapability : InheritableAttr {
-  let Spellings = [Clang<"requires_capability", 0>,
-                   Clang<"exclusive_locks_required", 0>,
-                   Clang<"requires_shared_capability", 0>,
-                   Clang<"shared_locks_required", 0>];
+  let Spellings = [GNU<"requires_capability">,
+                   CXX11<"clang", "requires_capability">,
+                   GNU<"exclusive_locks_required">,
+                   GNU<"requires_shared_capability">,
+                   CXX11<"clang", "requires_shared_capability">,
+                   GNU<"shared_locks_required">];
   let Args = [VariadicExprArgument<"Args">];
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
+  let DuplicatesAllowedWhileMerging = 1;
   let Subjects = SubjectList<[Function]>;
-  let Accessors = [Accessor<"isShared", [Clang<"requires_shared_capability", 0>,
-                                         Clang<"shared_locks_required", 0>]>];
+  let Accessors = [Accessor<"isShared", [GNU<"requires_shared_capability">,
+                                         GNU<"shared_locks_required">,
+                                CXX11<"clang","requires_shared_capability">]>];
   let Documentation = [Undocumented];
 }
 
 def NoThreadSafetyAnalysis : InheritableAttr {
-  let Spellings = [Clang<"no_thread_safety_analysis">];
+  let Spellings = [GNU<"no_thread_safety_analysis">];
   let Subjects = SubjectList<[Function]>;
   let Documentation = [Undocumented];
 }
@@ -2661,8 +1947,9 @@ def GuardedBy : InheritableAttr {
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
-  let Subjects = SubjectList<[Field, SharedVar]>;
+  let DuplicatesAllowedWhileMerging = 1;
+  let Subjects = SubjectList<[Field, SharedVar], WarnDiag,
+                             "ExpectedFieldOrGlobalVar">;
   let Documentation = [Undocumented];
 }
 
@@ -2672,8 +1959,9 @@ def PtGuardedBy : InheritableAttr {
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
-  let Subjects = SubjectList<[Field, SharedVar]>;
+  let DuplicatesAllowedWhileMerging = 1;
+  let Subjects = SubjectList<[Field, SharedVar], WarnDiag,
+                             "ExpectedFieldOrGlobalVar">;
   let Documentation = [Undocumented];
 }
 
@@ -2683,8 +1971,9 @@ def AcquiredAfter : InheritableAttr {
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
-  let Subjects = SubjectList<[Field, SharedVar]>;
+  let DuplicatesAllowedWhileMerging = 1;
+  let Subjects = SubjectList<[Field, SharedVar], WarnDiag,
+                             "ExpectedFieldOrGlobalVar">;
   let Documentation = [Undocumented];
 }
 
@@ -2694,8 +1983,9 @@ def AcquiredBefore : InheritableAttr {
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
-  let Subjects = SubjectList<[Field, SharedVar]>;
+  let DuplicatesAllowedWhileMerging = 1;
+  let Subjects = SubjectList<[Field, SharedVar], WarnDiag,
+                             "ExpectedFieldOrGlobalVar">;
   let Documentation = [Undocumented];
 }
 
@@ -2705,7 +1995,7 @@ def AssertExclusiveLock : InheritableAttr {
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
+  let DuplicatesAllowedWhileMerging = 1;
   let Subjects = SubjectList<[Function]>;
   let Documentation = [Undocumented];
 }
@@ -2716,7 +2006,7 @@ def AssertSharedLock : InheritableAttr {
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
+  let DuplicatesAllowedWhileMerging = 1;
   let Subjects = SubjectList<[Function]>;
   let Documentation = [Undocumented];
 }
@@ -2729,7 +2019,7 @@ def ExclusiveTrylockFunction : InheritableAttr {
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
+  let DuplicatesAllowedWhileMerging = 1;
   let Subjects = SubjectList<[Function]>;
   let Documentation = [Undocumented];
 }
@@ -2742,7 +2032,7 @@ def SharedTrylockFunction : InheritableAttr {
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
+  let DuplicatesAllowedWhileMerging = 1;
   let Subjects = SubjectList<[Function]>;
   let Documentation = [Undocumented];
 }
@@ -2763,7 +2053,7 @@ def LocksExcluded : InheritableAttr {
   let LateParsed = 1;
   let TemplateDependent = 1;
   let ParseArgumentsAsUnevaluated = 1;
-  let InheritEvenIfAlreadyPresent = 1;
+  let DuplicatesAllowedWhileMerging = 1;
   let Subjects = SubjectList<[Function]>;
   let Documentation = [Undocumented];
 }
@@ -2771,10 +2061,7 @@ def LocksExcluded : InheritableAttr {
 // C/C++ consumed attributes.
 
 def Consumable : InheritableAttr {
-  // This attribute does not have a C [[]] spelling because it only appertains
-  // to C++ struct/class/union.
-  // FIXME: should this attribute have a CPlusPlus language option?
-  let Spellings = [Clang<"consumable", 0>];
+  let Spellings = [GNU<"consumable">];
   let Subjects = SubjectList<[CXXRecord]>;
   let Args = [EnumArgument<"DefaultState", "ConsumedState",
                            ["unknown", "consumed", "unconsumed"],
@@ -2783,28 +2070,19 @@ def Consumable : InheritableAttr {
 }
 
 def ConsumableAutoCast : InheritableAttr {
-  // This attribute does not have a C [[]] spelling because it only appertains
-  // to C++ struct/class/union.
-  // FIXME: should this attribute have a CPlusPlus language option?
-  let Spellings = [Clang<"consumable_auto_cast_state", 0>];
+  let Spellings = [GNU<"consumable_auto_cast_state">];
   let Subjects = SubjectList<[CXXRecord]>;
   let Documentation = [Undocumented];
 }
 
 def ConsumableSetOnRead : InheritableAttr {
-  // This attribute does not have a C [[]] spelling because it only appertains
-  // to C++ struct/class/union.
-  // FIXME: should this attribute have a CPlusPlus language option?
-  let Spellings = [Clang<"consumable_set_state_on_read", 0>];
+  let Spellings = [GNU<"consumable_set_state_on_read">];
   let Subjects = SubjectList<[CXXRecord]>;
   let Documentation = [Undocumented];
 }
 
 def CallableWhen : InheritableAttr {
-  // This attribute does not have a C [[]] spelling because it only appertains
-  // to C++ function (but doesn't require it to be a member function).
-  // FIXME: should this attribute have a CPlusPlus language option?
-  let Spellings = [Clang<"callable_when", 0>];
+  let Spellings = [GNU<"callable_when">];
   let Subjects = SubjectList<[CXXMethod]>;
   let Args = [VariadicEnumArgument<"CallableStates", "ConsumedState",
                                    ["unknown", "consumed", "unconsumed"],
@@ -2813,10 +2091,7 @@ def CallableWhen : InheritableAttr {
 }
 
 def ParamTypestate : InheritableAttr {
-  // This attribute does not have a C [[]] spelling because it only appertains
-  // to a parameter whose type is a consumable C++ class.
-  // FIXME: should this attribute have a CPlusPlus language option?
-  let Spellings = [Clang<"param_typestate", 0>];
+  let Spellings = [GNU<"param_typestate">];
   let Subjects = SubjectList<[ParmVar]>;
   let Args = [EnumArgument<"ParamState", "ConsumedState",
                            ["unknown", "consumed", "unconsumed"],
@@ -2825,10 +2100,7 @@ def ParamTypestate : InheritableAttr {
 }
 
 def ReturnTypestate : InheritableAttr {
-  // This attribute does not have a C [[]] spelling because it only appertains
-  // to a parameter or function return type that is a consumable C++ class.
-  // FIXME: should this attribute have a CPlusPlus language option?
-  let Spellings = [Clang<"return_typestate", 0>];
+  let Spellings = [GNU<"return_typestate">];
   let Subjects = SubjectList<[Function, ParmVar]>;
   let Args = [EnumArgument<"State", "ConsumedState",
                            ["unknown", "consumed", "unconsumed"],
@@ -2837,10 +2109,7 @@ def ReturnTypestate : InheritableAttr {
 }
 
 def SetTypestate : InheritableAttr {
-  // This attribute does not have a C [[]] spelling because it only appertains
-  // to C++ function (but doesn't require it to be a member function).
-  // FIXME: should this attribute have a CPlusPlus language option?
-  let Spellings = [Clang<"set_typestate", 0>];
+  let Spellings = [GNU<"set_typestate">];
   let Subjects = SubjectList<[CXXMethod]>;
   let Args = [EnumArgument<"NewState", "ConsumedState",
                            ["unknown", "consumed", "unconsumed"],
@@ -2849,10 +2118,7 @@ def SetTypestate : InheritableAttr {
 }
 
 def TestTypestate : InheritableAttr {
-  // This attribute does not have a C [[]] spelling because it only appertains
-  // to C++ function (but doesn't require it to be a member function).
-  // FIXME: should this attribute have a CPlusPlus language option?
-  let Spellings = [Clang<"test_typestate", 0>];
+  let Spellings = [GNU<"test_typestate">];
   let Subjects = SubjectList<[CXXMethod]>;
   let Args = [EnumArgument<"TestState", "ConsumedState",
                            ["consumed", "unconsumed"],
@@ -2863,18 +2129,18 @@ def TestTypestate : InheritableAttr {
 // Type safety attributes for `void *' pointers and type tags.
 
 def ArgumentWithTypeTag : InheritableAttr {
-  let Spellings = [Clang<"argument_with_type_tag">,
-                   Clang<"pointer_with_type_tag">];
-  let Subjects = SubjectList<[HasFunctionProto], ErrorDiag>;
+  let Spellings = [GNU<"argument_with_type_tag">,
+                   GNU<"pointer_with_type_tag">];
   let Args = [IdentifierArgument<"ArgumentKind">,
-              ParamIdxArgument<"ArgumentIdx">,
-              ParamIdxArgument<"TypeTagIdx">,
-              BoolArgument<"IsPointer", /*opt*/0, /*fake*/1>];
+              UnsignedArgument<"ArgumentIdx">,
+              UnsignedArgument<"TypeTagIdx">,
+              BoolArgument<"IsPointer">];
+  let HasCustomParsing = 1;
   let Documentation = [ArgumentWithTypeTagDocs, PointerWithTypeTagDocs];
 }
 
 def TypeTagForDatatype : InheritableAttr {
-  let Spellings = [Clang<"type_tag_for_datatype">];
+  let Spellings = [GNU<"type_tag_for_datatype">];
   let Args = [IdentifierArgument<"ArgumentKind">,
               TypeArgument<"MatchingCType">,
               BoolArgument<"LayoutCompatible">,
@@ -2882,20 +2148,6 @@ def TypeTagForDatatype : InheritableAttr {
 //  let Subjects = SubjectList<[Var], ErrorDiag>;
   let HasCustomParsing = 1;
   let Documentation = [TypeTagForDatatypeDocs];
-}
-
-def Owner : InheritableAttr {
-  let Spellings = [CXX11<"gsl", "Owner">];
-  let Subjects = SubjectList<[Struct]>;
-  let Args = [TypeArgument<"DerefType", /*opt=*/1>];
-  let Documentation = [LifetimeOwnerDocs];
-}
-
-def Pointer : InheritableAttr {
-  let Spellings = [CXX11<"gsl", "Pointer">];
-  let Subjects = SubjectList<[Struct]>;
-  let Args = [TypeArgument<"DerefType", /*opt=*/1>];
-  let Documentation = [LifetimePointerDocs];
 }
 
 // Microsoft-related attributes
@@ -2910,21 +2162,6 @@ def : IgnoredAttr {
   let Spellings = [Declspec<"property">];
 }
 
-def MSAllocator : InheritableAttr {
-  let Spellings = [Declspec<"allocator">];
-  let Subjects = SubjectList<[Function]>;
-  let Documentation = [MSAllocatorDocs];
-}
-
-def CFGuard : InheritableAttr {
-  // Currently only the __declspec(guard(nocf)) modifier is supported. In future
-  // we might also want to support __declspec(guard(suppress)).
-  let Spellings = [Declspec<"guard">];
-  let Subjects = SubjectList<[Function]>;
-  let Args = [EnumArgument<"Guard", "GuardArg", ["nocf"], ["nocf"]>];
-  let Documentation = [CFGuardDocs];
-}
-
 def MSStruct : InheritableAttr {
   let Spellings = [GCC<"ms_struct">];
   let Subjects = SubjectList<[Record]>;
@@ -2937,46 +2174,16 @@ def DLLExport : InheritableAttr, TargetSpecificAttr<TargetWindows> {
   let Documentation = [DLLExportDocs];
 }
 
-def DLLExportStaticLocal : InheritableAttr, TargetSpecificAttr<TargetWindows> {
-  // This attribute is used internally only when -fno-dllexport-inlines is
-  // passed. This attribute is added to inline function of class having
-  // dllexport attribute. And if the function has static local variables, this
-  // attribute is used to whether the variables are exported or not. Also if
-  // function has local static variables, the function is dllexported too.
-  let Spellings = [];
-  let Subjects = SubjectList<[Function]>;
-  let Documentation = [Undocumented];
-}
-
 def DLLImport : InheritableAttr, TargetSpecificAttr<TargetWindows> {
   let Spellings = [Declspec<"dllimport">, GCC<"dllimport">];
   let Subjects = SubjectList<[Function, Var, CXXRecord, ObjCInterface]>;
   let Documentation = [DLLImportDocs];
-
-
-  let AdditionalMembers = [{
-private:
-  bool PropagatedToBaseTemplate = false;
-
-public:
-  void setPropagatedToBaseTemplate() { PropagatedToBaseTemplate = true; }
-  bool wasPropagatedToBaseTemplate() { return PropagatedToBaseTemplate; }
-  }];
-}
-
-def DLLImportStaticLocal : InheritableAttr, TargetSpecificAttr<TargetWindows> {
-  // This attribute is used internally only when -fno-dllexport-inlines is
-  // passed. This attribute is added to inline function of class having
-  // dllimport attribute. And if the function has static local variables, this
-  // attribute is used to whether the variables are imported or not.
-  let Spellings = [];
-  let Subjects = SubjectList<[Function]>;
-  let Documentation = [Undocumented];
 }
 
 def SelectAny : InheritableAttr {
-  let Spellings = [Declspec<"selectany">, GCC<"selectany">];
-  let Documentation = [SelectAnyDocs];
+  let Spellings = [Declspec<"selectany">];
+  let LangOpts = [MicrosoftExt];
+  let Documentation = [Undocumented];
 }
 
 def Thread : Attr {
@@ -2993,35 +2200,51 @@ def Win64 : IgnoredAttr {
 
 def Ptr32 : TypeAttr {
   let Spellings = [Keyword<"__ptr32">];
-  let Documentation = [Ptr32Docs];
+  let Documentation = [Undocumented];
 }
 
 def Ptr64 : TypeAttr {
   let Spellings = [Keyword<"__ptr64">];
-  let Documentation = [Ptr64Docs];
+  let Documentation = [Undocumented];
 }
 
 def SPtr : TypeAttr {
   let Spellings = [Keyword<"__sptr">];
-  let Documentation = [SPtrDocs];
+  let Documentation = [Undocumented];
 }
 
 def UPtr : TypeAttr {
   let Spellings = [Keyword<"__uptr">];
-  let Documentation = [UPtrDocs];
+  let Documentation = [Undocumented];
 }
 
 def MSInheritance : InheritableAttr {
   let LangOpts = [MicrosoftExt];
-  let Args = [DefaultBoolArgument<"BestCase", /*default*/1, /*fake*/1>];
+  let Args = [DefaultBoolArgument<"BestCase", 1>];
   let Spellings = [Keyword<"__single_inheritance">,
                    Keyword<"__multiple_inheritance">,
                    Keyword<"__virtual_inheritance">,
                    Keyword<"__unspecified_inheritance">];
   let AdditionalMembers = [{
-  MSInheritanceModel getInheritanceModel() const {
-    // The spelling enum should agree with MSInheritanceModel.
-    return MSInheritanceModel(getSemanticSpelling());
+  static bool hasVBPtrOffsetField(Spelling Inheritance) {
+    return Inheritance == Keyword_unspecified_inheritance;
+  }
+
+  // Only member pointers to functions need a this adjustment, since it can be
+  // combined with the field offset for data pointers.
+  static bool hasNVOffsetField(bool IsMemberFunction, Spelling Inheritance) {
+    return IsMemberFunction && Inheritance >= Keyword_multiple_inheritance;
+  }
+
+  static bool hasVBTableOffsetField(Spelling Inheritance) {
+    return Inheritance >= Keyword_virtual_inheritance;
+  }
+
+  static bool hasOnlyOneField(bool IsMemberFunction,
+                              Spelling Inheritance) {
+    if (IsMemberFunction)
+      return Inheritance <= Keyword_single_inheritance;
+    return Inheritance <= Keyword_multiple_inheritance;
   }
   }];
   let Documentation = [MSInheritanceDocs];
@@ -3034,7 +2257,13 @@ def MSVtorDisp : InheritableAttr {
   let SemaHandler = 0;
 
   let AdditionalMembers = [{
-  MSVtorDispMode getVtorDispMode() const { return MSVtorDispMode(vdm); }
+  enum Mode {
+    Never,
+    ForVBaseOverride,
+    ForVFTable
+  };
+
+  Mode getVtorDispMode() const { return Mode(vdm); }
   }];
   let Documentation = [Undocumented];
 }
@@ -3046,7 +2275,7 @@ def InitSeg : Attr {
   let Documentation = [InitSegDocs];
   let AdditionalMembers = [{
   void printPrettyPragma(raw_ostream &OS, const PrintingPolicy &Policy) const {
-    OS << " (" << getSection() << ')';
+    OS << '(' << getSection() << ')';
   }
   }];
 }
@@ -3056,14 +2285,10 @@ def LoopHint : Attr {
   /// vectorize: vectorizes loop operations if State == Enable.
   /// vectorize_width: vectorize loop operations with width 'Value'.
   /// interleave: interleave multiple loop iterations if State == Enable.
-  /// interleave_count: interleaves 'Value' loop iterations.
+  /// interleave_count: interleaves 'Value' loop interations.
   /// unroll: fully unroll loop if State == Enable.
   /// unroll_count: unrolls loop 'Value' times.
-  /// unroll_and_jam: attempt to unroll and jam loop if State == Enable.
-  /// unroll_and_jam_count: unroll and jams loop 'Value' times.
-  /// distribute: attempt to distribute loop if State == Enable.
-  /// pipeline: disable pipelining loop if State == Disable.
-  /// pipeline_initiation_interval: create loop schedule with initiation interval equal to 'Value'.
+  /// distribute: attempt to distribute loop if State == Enable
 
   /// #pragma unroll <argument> directive
   /// <no arg>: fully unrolls loop.
@@ -3071,19 +2296,14 @@ def LoopHint : Attr {
   /// expression: unrolls loop 'Value' times.
 
   let Spellings = [Pragma<"clang", "loop">, Pragma<"", "unroll">,
-                   Pragma<"", "nounroll">, Pragma<"", "unroll_and_jam">,
-                   Pragma<"", "nounroll_and_jam">];
+                   Pragma<"", "nounroll">];
 
   /// State of the loop optimization specified by the spelling.
   let Args = [EnumArgument<"Option", "OptionType",
                           ["vectorize", "vectorize_width", "interleave", "interleave_count",
-                           "unroll", "unroll_count", "unroll_and_jam", "unroll_and_jam_count",
-                           "pipeline", "pipeline_initiation_interval", "distribute",
-                           "vectorize_predicate"],
+                           "unroll", "unroll_count", "distribute"],
                           ["Vectorize", "VectorizeWidth", "Interleave", "InterleaveCount",
-                           "Unroll", "UnrollCount", "UnrollAndJam", "UnrollAndJamCount",
-                           "PipelineDisabled", "PipelineInitiationInterval", "Distribute",
-                           "VectorizePredicate"]>,
+                           "Unroll", "UnrollCount", "Distribute"]>,
               EnumArgument<"State", "LoopHintState",
                            ["enable", "disable", "numeric", "assume_safety", "full"],
                            ["Enable", "Disable", "Numeric", "AssumeSafety", "Full"]>,
@@ -3098,29 +2318,24 @@ def LoopHint : Attr {
     case InterleaveCount: return "interleave_count";
     case Unroll: return "unroll";
     case UnrollCount: return "unroll_count";
-    case UnrollAndJam: return "unroll_and_jam";
-    case UnrollAndJamCount: return "unroll_and_jam_count";
-    case PipelineDisabled: return "pipeline";
-    case PipelineInitiationInterval: return "pipeline_initiation_interval";
     case Distribute: return "distribute";
-    case VectorizePredicate: return "vectorize_predicate";
     }
     llvm_unreachable("Unhandled LoopHint option.");
   }
 
   void printPrettyPragma(raw_ostream &OS, const PrintingPolicy &Policy) const {
-    unsigned SpellingIndex = getAttributeSpellingListIndex();
+    unsigned SpellingIndex = getSpellingListIndex();
     // For "#pragma unroll" and "#pragma nounroll" the string "unroll" or
     // "nounroll" is already emitted as the pragma name.
-    if (SpellingIndex == Pragma_nounroll || SpellingIndex == Pragma_nounroll_and_jam)
+    if (SpellingIndex == Pragma_nounroll)
       return;
-    else if (SpellingIndex == Pragma_unroll || SpellingIndex == Pragma_unroll_and_jam) {
-      OS << ' ' << getValueString(Policy);
+    else if (SpellingIndex == Pragma_unroll) {
+      OS << getValueString(Policy);
       return;
     }
 
     assert(SpellingIndex == Pragma_clang_loop && "Unexpected spelling");
-    OS << ' ' << getOptionName(option) << getValueString(Policy);
+    OS << getOptionName(option) << getValueString(Policy);
   }
 
   // Return a string containing the loop hint argument including the
@@ -3145,16 +2360,11 @@ def LoopHint : Attr {
 
   // Return a string suitable for identifying this attribute in diagnostics.
   std::string getDiagnosticName(const PrintingPolicy &Policy) const {
-    unsigned SpellingIndex = getAttributeSpellingListIndex();
+    unsigned SpellingIndex = getSpellingListIndex();
     if (SpellingIndex == Pragma_nounroll)
       return "#pragma nounroll";
     else if (SpellingIndex == Pragma_unroll)
       return "#pragma unroll" + (option == UnrollCount ? getValueString(Policy) : "");
-    else if (SpellingIndex == Pragma_nounroll_and_jam)
-      return "#pragma nounroll_and_jam";
-    else if (SpellingIndex == Pragma_unroll_and_jam)
-      return "#pragma unroll_and_jam" +
-        (option == UnrollAndJamCount ? getValueString(Policy) : "");
 
     assert(SpellingIndex == Pragma_clang_loop && "Unexpected spelling");
     return getOptionName(option) + getValueString(Policy);
@@ -3185,22 +2395,6 @@ def OMPCaptureNoInit : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-def OMPCaptureKind : Attr {
-  // This attribute has no spellings as it is only ever created implicitly.
-  let Spellings = [];
-  let SemaHandler = 0;
-  let Args = [UnsignedArgument<"CaptureKind">];
-  let Documentation = [Undocumented];
-}
-
-def OMPReferencedVar : Attr {
-  // This attribute has no spellings as it is only ever created implicitly.
-  let Spellings = [];
-  let SemaHandler = 0;
-  let Args = [ExprArgument<"Ref">];
-  let Documentation = [Undocumented];
-}
-
 def OMPDeclareSimdDecl : Attr {
   let Spellings = [Pragma<"omp", "declare simd">];
   let Subjects = SubjectList<[Function]>;
@@ -3220,37 +2414,37 @@ def OMPDeclareSimdDecl : Attr {
     void printPrettyPragma(raw_ostream & OS, const PrintingPolicy &Policy)
         const {
       if (getBranchState() != BS_Undefined)
-        OS << ' ' << ConvertBranchStateTyToStr(getBranchState());
+        OS << ConvertBranchStateTyToStr(getBranchState()) << " ";
       if (auto *E = getSimdlen()) {
-        OS << " simdlen(";
+        OS << "simdlen(";
         E->printPretty(OS, nullptr, Policy);
-        OS << ")";
+        OS << ") ";
       }
       if (uniforms_size() > 0) {
-        OS << " uniform";
+        OS << "uniform";
         StringRef Sep = "(";
         for (auto *E : uniforms()) {
           OS << Sep;
           E->printPretty(OS, nullptr, Policy);
           Sep = ", ";
         }
-        OS << ")";
+        OS << ") ";
       }
       alignments_iterator NI = alignments_begin();
       for (auto *E : aligneds()) {
-        OS << " aligned(";
+        OS << "aligned(";
         E->printPretty(OS, nullptr, Policy);
         if (*NI) {
           OS << ": ";
           (*NI)->printPretty(OS, nullptr, Policy);
         }
-        OS << ")";
+        OS << ") ";
         ++NI;
       }
       steps_iterator I = steps_begin();
       modifiers_iterator MI = modifiers_begin();
       for (auto *E : linears()) {
-        OS << " linear(";
+        OS << "linear(";
         if (*MI != OMPC_LINEAR_unknown)
           OS << getOpenMPSimpleClauseTypeName(OMPC_linear, *MI) << "(";
         E->printPretty(OS, nullptr, Policy);
@@ -3260,7 +2454,7 @@ def OMPDeclareSimdDecl : Attr {
           OS << ": ";
           (*I)->printPretty(OS, nullptr, Policy);
         }
-        OS << ")";
+        OS << ") ";
         ++I;
         ++MI;
       }
@@ -3268,248 +2462,26 @@ def OMPDeclareSimdDecl : Attr {
   }];
 }
 
-def OMPDeclareTargetDecl : InheritableAttr {
+def OMPDeclareTargetDecl : Attr {
   let Spellings = [Pragma<"omp", "declare target">];
   let SemaHandler = 0;
-  let Subjects = SubjectList<[Function, SharedVar]>;
   let Documentation = [OMPDeclareTargetDocs];
   let Args = [
     EnumArgument<"MapType", "MapTypeTy",
                  [ "to", "link" ],
-                 [ "MT_To", "MT_Link" ]>,
-    EnumArgument<"DevType", "DevTypeTy",
-                 [ "host", "nohost", "any" ],
-                 [ "DT_Host", "DT_NoHost", "DT_Any" ]>
+                 [ "MT_To", "MT_Link" ]>
   ];
   let AdditionalMembers = [{
     void printPrettyPragma(raw_ostream &OS, const PrintingPolicy &Policy) const {
       // Use fake syntax because it is for testing and debugging purpose only.
-      if (getDevType() != DT_Any)
-        OS << " device_type(" << ConvertDevTypeTyToStr(getDevType()) << ")";
       if (getMapType() != MT_To)
-        OS << ' ' << ConvertMapTypeTyToStr(getMapType());
-    }
-    static llvm::Optional<MapTypeTy>
-    isDeclareTargetDeclaration(const ValueDecl *VD) {
-      if (!VD->hasAttrs())
-        return llvm::None;
-      if (const auto *Attr = VD->getAttr<OMPDeclareTargetDeclAttr>())
-        return Attr->getMapType();
-
-      return llvm::None;
-    }
-    static llvm::Optional<DevTypeTy> getDeviceType(const ValueDecl *VD) {
-      if (!VD->hasAttrs())
-        return llvm::None;
-      if (const auto *Attr = VD->getAttr<OMPDeclareTargetDeclAttr>())
-        return Attr->getDevType();
-
-      return llvm::None;
-    }
-  }];
-}
-
-def OMPAllocateDecl : InheritableAttr {
-  // This attribute has no spellings as it is only ever created implicitly.
-  let Spellings = [];
-  let SemaHandler = 0;
-  let Args = [
-    EnumArgument<"AllocatorType", "AllocatorTypeTy",
-                 [
-                   "omp_default_mem_alloc", "omp_large_cap_mem_alloc",
-                   "omp_const_mem_alloc", "omp_high_bw_mem_alloc",
-                   "omp_low_lat_mem_alloc", "omp_cgroup_mem_alloc",
-                   "omp_pteam_mem_alloc", "omp_thread_mem_alloc", ""
-                 ],
-                 [
-                   "OMPDefaultMemAlloc", "OMPLargeCapMemAlloc",
-                   "OMPConstMemAlloc", "OMPHighBWMemAlloc", "OMPLowLatMemAlloc",
-                   "OMPCGroupMemAlloc", "OMPPTeamMemAlloc", "OMPThreadMemAlloc",
-                   "OMPUserDefinedMemAlloc"
-                 ]>,
-    ExprArgument<"Allocator">
-  ];
-  let Documentation = [Undocumented];
-}
-
-def OMPDeclareVariant : InheritableAttr {
-  let Spellings = [Pragma<"omp", "declare variant">];
-  let Subjects = SubjectList<[Function]>;
-  let SemaHandler = 0;
-  let HasCustomParsing = 1;
-  let InheritEvenIfAlreadyPresent = 1;
-  let Documentation = [OMPDeclareVariantDocs];
-  let Args = [
-    ExprArgument<"VariantFuncRef">,
-    VariadicExprArgument<"Scores">,
-    VariadicUnsignedArgument<"CtxSelectorSets">,
-    VariadicUnsignedArgument<"CtxSelectors">,
-    VariadicStringArgument<"ImplVendors">,
-    VariadicStringArgument<"DeviceKinds">
-  ];
-  let AdditionalMembers = [{
-    void printScore(raw_ostream & OS, const PrintingPolicy &Policy, unsigned I) const {
-      if (const Expr *E = *std::next(scores_begin(), I)) {
-        OS << "score(";
-        E->printPretty(OS, nullptr, Policy);
-        OS << "):";
-      }
-    }
-    void printPrettyPragma(raw_ostream & OS, const PrintingPolicy &Policy)
-        const {
-      if (const Expr *E = getVariantFuncRef()) {
-        OS << "(";
-        E->printPretty(OS, nullptr, Policy);
-        OS << ")";
-      }
-      // TODO: add printing of real context selectors.
-      OS << " match(";
-      int Used[OMP_CTX_SET_unknown] = {0};
-      for (unsigned I = 0, E = ctxSelectorSets_size(); I < E; ++I) {
-        auto CtxSet = static_cast<OpenMPContextSelectorSetKind>(
-            *std::next(ctxSelectorSets_begin(), I));
-        if (Used[CtxSet])
-          continue;
-        if (I > 0)
-          OS << ",";
-        switch (CtxSet) {
-        case OMP_CTX_SET_implementation:
-          OS << "implementation={";
-          break;
-        case OMP_CTX_SET_device:
-          OS << "device={";
-          break;
-        case OMP_CTX_SET_unknown:
-          llvm_unreachable("Unknown context selector set.");
-        }
-        Used[CtxSet] = 1;
-        for (unsigned K = I, EK = ctxSelectors_size(); K < EK; ++K) {
-          auto CtxSetK = static_cast<OpenMPContextSelectorSetKind>(
-              *std::next(ctxSelectorSets_begin(), K));
-          if (CtxSet != CtxSetK)
-            continue;
-          if (K != I)
-            OS << ",";
-          auto Ctx = static_cast<OpenMPContextSelectorKind>(
-              *std::next(ctxSelectors_begin(), K));
-          switch (Ctx) {
-          case OMP_CTX_vendor:
-            assert(CtxSet == OMP_CTX_SET_implementation &&
-                   "Expected implementation context selector set.");
-            OS << "vendor(";
-            printScore(OS, Policy, K);
-            if (implVendors_size() > 0) {
-              OS << *implVendors(). begin();
-              for (StringRef VendorName : llvm::drop_begin(implVendors(), 1))
-                OS << ", " << VendorName;
-            }
-            OS << ")";
-            break;
-          case OMP_CTX_kind:
-            assert(CtxSet == OMP_CTX_SET_device &&
-                   "Expected device context selector set.");
-            OS << "kind(";
-            if (deviceKinds_size() > 0) {
-              OS << *deviceKinds().begin();
-              for (StringRef KindName : llvm::drop_begin(deviceKinds(), 1))
-                OS << ", " << KindName;
-            }
-            OS << ")";
-            break;
-          case OMP_CTX_unknown:
-            llvm_unreachable("Unknown context selector.");
-          }
-        }
-        OS << "}";
-      }
-      OS << ")";
+        OS << ConvertMapTypeTyToStr(getMapType()) << " ";
     }
   }];
 }
 
 def InternalLinkage : InheritableAttr {
-  let Spellings = [Clang<"internal_linkage">];
+  let Spellings = [GNU<"internal_linkage">, CXX11<"clang", "internal_linkage">];
   let Subjects = SubjectList<[Var, Function, CXXRecord]>;
   let Documentation = [InternalLinkageDocs];
-}
-
-def ExcludeFromExplicitInstantiation : InheritableAttr {
-  let Spellings = [Clang<"exclude_from_explicit_instantiation">];
-  let Subjects = SubjectList<[Var, Function, CXXRecord]>;
-  let Documentation = [ExcludeFromExplicitInstantiationDocs];
-  let MeaningfulToClassTemplateDefinition = 1;
-}
-
-def Reinitializes : InheritableAttr {
-  let Spellings = [Clang<"reinitializes", 0>];
-  let Subjects = SubjectList<[NonStaticNonConstCXXMethod], ErrorDiag>;
-  let Documentation = [ReinitializesDocs];
-}
-
-def NoDestroy : InheritableAttr {
-  let Spellings = [Clang<"no_destroy", 0>];
-  let Subjects = SubjectList<[Var]>;
-  let Documentation = [NoDestroyDocs];
-}
-
-def AlwaysDestroy : InheritableAttr {
-  let Spellings = [Clang<"always_destroy", 0>];
-  let Subjects = SubjectList<[Var]>;
-  let Documentation = [AlwaysDestroyDocs];
-}
-
-def SpeculativeLoadHardening : InheritableAttr {
-  let Spellings = [Clang<"speculative_load_hardening">];
-  let Subjects = SubjectList<[Function, ObjCMethod], ErrorDiag>;
-  let Documentation = [SpeculativeLoadHardeningDocs];
-}
-
-def NoSpeculativeLoadHardening : InheritableAttr {
-  let Spellings = [Clang<"no_speculative_load_hardening">];
-  let Subjects = SubjectList<[Function, ObjCMethod], ErrorDiag>;
-  let Documentation = [NoSpeculativeLoadHardeningDocs];
-}
-
-def Uninitialized : InheritableAttr {
-  let Spellings = [Clang<"uninitialized", 0>];
-  let Subjects = SubjectList<[LocalVar]>;
-  let Documentation = [UninitializedDocs];
-}
-
-def ObjCExternallyRetained : InheritableAttr {
-  let LangOpts = [ObjCAutoRefCount];
-  let Spellings = [Clang<"objc_externally_retained">];
-  let Subjects = SubjectList<[NonParmVar, Function, Block, ObjCMethod]>;
-  let Documentation = [ObjCExternallyRetainedDocs];
-}
-
-def NoBuiltin : Attr {
-  let Spellings = [Clang<"no_builtin">];
-  let Args = [VariadicStringArgument<"BuiltinNames">];
-  let Subjects = SubjectList<[Function]>;
-  let Documentation = [NoBuiltinDocs];
-}
-
-// FIXME: This attribute is not inheritable, it will not be propagated to
-// redecls. [[clang::lifetimebound]] has the same problems. This should be
-// fixed in TableGen (by probably adding a new inheritable flag).
-def AcquireHandle : DeclOrTypeAttr {
-  let Spellings = [Clang<"acquire_handle">];
-  let Args = [StringArgument<"HandleType">];
-  let Subjects = SubjectList<[Function, TypedefName, ParmVar]>;
-  let Documentation = [AcquireHandleDocs];
-}
-
-def UseHandle : InheritableParamAttr {
-  let Spellings = [Clang<"use_handle">];
-  let Args = [StringArgument<"HandleType">];
-  let Subjects = SubjectList<[ParmVar]>;
-  let Documentation = [UseHandleDocs];
-}
-
-def ReleaseHandle : InheritableParamAttr {
-  let Spellings = [Clang<"release_handle">];
-  let Args = [StringArgument<"HandleType">];
-  let Subjects = SubjectList<[ParmVar]>;
-  let Documentation = [ReleaseHandleDocs];
 }

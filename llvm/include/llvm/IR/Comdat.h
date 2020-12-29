@@ -1,8 +1,9 @@
-//===- llvm/IR/Comdat.h - Comdat definitions --------------------*- C++ -*-===//
+//===-- llvm/IR/Comdat.h - Comdat definitions -------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,9 +15,6 @@
 
 #ifndef LLVM_IR_COMDAT_H
 #define LLVM_IR_COMDAT_H
-
-#include "llvm-c/Types.h"
-#include "llvm/Support/CBindingWrapping.h"
 
 namespace llvm {
 
@@ -53,12 +51,9 @@ private:
   Comdat();
 
   // Points to the map in Module.
-  StringMapEntry<Comdat> *Name = nullptr;
-  SelectionKind SK = Any;
+  StringMapEntry<Comdat> *Name;
+  SelectionKind SK;
 };
-
-// Create wrappers for C Binding types (see CBindingWrapping.h).
-DEFINE_SIMPLE_CONVERSION_FUNCTIONS(Comdat, LLVMComdatRef)
 
 inline raw_ostream &operator<<(raw_ostream &OS, const Comdat &C) {
   C.print(OS);

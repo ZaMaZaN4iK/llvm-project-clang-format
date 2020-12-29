@@ -1,15 +1,16 @@
 //===-- RegisterContextThreadMemory.cpp -------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+#include "lldb/Core/Error.h"
 #include "lldb/Target/OperatingSystem.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Utility/Status.h"
 #include "lldb/lldb-private.h"
 
 #include "RegisterContextThreadMemory.h"
@@ -54,7 +55,9 @@ void RegisterContextThreadMemory::UpdateRegisterContext() {
   }
 }
 
+//------------------------------------------------------------------
 // Subclasses must override these functions
+//------------------------------------------------------------------
 void RegisterContextThreadMemory::InvalidateAllRegisters() {
   UpdateRegisterContext();
   if (m_reg_ctx_sp)
@@ -73,7 +76,7 @@ RegisterContextThreadMemory::GetRegisterInfoAtIndex(size_t reg) {
   UpdateRegisterContext();
   if (m_reg_ctx_sp)
     return m_reg_ctx_sp->GetRegisterInfoAtIndex(reg);
-  return nullptr;
+  return NULL;
 }
 
 size_t RegisterContextThreadMemory::GetRegisterSetCount() {
@@ -87,7 +90,7 @@ const RegisterSet *RegisterContextThreadMemory::GetRegisterSet(size_t reg_set) {
   UpdateRegisterContext();
   if (m_reg_ctx_sp)
     return m_reg_ctx_sp->GetRegisterSet(reg_set);
-  return nullptr;
+  return NULL;
 }
 
 bool RegisterContextThreadMemory::ReadRegister(const RegisterInfo *reg_info,
@@ -191,26 +194,26 @@ bool RegisterContextThreadMemory::HardwareSingleStep(bool enable) {
   return false;
 }
 
-Status RegisterContextThreadMemory::ReadRegisterValueFromMemory(
+Error RegisterContextThreadMemory::ReadRegisterValueFromMemory(
     const lldb_private::RegisterInfo *reg_info, lldb::addr_t src_addr,
     uint32_t src_len, RegisterValue &reg_value) {
   UpdateRegisterContext();
   if (m_reg_ctx_sp)
     return m_reg_ctx_sp->ReadRegisterValueFromMemory(reg_info, src_addr,
                                                      src_len, reg_value);
-  Status error;
+  Error error;
   error.SetErrorString("invalid register context");
   return error;
 }
 
-Status RegisterContextThreadMemory::WriteRegisterValueToMemory(
+Error RegisterContextThreadMemory::WriteRegisterValueToMemory(
     const lldb_private::RegisterInfo *reg_info, lldb::addr_t dst_addr,
     uint32_t dst_len, const RegisterValue &reg_value) {
   UpdateRegisterContext();
   if (m_reg_ctx_sp)
     return m_reg_ctx_sp->WriteRegisterValueToMemory(reg_info, dst_addr, dst_len,
                                                     reg_value);
-  Status error;
+  Error error;
   error.SetErrorString("invalid register context");
   return error;
 }

@@ -86,20 +86,6 @@ namespace bullet6 {
   const int& i1 = { 1 };
   const int& i2 = { 1.1 };  // expected-error {{type 'double' cannot be narrowed to 'int' in initializer list}} expected-note {{silence}} expected-warning {{implicit conversion}}
   const int (&iar)[2] = { 1, 2 };
-
-  // We interpret "class type with a default constructor" as including the case
-  // where a default constructor is inherited.
-  struct X {
-    X();
-    X(std::initializer_list<int>) = delete;
-  };
-  struct Y : X {
-    using X::X;
-    Y(int);
-  };
-  Y y1{};
-  void use() { Y y; }
-  Y y2{};
 }
 
 namespace bullet7 {
@@ -164,44 +150,35 @@ namespace cxx1z_direct_enum_init {
 
     void f(T);
     f(T{0});
-
-    char c;
-    auto t3 = T{c};
   }
 #if __cplusplus <= 201402L
-  // expected-error@-18 5{{cannot initialize}}
-  // expected-error@-18 5{{cannot initialize}}
-  // expected-error@-18 5{{cannot initialize}}
+  // expected-error@-15 5{{cannot initialize}}
+  // expected-error@-15 5{{cannot initialize}}
+  // expected-error@-15 5{{cannot initialize}}
   //
   //
-  // expected-error@-18 5{{cannot initialize}}
+  // expected-error@-15 5{{cannot initialize}}
   //
-  // expected-error@-18 5{{cannot initialize}}
+  // expected-error@-15 5{{cannot initialize}}
   //
-  // expected-error@-18 5{{cannot initialize}}
-  //
-  //
-  // expected-error@-18 5{{cannot initialize}}
+  // expected-error@-15 5{{cannot initialize}}
   //
   //
-  // expected-error@-18 5{{cannot initialize}}
+  // expected-error@-15 5{{cannot initialize}}
 #else
-  // expected-error@-35 {{cannot initialize}}
-  // expected-error@-35 {{cannot initialize}}
-  // expected-error@-35 {{cannot initialize}}
+  // expected-error@-29 {{cannot initialize}}
+  // expected-error@-29 {{cannot initialize}}
+  // expected-error@-29 {{cannot initialize}}
   //
   //
-  // expected-error@-35 {{cannot initialize}}
+  // expected-error@-29 {{cannot initialize}}
   //
-  // expected-error@-35 {{cannot initialize}}
+  // expected-error@-29 {{cannot initialize}}
   //
-  // expected-error@-35 {{cannot initialize}}
-  //
-  //
-  // expected-error@-35 {{cannot initialize}}
+  // expected-error@-29 {{cannot initialize}}
   //
   //
-  // expected-error@-35 {{cannot initialize}}
+  // expected-error@-29 {{cannot initialize}}
 #endif
 
   template<typename T> void bad() {
@@ -275,12 +252,4 @@ namespace cxx1z_direct_enum_init {
     (void)B{0.0}; // expected-error {{type 'double' cannot be narrowed}}
 #endif
   }
-
-#if __cplusplus > 201402L
-  enum class F : unsigned {};
-  F f1(unsigned x) { return F{x}; }
-  F f2(const unsigned x) { return F{x}; }
-  F f3(bool x) { return F{x}; }
-  F f4(const bool x) { return F{x}; }
-#endif
 }

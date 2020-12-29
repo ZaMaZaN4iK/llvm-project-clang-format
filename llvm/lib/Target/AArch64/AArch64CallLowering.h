@@ -1,8 +1,9 @@
-//===- AArch64CallLowering.h - Call lowering --------------------*- C++ -*-===//
+//===-- llvm/lib/Target/AArch64/AArch64CallLowering.h - Call lowering -----===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -11,72 +12,45 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_AARCH64_AARCH64CALLLOWERING_H
-#define LLVM_LIB_TARGET_AARCH64_AARCH64CALLLOWERING_H
+#ifndef LLVM_LIB_TARGET_AARCH64_AARCH64CALLLOWERING
+#define LLVM_LIB_TARGET_AARCH64_AARCH64CALLLOWERING
 
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/CodeGen/GlobalISel/CallLowering.h"
-#include "llvm/IR/CallingConv.h"
-#include <cstdint>
-#include <functional>
+#include "llvm/CodeGen/ValueTypes.h"
 
 namespace llvm {
 
 class AArch64TargetLowering;
-class CCValAssign;
-class DataLayout;
-class MachineIRBuilder;
-class MachineRegisterInfo;
-class Type;
 
 class AArch64CallLowering: public CallLowering {
-public:
+ public:
   AArch64CallLowering(const AArch64TargetLowering &TLI);
 
-  bool lowerReturn(MachineIRBuilder &MIRBuilder, const Value *Val,
-                   ArrayRef<Register> VRegs,
-                   Register SwiftErrorVReg) const override;
+  bool lowerReturn(MachineIRBuilder &MIRBuiler, const Value *Val,
+                   unsigned VReg) const override;
 
   bool lowerFormalArguments(MachineIRBuilder &MIRBuilder, const Function &F,
-                            ArrayRef<ArrayRef<Register>> VRegs) const override;
+                            ArrayRef<unsigned> VRegs) const override;
 
-  bool lowerCall(MachineIRBuilder &MIRBuilder,
-                 CallLoweringInfo &Info) const override;
-
-  /// Returns true if the call can be lowered as a tail call.
-  bool
-  isEligibleForTailCallOptimization(MachineIRBuilder &MIRBuilder,
-                                    CallLoweringInfo &Info,
-                                    SmallVectorImpl<ArgInfo> &InArgs,
-                                    SmallVectorImpl<ArgInfo> &OutArgs) const;
-
-  bool supportSwiftError() const override { return true; }
+  bool lowerCall(MachineIRBuilder &MIRBuilder, const MachineOperand &Callee,
+                 const ArgInfo &OrigRet,
+                 ArrayRef<ArgInfo> OrigArgs) const override;
 
 private:
-  using RegHandler = std::function<void(MachineIRBuilder &, Type *, unsigned,
-                                        CCValAssign &)>;
+  typedef std::function<void(MachineIRBuilder &, Type *, unsigned,
+                             CCValAssign &)>
+      RegHandler;
 
-  using MemHandler =
-      std::function<void(MachineIRBuilder &, int, CCValAssign &)>;
+  typedef std::function<void(MachineIRBuilder &, int, CCValAssign &)>
+      MemHandler;
+
+  typedef std::function<void(ArrayRef<unsigned>, ArrayRef<uint64_t>)>
+      SplitArgTy;
 
   void splitToValueTypes(const ArgInfo &OrigArgInfo,
                          SmallVectorImpl<ArgInfo> &SplitArgs,
                          const DataLayout &DL, MachineRegisterInfo &MRI,
-                         CallingConv::ID CallConv) const;
-
-  bool lowerTailCall(MachineIRBuilder &MIRBuilder, CallLoweringInfo &Info,
-                     SmallVectorImpl<ArgInfo> &OutArgs) const;
-
-  bool
-  doCallerAndCalleePassArgsTheSameWay(CallLoweringInfo &Info,
-                                      MachineFunction &MF,
-                                      SmallVectorImpl<ArgInfo> &InArgs) const;
-
-  bool
-  areCalleeOutgoingArgsTailCallable(CallLoweringInfo &Info, MachineFunction &MF,
-                                    SmallVectorImpl<ArgInfo> &OutArgs) const;
+                         SplitArgTy SplitArg) const;
 };
-
-} // end namespace llvm
-
-#endif // LLVM_LIB_TARGET_AARCH64_AARCH64CALLLOWERING_H
+} // End of namespace llvm;
+#endif

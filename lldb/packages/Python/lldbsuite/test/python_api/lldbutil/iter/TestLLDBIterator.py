@@ -5,6 +5,9 @@ Test the iteration protocol for some lldb container objects.
 from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -27,7 +30,7 @@ class LLDBIteratorTestCase(TestBase):
     def test_lldb_iter_module(self):
         """Test module_iter works correctly for SBTarget -> SBModule."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
@@ -63,7 +66,7 @@ class LLDBIteratorTestCase(TestBase):
     def test_lldb_iter_breakpoint(self):
         """Test breakpoint_iter works correctly for SBTarget -> SBBreakpoint."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
@@ -95,7 +98,7 @@ class LLDBIteratorTestCase(TestBase):
     def test_lldb_iter_frame(self):
         """Test iterator works correctly for SBProcess->SBThread->SBFrame."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)

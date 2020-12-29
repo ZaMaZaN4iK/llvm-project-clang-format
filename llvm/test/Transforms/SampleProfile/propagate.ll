@@ -201,10 +201,10 @@ entry:
 
 declare i32 @printf(i8*, ...) #3
 
-attributes #0 = { nounwind uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { nounwind uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #1 = { nounwind readnone }
-attributes #2 = { norecurse uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #3 = { "disable-tail-calls"="false" "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #2 = { norecurse uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #3 = { "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!3, !4}
@@ -216,7 +216,7 @@ attributes #3 = { "disable-tail-calls"="false" "less-precise-fpmad"="false" "fra
 !3 = !{i32 2, !"Dwarf Version", i32 4}
 !4 = !{i32 2, !"Debug Info Version", i32 3}
 !5 = !{!"clang version 3.9.0 (trunk 266819)"}
-!6 = distinct !DISubprogram(name: "foo", linkageName: "_Z3fooiil", scope: !1, file: !1, line: 3, type: !7, isLocal: false, isDefinition: true, scopeLine: 3, flags: DIFlagPrototyped, isOptimized: false, unit: !0, retainedNodes: !2)
+!6 = distinct !DISubprogram(name: "foo", linkageName: "_Z3fooiil", scope: !1, file: !1, line: 3, type: !7, isLocal: false, isDefinition: true, scopeLine: 3, flags: DIFlagPrototyped, isOptimized: false, unit: !0, variables: !2)
 !7 = !DISubroutineType(types: !8)
 !8 = !{!9, !10, !10, !9}
 !9 = !DIBasicType(name: "long int", size: 64, align: 64, encoding: DW_ATE_signed)
@@ -244,7 +244,7 @@ attributes #3 = { "disable-tail-calls"="false" "less-precise-fpmad"="false" "fra
 !31 = !DILocation(line: 7, column: 15, scope: !29)
 !32 = !DILocation(line: 7, column: 10, scope: !29)
 !33 = !DILocation(line: 7, column: 22, scope: !34)
-!34 = !DILexicalBlockFile(scope: !35, file: !1, discriminator: 2)
+!34 = !DILexicalBlockFile(scope: !35, file: !1, discriminator: 1)
 !35 = distinct !DILexicalBlock(scope: !29, file: !1, line: 7, column: 5)
 !36 = !DILocation(line: 7, column: 26, scope: !34)
 !37 = !DILocation(line: 7, column: 24, scope: !34)
@@ -275,7 +275,7 @@ attributes #3 = { "disable-tail-calls"="false" "less-precise-fpmad"="false" "fra
 !62 = !DILocation(line: 14, column: 24, scope: !59)
 !63 = !DILocation(line: 14, column: 14, scope: !59)
 !64 = !DILocation(line: 14, column: 31, scope: !65)
-!65 = !DILexicalBlockFile(scope: !66, file: !1, discriminator: 2)
+!65 = !DILexicalBlockFile(scope: !66, file: !1, discriminator: 1)
 !66 = distinct !DILexicalBlock(scope: !59, file: !1, line: 14, column: 9)
 !67 = !DILocation(line: 14, column: 33, scope: !65)
 !68 = !DILocation(line: 14, column: 9, scope: !65)
@@ -285,18 +285,18 @@ attributes #3 = { "disable-tail-calls"="false" "less-precise-fpmad"="false" "fra
 !72 = !DILocation(line: 16, column: 13, scope: !70)
 !73 = !DILocation(line: 17, column: 9, scope: !70)
 !74 = !DILocation(line: 14, column: 41, scope: !75)
-!75 = !DILexicalBlockFile(scope: !66, file: !1, discriminator: 4)
+!75 = !DILexicalBlockFile(scope: !66, file: !1, discriminator: 2)
 !76 = !DILocation(line: 14, column: 9, scope: !75)
 !77 = !DILocation(line: 19, column: 5, scope: !41)
 !78 = !DILocation(line: 7, column: 30, scope: !79)
-!79 = !DILexicalBlockFile(scope: !35, file: !1, discriminator: 4)
+!79 = !DILexicalBlockFile(scope: !35, file: !1, discriminator: 2)
 !80 = !DILocation(line: 7, column: 5, scope: !79)
 !81 = !DILocation(line: 21, column: 10, scope: !6)
 !82 = !DILocation(line: 21, column: 14, scope: !6)
 !83 = !DILocation(line: 21, column: 12, scope: !6)
 !84 = !DILocation(line: 21, column: 3, scope: !6)
 !85 = !DILocation(line: 22, column: 1, scope: !6)
-!86 = distinct !DISubprogram(name: "main", scope: !1, file: !1, line: 24, type: !87, isLocal: false, isDefinition: true, scopeLine: 24, flags: DIFlagPrototyped, isOptimized: false, unit: !0, retainedNodes: !2)
+!86 = distinct !DISubprogram(name: "main", scope: !1, file: !1, line: 24, type: !87, isLocal: false, isDefinition: true, scopeLine: 24, flags: DIFlagPrototyped, isOptimized: false, unit: !0, variables: !2)
 !87 = !DISubroutineType(types: !88)
 !88 = !{!10}
 !89 = !DILocalVariable(name: "x", scope: !86, file: !1, line: 25, type: !10)
@@ -313,5 +313,5 @@ attributes #3 = { "disable-tail-calls"="false" "less-precise-fpmad"="false" "fra
 !100 = !DILocation(line: 28, column: 57, scope: !86)
 !101 = !DILocation(line: 28, column: 47, scope: !86)
 !102 = !DILocation(line: 28, column: 3, scope: !103)
-!103 = !DILexicalBlockFile(scope: !86, file: !1, discriminator: 2)
+!103 = !DILexicalBlockFile(scope: !86, file: !1, discriminator: 1)
 !104 = !DILocation(line: 29, column: 3, scope: !86)

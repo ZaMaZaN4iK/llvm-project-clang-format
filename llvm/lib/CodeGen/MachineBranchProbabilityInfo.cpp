@@ -1,8 +1,9 @@
 //===- MachineBranchProbabilityInfo.cpp - Machine Branch Probability Info -===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,8 +14,6 @@
 #include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -38,12 +37,6 @@ cl::opt<unsigned> ProfileLikelyProb(
     cl::init(51), cl::Hidden);
 
 char MachineBranchProbabilityInfo::ID = 0;
-
-MachineBranchProbabilityInfo::MachineBranchProbabilityInfo()
-    : ImmutablePass(ID) {
-  PassRegistry &Registry = *PassRegistry::getPassRegistry();
-  initializeMachineBranchProbabilityInfoPass(Registry);
-}
 
 void MachineBranchProbabilityInfo::anchor() {}
 
@@ -91,7 +84,7 @@ raw_ostream &MachineBranchProbabilityInfo::printEdgeProbability(
     const MachineBasicBlock *Dst) const {
 
   const BranchProbability Prob = getEdgeProbability(Src, Dst);
-  OS << "edge " << printMBBReference(*Src) << " -> " << printMBBReference(*Dst)
+  OS << "edge MBB#" << Src->getNumber() << " -> MBB#" << Dst->getNumber()
      << " probability is " << Prob
      << (isEdgeHot(Src, Dst) ? " [HOT edge]\n" : "\n");
 

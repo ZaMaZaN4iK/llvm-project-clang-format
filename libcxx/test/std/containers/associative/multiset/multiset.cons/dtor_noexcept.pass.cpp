@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -27,7 +28,7 @@ struct some_comp
     bool operator()(const T&, const T&) const { return false; }
 };
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::multiset<MoveOnly> C;
@@ -41,12 +42,8 @@ int main(int, char**)
         typedef std::multiset<MoveOnly, std::less<MoveOnly>, other_allocator<MoveOnly>> C;
         static_assert(std::is_nothrow_destructible<C>::value, "");
     }
-#if defined(_LIBCPP_VERSION)
     {
         typedef std::multiset<MoveOnly, some_comp<MoveOnly>> C;
-        static_assert(!std::is_nothrow_destructible<C>::value, "");
+        LIBCPP_STATIC_ASSERT(!std::is_nothrow_destructible<C>::value, "");
     }
-#endif // _LIBCPP_VERSION
-
-  return 0;
 }

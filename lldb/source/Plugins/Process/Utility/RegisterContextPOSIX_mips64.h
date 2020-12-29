@@ -1,18 +1,24 @@
 //===-- RegisterContextPOSIX_mips64.h ---------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_RegisterContextPOSIX_mips64_h_
 #define liblldb_RegisterContextPOSIX_mips64_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "RegisterContext_mips.h"
 #include "RegisterInfoInterface.h"
+#include "lldb-mips-freebsd-register-enums.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Target/RegisterContext.h"
-#include "lldb/Utility/Log.h"
 
 using namespace lldb_private;
 
@@ -20,14 +26,6 @@ class ProcessMonitor;
 
 class RegisterContextPOSIX_mips64 : public lldb_private::RegisterContext {
 public:
-
-  enum Register_count{
-      gpr_registers_count = 0,
-      fpr_registers_count,
-      msa_registers_count,
-      register_set_count
-  };
-
   RegisterContextPOSIX_mips64(
       lldb_private::Thread &thread, uint32_t concrete_frame_idx,
       lldb_private::RegisterInfoInterface *register_info);
@@ -58,10 +56,10 @@ public:
                                                uint32_t num) override;
 
 protected:
-  uint32_t m_num_registers;
-  uint8_t m_registers_count[register_set_count];
+  uint64_t
+      m_gpr_mips64[k_num_gpr_registers_mips64]; // general purpose registers.
   std::unique_ptr<lldb_private::RegisterInfoInterface>
-      m_register_info_up; // Register Info Interface (FreeBSD or Linux)
+      m_register_info_ap; // Register Info Interface (FreeBSD or Linux)
 
   // Determines if an extended register set is supported on the processor
   // running the inferior process.

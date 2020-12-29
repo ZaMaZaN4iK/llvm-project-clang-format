@@ -1,8 +1,9 @@
 //=== PointerArithChecker.cpp - Pointer arithmetic checker -----*- C++ -*--===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
@@ -111,7 +112,7 @@ PointerArithChecker::getPointedRegion(const MemRegion *Region,
 }
 
 /// Checks whether a region is the part of an array.
-/// In case there is a derived to base cast above the array element, the
+/// In case there is a dericed to base cast above the array element, the
 /// Polymorphic output value is set to true. AKind output value is set to the
 /// allocation kind of the inspected region.
 const MemRegion *PointerArithChecker::getArrayRegion(const MemRegion *Region,
@@ -119,12 +120,12 @@ const MemRegion *PointerArithChecker::getArrayRegion(const MemRegion *Region,
                                                      AllocKind &AKind,
                                                      CheckerContext &C) const {
   assert(Region);
-  while (const auto *BaseRegion = dyn_cast<CXXBaseObjectRegion>(Region)) {
-    Region = BaseRegion->getSuperRegion();
+  while (Region->getKind() == MemRegion::Kind::CXXBaseObjectRegionKind) {
+    Region = Region->getAs<CXXBaseObjectRegion>()->getSuperRegion();
     Polymorphic = true;
   }
-  if (const auto *ElemRegion = dyn_cast<ElementRegion>(Region)) {
-    Region = ElemRegion->getSuperRegion();
+  if (Region->getKind() == MemRegion::Kind::ElementRegionKind) {
+    Region = Region->getAs<ElementRegion>()->getSuperRegion();
   }
 
   ProgramStateRef State = C.getState();
@@ -137,7 +138,7 @@ const MemRegion *PointerArithChecker::getArrayRegion(const MemRegion *Region,
   }
   // When the region is symbolic and we do not have any information about it,
   // assume that this is an array to avoid false positives.
-  if (isa<SymbolicRegion>(Region))
+  if (Region->getKind() == MemRegion::Kind::SymbolicRegionKind)
     return Region;
 
   // No AllocKind stored and not symbolic, assume that it points to a single
@@ -153,7 +154,8 @@ void PointerArithChecker::reportPointerArithMisuse(const Expr *E,
     return;
 
   ProgramStateRef State = C.getState();
-  const MemRegion *Region = C.getSVal(E).getAsRegion();
+  const MemRegion *Region =
+      State->getSVal(E, C.getLocationContext()).getAsRegion();
   if (!Region)
     return;
   if (PointedNeeded)
@@ -173,8 +175,8 @@ void PointerArithChecker::reportPointerArithMisuse(const Expr *E,
             this, "Dangerous pointer arithmetic",
             "Pointer arithmetic on a pointer to base class is dangerous "
             "because derived and base class may have different size."));
-      auto R = std::make_unique<PathSensitiveBugReport>(
-          *BT_polyArray, BT_polyArray->getDescription(), N);
+      auto R = llvm::make_unique<BugReport>(*BT_polyArray,
+                                            BT_polyArray->getDescription(), N);
       R->addRange(E->getSourceRange());
       R->markInteresting(ArrayRegion);
       C.emitReport(std::move(R));
@@ -196,8 +198,8 @@ void PointerArithChecker::reportPointerArithMisuse(const Expr *E,
                                            "Pointer arithmetic on non-array "
                                            "variables relies on memory layout, "
                                            "which is dangerous."));
-    auto R = std::make_unique<PathSensitiveBugReport>(
-        *BT_pointerArith, BT_pointerArith->getDescription(), N);
+    auto R = llvm::make_unique<BugReport>(*BT_pointerArith,
+                                          BT_pointerArith->getDescription(), N);
     R->addRange(SR);
     R->markInteresting(Region);
     C.emitReport(std::move(R));
@@ -225,7 +227,7 @@ void PointerArithChecker::checkPostStmt(const CallExpr *CE,
   if (AllocFunctions.count(FunI) == 0)
     return;
 
-  SVal SV = C.getSVal(CE);
+  SVal SV = State->getSVal(CE, C.getLocationContext());
   const MemRegion *Region = SV.getAsRegion();
   if (!Region)
     return;
@@ -246,7 +248,7 @@ void PointerArithChecker::checkPostStmt(const CXXNewExpr *NE,
   AllocKind Kind = getKindOfNewOp(NE, FD);
 
   ProgramStateRef State = C.getState();
-  SVal AllocedVal = C.getSVal(NE);
+  SVal AllocedVal = State->getSVal(NE, C.getLocationContext());
   const MemRegion *Region = AllocedVal.getAsRegion();
   if (!Region)
     return;
@@ -261,7 +263,7 @@ void PointerArithChecker::checkPostStmt(const CastExpr *CE,
 
   const Expr *CastedExpr = CE->getSubExpr();
   ProgramStateRef State = C.getState();
-  SVal CastedVal = C.getSVal(CastedExpr);
+  SVal CastedVal = State->getSVal(CastedExpr, C.getLocationContext());
 
   const MemRegion *Region = CastedVal.getAsRegion();
   if (!Region)
@@ -279,7 +281,7 @@ void PointerArithChecker::checkPreStmt(const CastExpr *CE,
 
   const Expr *CastedExpr = CE->getSubExpr();
   ProgramStateRef State = C.getState();
-  SVal CastedVal = C.getSVal(CastedExpr);
+  SVal CastedVal = State->getSVal(CastedExpr, C.getLocationContext());
 
   const MemRegion *Region = CastedVal.getAsRegion();
   if (!Region)
@@ -302,14 +304,11 @@ void PointerArithChecker::checkPreStmt(const UnaryOperator *UOp,
 
 void PointerArithChecker::checkPreStmt(const ArraySubscriptExpr *SubsExpr,
                                        CheckerContext &C) const {
-  SVal Idx = C.getSVal(SubsExpr->getIdx());
+  ProgramStateRef State = C.getState();
+  SVal Idx = State->getSVal(SubsExpr->getIdx(), C.getLocationContext());
 
   // Indexing with 0 is OK.
   if (Idx.isZeroConstant())
-    return;
-
-  // Indexing vector-type expressions is also OK.
-  if (SubsExpr->getBase()->getType()->isVectorType())
     return;
   reportPointerArithMisuse(SubsExpr->getBase(), C);
 }
@@ -325,14 +324,14 @@ void PointerArithChecker::checkPreStmt(const BinaryOperator *BOp,
   ProgramStateRef State = C.getState();
 
   if (Rhs->getType()->isIntegerType() && Lhs->getType()->isPointerType()) {
-    SVal RHSVal = C.getSVal(Rhs);
+    SVal RHSVal = State->getSVal(Rhs, C.getLocationContext());
     if (State->isNull(RHSVal).isConstrainedTrue())
       return;
     reportPointerArithMisuse(Lhs, C, !BOp->isAdditiveOp());
   }
   // The int += ptr; case is not valid C++.
   if (Lhs->getType()->isIntegerType() && Rhs->getType()->isPointerType()) {
-    SVal LHSVal = C.getSVal(Lhs);
+    SVal LHSVal = State->getSVal(Lhs, C.getLocationContext());
     if (State->isNull(LHSVal).isConstrainedTrue())
       return;
     reportPointerArithMisuse(Rhs, C);
@@ -341,8 +340,4 @@ void PointerArithChecker::checkPreStmt(const BinaryOperator *BOp,
 
 void ento::registerPointerArithChecker(CheckerManager &mgr) {
   mgr.registerChecker<PointerArithChecker>();
-}
-
-bool ento::shouldRegisterPointerArithChecker(const LangOptions &LO) {
-  return true;
 }

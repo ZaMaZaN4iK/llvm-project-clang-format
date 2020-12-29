@@ -2,8 +2,11 @@
 Test number of threads.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -26,7 +29,6 @@ class CreateDuringStepTestCase(TestBase):
     @expectedFailureAll(
         oslist=["windows"],
         bugnumber="llvm.org/pr24668: Breakpoints not resolved correctly")
-    @expectedFailureNetBSD
     def test_step_inst(self):
         """Test thread creation during step-inst handling."""
         self.build(dictionary=self.getBuildFlags())
@@ -46,7 +48,6 @@ class CreateDuringStepTestCase(TestBase):
     @expectedFailureAll(
         oslist=["windows"],
         bugnumber="llvm.org/pr24668: Breakpoints not resolved correctly")
-    @expectedFailureNetBSD
     def test_step_over(self):
         """Test thread creation during step-over handling."""
         self.build(dictionary=self.getBuildFlags())
@@ -66,7 +67,6 @@ class CreateDuringStepTestCase(TestBase):
     @expectedFailureAll(
         oslist=["windows"],
         bugnumber="llvm.org/pr24668: Breakpoints not resolved correctly")
-    @expectedFailureNetBSD
     def test_step_in(self):
         """Test thread creation during step-in handling."""
         self.build(dictionary=self.getBuildFlags())
@@ -83,14 +83,14 @@ class CreateDuringStepTestCase(TestBase):
 
     def create_during_step_base(self, step_cmd, step_stop_reason):
         """Test thread creation while using step-in."""
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Get the target process
         target = self.dbg.GetSelectedTarget()
 
         # This should create a breakpoint in the stepping thread.
-        self.bkpt = target.BreakpointCreateByLocation("main.cpp", self.breakpoint)
+        self.bkpt = target.BreakpointCreateByLocation("main.cpp", self.breakpoint) 
 
         # Run the program.
         self.runCmd("run", RUN_SUCCEEDED)

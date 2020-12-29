@@ -1,17 +1,18 @@
 //===-- LibStdcppTuple.cpp --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "LibStdcpp.h"
 
+#include "lldb/Core/ConstString.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/DataFormatters/FormattersHelpers.h"
 #include "lldb/DataFormatters/TypeSynthetic.h"
-#include "lldb/Utility/ConstString.h"
 
 #include <memory>
 #include <vector>
@@ -34,15 +35,10 @@ public:
 
   bool MightHaveChildren() override;
 
-  size_t GetIndexOfChildWithName(ConstString name) override;
+  size_t GetIndexOfChildWithName(const ConstString &name) override;
 
 private:
-  // The lifetime of a ValueObject and all its derivative ValueObjects
-  // (children, clones, etc.) is managed by a ClusterManager. These
-  // objects are only destroyed when every shared pointer to any of them
-  // is destroyed, so we must not store a shared pointer to any ValueObject
-  // derived from our backend ValueObject (since we're in the same cluster).
-  std::vector<ValueObject*> m_members;
+  std::vector<ValueObjectSP> m_members;
 };
 
 } // end of anonymous namespace
@@ -77,7 +73,9 @@ bool LibStdcppTupleSyntheticFrontEnd::Update() {
         if (value_sp) {
           StreamString name;
           name.Printf("[%zd]", m_members.size());
-          m_members.push_back(value_sp->Clone(ConstString(name.GetString())).get());
+          value_sp->SetName(ConstString(name.GetString()));
+
+          m_members.push_back(value_sp);
         }
       }
     }
@@ -90,8 +88,8 @@ bool LibStdcppTupleSyntheticFrontEnd::MightHaveChildren() { return true; }
 
 lldb::ValueObjectSP
 LibStdcppTupleSyntheticFrontEnd::GetChildAtIndex(size_t idx) {
-  if (idx < m_members.size() && m_members[idx])
-    return m_members[idx]->GetSP();
+  if (idx < m_members.size())
+    return m_members[idx];
   return lldb::ValueObjectSP();
 }
 
@@ -100,7 +98,7 @@ size_t LibStdcppTupleSyntheticFrontEnd::CalculateNumChildren() {
 }
 
 size_t LibStdcppTupleSyntheticFrontEnd::GetIndexOfChildWithName(
-    ConstString name) {
+    const ConstString &name) {
   return ExtractIndexFromString(name.GetCString());
 }
 

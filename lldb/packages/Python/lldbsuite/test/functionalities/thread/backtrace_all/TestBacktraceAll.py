@@ -2,6 +2,8 @@
 Test regression for Bug 25251.
 """
 
+import os
+import time
 import unittest2
 import lldb
 from lldbsuite.test.decorators import *
@@ -9,7 +11,7 @@ from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
-class BacktraceAllTestCase(TestBase):
+class BreakpointAfterJoinTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
@@ -28,7 +30,7 @@ class BacktraceAllTestCase(TestBase):
         """Test breakpoint handling after a thread join."""
         self.build(dictionary=self.getBuildFlags())
 
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # This should create a breakpoint

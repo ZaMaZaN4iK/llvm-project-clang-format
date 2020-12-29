@@ -1,28 +1,32 @@
 //===-- ConnectionFileDescriptorPosix.h -------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_Host_posix_ConnectionFileDescriptorPosix_h_
 #define liblldb_Host_posix_ConnectionFileDescriptorPosix_h_
 
+// C++ Includes
 #include <atomic>
 #include <memory>
 #include <mutex>
 
 #include "lldb/lldb-forward.h"
 
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/Connection.h"
+#include "lldb/Host/IOObject.h"
 #include "lldb/Host/Pipe.h"
-#include "lldb/Utility/Connection.h"
-#include "lldb/Utility/IOObject.h"
-#include "lldb/Utility/Predicate.h"
+#include "lldb/Host/Predicate.h"
 
 namespace lldb_private {
 
-class Status;
+class Error;
 class Socket;
 class SocketAddress;
 
@@ -49,26 +53,26 @@ public:
 
   bool IsConnected() const override;
 
-  lldb::ConnectionStatus Connect(llvm::StringRef s, Status *error_ptr) override;
+  lldb::ConnectionStatus Connect(llvm::StringRef s, Error *error_ptr) override;
 
-  lldb::ConnectionStatus Disconnect(Status *error_ptr) override;
+  lldb::ConnectionStatus Disconnect(Error *error_ptr) override;
 
   size_t Read(void *dst, size_t dst_len, const Timeout<std::micro> &timeout,
-              lldb::ConnectionStatus &status, Status *error_ptr) override;
+              lldb::ConnectionStatus &status, Error *error_ptr) override;
 
   size_t Write(const void *src, size_t src_len, lldb::ConnectionStatus &status,
-               Status *error_ptr) override;
+               Error *error_ptr) override;
 
   std::string GetURI() override;
 
   lldb::ConnectionStatus BytesAvailable(const Timeout<std::micro> &timeout,
-                                        Status *error_ptr);
+                                        Error *error_ptr);
 
   bool InterruptRead() override;
 
   lldb::IOObjectSP GetReadObject() override { return m_read_sp; }
 
-  uint16_t GetListeningPort(const Timeout<std::micro> &timeout);
+  uint16_t GetListeningPort(uint32_t timeout_sec);
 
   bool GetChildProcessesInherit() const;
   void SetChildProcessesInherit(bool child_processes_inherit);
@@ -79,29 +83,29 @@ protected:
   void CloseCommandPipe();
 
   lldb::ConnectionStatus SocketListenAndAccept(llvm::StringRef host_and_port,
-                                               Status *error_ptr);
+                                               Error *error_ptr);
 
   lldb::ConnectionStatus ConnectTCP(llvm::StringRef host_and_port,
-                                    Status *error_ptr);
+                                    Error *error_ptr);
 
-  lldb::ConnectionStatus ConnectUDP(llvm::StringRef args, Status *error_ptr);
+  lldb::ConnectionStatus ConnectUDP(llvm::StringRef args, Error *error_ptr);
 
   lldb::ConnectionStatus NamedSocketConnect(llvm::StringRef socket_name,
-                                            Status *error_ptr);
+                                            Error *error_ptr);
 
   lldb::ConnectionStatus NamedSocketAccept(llvm::StringRef socket_name,
-                                           Status *error_ptr);
+                                           Error *error_ptr);
 
   lldb::ConnectionStatus UnixAbstractSocketConnect(llvm::StringRef socket_name,
-                                                   Status *error_ptr);
+                                                   Error *error_ptr);
 
   lldb::IOObjectSP m_read_sp;
   lldb::IOObjectSP m_write_sp;
 
   Predicate<uint16_t>
       m_port_predicate; // Used when binding to port zero to wait for the thread
-                        // that creates the socket, binds and listens to
-                        // resolve the port number.
+                        // that creates the socket, binds and listens to resolve
+                        // the port number.
 
   Pipe m_pipe;
   std::recursive_mutex m_mutex;

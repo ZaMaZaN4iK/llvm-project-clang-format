@@ -1,8 +1,9 @@
 //===- lib/ReaderWriter/MachO/CompactUnwindPass.cpp -------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -16,9 +17,9 @@
 #include "File.h"
 #include "MachONormalizedFileBinaryUtils.h"
 #include "MachOPasses.h"
-#include "lld/Common/LLVM.h"
 #include "lld/Core/DefinedAtom.h"
 #include "lld/Core/File.h"
+#include "lld/Core/LLVM.h"
 #include "lld/Core/Reference.h"
 #include "lld/Core/Simple.h"
 #include "llvm/ADT/DenseMap.h"
@@ -281,7 +282,7 @@ public:
 
 private:
   llvm::Error perform(SimpleFile &mergedFile) override {
-    LLVM_DEBUG(llvm::dbgs() << "MachO Compact Unwind pass\n");
+    DEBUG(llvm::dbgs() << "MachO Compact Unwind pass\n");
 
     std::map<const Atom *, CompactUnwindEntry> unwindLocs;
     std::map<const Atom *, const Atom *> dwarfFrames;
@@ -304,7 +305,7 @@ private:
     // also probably be sorted by frequency.
     assert(personalities.size() <= 4);
 
-    // TODO: Find common encodings for use by compressed pages.
+    // TODO: Find commmon encodings for use by compressed pages.
     std::vector<uint32_t> commonEncodings;
 
     // Now sort the entries by final address and fixup the compact encoding to
@@ -318,7 +319,7 @@ private:
 
     // Finally, we can start creating pages based on these entries.
 
-    LLVM_DEBUG(llvm::dbgs() << "  Splitting entries into pages\n");
+    DEBUG(llvm::dbgs() << "  Splitting entries into pages\n");
     // FIXME: we split the entries into pages naively: lots of 4k pages followed
     // by a small one. ld64 tried to minimize space and align them to real 4k
     // boundaries. That might be worth doing, or perhaps we could perform some
@@ -335,13 +336,11 @@ private:
       pages.back().entries = remainingInfos.slice(0, entriesInPage);
       remainingInfos = remainingInfos.slice(entriesInPage);
 
-      LLVM_DEBUG(llvm::dbgs()
-                 << "    Page from "
-                 << pages.back().entries[0].rangeStart->name() << " to "
-                 << pages.back().entries.back().rangeStart->name() << " + "
-                 << llvm::format("0x%x",
-                                 pages.back().entries.back().rangeLength)
-                 << " has " << entriesInPage << " entries\n");
+      DEBUG(llvm::dbgs()
+            << "    Page from " << pages.back().entries[0].rangeStart->name()
+            << " to " << pages.back().entries.back().rangeStart->name() << " + "
+            << llvm::format("0x%x", pages.back().entries.back().rangeLength)
+            << " has " << entriesInPage << " entries\n");
     } while (!remainingInfos.empty());
 
     auto *unwind = new (_file.allocator())
@@ -361,7 +360,7 @@ private:
       const SimpleFile &mergedFile,
       std::map<const Atom *, CompactUnwindEntry> &unwindLocs,
       std::vector<const Atom *> &personalities, uint32_t &numLSDAs) {
-    LLVM_DEBUG(llvm::dbgs() << "  Collecting __compact_unwind entries\n");
+    DEBUG(llvm::dbgs() << "  Collecting __compact_unwind entries\n");
 
     for (const DefinedAtom *atom : mergedFile.defined()) {
       if (atom->contentType() != DefinedAtom::typeCompactUnwindInfo)
@@ -370,15 +369,14 @@ private:
       auto unwindEntry = extractCompactUnwindEntry(atom);
       unwindLocs.insert(std::make_pair(unwindEntry.rangeStart, unwindEntry));
 
-      LLVM_DEBUG(llvm::dbgs() << "    Entry for "
-                              << unwindEntry.rangeStart->name() << ", encoding="
-                              << llvm::format("0x%08x", unwindEntry.encoding));
+      DEBUG(llvm::dbgs() << "    Entry for " << unwindEntry.rangeStart->name()
+                         << ", encoding="
+                         << llvm::format("0x%08x", unwindEntry.encoding));
       if (unwindEntry.personalityFunction)
-        LLVM_DEBUG(llvm::dbgs()
-                   << ", personality="
-                   << unwindEntry.personalityFunction->name()
-                   << ", lsdaLoc=" << unwindEntry.lsdaLocation->name());
-      LLVM_DEBUG(llvm::dbgs() << '\n');
+        DEBUG(llvm::dbgs() << ", personality="
+                           << unwindEntry.personalityFunction->name()
+                           << ", lsdaLoc=" << unwindEntry.lsdaLocation->name());
+      DEBUG(llvm::dbgs() << '\n');
 
       // Count number of LSDAs we see, since we need to know how big the index
       // will be while laying out the section.
@@ -387,9 +385,12 @@ private:
 
       // Gather the personality functions now, so that they're in deterministic
       // order (derived from the DefinedAtom order).
-      if (unwindEntry.personalityFunction &&
-          !llvm::count(personalities, unwindEntry.personalityFunction))
-        personalities.push_back(unwindEntry.personalityFunction);
+      if (unwindEntry.personalityFunction) {
+        auto pFunc = std::find(personalities.begin(), personalities.end(),
+                               unwindEntry.personalityFunction);
+        if (pFunc == personalities.end())
+          personalities.push_back(unwindEntry.personalityFunction);
+      }
     }
   }
 
@@ -453,7 +454,7 @@ private:
       const std::map<const Atom *, const Atom *> &dwarfFrames) {
     std::vector<CompactUnwindEntry> unwindInfos;
 
-    LLVM_DEBUG(llvm::dbgs() << "  Creating __unwind_info entries\n");
+    DEBUG(llvm::dbgs() << "  Creating __unwind_info entries\n");
     // The final order in the __unwind_info section must be derived from the
     // order of typeCode atoms, since that's how they'll be put into the object
     // file eventually (yuck!).
@@ -464,10 +465,10 @@ private:
       unwindInfos.push_back(finalizeUnwindInfoEntryForAtom(
           atom, unwindLocs, personalities, dwarfFrames));
 
-      LLVM_DEBUG(llvm::dbgs()
-                 << "    Entry for " << atom->name() << ", final encoding="
-                 << llvm::format("0x%08x", unwindInfos.back().encoding)
-                 << '\n');
+      DEBUG(llvm::dbgs() << "    Entry for " << atom->name()
+                         << ", final encoding="
+                         << llvm::format("0x%08x", unwindInfos.back().encoding)
+                         << '\n');
     }
 
     return unwindInfos;
@@ -548,7 +549,8 @@ private:
       }
     }
 
-    auto personality = llvm::find(personalities, entry.personalityFunction);
+    auto personality = std::find(personalities.begin(), personalities.end(),
+                                 entry.personalityFunction);
     uint32_t personalityIdx = personality == personalities.end()
                                   ? 0
                                   : personality - personalities.begin() + 1;
@@ -573,7 +575,7 @@ private:
 
 void addCompactUnwindPass(PassManager &pm, const MachOLinkingContext &ctx) {
   assert(ctx.needsCompactUnwindPass());
-  pm.add(std::make_unique<CompactUnwindPass>(ctx));
+  pm.add(llvm::make_unique<CompactUnwindPass>(ctx));
 }
 
 } // end namesapce mach_o

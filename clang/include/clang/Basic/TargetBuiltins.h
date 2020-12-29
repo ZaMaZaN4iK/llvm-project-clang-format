@@ -1,13 +1,14 @@
 //===--- TargetBuiltins.h - Target specific builtin IDs ---------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Enumerates target-specific builtins in their own namespaces within
+/// \brief Enumerates target-specific builtins in their own namespaces within
 /// namespace ::clang.
 ///
 //===----------------------------------------------------------------------===//
@@ -30,7 +31,7 @@ namespace clang {
   };
   }
 
-  /// ARM builtins
+  /// \brief ARM builtins
   namespace ARM {
     enum {
       LastTIBuiltin = clang::Builtin::FirstTSBuiltin-1,
@@ -41,7 +42,7 @@ namespace clang {
     };
   }
 
-  /// AArch64 builtins
+  /// \brief AArch64 builtins
   namespace AArch64 {
   enum {
     LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
@@ -52,17 +53,7 @@ namespace clang {
   };
   }
 
-  /// BPF builtins
-  namespace BPF {
-  enum {
-    LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
-  #define BUILTIN(ID, TYPE, ATTRS) BI##ID,
-  #include "clang/Basic/BuiltinsBPF.def"
-    LastTSBuiltin
-  };
-  }
-
-  /// PPC builtins
+  /// \brief PPC builtins
   namespace PPC {
     enum {
         LastTIBuiltin = clang::Builtin::FirstTSBuiltin-1,
@@ -72,7 +63,7 @@ namespace clang {
     };
   }
 
-  /// NVPTX builtins
+  /// \brief NVPTX builtins
   namespace NVPTX {
     enum {
         LastTIBuiltin = clang::Builtin::FirstTSBuiltin-1,
@@ -82,7 +73,7 @@ namespace clang {
     };
   }
 
-  /// AMDGPU builtins
+  /// \brief AMDGPU builtins
   namespace AMDGPU {
   enum {
     LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
@@ -92,7 +83,7 @@ namespace clang {
   };
   }
 
-  /// X86 builtins
+  /// \brief X86 builtins
   namespace X86 {
   enum {
     LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
@@ -106,7 +97,7 @@ namespace clang {
   };
   }
 
-  /// Flags to identify the types for overloaded Neon builtins.
+  /// \brief Flags to identify the types for overloaded Neon builtins.
   ///
   /// These must be kept in sync with the flags in utils/TableGen/NeonEmitter.h.
   class NeonTypeFlags {
@@ -149,7 +140,7 @@ namespace clang {
     bool isQuad() const { return (Flags & QuadFlag) != 0; }
   };
 
-  /// Hexagon builtins
+  /// \brief Hexagon builtins
   namespace Hexagon {
     enum {
         LastTIBuiltin = clang::Builtin::FirstTSBuiltin-1,
@@ -159,7 +150,7 @@ namespace clang {
     };
   }
 
-  /// MIPS builtins
+  /// \brief MIPS builtins
   namespace Mips {
     enum {
         LastTIBuiltin = clang::Builtin::FirstTSBuiltin-1,
@@ -169,7 +160,7 @@ namespace clang {
     };
   }
 
-  /// XCore builtins
+  /// \brief XCore builtins
   namespace XCore {
     enum {
         LastTIBuiltin = clang::Builtin::FirstTSBuiltin-1,
@@ -179,7 +170,7 @@ namespace clang {
     };
   }
 
-  /// Le64 builtins
+  /// \brief Le64 builtins
   namespace Le64 {
   enum {
     LastTIBuiltin = clang::Builtin::FirstTSBuiltin - 1,
@@ -189,7 +180,7 @@ namespace clang {
   };
   }
 
-  /// SystemZ builtins
+  /// \brief SystemZ builtins
   namespace SystemZ {
     enum {
         LastTIBuiltin = clang::Builtin::FirstTSBuiltin-1,
@@ -199,7 +190,7 @@ namespace clang {
     };
   }
 
-  /// WebAssembly builtins
+  /// \brief WebAssembly builtins
   namespace WebAssembly {
     enum {
       LastTIBuiltin = clang::Builtin::FirstTSBuiltin-1,

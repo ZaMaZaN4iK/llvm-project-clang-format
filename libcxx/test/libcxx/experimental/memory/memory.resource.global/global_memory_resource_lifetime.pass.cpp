@@ -1,11 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// REQUIRES: c++experimental
 // UNSUPPORTED: c++98, c++03
 
 // <experimental/memory_resource>
@@ -20,8 +22,6 @@
 #include <experimental/memory_resource>
 #include <type_traits>
 #include <cassert>
-
-#include "test_macros.h"
 
 namespace ex = std::experimental::pmr;
 
@@ -54,10 +54,8 @@ ex::memory_resource* resource = ex::get_default_resource();
 POSType constructed_after_resources(resource, resource->allocate(1024), 1024);
 POSType constructed_after_resources2(nullptr, resource->allocate(1024), 1024);
 
-int main(int, char**)
+int main()
 {
     swap(constructed_after_resources, constructed_before_resources);
     swap(constructed_before_resources2, constructed_after_resources2);
-
-  return 0;
 }

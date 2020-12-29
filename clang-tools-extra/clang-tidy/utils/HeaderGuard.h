@@ -1,8 +1,9 @@
 //===--- HeaderGuard.h - clang-tidy -----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -27,13 +28,12 @@ class HeaderGuardCheck : public ClangTidyCheck {
 public:
   HeaderGuardCheck(StringRef Name, ClangTidyContext *Context)
       : ClangTidyCheck(Name, Context),
-        RawStringHeaderFileExtensions(Options.getLocalOrGlobal(
-            "HeaderFileExtensions", utils::defaultHeaderFileExtensions())) {
+        RawStringHeaderFileExtensions(
+            Options.getLocalOrGlobal("HeaderFileExtensions", ",h,hh,hpp,hxx")) {
     utils::parseHeaderFileExtensions(RawStringHeaderFileExtensions,
                                      HeaderFileExtensions, ',');
   }
-  void registerPPCallbacks(const SourceManager &SM, Preprocessor *PP,
-                           Preprocessor *ModuleExpanderPP) override;
+  void registerPPCallbacks(CompilerInstance &Compiler) override;
 
   /// Returns ``true`` if the check should suggest inserting a trailing comment
   /// on the ``#endif`` of the header guard. It will use the same name as

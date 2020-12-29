@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,8 +14,6 @@
 #include <array>
 #include <cassert>
 
-#include "test_macros.h"
-
 template <class C>
 void test_contiguous ( const C &c )
 {
@@ -22,13 +21,11 @@ void test_contiguous ( const C &c )
         assert ( *(c.begin() + i) == *(std::addressof(*c.begin()) + i));
 }
 
-int main(int, char**)
+int main()
 {
     {
         typedef double T;
         typedef std::array<T, 3> C;
         test_contiguous (C());
     }
-
-  return 0;
 }

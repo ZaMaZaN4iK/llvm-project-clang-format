@@ -1,20 +1,33 @@
 //===-- argdumper.cpp --------------------------------------------*- C++-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Support/JSON.h"
+#include "lldb/Core/StreamString.h"
+#include "lldb/Utility/JSON.h"
 
-using namespace llvm;
+#include <iostream>
+
+using namespace lldb_private;
 
 int main(int argc, char *argv[]) {
-  json::Array Arguments;
+  JSONArray::SP arguments(new JSONArray());
   for (int i = 1; i < argc; i++) {
-    Arguments.push_back(argv[i]);
+    arguments->AppendObject(JSONString::SP(new JSONString(argv[i])));
   }
-  llvm::outs() << json::Object({{"arguments", std::move(Arguments)}});
+
+  JSONObject::SP object(new JSONObject());
+  object->SetObject("arguments", arguments);
+
+  StreamString ss;
+
+  object->Write(ss);
+
+  std::cout << ss.GetData() << std::endl;
+
   return 0;
 }

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,16 +14,15 @@
 // template <class... Types> class tuple;
 
 // template <class Alloc>
-//   explicit(see-below) tuple(allocator_arg_t, const Alloc& a);
+//   tuple(allocator_arg_t, const Alloc& a);
 
 // NOTE: this constructor does not currently support tags derived from
 // allocator_arg_t because libc++ has to deduce the parameter as a template
-// argument. See PR27684 (https://bugs.llvm.org/show_bug.cgi?id=27684)
+// argument. See PR27684 (https://llvm.org/bugs/show_bug.cgi?id=27684)
 
 #include <tuple>
 #include <cassert>
 
-#include "test_macros.h"
 #include "DefaultOnly.h"
 #include "allocators.h"
 #include "../alloc_first.h"
@@ -40,7 +40,7 @@ struct NonDefaultConstructible {
 
 struct DerivedFromAllocArgT : std::allocator_arg_t {};
 
-int main(int, char**)
+int main()
 {
     {
         std::tuple<> t(std::allocator_arg, A1<int>());
@@ -96,16 +96,12 @@ int main(int, char**)
     }
     {
         // Test that the uses-allocator default constructor does not evaluate
-        // its SFINAE when it otherwise shouldn't be selected. Do this by
+        // it's SFINAE when it otherwise shouldn't be selected. Do this by
         // using 'NonDefaultConstructible' which will cause a compile error
         // if std::is_default_constructible is evaluated on it.
         using T = NonDefaultConstructible<>;
         T v(42);
         std::tuple<T, T> t(v, v);
-        (void)t;
         std::tuple<T, T> t2(42, 42);
-        (void)t2;
     }
-
-  return 0;
 }

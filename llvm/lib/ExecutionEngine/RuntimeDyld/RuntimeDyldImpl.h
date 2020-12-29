@@ -1,8 +1,9 @@
 //===-- RuntimeDyldImpl.h - Run-time dynamic linker for MC-JIT --*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -27,8 +28,8 @@
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/SwapByteOrder.h"
 #include <map>
-#include <system_error>
 #include <unordered_map>
+#include <system_error>
 
 using namespace llvm;
 using namespace llvm::object;
@@ -86,7 +87,7 @@ public:
 
   uint8_t *getAddress() const { return Address; }
 
-  /// Return the address of this section with an offset.
+  /// \brief Return the address of this section with an offset.
   uint8_t *getAddressWithOffset(unsigned OffsetBytes) const {
     assert(OffsetBytes <= AllocationSize && "Offset out of bounds!");
     return Address + OffsetBytes;
@@ -97,7 +98,7 @@ public:
   uint64_t getLoadAddress() const { return LoadAddress; }
   void setLoadAddress(uint64_t LA) { LoadAddress = LA; }
 
-  /// Return the load address of this section with an offset.
+  /// \brief Return the load address of this section with an offset.
   uint64_t getLoadAddressWithOffset(unsigned OffsetBytes) const {
     assert(OffsetBytes <= AllocationSize && "Offset out of bounds!");
     return LoadAddress + OffsetBytes;
@@ -148,8 +149,8 @@ public:
   /// The size of this relocation (MachO specific).
   unsigned Size;
 
-  // ARM (MachO and COFF) specific.
-  bool IsTargetThumbFunc = false;
+  // COFF specific.
+  bool IsTargetThumbFunc;
 
   RelocationEntry(unsigned id, uint64_t offset, uint32_t type, int64_t addend)
       : SectionID(id), Offset(offset), RelType(type), Addend(addend),
@@ -194,14 +195,12 @@ public:
   uint64_t Offset;
   int64_t Addend;
   const char *SymbolName;
-  bool IsStubThumb = false;
   RelocationValueRef() : SectionID(0), Offset(0), Addend(0),
                          SymbolName(nullptr) {}
 
   inline bool operator==(const RelocationValueRef &Other) const {
     return SectionID == Other.SectionID && Offset == Other.Offset &&
-           Addend == Other.Addend && SymbolName == Other.SymbolName &&
-           IsStubThumb == Other.IsStubThumb;
+           Addend == Other.Addend && SymbolName == Other.SymbolName;
   }
   inline bool operator<(const RelocationValueRef &Other) const {
     if (SectionID != Other.SectionID)
@@ -210,36 +209,35 @@ public:
       return Offset < Other.Offset;
     if (Addend != Other.Addend)
       return Addend < Other.Addend;
-    if (IsStubThumb != Other.IsStubThumb)
-      return IsStubThumb < Other.IsStubThumb;
     return SymbolName < Other.SymbolName;
   }
 };
 
-/// Symbol info for RuntimeDyld.
+/// @brief Symbol info for RuntimeDyld. 
 class SymbolTableEntry {
 public:
-  SymbolTableEntry() = default;
+  SymbolTableEntry()
+      : Offset(0), SectionID(0) {}
 
   SymbolTableEntry(unsigned SectionID, uint64_t Offset, JITSymbolFlags Flags)
       : Offset(Offset), SectionID(SectionID), Flags(Flags) {}
 
   unsigned getSectionID() const { return SectionID; }
   uint64_t getOffset() const { return Offset; }
-  void setOffset(uint64_t NewOffset) { Offset = NewOffset; }
 
   JITSymbolFlags getFlags() const { return Flags; }
 
 private:
-  uint64_t Offset = 0;
-  unsigned SectionID = 0;
-  JITSymbolFlags Flags = JITSymbolFlags::None;
+  uint64_t Offset;
+  unsigned SectionID;
+  JITSymbolFlags Flags;
 };
 
 typedef StringMap<SymbolTableEntry> RTDyldSymbolTable;
 
 class RuntimeDyldImpl {
   friend class RuntimeDyld::LoadedObjectInfo;
+  friend class RuntimeDyldCheckerImpl;
 protected:
   static const unsigned AbsoluteSymbolSection = ~0U;
 
@@ -248,6 +246,9 @@ protected:
 
   // The symbol resolver to use for external symbols.
   JITSymbolResolver &Resolver;
+
+  // Attached RuntimeDyldChecker instance. Null if no instance attached.
+  RuntimeDyldCheckerImpl *Checker;
 
   // A list of all sections emitted by the dynamic linker.  These sections are
   // referenced in the code by means of their index in this list - SectionID.
@@ -308,15 +309,19 @@ protected:
   // the end of the list while the list is being processed.
   sys::Mutex lock;
 
-  using NotifyStubEmittedFunction =
-    RuntimeDyld::NotifyStubEmittedFunction;
-  NotifyStubEmittedFunction NotifyStubEmitted;
-
-  virtual unsigned getMaxStubSize() const = 0;
+  virtual unsigned getMaxStubSize() = 0;
   virtual unsigned getStubAlignment() = 0;
 
   bool HasError;
   std::string ErrorStr;
+
+  uint64_t getSectionLoadAddress(unsigned SectionID) const {
+    return Sections[SectionID].getLoadAddress();
+  }
+
+  uint8_t *getSectionAddress(unsigned SectionID) const {
+    return Sections[SectionID].getAddress();
+  }
 
   void writeInt16BE(uint8_t *Addr, uint16_t Value) {
     if (IsTargetLittleEndian)
@@ -360,26 +365,13 @@ protected:
   /// Dst.
   void writeBytesUnaligned(uint64_t Value, uint8_t *Dst, unsigned Size) const;
 
-  /// Generate JITSymbolFlags from a libObject symbol.
-  virtual Expected<JITSymbolFlags> getJITSymbolFlags(const SymbolRef &Sym);
-
-  /// Modify the given target address based on the given symbol flags.
-  /// This can be used by subclasses to tweak addresses based on symbol flags,
-  /// For example: the MachO/ARM target uses it to set the low bit if the target
-  /// is a thumb symbol.
-  virtual uint64_t modifyAddressBasedOnFlags(uint64_t Addr,
-                                             JITSymbolFlags Flags) const {
-    return Addr;
-  }
-
-  /// Given the common symbols discovered in the object file, emit a
+  /// \brief Given the common symbols discovered in the object file, emit a
   /// new section for them and update the symbol mappings in the object and
   /// symbol table.
   Error emitCommonSymbols(const ObjectFile &Obj,
-                          CommonSymbolList &CommonSymbols, uint64_t CommonSize,
-                          uint32_t CommonAlign);
+                          CommonSymbolList &CommonSymbols);
 
-  /// Emits section data from the object file to the MemoryManager.
+  /// \brief Emits section data from the object file to the MemoryManager.
   /// \param IsCode if it's true then allocateCodeSection() will be
   ///        used for emits, else allocateDataSection() will be used.
   /// \return SectionID.
@@ -387,7 +379,7 @@ protected:
                                  const SectionRef &Section,
                                  bool IsCode);
 
-  /// Find Section in LocalSections. If the secton is not found - emit
+  /// \brief Find Section in LocalSections. If the secton is not found - emit
   ///        it and store in LocalSections.
   /// \param IsCode if it's true then allocateCodeSection() will be
   ///        used for emmits, else allocateDataSection() will be used.
@@ -396,26 +388,26 @@ protected:
                                        const SectionRef &Section, bool IsCode,
                                        ObjSectionToIDMap &LocalSections);
 
-  // Add a relocation entry that uses the given section.
+  // \brief Add a relocation entry that uses the given section.
   void addRelocationForSection(const RelocationEntry &RE, unsigned SectionID);
 
-  // Add a relocation entry that uses the given symbol.  This symbol may
+  // \brief Add a relocation entry that uses the given symbol.  This symbol may
   // be found in the global symbol table, or it may be external.
   void addRelocationForSymbol(const RelocationEntry &RE, StringRef SymbolName);
 
-  /// Emits long jump instruction to Addr.
+  /// \brief Emits long jump instruction to Addr.
   /// \return Pointer to the memory area for emitting target address.
   uint8_t *createStubFunction(uint8_t *Addr, unsigned AbiVariant = 0);
 
-  /// Resolves relocations from Relocs list with address from Value.
+  /// \brief Resolves relocations from Relocs list with address from Value.
   void resolveRelocationList(const RelocationList &Relocs, uint64_t Value);
 
-  /// A object file specific relocation resolver
+  /// \brief A object file specific relocation resolver
   /// \param RE The relocation to be resolved
   /// \param Value Target symbol address to apply the relocation action
   virtual void resolveRelocation(const RelocationEntry &RE, uint64_t Value) = 0;
 
-  /// Parses one or more object file relocations (some object files use
+  /// \brief Parses one or more object file relocations (some object files use
   ///        relocation pairs) and stores it to Relocations or SymbolRelocations
   ///        (this depends on the object file type).
   /// \return Iterator to the next relocation that needs to be parsed.
@@ -424,38 +416,24 @@ protected:
                        const ObjectFile &Obj, ObjSectionToIDMap &ObjSectionToID,
                        StubMap &Stubs) = 0;
 
-  void applyExternalSymbolRelocations(
-      const StringMap<JITEvaluatedSymbol> ExternalSymbolMap);
+  /// \brief Resolve relocations to external symbols.
+  void resolveExternalSymbols();
 
-  /// Resolve relocations to external symbols.
-  Error resolveExternalSymbols();
-
-  // Compute an upper bound of the memory that is required to load all
+  // \brief Compute an upper bound of the memory that is required to load all
   // sections
   Error computeTotalAllocSize(const ObjectFile &Obj,
                               uint64_t &CodeSize, uint32_t &CodeAlign,
                               uint64_t &RODataSize, uint32_t &RODataAlign,
                               uint64_t &RWDataSize, uint32_t &RWDataAlign);
 
-  // Compute GOT size
-  unsigned computeGOTSize(const ObjectFile &Obj);
-
-  // Compute the stub buffer size required for a section
+  // \brief Compute the stub buffer size required for a section
   unsigned computeSectionStubBufSize(const ObjectFile &Obj,
                                      const SectionRef &Section);
 
-  // Implementation of the generic part of the loadObject algorithm.
+  // \brief Implementation of the generic part of the loadObject algorithm.
   Expected<ObjSectionToIDMap> loadObjectImpl(const object::ObjectFile &Obj);
 
-  // Return size of Global Offset Table (GOT) entry
-  virtual size_t getGOTEntrySize() { return 0; }
-
-  // Return true if the relocation R may require allocating a GOT entry.
-  virtual bool relocationNeedsGot(const RelocationRef &R) const {
-    return false;
-  }
-
-  // Return true if the relocation R may require allocating a stub.
+  // \brief Return true if the relocation R may require allocating a stub.
   virtual bool relocationNeedsStub(const RelocationRef &R) const {
     return true;    // Conservative answer
   }
@@ -463,7 +441,7 @@ protected:
 public:
   RuntimeDyldImpl(RuntimeDyld::MemoryManager &MemMgr,
                   JITSymbolResolver &Resolver)
-    : MemMgr(MemMgr), Resolver(Resolver),
+    : MemMgr(MemMgr), Resolver(Resolver), Checker(nullptr),
       ProcessAllSections(false), HasError(false) {
   }
 
@@ -473,21 +451,12 @@ public:
     this->ProcessAllSections = ProcessAllSections;
   }
 
+  void setRuntimeDyldChecker(RuntimeDyldCheckerImpl *Checker) {
+    this->Checker = Checker;
+  }
+
   virtual std::unique_ptr<RuntimeDyld::LoadedObjectInfo>
   loadObject(const object::ObjectFile &Obj) = 0;
-
-  uint64_t getSectionLoadAddress(unsigned SectionID) const {
-    return Sections[SectionID].getLoadAddress();
-  }
-
-  uint8_t *getSectionAddress(unsigned SectionID) const {
-    return Sections[SectionID].getAddress();
-  }
-
-  StringRef getSectionContent(unsigned SectionID) const {
-    return StringRef(reinterpret_cast<char *>(Sections[SectionID].getAddress()),
-                     Sections[SectionID].getStubOffset() + getMaxStubSize());
-  }
 
   uint8_t* getSymbolLocalAddress(StringRef Name) const {
     // FIXME: Just look up as a function for now. Overly simple of course.
@@ -502,13 +471,6 @@ public:
     return getSectionAddress(SymInfo.getSectionID()) + SymInfo.getOffset();
   }
 
-  unsigned getSymbolSectionID(StringRef Name) const {
-    auto GSTItr = GlobalSymbolTable.find(Name);
-    if (GSTItr == GlobalSymbolTable.end())
-      return ~0U;
-    return GSTItr->second.getSectionID();
-  }
-
   JITEvaluatedSymbol getSymbol(StringRef Name) const {
     // FIXME: Just look up as a function for now. Overly simple of course.
     // Work in progress.
@@ -520,37 +482,10 @@ public:
     if (SymEntry.getSectionID() != AbsoluteSymbolSection)
       SectionAddr = getSectionLoadAddress(SymEntry.getSectionID());
     uint64_t TargetAddr = SectionAddr + SymEntry.getOffset();
-
-    // FIXME: Have getSymbol should return the actual address and the client
-    //        modify it based on the flags. This will require clients to be
-    //        aware of the target architecture, which we should build
-    //        infrastructure for.
-    TargetAddr = modifyAddressBasedOnFlags(TargetAddr, SymEntry.getFlags());
     return JITEvaluatedSymbol(TargetAddr, SymEntry.getFlags());
   }
 
-  std::map<StringRef, JITEvaluatedSymbol> getSymbolTable() const {
-    std::map<StringRef, JITEvaluatedSymbol> Result;
-
-    for (auto &KV : GlobalSymbolTable) {
-      auto SectionID = KV.second.getSectionID();
-      uint64_t SectionAddr = 0;
-      if (SectionID != AbsoluteSymbolSection)
-        SectionAddr = getSectionLoadAddress(SectionID);
-      Result[KV.first()] =
-        JITEvaluatedSymbol(SectionAddr + KV.second.getOffset(), KV.second.getFlags());
-    }
-
-    return Result;
-  }
-
   void resolveRelocations();
-
-  void resolveLocalRelocations();
-
-  static void finalizeAsync(std::unique_ptr<RuntimeDyldImpl> This,
-                            unique_function<void(Error)> OnEmitted,
-                            std::unique_ptr<MemoryBuffer> UnderlyingBuffer);
 
   void reassignSectionAddress(unsigned SectionID, uint64_t Addr);
 
@@ -567,13 +502,9 @@ public:
 
   virtual bool isCompatibleFile(const ObjectFile &Obj) const = 0;
 
-  void setNotifyStubEmitted(NotifyStubEmittedFunction NotifyStubEmitted) {
-    this->NotifyStubEmitted = std::move(NotifyStubEmitted);
-  }
-
   virtual void registerEHFrames();
 
-  void deregisterEHFrames();
+  virtual void deregisterEHFrames();
 
   virtual Error finalizeLoad(const ObjectFile &ObjImg,
                              ObjSectionToIDMap &SectionMap) {

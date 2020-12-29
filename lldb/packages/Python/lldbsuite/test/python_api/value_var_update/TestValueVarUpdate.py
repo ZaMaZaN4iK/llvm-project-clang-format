@@ -1,26 +1,35 @@
 """Test SBValue::GetValueDidChange"""
 
+from __future__ import print_function
 
 
+import os
+import sys
+import time
 import lldb
+import time
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
 
 
-class ValueVarUpdateTestCase(TestBase):
+class HelloWorldTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
+
+    def setUp(self):
+        # Call super's setUp().
+        TestBase.setUp(self)
+        # Get the full path to our executable to be attached/debugged.
+        self.exe = os.path.join(os.getcwd(), self.testMethodName)
+        self.d = {'EXE': self.testMethodName}
 
     @add_test_categories(['pyapi'])
     def test_with_process_launch_api(self):
         """Test SBValue::GetValueDidChange"""
-        # Get the full path to our executable to be attached/debugged.
-        exe = self.getBuildArtifact(self.testMethodName)
-        d = {'EXE': exe}
-        self.build(dictionary=d)
-        self.setTearDownCleanup(dictionary=d)
-        target = self.dbg.CreateTarget(exe)
+        self.build(dictionary=self.d)
+        self.setTearDownCleanup(dictionary=self.d)
+        target = self.dbg.CreateTarget(self.exe)
 
         breakpoint = target.BreakpointCreateBySourceRegex(
             "break here", lldb.SBFileSpec("main.c"))

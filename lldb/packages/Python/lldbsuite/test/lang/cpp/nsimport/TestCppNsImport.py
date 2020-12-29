@@ -11,17 +11,20 @@ class TestCppNsImport(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
+    @expectedFailureAll(oslist=['freebsd'], bugnumber="llvm.org/pr25925")
     def test_with_run_command(self):
         """Tests imported namespaces in C++."""
         self.build()
 
         # Get main source file
-        src_file = os.path.join(self.getSourceDir(), "main.cpp")
+        src_file = "main.cpp"
         src_file_spec = lldb.SBFileSpec(src_file)
         self.assertTrue(src_file_spec.IsValid(), "Main source file")
 
         # Get the path of the executable
-        exe_path = self.getBuildArtifact("a.out")
+        cwd = os.getcwd()
+        exe_file = "a.out"
+        exe_path = os.path.join(cwd, exe_file)
 
         # Load the executable
         target = self.dbg.CreateTarget(exe_path)
@@ -108,8 +111,8 @@ class TestCppNsImport(TestBase):
 
         test_result = frame.EvaluateExpression("imported")
         self.assertTrue(
-            test_result.IsValid() and test_result.GetValueAsSigned() == 99,
-            "imported = 99")
+            test_result.IsValid() and test_result.GetError().Fail(),
+            "imported is ambiguous")
 
         test_result = frame.EvaluateExpression("single")
         self.assertTrue(

@@ -1,13 +1,13 @@
 //===- NVPTXUtilities.cpp - Utility Functions -----------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // This file contains miscellaneous utility functions
-//
 //===----------------------------------------------------------------------===//
 
 #include "NVPTXUtilities.h"
@@ -19,11 +19,10 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/Support/ManagedStatic.h"
-#include "llvm/Support/Mutex.h"
+#include "llvm/Support/MutexGuard.h"
 #include <algorithm>
 #include <cstring>
 #include <map>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -39,12 +38,12 @@ static ManagedStatic<per_module_annot_t> annotationCache;
 static sys::Mutex Lock;
 
 void clearAnnotationCache(const Module *Mod) {
-  std::lock_guard<sys::Mutex> Guard(Lock);
+  MutexGuard Guard(Lock);
   annotationCache->erase(Mod);
 }
 
 static void cacheAnnotationFromMD(const MDNode *md, key_val_pair_t &retval) {
-  std::lock_guard<sys::Mutex> Guard(Lock);
+  MutexGuard Guard(Lock);
   assert(md && "Invalid mdnode for annotation");
   assert((md->getNumOperands() % 2) == 1 && "Invalid number of operands");
   // start index = 1, to skip the global variable key
@@ -70,7 +69,7 @@ static void cacheAnnotationFromMD(const MDNode *md, key_val_pair_t &retval) {
 }
 
 static void cacheAnnotationFromMD(const Module *m, const GlobalValue *gv) {
-  std::lock_guard<sys::Mutex> Guard(Lock);
+  MutexGuard Guard(Lock);
   NamedMDNode *NMD = m->getNamedMetadata("nvvm.annotations");
   if (!NMD)
     return;
@@ -104,7 +103,7 @@ static void cacheAnnotationFromMD(const Module *m, const GlobalValue *gv) {
 
 bool findOneNVVMAnnotation(const GlobalValue *gv, const std::string &prop,
                            unsigned &retval) {
-  std::lock_guard<sys::Mutex> Guard(Lock);
+  MutexGuard Guard(Lock);
   const Module *m = gv->getParent();
   if ((*annotationCache).find(m) == (*annotationCache).end())
     cacheAnnotationFromMD(m, gv);
@@ -118,7 +117,7 @@ bool findOneNVVMAnnotation(const GlobalValue *gv, const std::string &prop,
 
 bool findAllNVVMAnnotation(const GlobalValue *gv, const std::string &prop,
                            std::vector<unsigned> &retval) {
-  std::lock_guard<sys::Mutex> Guard(Lock);
+  MutexGuard Guard(Lock);
   const Module *m = gv->getParent();
   if ((*annotationCache).find(m) == (*annotationCache).end())
     cacheAnnotationFromMD(m, gv);

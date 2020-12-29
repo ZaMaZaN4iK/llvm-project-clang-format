@@ -1,6 +1,7 @@
-; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc-unknown-linux-gnu -verify-machineinstrs  -ppc-asm-full-reg-names | FileCheck %s --check-prefix=CHECK --check-prefix=PPC32
+; RUN: llc < %s -mtriple=powerpc-apple-darwin -march=ppc32 -verify-machineinstrs | FileCheck %s --check-prefix=CHECK --check-prefix=PPC32
+; FIXME: -verify-machineinstrs currently fail on ppc64 (mismatched register/instruction).
 ; This is already checked for in Atomics-64.ll
-; RUN: llc -verify-machineinstrs < %s -mtriple=powerpc64-unknown-linux-gnu  -ppc-asm-full-reg-names | FileCheck %s --check-prefix=CHECK --check-prefix=PPC64
+; RUN: llc < %s -mtriple=powerpc-apple-darwin -march=ppc64 | FileCheck %s --check-prefix=CHECK --check-prefix=PPC64
 
 ; FIXME: we don't currently check for the operations themselves with CHECK-NEXT,
 ;   because they are implemented in a very messy way with lwarx/stwcx.
@@ -24,12 +25,9 @@ define i16 @load_i16_monotonic(i16* %mem) {
 }
 define i32 @load_i32_acquire(i32* %mem) {
 ; CHECK-LABEL: load_i32_acquire
-; CHECK: lwz [[VAL:r[0-9]+]]
+; CHECK: lwz
   %val = load atomic i32, i32* %mem acquire, align 4
-; CHECK-PPC32: lwsync
-; CHECK-PPC64: cmpw [[CR:cr[0-9]+]], [[VAL]], [[VAL]]
-; CHECK-PPC64: bne- [[CR]], .+4
-; CHECK-PPC64: isync
+; CHECK: lwsync
   ret i32 %val
 }
 define i64 @load_i64_seq_cst(i64* %mem) {
@@ -37,12 +35,9 @@ define i64 @load_i64_seq_cst(i64* %mem) {
 ; CHECK: sync
 ; PPC32: __sync_
 ; PPC64-NOT: __sync_
-; PPC64: ld [[VAL:r[0-9]+]]
+; PPC64: ld
   %val = load atomic i64, i64* %mem seq_cst, align 8
-; CHECK-PPC32: lwsync
-; CHECK-PPC64: cmpw [[CR:cr[0-9]+]], [[VAL]], [[VAL]]
-; CHECK-PPC64: bne- [[CR]], .+4
-; CHECK-PPC64: isync
+; CHECK: lwsync
   ret i64 %val
 }
 

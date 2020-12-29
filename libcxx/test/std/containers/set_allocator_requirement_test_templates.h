@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 #ifndef SET_ALLOCATOR_REQUIREMENT_TEST_TEMPLATES_H
@@ -22,7 +23,7 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "count_new.h"
+#include "count_new.hpp"
 #include "container_test_types.h"
 #include "assert_checkpoint.h"
 
@@ -31,6 +32,8 @@ template <class Container>
 void testSetInsert()
 {
   typedef typename Container::value_type ValueTp;
+  typedef Container C;
+  typedef std::pair<typename C::iterator, bool> R;
   ConstructController* cc = getConstructController();
   cc->reset();
   {
@@ -143,6 +146,8 @@ template <class Container>
 void testSetEmplace()
 {
   typedef typename Container::value_type ValueTp;
+  typedef Container C;
+  typedef std::pair<typename C::iterator, bool> R;
   ConstructController* cc = getConstructController();
   cc->reset();
   {
@@ -204,6 +209,7 @@ template <class Container>
 void testSetEmplaceHint()
 {
   typedef typename Container::value_type ValueTp;
+
   typedef Container C;
   typedef typename C::iterator It;
   ConstructController* cc = getConstructController();
@@ -283,6 +289,7 @@ template <class Container>
 void testMultisetInsert()
 {
   typedef typename Container::value_type ValueTp;
+  typedef Container C;
   ConstructController* cc = getConstructController();
   cc->reset();
   {
@@ -337,50 +344,9 @@ void testMultisetInsert()
   {
     CHECKPOINT("Testing C::insert(Iter, Iter) for *Iter = value_type&");
     Container c;
-    ValueTp ValueList[] = { ValueTp(1), ValueTp(2) , ValueTp(1) };
+    ValueTp ValueList[] = { ValueTp(1), ValueTp(2) , ValueTp(3) };
     cc->expect<ValueTp&>(3);
     c.insert(std::begin(ValueList), std::end(ValueList));
-    assert(!cc->unchecked());
-  }
-}
-
-
-template <class Container>
-void testMultisetEmplace()
-{
-  typedef typename Container::value_type ValueTp;
-  ConstructController* cc = getConstructController();
-  cc->reset();
-  {
-    CHECKPOINT("Testing C::emplace(const value_type&)");
-    Container c;
-    const ValueTp v(42);
-    cc->expect<const ValueTp&>();
-    c.emplace(v);
-    assert(!cc->unchecked());
-  }
-  {
-    CHECKPOINT("Testing C::emplace(value_type&)");
-    Container c;
-    ValueTp v(42);
-    cc->expect<ValueTp&>();
-    c.emplace(v);
-    assert(!cc->unchecked());
-  }
-  {
-    CHECKPOINT("Testing C::emplace(value_type&&)");
-    Container c;
-    ValueTp v(42);
-    cc->expect<ValueTp&&>();
-    c.emplace(std::move(v));
-    assert(!cc->unchecked());
-  }
-  {
-    CHECKPOINT("Testing C::emplace(const value_type&&)");
-    Container c;
-    const ValueTp v(42);
-    cc->expect<const ValueTp&&>();
-    c.emplace(std::move(v));
     assert(!cc->unchecked());
   }
 }

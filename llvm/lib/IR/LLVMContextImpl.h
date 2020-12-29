@@ -1,12 +1,13 @@
-//===- LLVMContextImpl.h - The LLVMContextImpl opaque class -----*- C++ -*-===//
+//===-- LLVMContextImpl.h - The LLVMContextImpl opaque class ----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
-//  This file declares LLVMContextImpl, the opaque implementation
+//  This file declares LLVMContextImpl, the opaque implementation 
 //  of LLVMContext.
 //
 //===----------------------------------------------------------------------===//
@@ -20,62 +21,48 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/Hashing.h"
-#include "llvm/ADT/Optional.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/BinaryFormat/Dwarf.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
-#include "llvm/IR/RemarkStreamer.h"
-#include "llvm/IR/TrackingMDRef.h"
-#include "llvm/Support/Allocator.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/StringSaver.h"
+#include "llvm/IR/ValueHandle.h"
+#include "llvm/Support/Dwarf.h"
 #include "llvm/Support/YAMLTraits.h"
-#include <algorithm>
-#include <cassert>
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <utility>
 #include <vector>
 
 namespace llvm {
 
-class ConstantFP;
 class ConstantInt;
+class ConstantFP;
+class DiagnosticInfoOptimizationRemark;
+class DiagnosticInfoOptimizationRemarkMissed;
+class DiagnosticInfoOptimizationRemarkAnalysis;
+class GCStrategy;
+class LLVMContext;
 class Type;
 class Value;
-class ValueHandleBase;
 
 struct DenseMapAPIntKeyInfo {
   static inline APInt getEmptyKey() {
     APInt V(nullptr, 0);
-    V.U.VAL = 0;
+    V.VAL = 0;
     return V;
   }
-
   static inline APInt getTombstoneKey() {
     APInt V(nullptr, 0);
-    V.U.VAL = 1;
+    V.VAL = 1;
     return V;
   }
-
   static unsigned getHashValue(const APInt &Key) {
     return static_cast<unsigned>(hash_value(Key));
   }
-
   static bool isEqual(const APInt &LHS, const APInt &RHS) {
     return LHS.getBitWidth() == RHS.getBitWidth() && LHS == RHS;
   }
@@ -84,11 +71,9 @@ struct DenseMapAPIntKeyInfo {
 struct DenseMapAPFloatKeyInfo {
   static inline APFloat getEmptyKey() { return APFloat(APFloat::Bogus(), 1); }
   static inline APFloat getTombstoneKey() { return APFloat(APFloat::Bogus(), 2); }
-
   static unsigned getHashValue(const APFloat &Key) {
     return static_cast<unsigned>(hash_value(Key));
   }
-
   static bool isEqual(const APFloat &LHS, const APFloat &RHS) {
     return LHS.bitwiseIsEqual(RHS);
   }
@@ -98,13 +83,10 @@ struct AnonStructTypeKeyInfo {
   struct KeyTy {
     ArrayRef<Type*> ETypes;
     bool isPacked;
-
     KeyTy(const ArrayRef<Type*>& E, bool P) :
       ETypes(E), isPacked(P) {}
-
     KeyTy(const StructType *ST)
         : ETypes(ST->elements()), isPacked(ST->isPacked()) {}
-
     bool operator==(const KeyTy& that) const {
       if (isPacked != that.isPacked)
         return false;
@@ -116,31 +98,25 @@ struct AnonStructTypeKeyInfo {
       return !this->operator==(that);
     }
   };
-
   static inline StructType* getEmptyKey() {
     return DenseMapInfo<StructType*>::getEmptyKey();
   }
-
   static inline StructType* getTombstoneKey() {
     return DenseMapInfo<StructType*>::getTombstoneKey();
   }
-
   static unsigned getHashValue(const KeyTy& Key) {
     return hash_combine(hash_combine_range(Key.ETypes.begin(),
                                            Key.ETypes.end()),
                         Key.isPacked);
   }
-
   static unsigned getHashValue(const StructType *ST) {
     return getHashValue(KeyTy(ST));
   }
-
   static bool isEqual(const KeyTy& LHS, const StructType *RHS) {
     if (RHS == getEmptyKey() || RHS == getTombstoneKey())
       return false;
     return LHS == KeyTy(RHS);
   }
-
   static bool isEqual(const StructType *LHS, const StructType *RHS) {
     return LHS == RHS;
   }
@@ -151,13 +127,11 @@ struct FunctionTypeKeyInfo {
     const Type *ReturnType;
     ArrayRef<Type*> Params;
     bool isVarArg;
-
     KeyTy(const Type* R, const ArrayRef<Type*>& P, bool V) :
       ReturnType(R), Params(P), isVarArg(V) {}
     KeyTy(const FunctionType *FT)
         : ReturnType(FT->getReturnType()), Params(FT->params()),
           isVarArg(FT->isVarArg()) {}
-
     bool operator==(const KeyTy& that) const {
       if (ReturnType != that.ReturnType)
         return false;
@@ -171,41 +145,36 @@ struct FunctionTypeKeyInfo {
       return !this->operator==(that);
     }
   };
-
   static inline FunctionType* getEmptyKey() {
     return DenseMapInfo<FunctionType*>::getEmptyKey();
   }
-
   static inline FunctionType* getTombstoneKey() {
     return DenseMapInfo<FunctionType*>::getTombstoneKey();
   }
-
   static unsigned getHashValue(const KeyTy& Key) {
     return hash_combine(Key.ReturnType,
                         hash_combine_range(Key.Params.begin(),
                                            Key.Params.end()),
                         Key.isVarArg);
   }
-
   static unsigned getHashValue(const FunctionType *FT) {
     return getHashValue(KeyTy(FT));
   }
-
   static bool isEqual(const KeyTy& LHS, const FunctionType *RHS) {
     if (RHS == getEmptyKey() || RHS == getTombstoneKey())
       return false;
     return LHS == KeyTy(RHS);
   }
-
   static bool isEqual(const FunctionType *LHS, const FunctionType *RHS) {
     return LHS == RHS;
   }
 };
 
-/// Structure for hashing arbitrary MDNode operands.
+/// \brief Structure for hashing arbitrary MDNode operands.
 class MDNodeOpsKey {
   ArrayRef<Metadata *> RawOps;
   ArrayRef<MDOperand> Ops;
+
   unsigned Hash;
 
 protected:
@@ -243,21 +212,20 @@ public:
 };
 
 template <class NodeTy> struct MDNodeKeyImpl;
+template <class NodeTy> struct MDNodeInfo;
 
 /// Configuration point for MDNodeInfo::isEqual().
 template <class NodeTy> struct MDNodeSubsetEqualImpl {
-  using KeyTy = MDNodeKeyImpl<NodeTy>;
-
+  typedef MDNodeKeyImpl<NodeTy> KeyTy;
   static bool isSubsetEqual(const KeyTy &LHS, const NodeTy *RHS) {
     return false;
   }
-
   static bool isSubsetEqual(const NodeTy *LHS, const NodeTy *RHS) {
     return false;
   }
 };
 
-/// DenseMapInfo for MDTuple.
+/// \brief DenseMapInfo for MDTuple.
 ///
 /// Note that we don't need the is-function-local bit, since that's implicit in
 /// the operands.
@@ -274,38 +242,34 @@ template <> struct MDNodeKeyImpl<MDTuple> : MDNodeOpsKey {
   }
 };
 
-/// DenseMapInfo for DILocation.
+/// \brief DenseMapInfo for DILocation.
 template <> struct MDNodeKeyImpl<DILocation> {
   unsigned Line;
   unsigned Column;
   Metadata *Scope;
   Metadata *InlinedAt;
-  bool ImplicitCode;
 
   MDNodeKeyImpl(unsigned Line, unsigned Column, Metadata *Scope,
-                Metadata *InlinedAt, bool ImplicitCode)
-      : Line(Line), Column(Column), Scope(Scope), InlinedAt(InlinedAt),
-        ImplicitCode(ImplicitCode) {}
+                Metadata *InlinedAt)
+      : Line(Line), Column(Column), Scope(Scope), InlinedAt(InlinedAt) {}
+
   MDNodeKeyImpl(const DILocation *L)
       : Line(L->getLine()), Column(L->getColumn()), Scope(L->getRawScope()),
-        InlinedAt(L->getRawInlinedAt()), ImplicitCode(L->isImplicitCode()) {}
+        InlinedAt(L->getRawInlinedAt()) {}
 
   bool isKeyOf(const DILocation *RHS) const {
     return Line == RHS->getLine() && Column == RHS->getColumn() &&
-           Scope == RHS->getRawScope() && InlinedAt == RHS->getRawInlinedAt() &&
-           ImplicitCode == RHS->isImplicitCode();
+           Scope == RHS->getRawScope() && InlinedAt == RHS->getRawInlinedAt();
   }
-
   unsigned getHashValue() const {
-    return hash_combine(Line, Column, Scope, InlinedAt, ImplicitCode);
+    return hash_combine(Line, Column, Scope, InlinedAt);
   }
 };
 
-/// DenseMapInfo for GenericDINode.
+/// \brief DenseMapInfo for GenericDINode.
 template <> struct MDNodeKeyImpl<GenericDINode> : MDNodeOpsKey {
   unsigned Tag;
   MDString *Header;
-
   MDNodeKeyImpl(unsigned Tag, MDString *Header, ArrayRef<Metadata *> DwarfOps)
       : MDNodeOpsKey(DwarfOps), Tag(Tag), Header(Header) {}
   MDNodeKeyImpl(const GenericDINode *N)
@@ -324,52 +288,31 @@ template <> struct MDNodeKeyImpl<GenericDINode> : MDNodeOpsKey {
 };
 
 template <> struct MDNodeKeyImpl<DISubrange> {
-  Metadata *CountNode;
+  int64_t Count;
   int64_t LowerBound;
 
-  MDNodeKeyImpl(Metadata *CountNode, int64_t LowerBound)
-      : CountNode(CountNode), LowerBound(LowerBound) {}
+  MDNodeKeyImpl(int64_t Count, int64_t LowerBound)
+      : Count(Count), LowerBound(LowerBound) {}
   MDNodeKeyImpl(const DISubrange *N)
-      : CountNode(N->getRawCountNode()),
-        LowerBound(N->getLowerBound()) {}
+      : Count(N->getCount()), LowerBound(N->getLowerBound()) {}
 
   bool isKeyOf(const DISubrange *RHS) const {
-    if (LowerBound != RHS->getLowerBound())
-      return false;
-
-    if (auto *RHSCount = RHS->getCount().dyn_cast<ConstantInt*>())
-      if (auto *MD = dyn_cast<ConstantAsMetadata>(CountNode))
-        if (RHSCount->getSExtValue() ==
-            cast<ConstantInt>(MD->getValue())->getSExtValue())
-          return true;
-
-    return CountNode == RHS->getRawCountNode();
+    return Count == RHS->getCount() && LowerBound == RHS->getLowerBound();
   }
-
-  unsigned getHashValue() const {
-    if (auto *MD = dyn_cast<ConstantAsMetadata>(CountNode))
-      return hash_combine(cast<ConstantInt>(MD->getValue())->getSExtValue(),
-                          LowerBound);
-    return hash_combine(CountNode, LowerBound);
-  }
+  unsigned getHashValue() const { return hash_combine(Count, LowerBound); }
 };
 
 template <> struct MDNodeKeyImpl<DIEnumerator> {
   int64_t Value;
   MDString *Name;
-  bool IsUnsigned;
 
-  MDNodeKeyImpl(int64_t Value, bool IsUnsigned, MDString *Name)
-      : Value(Value), Name(Name), IsUnsigned(IsUnsigned) {}
+  MDNodeKeyImpl(int64_t Value, MDString *Name) : Value(Value), Name(Name) {}
   MDNodeKeyImpl(const DIEnumerator *N)
-      : Value(N->getValue()), Name(N->getRawName()),
-        IsUnsigned(N->isUnsigned()) {}
+      : Value(N->getValue()), Name(N->getRawName()) {}
 
   bool isKeyOf(const DIEnumerator *RHS) const {
-    return Value == RHS->getValue() && IsUnsigned == RHS->isUnsigned() &&
-           Name == RHS->getRawName();
+    return Value == RHS->getValue() && Name == RHS->getRawName();
   }
-
   unsigned getHashValue() const { return hash_combine(Value, Name); }
 };
 
@@ -379,24 +322,21 @@ template <> struct MDNodeKeyImpl<DIBasicType> {
   uint64_t SizeInBits;
   uint32_t AlignInBits;
   unsigned Encoding;
-  unsigned Flags;
 
   MDNodeKeyImpl(unsigned Tag, MDString *Name, uint64_t SizeInBits,
-                uint32_t AlignInBits, unsigned Encoding, unsigned Flags)
+                uint32_t AlignInBits, unsigned Encoding)
       : Tag(Tag), Name(Name), SizeInBits(SizeInBits), AlignInBits(AlignInBits),
-        Encoding(Encoding), Flags(Flags) {}
+        Encoding(Encoding) {}
   MDNodeKeyImpl(const DIBasicType *N)
       : Tag(N->getTag()), Name(N->getRawName()), SizeInBits(N->getSizeInBits()),
-        AlignInBits(N->getAlignInBits()), Encoding(N->getEncoding()), Flags(N->getFlags()) {}
+        AlignInBits(N->getAlignInBits()), Encoding(N->getEncoding()) {}
 
   bool isKeyOf(const DIBasicType *RHS) const {
     return Tag == RHS->getTag() && Name == RHS->getRawName() &&
            SizeInBits == RHS->getSizeInBits() &&
            AlignInBits == RHS->getAlignInBits() &&
-           Encoding == RHS->getEncoding() &&
-           Flags == RHS->getFlags();
+           Encoding == RHS->getEncoding();
   }
-
   unsigned getHashValue() const {
     return hash_combine(Tag, Name, SizeInBits, AlignInBits, Encoding);
   }
@@ -412,26 +352,22 @@ template <> struct MDNodeKeyImpl<DIDerivedType> {
   uint64_t SizeInBits;
   uint64_t OffsetInBits;
   uint32_t AlignInBits;
-  Optional<unsigned> DWARFAddressSpace;
   unsigned Flags;
   Metadata *ExtraData;
 
   MDNodeKeyImpl(unsigned Tag, MDString *Name, Metadata *File, unsigned Line,
                 Metadata *Scope, Metadata *BaseType, uint64_t SizeInBits,
-                uint32_t AlignInBits, uint64_t OffsetInBits,
-                Optional<unsigned> DWARFAddressSpace, unsigned Flags,
+                uint32_t AlignInBits, uint64_t OffsetInBits, unsigned Flags,
                 Metadata *ExtraData)
       : Tag(Tag), Name(Name), File(File), Line(Line), Scope(Scope),
         BaseType(BaseType), SizeInBits(SizeInBits), OffsetInBits(OffsetInBits),
-        AlignInBits(AlignInBits), DWARFAddressSpace(DWARFAddressSpace),
-        Flags(Flags), ExtraData(ExtraData) {}
+        AlignInBits(AlignInBits), Flags(Flags), ExtraData(ExtraData) {}
   MDNodeKeyImpl(const DIDerivedType *N)
       : Tag(N->getTag()), Name(N->getRawName()), File(N->getRawFile()),
         Line(N->getLine()), Scope(N->getRawScope()),
         BaseType(N->getRawBaseType()), SizeInBits(N->getSizeInBits()),
         OffsetInBits(N->getOffsetInBits()), AlignInBits(N->getAlignInBits()),
-        DWARFAddressSpace(N->getDWARFAddressSpace()), Flags(N->getFlags()),
-        ExtraData(N->getRawExtraData()) {}
+        Flags(N->getFlags()), ExtraData(N->getRawExtraData()) {}
 
   bool isKeyOf(const DIDerivedType *RHS) const {
     return Tag == RHS->getTag() && Name == RHS->getRawName() &&
@@ -439,12 +375,9 @@ template <> struct MDNodeKeyImpl<DIDerivedType> {
            Scope == RHS->getRawScope() && BaseType == RHS->getRawBaseType() &&
            SizeInBits == RHS->getSizeInBits() &&
            AlignInBits == RHS->getAlignInBits() &&
-           OffsetInBits == RHS->getOffsetInBits() &&
-           DWARFAddressSpace == RHS->getDWARFAddressSpace() &&
-           Flags == RHS->getFlags() &&
+           OffsetInBits == RHS->getOffsetInBits() && Flags == RHS->getFlags() &&
            ExtraData == RHS->getRawExtraData();
   }
-
   unsigned getHashValue() const {
     // If this is a member inside an ODR type, only hash the type and the name.
     // Otherwise the hash will be stronger than
@@ -463,12 +396,10 @@ template <> struct MDNodeKeyImpl<DIDerivedType> {
 };
 
 template <> struct MDNodeSubsetEqualImpl<DIDerivedType> {
-  using KeyTy = MDNodeKeyImpl<DIDerivedType>;
-
+  typedef MDNodeKeyImpl<DIDerivedType> KeyTy;
   static bool isSubsetEqual(const KeyTy &LHS, const DIDerivedType *RHS) {
     return isODRMember(LHS.Tag, LHS.Scope, LHS.Name, RHS);
   }
-
   static bool isSubsetEqual(const DIDerivedType *LHS, const DIDerivedType *RHS) {
     return isODRMember(LHS->getTag(), LHS->getRawScope(), LHS->getRawName(),
                        RHS);
@@ -508,20 +439,18 @@ template <> struct MDNodeKeyImpl<DICompositeType> {
   Metadata *VTableHolder;
   Metadata *TemplateParams;
   MDString *Identifier;
-  Metadata *Discriminator;
 
   MDNodeKeyImpl(unsigned Tag, MDString *Name, Metadata *File, unsigned Line,
                 Metadata *Scope, Metadata *BaseType, uint64_t SizeInBits,
                 uint32_t AlignInBits, uint64_t OffsetInBits, unsigned Flags,
                 Metadata *Elements, unsigned RuntimeLang,
                 Metadata *VTableHolder, Metadata *TemplateParams,
-                MDString *Identifier, Metadata *Discriminator)
+                MDString *Identifier)
       : Tag(Tag), Name(Name), File(File), Line(Line), Scope(Scope),
         BaseType(BaseType), SizeInBits(SizeInBits), OffsetInBits(OffsetInBits),
         AlignInBits(AlignInBits), Flags(Flags), Elements(Elements),
         RuntimeLang(RuntimeLang), VTableHolder(VTableHolder),
-        TemplateParams(TemplateParams), Identifier(Identifier),
-        Discriminator(Discriminator) {}
+        TemplateParams(TemplateParams), Identifier(Identifier) {}
   MDNodeKeyImpl(const DICompositeType *N)
       : Tag(N->getTag()), Name(N->getRawName()), File(N->getRawFile()),
         Line(N->getLine()), Scope(N->getRawScope()),
@@ -530,8 +459,7 @@ template <> struct MDNodeKeyImpl<DICompositeType> {
         Flags(N->getFlags()), Elements(N->getRawElements()),
         RuntimeLang(N->getRuntimeLang()), VTableHolder(N->getRawVTableHolder()),
         TemplateParams(N->getRawTemplateParams()),
-        Identifier(N->getRawIdentifier()),
-        Discriminator(N->getRawDiscriminator()) {}
+        Identifier(N->getRawIdentifier()) {}
 
   bool isKeyOf(const DICompositeType *RHS) const {
     return Tag == RHS->getTag() && Name == RHS->getRawName() &&
@@ -544,10 +472,8 @@ template <> struct MDNodeKeyImpl<DICompositeType> {
            RuntimeLang == RHS->getRuntimeLang() &&
            VTableHolder == RHS->getRawVTableHolder() &&
            TemplateParams == RHS->getRawTemplateParams() &&
-           Identifier == RHS->getRawIdentifier() &&
-           Discriminator == RHS->getRawDiscriminator();
+           Identifier == RHS->getRawIdentifier();
   }
-
   unsigned getHashValue() const {
     // Intentionally computes the hash on a subset of the operands for
     // performance reason. The subset has to be significant enough to avoid
@@ -572,36 +498,31 @@ template <> struct MDNodeKeyImpl<DISubroutineType> {
     return Flags == RHS->getFlags() && CC == RHS->getCC() &&
            TypeArray == RHS->getRawTypeArray();
   }
-
   unsigned getHashValue() const { return hash_combine(Flags, CC, TypeArray); }
 };
 
 template <> struct MDNodeKeyImpl<DIFile> {
   MDString *Filename;
   MDString *Directory;
-  Optional<DIFile::ChecksumInfo<MDString *>> Checksum;
-  Optional<MDString *> Source;
+  DIFile::ChecksumKind CSKind;
+  MDString *Checksum;
 
   MDNodeKeyImpl(MDString *Filename, MDString *Directory,
-                Optional<DIFile::ChecksumInfo<MDString *>> Checksum,
-                Optional<MDString *> Source)
-      : Filename(Filename), Directory(Directory), Checksum(Checksum),
-        Source(Source) {}
+                DIFile::ChecksumKind CSKind, MDString *Checksum)
+      : Filename(Filename), Directory(Directory), CSKind(CSKind),
+        Checksum(Checksum) {}
   MDNodeKeyImpl(const DIFile *N)
       : Filename(N->getRawFilename()), Directory(N->getRawDirectory()),
-        Checksum(N->getRawChecksum()), Source(N->getRawSource()) {}
+        CSKind(N->getChecksumKind()), Checksum(N->getRawChecksum()) {}
 
   bool isKeyOf(const DIFile *RHS) const {
     return Filename == RHS->getRawFilename() &&
            Directory == RHS->getRawDirectory() &&
-           Checksum == RHS->getRawChecksum() &&
-           Source == RHS->getRawSource();
+           CSKind == RHS->getChecksumKind() &&
+           Checksum == RHS->getRawChecksum();
   }
-
   unsigned getHashValue() const {
-    return hash_combine(
-        Filename, Directory, Checksum ? Checksum->Kind : 0,
-        Checksum ? Checksum->Value : nullptr, Source.getValueOr(nullptr));
+    return hash_combine(Filename, Directory, CSKind, Checksum);
   }
 };
 
@@ -612,67 +533,69 @@ template <> struct MDNodeKeyImpl<DISubprogram> {
   Metadata *File;
   unsigned Line;
   Metadata *Type;
+  bool IsLocalToUnit;
+  bool IsDefinition;
   unsigned ScopeLine;
   Metadata *ContainingType;
+  unsigned Virtuality;
   unsigned VirtualIndex;
   int ThisAdjustment;
   unsigned Flags;
-  unsigned SPFlags;
+  bool IsOptimized;
   Metadata *Unit;
   Metadata *TemplateParams;
   Metadata *Declaration;
-  Metadata *RetainedNodes;
-  Metadata *ThrownTypes;
+  Metadata *Variables;
 
   MDNodeKeyImpl(Metadata *Scope, MDString *Name, MDString *LinkageName,
                 Metadata *File, unsigned Line, Metadata *Type,
-                unsigned ScopeLine, Metadata *ContainingType,
+                bool IsLocalToUnit, bool IsDefinition, unsigned ScopeLine,
+                Metadata *ContainingType, unsigned Virtuality,
                 unsigned VirtualIndex, int ThisAdjustment, unsigned Flags,
-                unsigned SPFlags, Metadata *Unit, Metadata *TemplateParams,
-                Metadata *Declaration, Metadata *RetainedNodes,
-                Metadata *ThrownTypes)
+                bool IsOptimized, Metadata *Unit, Metadata *TemplateParams,
+                Metadata *Declaration, Metadata *Variables)
       : Scope(Scope), Name(Name), LinkageName(LinkageName), File(File),
-        Line(Line), Type(Type), ScopeLine(ScopeLine),
-        ContainingType(ContainingType), VirtualIndex(VirtualIndex),
-        ThisAdjustment(ThisAdjustment), Flags(Flags), SPFlags(SPFlags),
-        Unit(Unit), TemplateParams(TemplateParams), Declaration(Declaration),
-        RetainedNodes(RetainedNodes), ThrownTypes(ThrownTypes) {}
+        Line(Line), Type(Type), IsLocalToUnit(IsLocalToUnit),
+        IsDefinition(IsDefinition), ScopeLine(ScopeLine),
+        ContainingType(ContainingType), Virtuality(Virtuality),
+        VirtualIndex(VirtualIndex), ThisAdjustment(ThisAdjustment),
+        Flags(Flags), IsOptimized(IsOptimized), Unit(Unit),
+        TemplateParams(TemplateParams), Declaration(Declaration),
+        Variables(Variables) {}
   MDNodeKeyImpl(const DISubprogram *N)
       : Scope(N->getRawScope()), Name(N->getRawName()),
         LinkageName(N->getRawLinkageName()), File(N->getRawFile()),
-        Line(N->getLine()), Type(N->getRawType()), ScopeLine(N->getScopeLine()),
-        ContainingType(N->getRawContainingType()),
-        VirtualIndex(N->getVirtualIndex()),
+        Line(N->getLine()), Type(N->getRawType()),
+        IsLocalToUnit(N->isLocalToUnit()), IsDefinition(N->isDefinition()),
+        ScopeLine(N->getScopeLine()), ContainingType(N->getRawContainingType()),
+        Virtuality(N->getVirtuality()), VirtualIndex(N->getVirtualIndex()),
         ThisAdjustment(N->getThisAdjustment()), Flags(N->getFlags()),
-        SPFlags(N->getSPFlags()), Unit(N->getRawUnit()),
+        IsOptimized(N->isOptimized()), Unit(N->getRawUnit()),
         TemplateParams(N->getRawTemplateParams()),
-        Declaration(N->getRawDeclaration()),
-        RetainedNodes(N->getRawRetainedNodes()),
-        ThrownTypes(N->getRawThrownTypes()) {}
+        Declaration(N->getRawDeclaration()), Variables(N->getRawVariables()) {}
 
   bool isKeyOf(const DISubprogram *RHS) const {
     return Scope == RHS->getRawScope() && Name == RHS->getRawName() &&
            LinkageName == RHS->getRawLinkageName() &&
            File == RHS->getRawFile() && Line == RHS->getLine() &&
-           Type == RHS->getRawType() && ScopeLine == RHS->getScopeLine() &&
+           Type == RHS->getRawType() && IsLocalToUnit == RHS->isLocalToUnit() &&
+           IsDefinition == RHS->isDefinition() &&
+           ScopeLine == RHS->getScopeLine() &&
            ContainingType == RHS->getRawContainingType() &&
+           Virtuality == RHS->getVirtuality() &&
            VirtualIndex == RHS->getVirtualIndex() &&
            ThisAdjustment == RHS->getThisAdjustment() &&
-           Flags == RHS->getFlags() && SPFlags == RHS->getSPFlags() &&
+           Flags == RHS->getFlags() && IsOptimized == RHS->isOptimized() &&
            Unit == RHS->getUnit() &&
            TemplateParams == RHS->getRawTemplateParams() &&
            Declaration == RHS->getRawDeclaration() &&
-           RetainedNodes == RHS->getRawRetainedNodes() &&
-           ThrownTypes == RHS->getRawThrownTypes();
+           Variables == RHS->getRawVariables();
   }
-
-  bool isDefinition() const { return SPFlags & DISubprogram::SPFlagDefinition; }
-
   unsigned getHashValue() const {
     // If this is a declaration inside an ODR type, only hash the type and the
     // name.  Otherwise the hash will be stronger than
     // MDNodeSubsetEqualImpl::isDeclarationOfODRMember().
-    if (!isDefinition() && LinkageName)
+    if (!IsDefinition && LinkageName)
       if (auto *CT = dyn_cast_or_null<DICompositeType>(Scope))
         if (CT->getRawIdentifier())
           return hash_combine(LinkageName, Scope);
@@ -686,24 +609,20 @@ template <> struct MDNodeKeyImpl<DISubprogram> {
 };
 
 template <> struct MDNodeSubsetEqualImpl<DISubprogram> {
-  using KeyTy = MDNodeKeyImpl<DISubprogram>;
-
+  typedef MDNodeKeyImpl<DISubprogram> KeyTy;
   static bool isSubsetEqual(const KeyTy &LHS, const DISubprogram *RHS) {
-    return isDeclarationOfODRMember(LHS.isDefinition(), LHS.Scope,
-                                    LHS.LinkageName, LHS.TemplateParams, RHS);
+    return isDeclarationOfODRMember(LHS.IsDefinition, LHS.Scope,
+                                    LHS.LinkageName, RHS);
   }
-
   static bool isSubsetEqual(const DISubprogram *LHS, const DISubprogram *RHS) {
     return isDeclarationOfODRMember(LHS->isDefinition(), LHS->getRawScope(),
-                                    LHS->getRawLinkageName(),
-                                    LHS->getRawTemplateParams(), RHS);
+                                    LHS->getRawLinkageName(), RHS);
   }
 
   /// Subprograms compare equal if they declare the same function in an ODR
   /// type.
   static bool isDeclarationOfODRMember(bool IsDefinition, const Metadata *Scope,
                                        const MDString *LinkageName,
-                                       const Metadata *TemplateParams,
                                        const DISubprogram *RHS) {
     // Check whether the LHS is eligible.
     if (IsDefinition || !Scope || !LinkageName)
@@ -714,14 +633,8 @@ template <> struct MDNodeSubsetEqualImpl<DISubprogram> {
       return false;
 
     // Compare to the RHS.
-    // FIXME: We need to compare template parameters here to avoid incorrect
-    // collisions in mapMetadata when RF_MoveDistinctMDs and a ODR-DISubprogram
-    // has a non-ODR template parameter (i.e., a DICompositeType that does not
-    // have an identifier). Eventually we should decouple ODR logic from
-    // uniquing logic.
     return IsDefinition == RHS->isDefinition() && Scope == RHS->getRawScope() &&
-           LinkageName == RHS->getRawLinkageName() &&
-           TemplateParams == RHS->getRawTemplateParams();
+           LinkageName == RHS->getRawLinkageName();
   }
 };
 
@@ -741,7 +654,6 @@ template <> struct MDNodeKeyImpl<DILexicalBlock> {
     return Scope == RHS->getRawScope() && File == RHS->getRawFile() &&
            Line == RHS->getLine() && Column == RHS->getColumn();
   }
-
   unsigned getHashValue() const {
     return hash_combine(Scope, File, Line, Column);
   }
@@ -762,7 +674,6 @@ template <> struct MDNodeKeyImpl<DILexicalBlockFile> {
     return Scope == RHS->getRawScope() && File == RHS->getRawFile() &&
            Discriminator == RHS->getDiscriminator();
   }
-
   unsigned getHashValue() const {
     return hash_combine(Scope, File, Discriminator);
   }
@@ -770,47 +681,26 @@ template <> struct MDNodeKeyImpl<DILexicalBlockFile> {
 
 template <> struct MDNodeKeyImpl<DINamespace> {
   Metadata *Scope;
+  Metadata *File;
   MDString *Name;
+  unsigned Line;
   bool ExportSymbols;
 
-  MDNodeKeyImpl(Metadata *Scope, MDString *Name, bool ExportSymbols)
-      : Scope(Scope), Name(Name), ExportSymbols(ExportSymbols) {}
+  MDNodeKeyImpl(Metadata *Scope, Metadata *File, MDString *Name, unsigned Line,
+                bool ExportSymbols)
+      : Scope(Scope), File(File), Name(Name), Line(Line),
+        ExportSymbols(ExportSymbols) {}
   MDNodeKeyImpl(const DINamespace *N)
-      : Scope(N->getRawScope()), Name(N->getRawName()),
-        ExportSymbols(N->getExportSymbols()) {}
+      : Scope(N->getRawScope()), File(N->getRawFile()), Name(N->getRawName()),
+        Line(N->getLine()), ExportSymbols(N->getExportSymbols()) {}
 
   bool isKeyOf(const DINamespace *RHS) const {
-    return Scope == RHS->getRawScope() && Name == RHS->getRawName() &&
+    return Scope == RHS->getRawScope() && File == RHS->getRawFile() &&
+           Name == RHS->getRawName() && Line == RHS->getLine() &&
            ExportSymbols == RHS->getExportSymbols();
   }
-
   unsigned getHashValue() const {
-    return hash_combine(Scope, Name);
-  }
-};
-
-template <> struct MDNodeKeyImpl<DICommonBlock> {
-  Metadata *Scope;
-  Metadata *Decl;
-  MDString *Name;
-  Metadata *File;
-  unsigned LineNo;
-
-  MDNodeKeyImpl(Metadata *Scope, Metadata *Decl, MDString *Name,
-                Metadata *File, unsigned LineNo)
-      : Scope(Scope), Decl(Decl), Name(Name), File(File), LineNo(LineNo) {}
-  MDNodeKeyImpl(const DICommonBlock *N)
-      : Scope(N->getRawScope()), Decl(N->getRawDecl()), Name(N->getRawName()),
-        File(N->getRawFile()), LineNo(N->getLineNo()) {}
-
-  bool isKeyOf(const DICommonBlock *RHS) const {
-    return Scope == RHS->getRawScope() && Decl == RHS->getRawDecl() &&
-      Name == RHS->getRawName() && File == RHS->getRawFile() &&
-      LineNo == RHS->getLineNo();
-  }
-
-  unsigned getHashValue() const {
-    return hash_combine(Scope, Decl, Name, File, LineNo);
+    return hash_combine(Scope, File, Name, Line);
   }
 };
 
@@ -819,27 +709,25 @@ template <> struct MDNodeKeyImpl<DIModule> {
   MDString *Name;
   MDString *ConfigurationMacros;
   MDString *IncludePath;
-  MDString *SysRoot;
-
+  MDString *ISysRoot;
   MDNodeKeyImpl(Metadata *Scope, MDString *Name, MDString *ConfigurationMacros,
-                MDString *IncludePath, MDString *SysRoot)
+                MDString *IncludePath, MDString *ISysRoot)
       : Scope(Scope), Name(Name), ConfigurationMacros(ConfigurationMacros),
-        IncludePath(IncludePath), SysRoot(SysRoot) {}
+        IncludePath(IncludePath), ISysRoot(ISysRoot) {}
   MDNodeKeyImpl(const DIModule *N)
       : Scope(N->getRawScope()), Name(N->getRawName()),
         ConfigurationMacros(N->getRawConfigurationMacros()),
-        IncludePath(N->getRawIncludePath()), SysRoot(N->getRawSysRoot()) {}
+        IncludePath(N->getRawIncludePath()), ISysRoot(N->getRawISysRoot()) {}
 
   bool isKeyOf(const DIModule *RHS) const {
     return Scope == RHS->getRawScope() && Name == RHS->getRawName() &&
            ConfigurationMacros == RHS->getRawConfigurationMacros() &&
            IncludePath == RHS->getRawIncludePath() &&
-           SysRoot == RHS->getRawSysRoot();
+           ISysRoot == RHS->getRawISysRoot();
   }
-
   unsigned getHashValue() const {
     return hash_combine(Scope, Name,
-                        ConfigurationMacros, IncludePath, SysRoot);
+                        ConfigurationMacros, IncludePath, ISysRoot);
   }
 };
 
@@ -854,7 +742,6 @@ template <> struct MDNodeKeyImpl<DITemplateTypeParameter> {
   bool isKeyOf(const DITemplateTypeParameter *RHS) const {
     return Name == RHS->getRawName() && Type == RHS->getRawType();
   }
-
   unsigned getHashValue() const { return hash_combine(Name, Type); }
 };
 
@@ -874,7 +761,6 @@ template <> struct MDNodeKeyImpl<DITemplateValueParameter> {
     return Tag == RHS->getTag() && Name == RHS->getRawName() &&
            Type == RHS->getRawType() && Value == RHS->getValue();
   }
-
   unsigned getHashValue() const { return hash_combine(Tag, Name, Type, Value); }
 };
 
@@ -888,26 +774,23 @@ template <> struct MDNodeKeyImpl<DIGlobalVariable> {
   bool IsLocalToUnit;
   bool IsDefinition;
   Metadata *StaticDataMemberDeclaration;
-  Metadata *TemplateParams;
   uint32_t AlignInBits;
 
   MDNodeKeyImpl(Metadata *Scope, MDString *Name, MDString *LinkageName,
                 Metadata *File, unsigned Line, Metadata *Type,
                 bool IsLocalToUnit, bool IsDefinition,
-                Metadata *StaticDataMemberDeclaration, Metadata *TemplateParams,
-                uint32_t AlignInBits)
+                Metadata *StaticDataMemberDeclaration, uint32_t AlignInBits)
       : Scope(Scope), Name(Name), LinkageName(LinkageName), File(File),
         Line(Line), Type(Type), IsLocalToUnit(IsLocalToUnit),
         IsDefinition(IsDefinition),
         StaticDataMemberDeclaration(StaticDataMemberDeclaration),
-        TemplateParams(TemplateParams), AlignInBits(AlignInBits) {}
+        AlignInBits(AlignInBits) {}
   MDNodeKeyImpl(const DIGlobalVariable *N)
       : Scope(N->getRawScope()), Name(N->getRawName()),
         LinkageName(N->getRawLinkageName()), File(N->getRawFile()),
         Line(N->getLine()), Type(N->getRawType()),
         IsLocalToUnit(N->isLocalToUnit()), IsDefinition(N->isDefinition()),
         StaticDataMemberDeclaration(N->getRawStaticDataMemberDeclaration()),
-        TemplateParams(N->getRawTemplateParams()),
         AlignInBits(N->getAlignInBits()) {}
 
   bool isKeyOf(const DIGlobalVariable *RHS) const {
@@ -918,10 +801,8 @@ template <> struct MDNodeKeyImpl<DIGlobalVariable> {
            IsDefinition == RHS->isDefinition() &&
            StaticDataMemberDeclaration ==
                RHS->getRawStaticDataMemberDeclaration() &&
-           TemplateParams == RHS->getRawTemplateParams() &&
            AlignInBits == RHS->getAlignInBits();
   }
-
   unsigned getHashValue() const {
     // We do not use AlignInBits in hashing function here on purpose:
     // in most cases this param for local variable is zero (for function param
@@ -962,7 +843,6 @@ template <> struct MDNodeKeyImpl<DILocalVariable> {
            Type == RHS->getRawType() && Arg == RHS->getArg() &&
            Flags == RHS->getFlags() && AlignInBits == RHS->getAlignInBits();
   }
-
   unsigned getHashValue() const {
     // We do not use AlignInBits in hashing function here on purpose:
     // in most cases this param for local variable is zero (for function param
@@ -975,29 +855,6 @@ template <> struct MDNodeKeyImpl<DILocalVariable> {
   }
 };
 
-template <> struct MDNodeKeyImpl<DILabel> {
-  Metadata *Scope;
-  MDString *Name;
-  Metadata *File;
-  unsigned Line;
-
-  MDNodeKeyImpl(Metadata *Scope, MDString *Name, Metadata *File, unsigned Line)
-      : Scope(Scope), Name(Name), File(File), Line(Line) {}
-  MDNodeKeyImpl(const DILabel *N)
-      : Scope(N->getRawScope()), Name(N->getRawName()), File(N->getRawFile()),
-        Line(N->getLine()) {}
-
-  bool isKeyOf(const DILabel *RHS) const {
-    return Scope == RHS->getRawScope() && Name == RHS->getRawName() &&
-           File == RHS->getRawFile() && Line == RHS->getLine();
-  }
-
-  /// Using name and line to get hash value. It should already be mostly unique.
-  unsigned getHashValue() const {
-    return hash_combine(Scope, Name, Line);
-  }
-};
-
 template <> struct MDNodeKeyImpl<DIExpression> {
   ArrayRef<uint64_t> Elements;
 
@@ -1007,7 +864,6 @@ template <> struct MDNodeKeyImpl<DIExpression> {
   bool isKeyOf(const DIExpression *RHS) const {
     return Elements == RHS->getElements();
   }
-
   unsigned getHashValue() const {
     return hash_combine_range(Elements.begin(), Elements.end());
   }
@@ -1026,7 +882,6 @@ template <> struct MDNodeKeyImpl<DIGlobalVariableExpression> {
     return Variable == RHS->getRawVariable() &&
            Expression == RHS->getRawExpression();
   }
-
   unsigned getHashValue() const { return hash_combine(Variable, Expression); }
 };
 
@@ -1055,7 +910,6 @@ template <> struct MDNodeKeyImpl<DIObjCProperty> {
            SetterName == RHS->getRawSetterName() &&
            Attributes == RHS->getAttributes() && Type == RHS->getRawType();
   }
-
   unsigned getHashValue() const {
     return hash_combine(Name, File, Line, GetterName, SetterName, Attributes,
                         Type);
@@ -1066,26 +920,23 @@ template <> struct MDNodeKeyImpl<DIImportedEntity> {
   unsigned Tag;
   Metadata *Scope;
   Metadata *Entity;
-  Metadata *File;
   unsigned Line;
   MDString *Name;
 
-  MDNodeKeyImpl(unsigned Tag, Metadata *Scope, Metadata *Entity, Metadata *File,
-                unsigned Line, MDString *Name)
-      : Tag(Tag), Scope(Scope), Entity(Entity), File(File), Line(Line),
-        Name(Name) {}
+  MDNodeKeyImpl(unsigned Tag, Metadata *Scope, Metadata *Entity, unsigned Line,
+                MDString *Name)
+      : Tag(Tag), Scope(Scope), Entity(Entity), Line(Line), Name(Name) {}
   MDNodeKeyImpl(const DIImportedEntity *N)
       : Tag(N->getTag()), Scope(N->getRawScope()), Entity(N->getRawEntity()),
-        File(N->getRawFile()), Line(N->getLine()), Name(N->getRawName()) {}
+        Line(N->getLine()), Name(N->getRawName()) {}
 
   bool isKeyOf(const DIImportedEntity *RHS) const {
     return Tag == RHS->getTag() && Scope == RHS->getRawScope() &&
-           Entity == RHS->getRawEntity() && File == RHS->getFile() &&
-           Line == RHS->getLine() && Name == RHS->getRawName();
+           Entity == RHS->getRawEntity() && Line == RHS->getLine() &&
+           Name == RHS->getRawName();
   }
-
   unsigned getHashValue() const {
-    return hash_combine(Tag, Scope, Entity, File, Line, Name);
+    return hash_combine(Tag, Scope, Entity, Line, Name);
   }
 };
 
@@ -1105,7 +956,6 @@ template <> struct MDNodeKeyImpl<DIMacro> {
     return MIType == RHS->getMacinfoType() && Line == RHS->getLine() &&
            Name == RHS->getRawName() && Value == RHS->getRawValue();
   }
-
   unsigned getHashValue() const {
     return hash_combine(MIType, Line, Name, Value);
   }
@@ -1128,37 +978,30 @@ template <> struct MDNodeKeyImpl<DIMacroFile> {
     return MIType == RHS->getMacinfoType() && Line == RHS->getLine() &&
            File == RHS->getRawFile() && Elements == RHS->getRawElements();
   }
-
   unsigned getHashValue() const {
     return hash_combine(MIType, Line, File, Elements);
   }
 };
 
-/// DenseMapInfo for MDNode subclasses.
+/// \brief DenseMapInfo for MDNode subclasses.
 template <class NodeTy> struct MDNodeInfo {
-  using KeyTy = MDNodeKeyImpl<NodeTy>;
-  using SubsetEqualTy = MDNodeSubsetEqualImpl<NodeTy>;
-
+  typedef MDNodeKeyImpl<NodeTy> KeyTy;
+  typedef MDNodeSubsetEqualImpl<NodeTy> SubsetEqualTy;
   static inline NodeTy *getEmptyKey() {
     return DenseMapInfo<NodeTy *>::getEmptyKey();
   }
-
   static inline NodeTy *getTombstoneKey() {
     return DenseMapInfo<NodeTy *>::getTombstoneKey();
   }
-
   static unsigned getHashValue(const KeyTy &Key) { return Key.getHashValue(); }
-
   static unsigned getHashValue(const NodeTy *N) {
     return KeyTy(N).getHashValue();
   }
-
   static bool isEqual(const KeyTy &LHS, const NodeTy *RHS) {
     if (RHS == getEmptyKey() || RHS == getTombstoneKey())
       return false;
     return SubsetEqualTy::isSubsetEqual(LHS, RHS) || LHS.isKeyOf(RHS);
   }
-
   static bool isEqual(const NodeTy *LHS, const NodeTy *RHS) {
     if (LHS == RHS)
       return true;
@@ -1168,10 +1011,10 @@ template <class NodeTy> struct MDNodeInfo {
   }
 };
 
-#define HANDLE_MDNODE_LEAF(CLASS) using CLASS##Info = MDNodeInfo<CLASS>;
+#define HANDLE_MDNODE_LEAF(CLASS) typedef MDNodeInfo<CLASS> CLASS##Info;
 #include "llvm/IR/Metadata.def"
 
-/// Map-like storage for metadata attachments.
+/// \brief Map-like storage for metadata attachments.
 class MDAttachmentMap {
   SmallVector<std::pair<unsigned, TrackingMDNodeRef>, 2> Attachments;
 
@@ -1179,27 +1022,27 @@ public:
   bool empty() const { return Attachments.empty(); }
   size_t size() const { return Attachments.size(); }
 
-  /// Get a particular attachment (if any).
+  /// \brief Get a particular attachment (if any).
   MDNode *lookup(unsigned ID) const;
 
-  /// Set an attachment to a particular node.
+  /// \brief Set an attachment to a particular node.
   ///
   /// Set the \c ID attachment to \c MD, replacing the current attachment at \c
   /// ID (if anyway).
   void set(unsigned ID, MDNode &MD);
 
-  /// Remove an attachment.
+  /// \brief Remove an attachment.
   ///
   /// Remove the attachment at \c ID, if any.
-  bool erase(unsigned ID);
+  void erase(unsigned ID);
 
-  /// Copy out all the attachments.
+  /// \brief Copy out all the attachments.
   ///
   /// Copies all the current attachments into \c Result, sorting by attachment
   /// ID.  This function does \em not clear \c Result.
   void getAll(SmallVectorImpl<std::pair<unsigned, MDNode *>> &Result) const;
 
-  /// Erase matching attachments.
+  /// \brief Erase matching attachments.
   ///
   /// Erases all attachments matching the \c shouldRemove predicate.
   template <class PredTy> void remove_if(PredTy shouldRemove) {
@@ -1224,14 +1067,10 @@ public:
   /// Appends all attachments with the given ID to \c Result in insertion order.
   /// If the global has no attachments with the given ID, or if ID is invalid,
   /// leaves Result unchanged.
-  void get(unsigned ID, SmallVectorImpl<MDNode *> &Result) const;
-
-  /// Returns the first attachment with the given ID or nullptr if no such
-  /// attachment exists.
-  MDNode *lookup(unsigned ID) const;
+  void get(unsigned ID, SmallVectorImpl<MDNode *> &Result);
 
   void insert(unsigned ID, MDNode &MD);
-  bool erase(unsigned ID);
+  void erase(unsigned ID);
 
   /// Appends all attachments for the global to \c Result, sorting by attachment
   /// ID. Attachments with the same ID appear in insertion order. This function
@@ -1244,29 +1083,29 @@ public:
   /// OwnedModules - The set of modules instantiated in this context, and which
   /// will be automatically deleted if this context is deleted.
   SmallPtrSet<Module*, 4> OwnedModules;
+  
+  LLVMContext::InlineAsmDiagHandlerTy InlineAsmDiagHandler;
+  void *InlineAsmDiagContext;
 
-  LLVMContext::InlineAsmDiagHandlerTy InlineAsmDiagHandler = nullptr;
-  void *InlineAsmDiagContext = nullptr;
+  LLVMContext::DiagnosticHandlerTy DiagnosticHandler;
+  void *DiagnosticContext;
+  bool RespectDiagnosticFilters;
+  bool DiagnosticHotnessRequested;
+  std::unique_ptr<yaml::Output> DiagnosticsOutputFile;
 
-  std::unique_ptr<DiagnosticHandler> DiagHandler;
-  bool RespectDiagnosticFilters = false;
-  bool DiagnosticsHotnessRequested = false;
-  uint64_t DiagnosticsHotnessThreshold = 0;
-  std::unique_ptr<RemarkStreamer> RemarkDiagStreamer;
+  LLVMContext::YieldCallbackTy YieldCallback;
+  void *YieldOpaqueHandle;
 
-  LLVMContext::YieldCallbackTy YieldCallback = nullptr;
-  void *YieldOpaqueHandle = nullptr;
-
-  using IntMapTy =
-      DenseMap<APInt, std::unique_ptr<ConstantInt>, DenseMapAPIntKeyInfo>;
+  typedef DenseMap<APInt, std::unique_ptr<ConstantInt>, DenseMapAPIntKeyInfo>
+      IntMapTy;
   IntMapTy IntConstants;
 
-  using FPMapTy =
-      DenseMap<APFloat, std::unique_ptr<ConstantFP>, DenseMapAPFloatKeyInfo>;
+  typedef DenseMap<APFloat, std::unique_ptr<ConstantFP>, DenseMapAPFloatKeyInfo>
+      FPMapTy;
   FPMapTy FPConstants;
 
   FoldingSet<AttributeImpl> AttrsSet;
-  FoldingSet<AttributeListImpl> AttrsLists;
+  FoldingSet<AttributeSetImpl> AttrsLists;
   FoldingSet<AttributeSetNode> AttrsSetNodes;
 
   StringMap<MDString, BumpPtrAllocator> MDStringCache;
@@ -1290,13 +1129,13 @@ public:
 
   DenseMap<Type *, std::unique_ptr<ConstantAggregateZero>> CAZConstants;
 
-  using ArrayConstantsTy = ConstantUniqueMap<ConstantArray>;
+  typedef ConstantUniqueMap<ConstantArray> ArrayConstantsTy;
   ArrayConstantsTy ArrayConstants;
-
-  using StructConstantsTy = ConstantUniqueMap<ConstantStruct>;
+  
+  typedef ConstantUniqueMap<ConstantStruct> StructConstantsTy;
   StructConstantsTy StructConstants;
-
-  using VectorConstantsTy = ConstantUniqueMap<ConstantVector>;
+  
+  typedef ConstantUniqueMap<ConstantVector> VectorConstantsTy;
   VectorConstantsTy VectorConstants;
 
   DenseMap<PointerType *, std::unique_ptr<ConstantPointerNull>> CPNConstants;
@@ -1311,8 +1150,8 @@ public:
 
   ConstantUniqueMap<InlineAsm> InlineAsms;
 
-  ConstantInt *TheTrueVal = nullptr;
-  ConstantInt *TheFalseVal = nullptr;
+  ConstantInt *TheTrueVal;
+  ConstantInt *TheFalseVal;
 
   std::unique_ptr<ConstantTokenNone> TheNoneToken;
 
@@ -1321,29 +1160,32 @@ public:
   Type X86_FP80Ty, FP128Ty, PPC_FP128Ty, X86_MMXTy;
   IntegerType Int1Ty, Int8Ty, Int16Ty, Int32Ty, Int64Ty, Int128Ty;
 
-  BumpPtrAllocator Alloc;
-  UniqueStringSaver Saver{Alloc};
-
+  
+  /// TypeAllocator - All dynamically allocated types are allocated from this.
+  /// They live forever until the context is torn down.
+  BumpPtrAllocator TypeAllocator;
+  
   DenseMap<unsigned, IntegerType*> IntegerTypes;
 
-  using FunctionTypeSet = DenseSet<FunctionType *, FunctionTypeKeyInfo>;
+  typedef DenseSet<FunctionType *, FunctionTypeKeyInfo> FunctionTypeSet;
   FunctionTypeSet FunctionTypes;
-  using StructTypeSet = DenseSet<StructType *, AnonStructTypeKeyInfo>;
+  typedef DenseSet<StructType *, AnonStructTypeKeyInfo> StructTypeSet;
   StructTypeSet AnonStructTypes;
   StringMap<StructType*> NamedStructTypes;
-  unsigned NamedStructTypesUniqueID = 0;
-
+  unsigned NamedStructTypesUniqueID;
+    
   DenseMap<std::pair<Type *, uint64_t>, ArrayType*> ArrayTypes;
-  DenseMap<std::pair<Type *, ElementCount>, VectorType*> VectorTypes;
+  DenseMap<std::pair<Type *, unsigned>, VectorType*> VectorTypes;
   DenseMap<Type*, PointerType*> PointerTypes;  // Pointers in AddrSpace = 0
   DenseMap<std::pair<Type*, unsigned>, PointerType*> ASPointerTypes;
+
 
   /// ValueHandles - This map keeps track of all of the value handles that are
   /// watching a Value*.  The Value::HasValueHandle bit is used to know
   /// whether or not a value has an entry in this map.
-  using ValueHandlesTy = DenseMap<Value *, ValueHandleBase *>;
+  typedef DenseMap<Value*, ValueHandleBase*> ValueHandlesTy;
   ValueHandlesTy ValueHandles;
-
+  
   /// CustomMDKindNames - Map to hold the metadata string to ID mapping.
   StringMap<unsigned> CustomMDKindNames;
 
@@ -1356,8 +1198,8 @@ public:
   /// Collection of per-GlobalObject sections used in this context.
   DenseMap<const GlobalObject *, StringRef> GlobalObjectSections;
 
-  /// Collection of per-GlobalValue partitions used in this context.
-  DenseMap<const GlobalValue *, StringRef> GlobalValuePartitions;
+  /// Stable collection of section strings.
+  StringSet<> SectionStrings;
 
   /// DiscriminatorTable - This table maps file:line locations to an
   /// integer representing the next DWARF path discriminator to assign to
@@ -1367,7 +1209,7 @@ public:
   int getOrAddScopeRecordIdxEntry(MDNode *N, int ExistingIdx);
   int getOrAddScopeInlinedAtIdxEntry(MDNode *Scope, MDNode *IA,int ExistingIdx);
 
-  /// A set of interned tags for operand bundles.  The StringMap maps
+  /// \brief A set of interned tags for operand bundles.  The StringMap maps
   /// bundle tags to their IDs.
   ///
   /// \see LLVMContext::getOperandBundleTagID
@@ -1376,20 +1218,6 @@ public:
   StringMapEntry<uint32_t> *getOrInsertBundleTag(StringRef Tag);
   void getOperandBundleTags(SmallVectorImpl<StringRef> &Tags) const;
   uint32_t getOperandBundleTagID(StringRef Tag) const;
-
-  /// A set of interned synchronization scopes.  The StringMap maps
-  /// synchronization scope names to their respective synchronization scope IDs.
-  StringMap<SyncScope::ID> SSC;
-
-  /// getOrInsertSyncScopeID - Maps synchronization scope name to
-  /// synchronization scope ID.  Every synchronization scope registered with
-  /// LLVMContext has unique ID except pre-defined ones.
-  SyncScope::ID getOrInsertSyncScopeID(StringRef SSN);
-
-  /// getSyncScopeNames - Populates client supplied SmallVector with
-  /// synchronization scope names registered with LLVMContext.  Synchronization
-  /// scope names are ordered by increasing synchronization scope IDs.
-  void getSyncScopeNames(SmallVectorImpl<StringRef> &SSNs) const;
 
   /// Maintain the GC name for each function.
   ///
@@ -1408,20 +1236,11 @@ public:
   /// Destroy the ConstantArrays if they are not used.
   void dropTriviallyDeadConstantArrays();
 
-  mutable OptPassGate *OPG = nullptr;
-
-  /// Access the object which can disable optional passes and individual
-  /// optimizations at compile time.
-  OptPassGate &getOptPassGate() const;
-
-  /// Set the object which can disable optional passes and individual
-  /// optimizations at compile time.
-  ///
-  /// The lifetime of the object must be guaranteed to extend as long as the
-  /// LLVMContext is used by compilation.
-  void setOptPassGate(OptPassGate&);
+  /// \brief Access the object which manages optimization bisection for failure
+  /// analysis.
+  OptBisect &getOptBisect();
 };
 
-} // end namespace llvm
+}
 
-#endif // LLVM_LIB_IR_LLVMCONTEXTIMPL_H
+#endif

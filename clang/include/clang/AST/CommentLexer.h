@@ -1,8 +1,9 @@
 //===--- CommentLexer.h - Lexer for structured comments ---------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -51,7 +52,7 @@ enum TokenKind {
 };
 } // end namespace tok
 
-/// Comment token.
+/// \brief Comment token.
 class Token {
   friend class Lexer;
   friend class TextTokenRetokenizer;
@@ -71,11 +72,11 @@ class Token {
 
   /// Integer value associated with a token.
   ///
-  /// If the token is a known command, contains command ID and TextPtr is
+  /// If the token is a konwn command, contains command ID and TextPtr is
   /// unused (command spelling can be found with CommandTraits).  Otherwise,
   /// contains the length of the string that starts at TextPtr.
   unsigned IntVal;
-
+  
 public:
   SourceLocation getLocation() const LLVM_READONLY { return Loc; }
   void setLocation(SourceLocation SL) { Loc = SL; }
@@ -216,7 +217,7 @@ public:
   void dump(const Lexer &L, const SourceManager &SM) const;
 };
 
-/// Comment lexer.
+/// \brief Comment lexer.
 class Lexer {
 private:
   Lexer(const Lexer &) = delete;
@@ -227,7 +228,7 @@ private:
   llvm::BumpPtrAllocator &Allocator;
 
   DiagnosticsEngine &Diags;
-
+  
   const CommandTraits &Traits;
 
   const char *const BufferStart;
@@ -280,11 +281,6 @@ private:
   /// command, including command marker.
   SmallString<16> VerbatimBlockEndCommandName;
 
-  /// If true, the commands, html tags, etc will be parsed and reported as
-  /// separate tokens inside the comment body. If false, the comment text will
-  /// be parsed into text and newline tokens.
-  bool ParseCommands;
-
   /// Given a character reference name (e.g., "lt"), return the character that
   /// it stands for (e.g., "<").
   StringRef resolveHTMLNamedCharacterReference(StringRef Name) const;
@@ -319,11 +315,12 @@ private:
   /// Eat string matching regexp \code \s*\* \endcode.
   void skipLineStartingDecorations();
 
-  /// Lex comment text, including commands if ParseCommands is set to true.
+  /// Lex stuff inside comments.  CommentEnd should be set correctly.
   void lexCommentText(Token &T);
 
-  void setupAndLexVerbatimBlock(Token &T, const char *TextBegin, char Marker,
-                                const CommandInfo *Info);
+  void setupAndLexVerbatimBlock(Token &T,
+                                const char *TextBegin,
+                                char Marker, const CommandInfo *Info);
 
   void lexVerbatimBlockFirstLine(Token &T);
 
@@ -346,13 +343,15 @@ private:
 
 public:
   Lexer(llvm::BumpPtrAllocator &Allocator, DiagnosticsEngine &Diags,
-        const CommandTraits &Traits, SourceLocation FileLoc,
-        const char *BufferStart, const char *BufferEnd,
-        bool ParseCommands = true);
+        const CommandTraits &Traits,
+        SourceLocation FileLoc,
+        const char *BufferStart, const char *BufferEnd);
 
   void lex(Token &T);
 
-  StringRef getSpelling(const Token &Tok, const SourceManager &SourceMgr) const;
+  StringRef getSpelling(const Token &Tok,
+                        const SourceManager &SourceMgr,
+                        bool *Invalid = nullptr) const;
 };
 
 } // end namespace comments

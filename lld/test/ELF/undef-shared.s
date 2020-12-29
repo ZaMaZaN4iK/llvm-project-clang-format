@@ -1,19 +1,15 @@
-# REQUIRES: x86
 # RUN: llvm-mc -filetype=obj -triple=x86_64-unknown-linux %s -o %t.o
-# RUN: not ld.lld %t.o -o /dev/null -shared 2>&1 | FileCheck %s
+# RUN: not ld.lld %t.o -o %t.so -shared 2>&1 | FileCheck %s
 
-# CHECK: error: undefined hidden symbol: hidden
-# CHECK: >>> referenced by {{.*}}:(.data+0x0)
+# CHECK: error: {{.*}}:(.data+0x0): undefined symbol 'hidden'
 .global hidden
 .hidden hidden
 
-# CHECK: error: undefined internal symbol: internal
-# CHECK: >>> referenced by {{.*}}:(.data+0x8)
+# CHECK: error: {{.*}}:(.data+0x8): undefined symbol 'internal'
 .global internal
 .internal internal
 
-# CHECK: error: undefined protected symbol: protected
-# CHECK: >>> referenced by {{.*}}:(.data+0x10)
+# CHECK: error: {{.*}}:(.data+0x10): undefined symbol 'protected'
 .global protected
 .protected protected
 

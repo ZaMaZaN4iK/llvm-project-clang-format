@@ -1,25 +1,22 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // <memory>
 
-// struct allocator_arg_t { explicit allocator_arg_t() = default; };
+// struct allocator_arg_t { };
 // const allocator_arg_t allocator_arg = allocator_arg_t();
 
 #include <memory>
 
-#include "test_macros.h"
-
 void test(std::allocator_arg_t) {}
 
-int main(int, char**)
+int main()
 {
     test(std::allocator_arg);
-
-    return 0;
 }

@@ -1,8 +1,9 @@
 //===-- aeabi_memmove.S - EABI memmove implementation --------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===---------------------------------------------------------------------===//
 
@@ -12,13 +13,7 @@
 
         .p2align 2
 DEFINE_COMPILERRT_FUNCTION(__aeabi_memmove)
-#ifdef USE_THUMB_1
-        push    {r7, lr}
-        bl      memmove
-        pop     {r7, pc}
-#else
         b       memmove
-#endif
 END_COMPILERRT_FUNCTION(__aeabi_memmove)
 
 DEFINE_AEABI_FUNCTION_ALIAS(__aeabi_memmove4, __aeabi_memmove)

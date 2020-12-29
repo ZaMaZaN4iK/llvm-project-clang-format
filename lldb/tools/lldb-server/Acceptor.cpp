@@ -1,8 +1,9 @@
 //===-- Acceptor.cpp --------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,10 +12,11 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ScopedPrinter.h"
 
+#include "lldb/Core/StreamString.h"
 #include "lldb/Host/ConnectionFileDescriptor.h"
 #include "lldb/Host/common/TCPSocket.h"
-#include "lldb/Utility/StreamString.h"
-#include "lldb/Utility/UriParser.h"
+
+#include "Utility/UriParser.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -55,13 +57,14 @@ const char *FindSchemeByProtocol(const Socket::SocketProtocol protocol) {
 }
 }
 
-Status Acceptor::Listen(int backlog) {
+Error Acceptor::Listen(int backlog) {
   return m_listener_socket_up->Listen(StringRef(m_name), backlog);
 }
 
-Status Acceptor::Accept(const bool child_processes_inherit, Connection *&conn) {
+Error Acceptor::Accept(const bool child_processes_inherit, Connection *&conn) {
   Socket *conn_socket = nullptr;
-  auto error = m_listener_socket_up->Accept(conn_socket);
+  auto error = m_listener_socket_up->Accept(
+      StringRef(m_name), child_processes_inherit, conn_socket);
   if (error.Success())
     conn = new ConnectionFileDescriptor(conn_socket);
 
@@ -80,7 +83,7 @@ std::string Acceptor::GetLocalSocketId() const { return m_local_socket_id(); }
 
 std::unique_ptr<Acceptor> Acceptor::Create(StringRef name,
                                            const bool child_processes_inherit,
-                                           Status &error) {
+                                           Error &error) {
   error.Clear();
 
   Socket::SocketProtocol socket_protocol = Socket::ProtocolUnixDomain;

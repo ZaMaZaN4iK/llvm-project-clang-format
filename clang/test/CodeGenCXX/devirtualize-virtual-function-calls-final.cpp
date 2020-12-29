@@ -24,23 +24,10 @@ namespace Test2 {
   }
 }
 
-namespace Test2a {
-  struct A {
-    virtual ~A() final {}
-    virtual int f();
-  };
-
-  // CHECK-LABEL: define i32 @_ZN6Test2a1fEPNS_1AE
-  int f(A *a) {
-    // CHECK: call i32 @_ZN6Test2a1A1fEv
-    return a->f();
-  }
-}
-
-
 namespace Test3 {
   struct A {
-    virtual int f();  };
+    virtual int f();
+  };
 
   struct B final : A { };
 
@@ -252,98 +239,5 @@ namespace Test10 {
   int f(B *b) {
     // CHECK: call i32 @_ZN6Test101B1fEv
     return static_cast<A *>(b)->f();
-  }
-}
-
-namespace TestVBase {
-  struct A { virtual void f(); };
-  struct B : virtual A {};
-  struct C : virtual A { void f() override; };
-
-  extern struct BC final : B, C {} &bc;
-  extern struct BCusingA final : B, C { using A::f; } &bc_using_a;
-  extern struct BCusingB final : B, C { using B::f; } &bc_using_b;
-  extern struct BCusingC final : B, C { using C::f; } &bc_using_c;
-
-  extern struct CB final : C, B {} &cb;
-  extern struct CBusingA final : C, B { using A::f; } &cb_using_a;
-  extern struct CBusingB final : C, B { using B::f; } &cb_using_b;
-  extern struct CBusingC final : C, B { using C::f; } &cb_using_c;
-
-  // CHECK-LABEL: @_ZN9TestVBase4testEv(
-  void test() {
-    // FIXME: The 'using A' case can be devirtualized to call A's virtual
-    // adjustment thunk for C::f.
-    // FIXME: The 'using B' case can be devirtualized, but requires us to emit
-    // a derived-to-base or base-to-derived conversion as part of
-    // devirtualization.
-
-    // CHECK: call void @_ZN9TestVBase1C1fEv(
-    bc.f();
-    // CHECK: call void %
-    bc_using_a.f();
-    // CHECK: call void %
-    bc_using_b.f();
-    // CHECK: call void @_ZN9TestVBase1C1fEv(
-    bc_using_c.f();
-
-    // CHECK: call void @_ZN9TestVBase1C1fEv(
-    cb.f();
-    // CHECK: call void %
-    cb_using_a.f();
-    // CHECK: call void %
-    cb_using_b.f();
-    // CHECK: call void @_ZN9TestVBase1C1fEv(
-    cb_using_c.f();
-  }
-}
-
-namespace Test11 {
-  // Check that the definitions of Derived's operators are emitted.
-
-  // CHECK-LABEL: define linkonce_odr void @_ZN6Test111SIiE4foo1Ev(
-  // CHECK: call void @_ZN6Test111SIiE7DerivedclEv(
-  // CHECK: call zeroext i1 @_ZN6Test111SIiE7DerivedeqERKNS_4BaseE(
-  // CHECK: call zeroext i1 @_ZN6Test111SIiE7DerivedntEv(
-  // CHECK: call dereferenceable(4) %"class.Test11::Base"* @_ZN6Test111SIiE7DerivedixEi(
-  // CHECK: define linkonce_odr void @_ZN6Test111SIiE7DerivedclEv(
-  // CHECK: define linkonce_odr zeroext i1 @_ZN6Test111SIiE7DerivedeqERKNS_4BaseE(
-  // CHECK: define linkonce_odr zeroext i1 @_ZN6Test111SIiE7DerivedntEv(
-  // CHECK: define linkonce_odr dereferenceable(4) %"class.Test11::Base"* @_ZN6Test111SIiE7DerivedixEi(
-  class Base {
-  public:
-    virtual void operator()() {}
-    virtual bool operator==(const Base &other) { return false; }
-    virtual bool operator!() { return false; }
-    virtual Base &operator[](int i) { return *this; }
-  };
-
-  template<class T>
-  struct S {
-    class Derived final : public Base {
-    public:
-      void operator()() override {}
-      bool operator==(const Base &other) override { return true; }
-      bool operator!() override { return true; }
-      Base &operator[](int i) override { return *this; }
-    };
-
-    Derived *ptr = nullptr, *ptr2 = nullptr;
-
-    void foo1() {
-      if (ptr && ptr2) {
-        // These calls get devirtualized. Linkage fails if the definitions of
-        // the called functions are not emitted.
-        (*ptr)();
-        (void)(*ptr == *ptr2);
-        (void)(!(*ptr));
-        (void)((*ptr)[1]);
-      }
-    }
-  };
-
-  void foo2() {
-    S<int> *s = new S<int>;
-    s->foo1();
   }
 }

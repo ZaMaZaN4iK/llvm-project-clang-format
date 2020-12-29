@@ -1,8 +1,9 @@
 //===-- asan_report.h -------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,9 +11,6 @@
 //
 // ASan-private header for error reporting functions.
 //===----------------------------------------------------------------------===//
-
-#ifndef ASAN_REPORT_H
-#define ASAN_REPORT_H
 
 #include "asan_allocator.h"
 #include "asan_internal.h"
@@ -25,7 +23,6 @@ struct StackVarDescr {
   uptr size;
   const char *name_pos;
   uptr name_len;
-  uptr line;
 };
 
 // Returns the number of globals close to the provided address and copies
@@ -48,9 +45,9 @@ bool ParseFrameDescription(const char *frame_descr,
 // Different kinds of error reports.
 void ReportGenericError(uptr pc, uptr bp, uptr sp, uptr addr, bool is_write,
                         uptr access_size, u32 exp, bool fatal);
-void ReportDeadlySignal(const SignalContext &sig);
-void ReportNewDeleteTypeMismatch(uptr addr, uptr delete_size,
-                                 uptr delete_alignment,
+void ReportStackOverflow(const SignalContext &sig);
+void ReportDeadlySignal(int signo, const SignalContext &sig);
+void ReportNewDeleteSizeMismatch(uptr addr, uptr delete_size,
                                  BufferedStackTrace *free_stack);
 void ReportDoubleFree(uptr addr, BufferedStackTrace *free_stack);
 void ReportFreeNotMalloced(uptr addr, BufferedStackTrace *free_stack);
@@ -60,20 +57,6 @@ void ReportAllocTypeMismatch(uptr addr, BufferedStackTrace *free_stack,
 void ReportMallocUsableSizeNotOwned(uptr addr, BufferedStackTrace *stack);
 void ReportSanitizerGetAllocatedSizeNotOwned(uptr addr,
                                              BufferedStackTrace *stack);
-void ReportCallocOverflow(uptr count, uptr size, BufferedStackTrace *stack);
-void ReportReallocArrayOverflow(uptr count, uptr size,
-                                BufferedStackTrace *stack);
-void ReportPvallocOverflow(uptr size, BufferedStackTrace *stack);
-void ReportInvalidAllocationAlignment(uptr alignment,
-                                      BufferedStackTrace *stack);
-void ReportInvalidAlignedAllocAlignment(uptr size, uptr alignment,
-                                        BufferedStackTrace *stack);
-void ReportInvalidPosixMemalignAlignment(uptr alignment,
-                                         BufferedStackTrace *stack);
-void ReportAllocationSizeTooBig(uptr user_size, uptr total_size, uptr max_size,
-                                BufferedStackTrace *stack);
-void ReportRssLimitExceeded(BufferedStackTrace *stack);
-void ReportOutOfMemory(uptr requested_size, BufferedStackTrace *stack);
 void ReportStringFunctionMemoryRangesOverlap(const char *function,
                                              const char *offset1, uptr length1,
                                              const char *offset2, uptr length2,
@@ -96,4 +79,3 @@ void ReportMacCfReallocUnknown(uptr addr, uptr zone_ptr,
                                BufferedStackTrace *stack);
 
 }  // namespace __asan
-#endif  // ASAN_REPORT_H

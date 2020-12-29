@@ -7,8 +7,7 @@
 Overview
 ========
 
-libc++ is a new implementation of the C++ standard library, targeting C++11 and
-above.
+libc++ is a new implementation of the C++ standard library, targeting C++11.
 
 * Features and Goals
 
@@ -34,16 +33,10 @@ Getting Started with libc++
 .. toctree::
    :maxdepth: 2
 
-   ReleaseNotes
    UsingLibcxx
    BuildingLibcxx
    TestingLibcxx
 
-
-.. toctree::
-    :hidden:
-
-    FeatureTestMacroTable
 
 Current Status
 --------------
@@ -85,15 +78,15 @@ reasons, but some of the major ones are:
 Platform and Compiler Support
 -----------------------------
 
-libc++ is known to work on the following platforms, using gcc and
-clang.
+libc++ is known to work on the following platforms, using gcc-4.2 and
+clang  (lack of C++11 language support disables some functionality).
 Note that functionality provided by ``<atomic>`` is only functional with clang
 and GCC.
 
 ============ ==================== ============ ========================
 OS           Arch                 Compilers    ABI Library
 ============ ==================== ============ ========================
-macOS        i386, x86_64         Clang, GCC   libc++abi
+Mac OS X     i386, x86_64         Clang, GCC   libc++abi
 FreeBSD 10+  i386, x86_64, ARM    Clang, GCC   libcxxrt, libc++abi
 Linux        i386, x86_64         Clang, GCC   libc++abi
 ============ ==================== ============ ========================
@@ -101,18 +94,17 @@ Linux        i386, x86_64         Clang, GCC   libc++abi
 The following minimum compiler versions are strongly recommended.
 
 * Clang 3.5 and above
-* GCC 5.0 and above.
+* GCC 4.7 and above.
 
-The C++03 dialect is only supported for Clang compilers.
+Anything older *may* work.
 
 C++ Dialect Support
 ---------------------
 
 * C++11 - Complete
 * `C++14 - Complete <http://libcxx.llvm.org/cxx1y_status.html>`__
-* `C++17 - In Progress <http://libcxx.llvm.org/cxx1z_status.html>`__
+* `C++1z - In Progress <http://libcxx.llvm.org/cxx1z_status.html>`__
 * `Post C++14 Technical Specifications - In Progress <http://libcxx.llvm.org/ts1z_status.html>`__
-* :ref:`C++ Feature Test Macro Status <feature-status>`
 
 Notes and Known Issues
 ----------------------
@@ -121,11 +113,13 @@ This list contains known issues with libc++
 
 * Building libc++ with ``-fno-rtti`` is not supported. However
   linking against it with ``-fno-rtti`` is supported.
+* On OS X v10.8 and older the CMake option ``-DLIBCXX_LIBCPPABI_VERSION=""``
+  must be used during configuration.
 
 
 A full list of currently open libc++ bugs can be `found here`__.
 
-.. __:  https://bugs.llvm.org/buglist.cgi?component=All%20Bugs&product=libc%2B%2B&query_format=advanced&resolution=---&order=changeddate%20DESC%2Cassigned_to%20DESC%2Cbug_status%2Cpriority%2Cbug_id&list_id=74184
+.. __:  https://llvm.org/bugs/buglist.cgi?component=All%20Bugs&product=libc%2B%2B&query_format=advanced&resolution=---&order=changeddate%20DESC%2Cassigned_to%20DESC%2Cbug_status%2Cpriority%2Cbug_id&list_id=74184
 
 Design Documents
 ----------------
@@ -133,16 +127,11 @@ Design Documents
 .. toctree::
    :maxdepth: 1
 
-   DesignDocs/AvailabilityMarkup
    DesignDocs/DebugMode
    DesignDocs/CapturingConfigInfo
    DesignDocs/ABIVersioning
-   DesignDocs/ExperimentalFeatures
    DesignDocs/VisibilityMacros
    DesignDocs/ThreadingSupportAPI
-   DesignDocs/FileTimeType
-   DesignDocs/FeatureTestMacros
-   DesignDocs/ExtendedCXX03Support
 
 * `<atomic> design <http://libcxx.llvm.org/atomic_design.html>`_
 * `<type_traits> design <http://libcxx.llvm.org/type_traits_design.html>`_
@@ -155,7 +144,7 @@ Build Bots and Test Coverage
 
 * `LLVM Buildbot Builders <http://lab.llvm.org:8011/console>`_
 * `Apple Jenkins Builders <http://lab.llvm.org:8080/green/view/Libcxx/>`_
-* `Windows Appveyor Builders <https://ci.appveyor.com/project/llvm-mirror/libcxx>`_
+* `EricWF's Nightly Builders <http://ds2.efcs.ca:8080/console>`_
 * `Code Coverage Results <http://efcs.ca/libcxx-coverage>`_
 
 Getting Involved
@@ -168,18 +157,21 @@ and `Getting started with LLVM <http://llvm.org/docs/GettingStarted.html>`__.
 
 If you think you've found a bug in libc++, please report it using
 the `LLVM Bugzilla`_. If you're not sure, you
-can post a message to the `libcxx-dev mailing list`_ or on IRC.
+can post a message to the `cfe-dev mailing list`_ or on IRC.
+Please include "libc++" in your subject.
 
 **Patches**
 
 If you want to contribute a patch to libc++, the best place for that is
-`Phabricator <http://llvm.org/docs/Phabricator.html>`_. Please add `libcxx-commits` as a subscriber.
-Also make sure you are subscribed to the `libcxx-commits mailing list <http://lists.llvm.org/mailman/listinfo/libcxx-commits>`_.
+`Phabricator <http://llvm.org/docs/Phabricator.html>`_. Please include [libcxx] in the subject and
+add `cfe-commits` as a subscriber. Also make sure you are subscribed to the
+`cfe-commits mailing list <http://lists.llvm.org/mailman/listinfo/cfe-commits>`_.
 
 **Discussion and Questions**
 
 Send discussions and questions to the
-`libcxx-dev mailing list <http://lists.llvm.org/mailman/listinfo/libcxx-dev>`_.
+`cfe-dev mailing list <http://lists.llvm.org/mailman/listinfo/cfe-dev>`_.
+Please include [libcxx] in the subject.
 
 
 
@@ -187,7 +179,8 @@ Quick Links
 ===========
 * `LLVM Homepage <http://llvm.org/>`_
 * `libc++abi Homepage <http://libcxxabi.llvm.org/>`_
-* `LLVM Bugzilla <https://bugs.llvm.org/>`_
-* `libcxx-commits Mailing List`_
-* `libcxx-dev Mailing List`_
-* `Browse libc++ Sources <https://github.com/llvm/llvm-project/tree/master/libcxx/>`_
+* `LLVM Bugzilla <http://llvm.org/bugs/>`_
+* `cfe-commits Mailing List`_
+* `cfe-dev Mailing List`_
+* `Browse libc++ -- SVN <http://llvm.org/svn/llvm-project/libcxx/trunk/>`_
+* `Browse libc++ -- ViewVC <http://llvm.org/viewvc/llvm-project/libcxx/trunk/>`_

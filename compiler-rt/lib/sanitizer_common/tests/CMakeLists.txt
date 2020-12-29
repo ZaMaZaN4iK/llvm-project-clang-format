@@ -5,47 +5,41 @@ clang_compiler_add_cxx_check()
 # FIXME: use SANITIZER_COMMON_SUPPORTED_ARCH here
 filter_available_targets(SANITIZER_UNITTEST_SUPPORTED_ARCH x86_64 i386 mips64 mips64el)
 if(APPLE)
-  darwin_filter_host_archs(SANITIZER_UNITTEST_SUPPORTED_ARCH SANITIZER_UNITTEST_SUPPORTED_ARCH)
+  darwin_filter_host_archs(SANITIZER_UNITTEST_SUPPORTED_ARCH SANITIZER_COMMON_SUPPORTED_ARCH)
 endif()
 
 set(SANITIZER_UNITTESTS
-  sanitizer_allocator_test.cpp
-  sanitizer_atomic_test.cpp
-  sanitizer_bitvector_test.cpp
-  sanitizer_bvgraph_test.cpp
-  sanitizer_common_test.cpp
-  sanitizer_deadlock_detector_test.cpp
-  sanitizer_flags_test.cpp
-  sanitizer_format_interceptor_test.cpp
-  sanitizer_ioctl_test.cpp
-  sanitizer_libc_test.cpp
-  sanitizer_linux_test.cpp
-  sanitizer_list_test.cpp
-  sanitizer_mutex_test.cpp
-  sanitizer_nolibc_test.cpp
-  sanitizer_posix_test.cpp
-  sanitizer_printf_test.cpp
-  sanitizer_procmaps_test.cpp
-  sanitizer_ring_buffer_test.cpp
-  sanitizer_quarantine_test.cpp
-  sanitizer_stackdepot_test.cpp
-  sanitizer_stacktrace_printer_test.cpp
-  sanitizer_stacktrace_test.cpp
-  sanitizer_stoptheworld_test.cpp
-  sanitizer_suppressions_test.cpp
-  sanitizer_symbolizer_test.cpp
-  sanitizer_test_main.cpp
-  sanitizer_thread_registry_test.cpp
-  sanitizer_type_traits_test.cpp
-  sanitizer_vector_test.cpp
-  )
+  sanitizer_allocator_test.cc
+  sanitizer_atomic_test.cc
+  sanitizer_bitvector_test.cc
+  sanitizer_bvgraph_test.cc
+  sanitizer_common_test.cc
+  sanitizer_deadlock_detector_test.cc
+  sanitizer_flags_test.cc
+  sanitizer_format_interceptor_test.cc
+  sanitizer_ioctl_test.cc
+  sanitizer_libc_test.cc
+  sanitizer_linux_test.cc
+  sanitizer_list_test.cc
+  sanitizer_mutex_test.cc
+  sanitizer_nolibc_test.cc
+  sanitizer_posix_test.cc
+  sanitizer_printf_test.cc
+  sanitizer_procmaps_test.cc
+  sanitizer_stackdepot_test.cc
+  sanitizer_stacktrace_printer_test.cc
+  sanitizer_stacktrace_test.cc
+  sanitizer_stoptheworld_test.cc
+  sanitizer_suppressions_test.cc
+  sanitizer_symbolizer_test.cc
+  sanitizer_test_main.cc
+  sanitizer_thread_registry_test.cc)
 
 set(SANITIZER_TEST_HEADERS
   sanitizer_pthread_wrappers.h
   sanitizer_test_config.h
-  sanitizer_test_utils.h
-  )
-foreach(header ${SANITIZER_IMPL_HEADERS})
+  sanitizer_test_utils.h)
+foreach(header ${SANITIZER_HEADERS})
   list(APPEND SANITIZER_TEST_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/../${header})
 endforeach()
 
@@ -58,11 +52,12 @@ set(SANITIZER_TEST_CFLAGS_COMMON
   -fno-rtti
   -O2
   -Werror=sign-compare
-  -Wno-non-virtual-dtor
-  -Wno-gnu-zero-variadic-macro-arguments
-  )
+  -Wno-non-virtual-dtor)
 
-set(SANITIZER_TEST_LINK_FLAGS_COMMON ${COMPILER_RT_UNITTEST_LINK_FLAGS})
+if(MSVC)
+  # Disable exceptions on Windows until they work reliably.
+  list(APPEND SANITIZER_TEST_CFLAGS_COMMON -fno-exceptions -DGTEST_HAS_SEH=0)
+endif()
 
 # -gline-tables-only must be enough for these tests, so use it if possible.
 if(COMPILER_RT_TEST_COMPILER_ID MATCHES "Clang")
@@ -124,13 +119,23 @@ macro(add_sanitizer_common_lib library)
     FOLDER "Compiler-RT Runtime tests")
 endmacro()
 
-function(get_sanitizer_common_lib_for_arch arch lib)
+function(get_sanitizer_common_lib_for_arch arch lib lib_name)
   if(APPLE)
     set(tgt_name "RTSanitizerCommon.test.osx")
   else()
     set(tgt_name "RTSanitizerCommon.test.${arch}")
   endif()
   set(${lib} "${tgt_name}" PARENT_SCOPE)
+  if(CMAKE_CONFIGURATION_TYPES)
+   set(configuration_path "${CMAKE_CFG_INTDIR}/")
+  else()
+   set(configuration_path "")
+  endif()
+  if(NOT MSVC)
+    set(${lib_name} "${configuration_path}lib${tgt_name}.a" PARENT_SCOPE)
+  else()
+    set(${lib_name} "${configuration_path}${tgt_name}.lib" PARENT_SCOPE)
+  endif()
 endfunction()
 
 # Sanitizer_common unit tests testsuite.
@@ -139,39 +144,53 @@ set_target_properties(SanitizerUnitTests PROPERTIES FOLDER "Compiler-RT Tests")
 
 # Adds sanitizer tests for architecture.
 macro(add_sanitizer_tests_for_arch arch)
-  set(extra_flags)
-  if( CMAKE_SIZEOF_VOID_P EQUAL 4 )
-    list(APPEND extra_flags "-D_LARGEFILE_SOURCE")
-    list(APPEND extra_flags "-D_FILE_OFFSET_BITS=64")
+  get_target_flags_for_arch(${arch} TARGET_FLAGS)
+  set(SANITIZER_TEST_SOURCES ${SANITIZER_UNITTESTS}
+                             ${COMPILER_RT_GTEST_SOURCE})
+  set(SANITIZER_TEST_COMPILE_DEPS ${SANITIZER_TEST_HEADERS})
+  if(NOT COMPILER_RT_STANDALONE_BUILD)
+    list(APPEND SANITIZER_TEST_COMPILE_DEPS gtest)
   endif()
-  get_sanitizer_common_lib_for_arch(${arch} SANITIZER_COMMON_LIB)
-
   set(SANITIZER_TEST_OBJECTS)
-  generate_compiler_rt_tests(SANITIZER_TEST_OBJECTS SanitizerUnitTests
-    "Sanitizer-${arch}-Test" ${arch}
-    RUNTIME "${SANITIZER_COMMON_LIB}"
-    SOURCES ${SANITIZER_UNITTESTS} ${COMPILER_RT_GTEST_SOURCE}
-    COMPILE_DEPS ${SANITIZER_TEST_HEADERS}
-    DEPS gtest
-    CFLAGS  ${SANITIZER_TEST_CFLAGS_COMMON} ${extra_flags}
-    LINK_FLAGS ${SANITIZER_TEST_LINK_FLAGS_COMMON} ${extra_flags})
+  foreach(source ${SANITIZER_TEST_SOURCES})
+    get_filename_component(basename ${source} NAME)
+    if(CMAKE_CONFIGURATION_TYPES)
+      set(output_obj "${CMAKE_CFG_INTDIR}/${basename}.${arch}.o")
+    else()
+      set(output_obj "${basename}.${arch}.o")
+    endif()
+    clang_compile(${output_obj} ${source}
+                  CFLAGS ${SANITIZER_TEST_CFLAGS_COMMON} ${TARGET_FLAGS}
+                  DEPS ${SANITIZER_TEST_COMPILE_DEPS})
+    list(APPEND SANITIZER_TEST_OBJECTS ${output_obj})
+  endforeach()
+  get_sanitizer_common_lib_for_arch(${arch} SANITIZER_COMMON_LIB
+                                    SANITIZER_COMMON_LIB_NAME)
+  # Add unittest target.
+  set(SANITIZER_TEST_NAME "Sanitizer-${arch}-Test")
+  add_compiler_rt_test(SanitizerUnitTests ${SANITIZER_TEST_NAME}
+                       OBJECTS ${SANITIZER_TEST_OBJECTS}
+                               ${SANITIZER_COMMON_LIB_NAME}
+                       DEPS ${SANITIZER_TEST_OBJECTS} ${SANITIZER_COMMON_LIB}
+                       LINK_FLAGS ${SANITIZER_TEST_LINK_FLAGS_COMMON}
+                                  ${TARGET_FLAGS})
 
   if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux" AND "${arch}" STREQUAL "x86_64")
     # Test that the libc-independent part of sanitizer_common is indeed
     # independent of libc, by linking this binary without libc (here) and
-    # executing it (unit test in sanitizer_nolibc_test.cpp).
+    # executing it (unit test in sanitizer_nolibc_test.cc).
     clang_compile(sanitizer_nolibc_test_main.${arch}.o
-                  sanitizer_nolibc_test_main.cpp
+                  sanitizer_nolibc_test_main.cc
                   CFLAGS ${SANITIZER_TEST_CFLAGS_COMMON} ${TARGET_FLAGS}
                   DEPS ${SANITIZER_TEST_COMPILE_DEPS})
-    add_compiler_rt_test(SanitizerUnitTests "Sanitizer-${arch}-Test-Nolibc" ${arch}
+    add_compiler_rt_test(SanitizerUnitTests "Sanitizer-${arch}-Test-Nolibc"
                          OBJECTS sanitizer_nolibc_test_main.${arch}.o
                                  -Wl,-whole-archive
                                  libRTSanitizerCommon.test.nolibc.${arch}.a
                                  -Wl,-no-whole-archive
                          DEPS sanitizer_nolibc_test_main.${arch}.o
                               RTSanitizerCommon.test.nolibc.${arch}
-                         LINK_FLAGS -static -nostdlib ${TARGET_FLAGS})
+                         LINK_FLAGS -nostdlib ${TARGET_FLAGS})
   endif()
 endmacro()
 
@@ -181,8 +200,7 @@ if(COMPILER_RT_CAN_EXECUTE_TESTS AND NOT ANDROID)
   if(APPLE)
     add_sanitizer_common_lib("RTSanitizerCommon.test.osx"
                              $<TARGET_OBJECTS:RTSanitizerCommon.osx>
-                             $<TARGET_OBJECTS:RTSanitizerCommonLibc.osx>
-                             $<TARGET_OBJECTS:RTSanitizerCommonSymbolizer.osx>)
+                             $<TARGET_OBJECTS:RTSanitizerCommonLibc.osx>)
   else()
     if(CAN_TARGET_x86_64)
       add_sanitizer_common_lib("RTSanitizerCommon.test.nolibc.x86_64"
@@ -192,8 +210,7 @@ if(COMPILER_RT_CAN_EXECUTE_TESTS AND NOT ANDROID)
     foreach(arch ${SANITIZER_UNITTEST_SUPPORTED_ARCH})
       add_sanitizer_common_lib("RTSanitizerCommon.test.${arch}"
                                $<TARGET_OBJECTS:RTSanitizerCommon.${arch}>
-                               $<TARGET_OBJECTS:RTSanitizerCommonLibc.${arch}>
-                               $<TARGET_OBJECTS:RTSanitizerCommonSymbolizer.${arch}>)
+                               $<TARGET_OBJECTS:RTSanitizerCommonLibc.${arch}>)
     endforeach()
   endif()
   foreach(arch ${SANITIZER_UNITTEST_SUPPORTED_ARCH})
@@ -207,8 +224,7 @@ if(ANDROID)
       ${SANITIZER_UNITTESTS}
       ${COMPILER_RT_GTEST_SOURCE}
       $<TARGET_OBJECTS:RTSanitizerCommon.${arch}>
-      $<TARGET_OBJECTS:RTSanitizerCommonLibc.${arch}>
-      $<TARGET_OBJECTS:RTSanitizerCommonSymbolizer.${arch}>)
+      $<TARGET_OBJECTS:RTSanitizerCommonLibc.${arch}>)
     set_target_compile_flags(SanitizerTest
       ${SANITIZER_COMMON_CFLAGS}
       ${SANITIZER_TEST_CFLAGS_COMMON})

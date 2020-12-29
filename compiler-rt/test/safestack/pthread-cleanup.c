@@ -1,9 +1,7 @@
 // RUN: %clang_safestack %s -pthread -o %t
-// RUN: %run %t 0
-// RUN: not --crash %run %t 1
+// RUN: not --crash %run %t
 
-// Test unsafe stack deallocation. Unsafe stacks are not deallocated immediately
-// at thread exit. They are deallocated by following exiting threads.
+// Test that unsafe stacks are deallocated correctly on thread exit.
 
 #include <stdlib.h>
 #include <string.h>
@@ -11,7 +9,7 @@
 
 enum { kBufferSize = (1 << 15) };
 
-void *start(void *ptr)
+void *t1_start(void *ptr)
 {
   char buffer[kBufferSize];
   return buffer;
@@ -19,36 +17,15 @@ void *start(void *ptr)
 
 int main(int argc, char **argv)
 {
-  int arg = atoi(argv[1]);
+  pthread_t t1;
+  char *buffer = NULL;
 
-  pthread_t t1, t2;
-  char *t1_buffer = NULL;
-
-  if (pthread_create(&t1, NULL, start, NULL))
+  if (pthread_create(&t1, NULL, t1_start, NULL))
     abort();
-  if (pthread_join(t1, &t1_buffer))
+  if (pthread_join(t1, &buffer))
     abort();
 
-  // Stack has not yet been deallocated
-  memset(t1_buffer, 0, kBufferSize);
-
-  if (arg == 0)
-    return 0;
-
-  for (int i = 0; i < 3; i++) {
-    if (pthread_create(&t2, NULL, start, NULL))
-      abort();
-    // Second thread destructor cleans up the first thread's stack.
-    if (pthread_join(t2, NULL))
-      abort();
-
-    // Should segfault here
-    memset(t1_buffer, 0, kBufferSize);
-
-    // PR39001: Re-try in the rare case that pthread_join() returns before the
-    // thread finishes exiting in the kernel--hence the tgkill() check for t1
-    // returns that it's alive despite pthread_join() returning.
-    sleep(1);
-  }
+  // should segfault here
+  memset(buffer, 0, kBufferSize);
   return 0;
 }

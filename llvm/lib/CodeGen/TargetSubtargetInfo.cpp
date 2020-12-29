@@ -1,8 +1,9 @@
-//===- TargetSubtargetInfo.cpp - General Target Information ----------------==//
+//===-- TargetSubtargetInfo.cpp - General Target Information ---------------==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,27 +11,25 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
-
+#include "llvm/Target/TargetSubtargetInfo.h"
 using namespace llvm;
 
+//---------------------------------------------------------------------------
+// TargetSubtargetInfo Class
+//
 TargetSubtargetInfo::TargetSubtargetInfo(
     const Triple &TT, StringRef CPU, StringRef FS,
-    ArrayRef<SubtargetFeatureKV> PF, ArrayRef<SubtargetSubTypeKV> PD,
-    const MCWriteProcResEntry *WPR,
+    ArrayRef<SubtargetFeatureKV> PF, ArrayRef<SubtargetFeatureKV> PD,
+    const SubtargetInfoKV *ProcSched, const MCWriteProcResEntry *WPR,
     const MCWriteLatencyEntry *WL, const MCReadAdvanceEntry *RA,
     const InstrStage *IS, const unsigned *OC, const unsigned *FP)
-    : MCSubtargetInfo(TT, CPU, FS, PF, PD, WPR, WL, RA, IS, OC, FP) {
+    : MCSubtargetInfo(TT, CPU, FS, PF, PD, ProcSched, WPR, WL, RA, IS, OC, FP) {
 }
 
-TargetSubtargetInfo::~TargetSubtargetInfo() = default;
+TargetSubtargetInfo::~TargetSubtargetInfo() {}
 
 bool TargetSubtargetInfo::enableAtomicExpand() const {
   return true;
-}
-
-bool TargetSubtargetInfo::enableIndirectBrExpand() const {
-  return false;
 }
 
 bool TargetSubtargetInfo::enableMachineScheduler() const {
@@ -46,20 +45,10 @@ bool TargetSubtargetInfo::enableRALocalReassignment(
   return true;
 }
 
-bool TargetSubtargetInfo::enableAdvancedRASplitCost() const {
-  return false;
-}
-
 bool TargetSubtargetInfo::enablePostRAScheduler() const {
   return getSchedModel().PostRAScheduler;
-}
-
-bool TargetSubtargetInfo::enablePostRAMachineScheduler() const {
-  return enableMachineScheduler() && enablePostRAScheduler();
 }
 
 bool TargetSubtargetInfo::useAA() const {
   return false;
 }
-
-void TargetSubtargetInfo::mirFileLoaded(MachineFunction &MF) const { }

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,16 +23,15 @@
 #include <tuple>
 #include <cassert>
 #include <cstdlib>
-#include "uses_alloc_types.h"
-#include "controlled_allocators.h"
+#include "uses_alloc_types.hpp"
+#include "controlled_allocators.hpp"
 
-#include "test_macros.h"
-
-// - If uses_allocator_v<T, inner_allocator_type> is false and
+// — If uses_allocator_v<T, inner_allocator_type> is false and
 //   is_constructible_v<T, Args...> is true, calls
 //   OUTERMOST_ALLOC_TRAITS(*this)::construct(
 //      OUTERMOST (*this), p, std::forward<Args>(args)...).
 void test_bullet_one() {
+    using VoidAlloc1 = CountingAllocator<void, 1>;
     using VoidAlloc2 = CountingAllocator<void, 2>;
 
     AllocController POuter;
@@ -41,6 +41,7 @@ void test_bullet_one() {
         using Outer = CountingAllocator<T, 1>;
         using Inner = CountingAllocator<T, 2>;
         using SA = std::scoped_allocator_adaptor<Outer, Inner>;
+        using SAInner = std::scoped_allocator_adaptor<Inner>;
         static_assert(!std::uses_allocator<T, Outer>::value, "");
         static_assert(!std::uses_allocator<T, Inner>::value, "");
         T* ptr = (T*)::operator new(sizeof(T));
@@ -65,6 +66,7 @@ void test_bullet_one() {
 // true, calls OUTERMOST_ALLOC_TRAITS(*this)::construct(OUTERMOST (*this), p,
 //     allocator_arg, inner_allocator(), std::forward<Args>(args)...).
 void test_bullet_two() {
+    using VoidAlloc1 = CountingAllocator<void, 1>;
     using VoidAlloc2 = CountingAllocator<void, 2>;
 
     AllocController POuter;
@@ -74,6 +76,7 @@ void test_bullet_two() {
         using Outer = CountingAllocator<T, 1>;
         using Inner = CountingAllocator<T, 2>;
         using SA = std::scoped_allocator_adaptor<Outer, Inner>;
+        using SAInner = std::scoped_allocator_adaptor<Inner>;
         static_assert(!std::uses_allocator<T, Outer>::value, "");
         static_assert(std::uses_allocator<T, Inner>::value, "");
         T* ptr = (T*)::operator new(sizeof(T));
@@ -98,6 +101,7 @@ void test_bullet_two() {
 // OUTERMOST_ALLOC_TRAITS(*this)::construct(OUTERMOST (*this), p,
 //   std::forward<Args>(args)..., inner_allocator()).
 void test_bullet_three() {
+    using VoidAlloc1 = CountingAllocator<void, 1>;
     using VoidAlloc2 = CountingAllocator<void, 2>;
 
     AllocController POuter;
@@ -107,6 +111,7 @@ void test_bullet_three() {
         using Outer = CountingAllocator<T, 1>;
         using Inner = CountingAllocator<T, 2>;
         using SA = std::scoped_allocator_adaptor<Outer, Inner>;
+        using SAInner = std::scoped_allocator_adaptor<Inner>;
         static_assert(!std::uses_allocator<T, Outer>::value, "");
         static_assert(std::uses_allocator<T, Inner>::value, "");
         T* ptr = (T*)::operator new(sizeof(T));
@@ -127,10 +132,8 @@ void test_bullet_three() {
     POuter.reset();
 }
 
-int main(int, char**) {
+int main() {
     test_bullet_one();
     test_bullet_two();
     test_bullet_three();
-
-  return 0;
 }

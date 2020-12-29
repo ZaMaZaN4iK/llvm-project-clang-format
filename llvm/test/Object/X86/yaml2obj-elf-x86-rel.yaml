@@ -30,11 +30,13 @@ Sections:
         Type:            R_386_32
 
 Symbols:
-  - Name:            .text
-    Type:            STT_SECTION
-    Section:         .text
-  - Name:            main
-    Type:            STT_FUNC
-    Section:         .text
-    Size:            0x08
-    Binding:         STB_GLOBAL
+  Local:
+    - Name:            .text
+      Type:            STT_SECTION
+      Section:         .text
+
+  Global:
+    - Name:            main
+      Type:            STT_FUNC
+      Section:         .text
+      Size:            0x08

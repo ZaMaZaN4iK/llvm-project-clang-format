@@ -1,12 +1,13 @@
 //===-- HostThreadWindows.cpp -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "lldb/Utility/Status.h"
+#include "lldb/Core/Error.h"
 
 #include "lldb/Host/windows/HostThreadWindows.h"
 #include "lldb/Host/windows/windows.h"
@@ -32,8 +33,8 @@ HostThreadWindows::~HostThreadWindows() { Reset(); }
 
 void HostThreadWindows::SetOwnsHandle(bool owns) { m_owns_handle = owns; }
 
-Status HostThreadWindows::Join(lldb::thread_result_t *result) {
-  Status error;
+Error HostThreadWindows::Join(lldb::thread_result_t *result) {
+  Error error;
   if (IsJoinable()) {
     DWORD wait_result = ::WaitForSingleObject(m_thread, INFINITE);
     if (WAIT_OBJECT_0 == wait_result && result) {
@@ -50,8 +51,8 @@ Status HostThreadWindows::Join(lldb::thread_result_t *result) {
   return error;
 }
 
-Status HostThreadWindows::Cancel() {
-  Status error;
+Error HostThreadWindows::Cancel() {
+  Error error;
 
   DWORD result = ::QueueUserAPC(::ExitThreadProxy, m_thread, 0);
   error.SetError(result, eErrorTypeWin32);
@@ -67,8 +68,4 @@ void HostThreadWindows::Reset() {
     ::CloseHandle(m_thread);
 
   HostNativeThreadBase::Reset();
-}
-
-bool HostThreadWindows::EqualsThread(lldb::thread_t thread) const {
-  return GetThreadId() == ::GetThreadId(thread);
 }

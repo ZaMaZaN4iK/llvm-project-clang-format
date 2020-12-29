@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,7 +12,7 @@
 // template<ForwardIterator Iter, class T>
 //   requires HasLess<T, Iter::value_type>
 //         && HasLess<Iter::value_type, T>
-//   constexpr pair<Iter, Iter>   // constexpr after c++17
+//   pair<Iter, Iter>
 //   equal_range(Iter first, Iter last, const T& value);
 
 #include <algorithm>
@@ -19,21 +20,7 @@
 #include <cassert>
 #include <cstddef>
 
-#include "test_macros.h"
 #include "test_iterators.h"
-
-#if TEST_STD_VER > 17
-TEST_CONSTEXPR bool lt(int a, int b) { return a < b; }
-
-TEST_CONSTEXPR bool test_constexpr() {
-    int ia[] = {1, 3, 3, 6, 7};
-
-    return (std::equal_range(std::begin(ia), std::end(ia), 1, lt) == std::pair<int *, int *>(ia+0, ia+1))
-        && (std::equal_range(std::begin(ia), std::end(ia), 3, lt) == std::pair<int *, int *>(ia+1, ia+3))
-        && (std::equal_range(std::begin(ia), std::end(ia), 9, lt) == std::pair<int *, int *>(std::end(ia), std::end(ia)))
-        ;
-    }
-#endif
 
 template <class Iter, class T>
 void
@@ -69,7 +56,7 @@ test()
         test(Iter(v.data()), Iter(v.data()+v.size()), x);
 }
 
-int main(int, char**)
+int main()
 {
     int d[] = {0, 1, 2, 3};
     for (int* e = d; e <= d+4; ++e)
@@ -80,10 +67,4 @@ int main(int, char**)
     test<bidirectional_iterator<const int*> >();
     test<random_access_iterator<const int*> >();
     test<const int*>();
-
-#if TEST_STD_VER > 17
-    static_assert(test_constexpr());
-#endif
-
-  return 0;
 }

@@ -1,26 +1,25 @@
 //===-- ARMUnwindOpAsm.cpp - ARM Unwind Opcodes Assembler -------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the unwind opcode assembler for ARM exception handling
+// This file implements the unwind opcode assmebler for ARM exception handling
 // table.
 //
 //===----------------------------------------------------------------------===//
 
 #include "ARMUnwindOpAsm.h"
 #include "llvm/Support/ARMEHABI.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/LEB128.h"
-#include "llvm/Support/MathExtras.h"
-#include <cassert>
 
 using namespace llvm;
 
 namespace {
-
   /// UnwindOpcodeStreamer - The simple wrapper over SmallVector to emit bytes
   /// with MSB to LSB per uint32_t ordering.  For example, the first byte will
   /// be placed in Vec[3], and the following bytes will be placed in 2, 1, 0,
@@ -28,19 +27,20 @@ namespace {
   class UnwindOpcodeStreamer {
   private:
     SmallVectorImpl<uint8_t> &Vec;
-    size_t Pos = 3;
+    size_t Pos;
 
   public:
-    UnwindOpcodeStreamer(SmallVectorImpl<uint8_t> &V) : Vec(V) {}
+    UnwindOpcodeStreamer(SmallVectorImpl<uint8_t> &V) : Vec(V), Pos(3) {
+    }
 
     /// Emit the byte in MSB to LSB per uint32_t order.
-    void EmitByte(uint8_t elem) {
+    inline void EmitByte(uint8_t elem) {
       Vec[Pos] = elem;
       Pos = (((Pos ^ 0x3u) + 1) ^ 0x3u);
     }
 
     /// Emit the size prefix.
-    void EmitSize(size_t Size) {
+    inline void EmitSize(size_t Size) {
       size_t SizeInWords = (Size + 3) / 4;
       assert(SizeInWords <= 0x100u &&
              "Only 256 additional words are allowed for unwind opcodes");
@@ -48,20 +48,19 @@ namespace {
     }
 
     /// Emit the personality index prefix.
-    void EmitPersonalityIndex(unsigned PI) {
+    inline void EmitPersonalityIndex(unsigned PI) {
       assert(PI < ARM::EHABI::NUM_PERSONALITY_INDEX &&
              "Invalid personality prefix");
       EmitByte(ARM::EHABI::EHT_COMPACT | PI);
     }
 
     /// Fill the rest of bytes with FINISH opcode.
-    void FillFinishOpcode() {
+    inline void FillFinishOpcode() {
       while (Pos < Vec.size())
         EmitByte(ARM::EHABI::UNWIND_OPCODE_FINISH);
     }
   };
-
-} // end anonymous namespace
+}
 
 void UnwindOpcodeAssembler::EmitRegSave(uint32_t RegSave) {
   if (RegSave == 0u)
@@ -154,6 +153,7 @@ void UnwindOpcodeAssembler::EmitSPOffset(int64_t Offset) {
 
 void UnwindOpcodeAssembler::Finalize(unsigned &PersonalityIndex,
                                      SmallVectorImpl<uint8_t> &Result) {
+
   UnwindOpcodeStreamer OpStreamer(Result);
 
   if (HasPersonality) {

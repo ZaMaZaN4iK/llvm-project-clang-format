@@ -1,13 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-//
-// NetBSD does not support LC_COLLATE at the moment
-// XFAIL: netbsd
 
 // REQUIRES: locale.cs_CZ.ISO8859-2
 
@@ -39,7 +37,7 @@ test(const char_type* A, const std::basic_string<char_type>& expected)
     assert(t.lookup_collatename(F(A), F(A + t.length(A))) == expected);
 }
 
-int main(int, char**)
+int main()
 {
     test("NUL", std::string("\x00", 1));
     test("alert", std::string("\x07"));
@@ -192,6 +190,4 @@ int main(int, char**)
     std::locale::global(std::locale(LOCALE_cs_CZ_ISO8859_2));
     test(L"ch", std::wstring(L"ch"));
     std::locale::global(std::locale("C"));
-
-  return 0;
 }

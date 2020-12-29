@@ -1,8 +1,9 @@
 //===- ObjCARCAnalysisUtils.cpp -------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,8 +19,10 @@
 using namespace llvm;
 using namespace llvm::objcarc;
 
-/// A handy option to enable/disable all ARC Optimizations.
+/// \brief A handy option to enable/disable all ARC Optimizations.
 bool llvm::objcarc::EnableARCOpts;
-static cl::opt<bool, true> EnableARCOptimizations(
-    "enable-objc-arc-opts", cl::desc("enable/disable all ARC Optimizations"),
-    cl::location(EnableARCOpts), cl::init(true), cl::Hidden);
+static cl::opt<bool, true>
+EnableARCOptimizations("enable-objc-arc-opts",
+                       cl::desc("enable/disable all ARC Optimizations"),
+                       cl::location(EnableARCOpts),
+                       cl::init(true));

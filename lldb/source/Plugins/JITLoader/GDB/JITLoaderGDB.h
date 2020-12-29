@@ -1,16 +1,21 @@
 //===-- JITLoaderGDB.h ------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_JITLoaderGDB_h_
 #define liblldb_JITLoaderGDB_h_
 
+// C Includes
+// C++ Includes
 #include <map>
 
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Target/JITLoader.h"
 #include "lldb/Target/Process.h"
 
@@ -20,7 +25,9 @@ public:
 
   ~JITLoaderGDB() override;
 
+  //------------------------------------------------------------------
   // Static Functions
+  //------------------------------------------------------------------
   static void Initialize();
 
   static void Terminate();
@@ -34,12 +41,16 @@ public:
 
   static void DebuggerInitialize(lldb_private::Debugger &debugger);
 
+  //------------------------------------------------------------------
   // PluginInterface protocol
+  //------------------------------------------------------------------
   lldb_private::ConstString GetPluginName() override;
 
   uint32_t GetPluginVersion() override;
 
+  //------------------------------------------------------------------
   // JITLoader interface
+  //------------------------------------------------------------------
   void DidAttach() override;
 
   void DidLaunch() override;
@@ -48,7 +59,7 @@ public:
 
 private:
   lldb::addr_t GetSymbolAddress(lldb_private::ModuleList &module_list,
-                                lldb_private::ConstString name,
+                                const lldb_private::ConstString &name,
                                 lldb::SymbolType symbol_type) const;
 
   void SetJITBreakpoint(lldb_private::ModuleList &module_list);

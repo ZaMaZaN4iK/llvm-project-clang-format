@@ -1,13 +1,14 @@
 //===-- WebAssemblyRegisterInfo.cpp - WebAssembly Register Information ----===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file contains the WebAssembly implementation of the
+/// \brief This file contains the WebAssembly implementation of the
 /// TargetRegisterInfo class.
 ///
 //===----------------------------------------------------------------------===//
@@ -21,9 +22,9 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/TargetFrameLowering.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetFrameLowering.h"
 #include "llvm/Target/TargetOptions.h"
 using namespace llvm;
 
@@ -66,22 +67,19 @@ void WebAssemblyRegisterInfo::eliminateFrameIndex(
   assert(MFI.getObjectSize(FrameIndex) != 0 &&
          "We assume that variable-sized objects have already been lowered, "
          "and don't use FrameIndex operands.");
-  Register FrameRegister = getFrameRegister(MF);
+  unsigned FrameRegister = getFrameRegister(MF);
 
   // If this is the address operand of a load or store, make it relative to SP
   // and fold the frame offset directly in.
-  unsigned AddrOperandNum = WebAssembly::getNamedOperandIdx(
-      MI.getOpcode(), WebAssembly::OpName::addr);
-  if (AddrOperandNum == FIOperandNum) {
-    unsigned OffsetOperandNum = WebAssembly::getNamedOperandIdx(
-        MI.getOpcode(), WebAssembly::OpName::off);
-    assert(FrameOffset >= 0 && MI.getOperand(OffsetOperandNum).getImm() >= 0);
-    int64_t Offset = MI.getOperand(OffsetOperandNum).getImm() + FrameOffset;
+  if ((MI.mayLoad() && FIOperandNum == WebAssembly::LoadAddressOperandNo) ||
+      (MI.mayStore() && FIOperandNum == WebAssembly::StoreAddressOperandNo)) {
+    assert(FrameOffset >= 0 && MI.getOperand(FIOperandNum - 1).getImm() >= 0);
+    int64_t Offset = MI.getOperand(FIOperandNum - 1).getImm() + FrameOffset;
 
     if (static_cast<uint64_t>(Offset) <= std::numeric_limits<uint32_t>::max()) {
-      MI.getOperand(OffsetOperandNum).setImm(Offset);
+      MI.getOperand(FIOperandNum - 1).setImm(Offset);
       MI.getOperand(FIOperandNum)
-          .ChangeToRegister(FrameRegister, /*isDef=*/false);
+          .ChangeToRegister(FrameRegister, /*IsDef=*/false);
       return;
     }
   }
@@ -91,8 +89,8 @@ void WebAssemblyRegisterInfo::eliminateFrameIndex(
   if (MI.getOpcode() == WebAssembly::ADD_I32) {
     MachineOperand &OtherMO = MI.getOperand(3 - FIOperandNum);
     if (OtherMO.isReg()) {
-      Register OtherMOReg = OtherMO.getReg();
-      if (Register::isVirtualRegister(OtherMOReg)) {
+      unsigned OtherMOReg = OtherMO.getReg();
+      if (TargetRegisterInfo::isVirtualRegister(OtherMOReg)) {
         MachineInstr *Def = MF.getRegInfo().getUniqueVRegDef(OtherMOReg);
         // TODO: For now we just opportunistically do this in the case where
         // the CONST_I32 happens to have exactly one def and one use. We
@@ -102,7 +100,7 @@ void WebAssemblyRegisterInfo::eliminateFrameIndex(
           MachineOperand &ImmMO = Def->getOperand(1);
           ImmMO.setImm(ImmMO.getImm() + uint32_t(FrameOffset));
           MI.getOperand(FIOperandNum)
-              .ChangeToRegister(FrameRegister, /*isDef=*/false);
+              .ChangeToRegister(FrameRegister, /*IsDef=*/false);
           return;
         }
       }
@@ -117,7 +115,7 @@ void WebAssemblyRegisterInfo::eliminateFrameIndex(
     // Create i32.add SP, offset and make it the operand.
     const TargetRegisterClass *PtrRC =
         MRI.getTargetRegisterInfo()->getPointerRegClass(MF);
-    Register OffsetOp = MRI.createVirtualRegister(PtrRC);
+    unsigned OffsetOp = MRI.createVirtualRegister(PtrRC);
     BuildMI(MBB, *II, II->getDebugLoc(), TII->get(WebAssembly::CONST_I32),
             OffsetOp)
         .addImm(FrameOffset);
@@ -127,10 +125,10 @@ void WebAssemblyRegisterInfo::eliminateFrameIndex(
         .addReg(FrameRegister)
         .addReg(OffsetOp);
   }
-  MI.getOperand(FIOperandNum).ChangeToRegister(FIRegOperand, /*isDef=*/false);
+  MI.getOperand(FIOperandNum).ChangeToRegister(FIRegOperand, /*IsDef=*/false);
 }
 
-Register
+unsigned
 WebAssemblyRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   static const unsigned Regs[2][2] = {
       /*            !isArch64Bit       isArch64Bit      */

@@ -1,8 +1,9 @@
 //===--- UseNullptrCheck.cpp - clang-tidy----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -30,15 +31,14 @@ AST_MATCHER(Type, sugaredNullptrType) {
   return false;
 }
 
-/// Create a matcher that finds implicit casts as well as the head of a
+/// \brief Create a matcher that finds implicit casts as well as the head of a
 /// sequence of zero or more nested explicit casts that have an implicit cast
 /// to null within.
-/// Finding sequences of explicit casts is necessary so that an entire sequence
+/// Finding sequences of explict casts is necessary so that an entire sequence
 /// can be replaced instead of just the inner-most implicit cast.
 StatementMatcher makeCastSequenceMatcher() {
   StatementMatcher ImplicitCastToNull = implicitCastExpr(
       anyOf(hasCastKind(CK_NullToPointer), hasCastKind(CK_NullToMemberPointer)),
-      unless(hasImplicitDestinationType(qualType(substTemplateTypeParmType()))),
       unless(hasSourceExpression(hasType(sugaredNullptrType()))));
 
   return castExpr(anyOf(ImplicitCastToNull,
@@ -52,7 +52,7 @@ bool isReplaceableRange(SourceLocation StartLoc, SourceLocation EndLoc,
   return SM.isWrittenInSameFile(StartLoc, EndLoc);
 }
 
-/// Replaces the provided range with the text "nullptr", but only if
+/// \brief Replaces the provided range with the text "nullptr", but only if
 /// the start and end location are both in main file.
 /// Returns true if and only if a replacement was made.
 void replaceWithNullptr(ClangTidyCheck &Check, SourceManager &SM,
@@ -67,7 +67,7 @@ void replaceWithNullptr(ClangTidyCheck &Check, SourceManager &SM,
       Range, NeedsSpace ? " nullptr" : "nullptr");
 }
 
-/// Returns the name of the outermost macro.
+/// \brief Returns the name of the outermost macro.
 ///
 /// Given
 /// \code
@@ -87,7 +87,7 @@ StringRef getOutermostMacroName(SourceLocation Loc, const SourceManager &SM,
   return Lexer::getImmediateMacroName(OutermostMacroLoc, SM, LO);
 }
 
-/// RecursiveASTVisitor for ensuring all nodes rooted at a given AST
+/// \brief RecursiveASTVisitor for ensuring all nodes rooted at a given AST
 /// subtree that have file-level source locations corresponding to a macro
 /// argument have implicit NullTo(Member)Pointer nodes as ancestors.
 class MacroArgUsageVisitor : public RecursiveASTVisitor<MacroArgUsageVisitor> {
@@ -124,7 +124,7 @@ public:
   }
 
   bool VisitStmt(Stmt *S) {
-    if (SM.getFileLoc(S->getBeginLoc()) != CastLoc)
+    if (SM.getFileLoc(S->getLocStart()) != CastLoc)
       return true;
     Visited = true;
 
@@ -157,7 +157,7 @@ private:
   bool InvalidFound;
 };
 
-/// Looks for implicit casts as well as sequences of 0 or more explicit
+/// \brief Looks for implicit casts as well as sequences of 0 or more explicit
 /// casts with an implicit null-to-pointer cast within.
 ///
 /// The matcher this visitor is used with will find a single implicit cast or a
@@ -190,31 +190,27 @@ public:
   bool VisitStmt(Stmt *S) {
     auto *C = dyn_cast<CastExpr>(S);
     // Catch the castExpr inside cxxDefaultArgExpr.
-    if (auto *E = dyn_cast<CXXDefaultArgExpr>(S)) {
+    if (auto *E = dyn_cast<CXXDefaultArgExpr>(S))
       C = dyn_cast<CastExpr>(E->getExpr());
-      FirstSubExpr = nullptr;
-    }
     if (!C) {
       FirstSubExpr = nullptr;
       return true;
     }
 
-    auto* CastSubExpr = C->getSubExpr()->IgnoreParens();
-    // Ignore cast expressions which cast nullptr literal.
-    if (isa<CXXNullPtrLiteralExpr>(CastSubExpr)) {
-      return true;
-    }
-
     if (!FirstSubExpr)
-      FirstSubExpr = CastSubExpr;
+      FirstSubExpr = C->getSubExpr()->IgnoreParens();
+
+    // Ignore the expr if it is already a nullptr literal expr.
+    if (isa<CXXNullPtrLiteralExpr>(FirstSubExpr))
+      return true;
 
     if (C->getCastKind() != CK_NullToPointer &&
         C->getCastKind() != CK_NullToMemberPointer) {
       return true;
     }
 
-    SourceLocation StartLoc = FirstSubExpr->getBeginLoc();
-    SourceLocation EndLoc = FirstSubExpr->getEndLoc();
+    SourceLocation StartLoc = FirstSubExpr->getLocStart();
+    SourceLocation EndLoc = FirstSubExpr->getLocEnd();
 
     // If the location comes from a macro arg expansion, *all* uses of that
     // arg must be checked to result in NullTo(Member)Pointer casts.
@@ -224,17 +220,17 @@ public:
     if (SM.isMacroArgExpansion(StartLoc) && SM.isMacroArgExpansion(EndLoc)) {
       SourceLocation FileLocStart = SM.getFileLoc(StartLoc),
                      FileLocEnd = SM.getFileLoc(EndLoc);
-      SourceLocation ImmediateMacroArgLoc, MacroLoc;
+      SourceLocation ImmediateMarcoArgLoc, MacroLoc;
       // Skip NULL macros used in macro.
-      if (!getMacroAndArgLocations(StartLoc, ImmediateMacroArgLoc, MacroLoc) ||
-          ImmediateMacroArgLoc != FileLocStart)
+      if (!getMacroAndArgLocations(StartLoc, ImmediateMarcoArgLoc, MacroLoc) ||
+          ImmediateMarcoArgLoc != FileLocStart)
         return skipSubTree();
 
       if (isReplaceableRange(FileLocStart, FileLocEnd, SM) &&
           allArgUsesValid(C)) {
         replaceWithNullptr(Check, SM, FileLocStart, FileLocEnd);
       }
-      return true;
+      return skipSubTree();
     }
 
     if (SM.isMacroBodyExpansion(StartLoc) && SM.isMacroBodyExpansion(EndLoc)) {
@@ -242,8 +238,10 @@ public:
           getOutermostMacroName(StartLoc, SM, Context.getLangOpts());
 
       // Check to see if the user wants to replace the macro being expanded.
-      if (!llvm::is_contained(NullMacros, OutermostMacroName))
+      if (std::find(NullMacros.begin(), NullMacros.end(), OutermostMacroName) ==
+          NullMacros.end()) {
         return skipSubTree();
+      }
 
       StartLoc = SM.getFileLoc(StartLoc);
       EndLoc = SM.getFileLoc(EndLoc);
@@ -263,10 +261,10 @@ private:
     return true;
   }
 
-  /// Tests that all expansions of a macro arg, one of which expands to
+  /// \brief Tests that all expansions of a macro arg, one of which expands to
   /// result in \p CE, yield NullTo(Member)Pointer casts.
   bool allArgUsesValid(const CastExpr *CE) {
-    SourceLocation CastLoc = CE->getBeginLoc();
+    SourceLocation CastLoc = CE->getLocStart();
 
     // Step 1: Get location of macro arg and location of the macro the arg was
     // provided to.
@@ -297,7 +295,7 @@ private:
     return !ArgUsageVisitor.foundInvalid();
   }
 
-  /// Given the SourceLocation for a macro arg expansion, finds the
+  /// \brief Given the SourceLocation for a macro arg expansion, finds the
   /// non-macro SourceLocation of the macro the arg was passed to and the
   /// non-macro SourceLocation of the argument in the arg list to that macro.
   /// These results are returned via \c MacroLoc and \c ArgLoc respectively.
@@ -325,10 +323,11 @@ private:
 
         StringRef Name =
             Lexer::getImmediateMacroName(OldArgLoc, SM, Context.getLangOpts());
-        return llvm::is_contained(NullMacros, Name);
+        return std::find(NullMacros.begin(), NullMacros.end(), Name) !=
+               NullMacros.end();
       }
 
-      MacroLoc = SM.getExpansionRange(ArgLoc).getBegin();
+      MacroLoc = SM.getExpansionRange(ArgLoc).first;
 
       ArgLoc = Expansion.getSpellingLoc().getLocWithOffset(LocInfo.second);
       if (ArgLoc.isFileID())
@@ -347,7 +346,7 @@ private:
     llvm_unreachable("getMacroAndArgLocations");
   }
 
-  /// Tests if TestMacroLoc is found while recursively unravelling
+  /// \brief Tests if TestMacroLoc is found while recursively unravelling
   /// expansions starting at TestLoc. TestMacroLoc.isFileID() must be true.
   /// Implementation is very similar to getMacroAndArgLocations() except in this
   /// case, it's not assumed that TestLoc is expanded from a macro argument.
@@ -383,7 +382,7 @@ private:
         continue;
       }
 
-      MacroLoc = SM.getImmediateExpansionRange(Loc).getBegin();
+      MacroLoc = SM.getImmediateExpansionRange(Loc).first;
       if (MacroLoc.isFileID() && MacroLoc == TestMacroLoc) {
         // Match made.
         return true;
@@ -400,7 +399,7 @@ private:
     llvm_unreachable("expandsFrom");
   }
 
-  /// Given a starting point \c Start in the AST, find an ancestor that
+  /// \brief Given a starting point \c Start in the AST, find an ancestor that
   /// doesn't expand from the macro called at file location \c MacroLoc.
   ///
   /// \pre MacroLoc.isFileID()
@@ -433,9 +432,9 @@ private:
 
       SourceLocation Loc;
       if (const auto *D = Parent.get<Decl>())
-        Loc = D->getBeginLoc();
+        Loc = D->getLocStart();
       else if (const auto *S = Parent.get<Stmt>())
-        Loc = S->getBeginLoc();
+        Loc = S->getLocStart();
 
       // TypeLoc and NestedNameSpecifierLoc are members of the parent map. Skip
       // them and keep going up.

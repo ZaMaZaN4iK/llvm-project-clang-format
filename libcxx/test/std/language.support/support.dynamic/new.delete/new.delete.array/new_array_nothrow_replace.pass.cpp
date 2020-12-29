@@ -1,15 +1,15 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // test operator new [] nothrow by replacing only operator new
 
 // UNSUPPORTED: sanitizer-new-delete
-// XFAIL: libcpp-no-vcruntime
 
 #include <new>
 #include <cstddef>
@@ -35,7 +35,7 @@ void  operator delete(void* p) TEST_NOEXCEPT
     std::free(p);
 }
 
-int A_constructed = 0;
+volatile int A_constructed = 0;
 
 struct A
 {
@@ -43,17 +43,15 @@ struct A
     ~A() {--A_constructed;}
 };
 
-int main(int, char**)
+A* volatile ap;
+
+int main()
 {
-    A *ap = new (std::nothrow) A[3];
-    DoNotOptimize(ap);
+    ap = new (std::nothrow) A[3];
     assert(ap);
     assert(A_constructed == 3);
     assert(new_called);
     delete [] ap;
-    DoNotOptimize(ap);
     assert(A_constructed == 0);
     assert(!new_called);
-
-  return 0;
 }

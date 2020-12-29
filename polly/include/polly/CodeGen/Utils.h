@@ -1,8 +1,9 @@
 //===- Utils.h - Utility functions for code generation ----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,23 +13,16 @@
 #ifndef POLLY_CODEGEN_UTILS_H
 #define POLLY_CODEGEN_UTILS_H
 
-#include <utility>
-
 namespace llvm {
 class Pass;
 class Value;
 class BasicBlock;
-class DominatorTree;
-class RegionInfo;
-class LoopInfo;
-class BranchInst;
 } // namespace llvm
 
 namespace polly {
 
 class Scop;
 
-using BBPair = std::pair<llvm::BasicBlock *, llvm::BasicBlock *>;
 /// Execute a Scop conditionally wrt @p RTC.
 ///
 /// In the CFG the optimized code of the Scop is generated next to the
@@ -60,13 +54,8 @@ using BBPair = std::pair<llvm::BasicBlock *, llvm::BasicBlock *>;
 /// @param P   A reference to the pass calling this function.
 /// @param RTC The runtime condition checked before executing the new SCoP.
 ///
-/// @return  An std::pair:
-///              - The first element is a BBPair of (StartBlock, EndBlock).
-///              - The second element is the BranchInst which conditionally
-///                branches to the SCoP based on the RTC.
-///
-std::pair<BBPair, llvm::BranchInst *>
-executeScopConditionally(Scop &S, llvm::Value *RTC, llvm::DominatorTree &DT,
-                         llvm::RegionInfo &RI, llvm::LoopInfo &LI);
+/// @return The 'StartBlock' to which new code can be added.
+llvm::BasicBlock *executeScopConditionally(Scop &S, llvm::Pass *P,
+                                           llvm::Value *RTC);
 } // namespace polly
 #endif

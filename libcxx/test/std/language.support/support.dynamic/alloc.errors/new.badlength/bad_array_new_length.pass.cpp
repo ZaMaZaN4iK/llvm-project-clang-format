@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,9 +13,7 @@
 #include <type_traits>
 #include <cassert>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     static_assert((std::is_base_of<std::bad_alloc, std::bad_array_new_length>::value),
                   "std::is_base_of<std::bad_alloc, std::bad_array_new_length>::value");
@@ -25,6 +24,4 @@ int main(int, char**)
     b2 = b;
     const char* w = b2.what();
     assert(w);
-
-  return 0;
 }

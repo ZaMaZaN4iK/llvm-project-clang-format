@@ -2,8 +2,12 @@
 Test lldb data formatter subsystem.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -26,13 +30,12 @@ class LibcxxListDataFormatterTestCase(TestBase):
         self.line4 = line_number('main.cpp',
                                  '// Set fourth break point at this line.')
 
-    @add_test_categories(["libc++"])
-    @skipIf(debug_info="gmodules",
-            bugnumber="https://bugs.llvm.org/show_bug.cgi?id=36048")
+    @skipIf(compiler="gcc")
+    @skipIfWindows  # libc++ not ported to Windows yet
     def test_with_run_command(self):
         """Test that that file and class static variables display correctly."""
         self.build()
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(
             self, "main.cpp", self.line, num_expected_locations=-1)
@@ -84,8 +87,7 @@ class LibcxxListDataFormatterTestCase(TestBase):
                     substrs=['list has 0 items',
                              '{}'])
 
-        self.runCmd("n") # This gets up past the printf
-        self.runCmd("n") # Now advance over the first push_back.
+        self.runCmd("n")
 
         self.expect("frame variable numbers_list",
                     substrs=['list has 1 items',
@@ -158,10 +160,6 @@ class LibcxxListDataFormatterTestCase(TestBase):
                              '[2] = ', '3',
                              '[3] = ', '4'])
 
-        ListPtr = self.frame().FindVariable("list_ptr")
-        self.assertTrue(ListPtr.GetChildAtIndex(
-            0).GetValueAsUnsigned(0) == 1, "[0] = 1")
-
         # check that MightHaveChildren() gets it right
         self.assertTrue(
             self.frame().FindVariable("numbers_list").MightHaveChildren(),
@@ -188,8 +186,6 @@ class LibcxxListDataFormatterTestCase(TestBase):
                              '\"is\"',
                              '\"smart\"'])
 
-        self.runCmd("n") # This gets us past the printf
-        self.runCmd("n")
         self.runCmd("n")
 
         # check access-by-index

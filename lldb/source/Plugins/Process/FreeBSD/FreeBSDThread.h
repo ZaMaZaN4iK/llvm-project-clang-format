@@ -1,17 +1,20 @@
 //===-- FreeBSDThread.h -----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_FreeBSDThread_H_
 #define liblldb_FreeBSDThread_H_
 
+// C++ Includes
 #include <memory>
 #include <string>
 
+// Other libraries and framework includes
 #include "RegisterContextPOSIX.h"
 #include "lldb/Target/Thread.h"
 
@@ -19,11 +22,14 @@ class ProcessMessage;
 class ProcessMonitor;
 class POSIXBreakpointProtocol;
 
+//------------------------------------------------------------------------------
 // @class FreeBSDThread
-// Abstraction of a FreeBSD thread.
+// @brief Abstraction of a FreeBSD thread.
 class FreeBSDThread : public lldb_private::Thread {
 public:
+  //------------------------------------------------------------------
   // Constructors and destructors
+  //------------------------------------------------------------------
   FreeBSDThread(lldb_private::Process &process, lldb::tid_t tid);
 
   virtual ~FreeBSDThread();
@@ -47,6 +53,7 @@ public:
 
   lldb::addr_t GetThreadPointer() override;
 
+  //--------------------------------------------------------------------------
   // These functions provide a mapping from the register offset
   // back to the register index or name for use in debugging or log
   // output.
@@ -57,12 +64,14 @@ public:
 
   const char *GetRegisterNameFromOffset(unsigned offset);
 
+  //--------------------------------------------------------------------------
   // These methods form a specialized interface to POSIX threads.
   //
   bool Resume();
 
   void Notify(const ProcessMessage &message);
 
+  //--------------------------------------------------------------------------
   // These methods provide an interface to watchpoints
   //
   bool EnableHardwareWatchpoint(lldb_private::Watchpoint *wp);
@@ -80,7 +89,7 @@ protected:
     return m_posix_thread;
   }
 
-  std::unique_ptr<lldb_private::StackFrame> m_frame_up;
+  std::unique_ptr<lldb_private::StackFrame> m_frame_ap;
 
   lldb::BreakpointSiteSP m_breakpoint;
 
@@ -104,6 +113,7 @@ protected:
 
   lldb_private::Unwind *GetUnwinder() override;
 
+  //--------------------------------------------------------------------------
   // FreeBSDThread internal API.
 
   // POSIXThread override

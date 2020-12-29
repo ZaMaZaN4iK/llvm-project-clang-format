@@ -1,14 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// On Windows Clang bugs out when both __declspec and __attribute__ are present,
-// the processing goes awry preventing the definition of the types.
-// XFAIL: LIBCXX-WINDOWS-FIXME
 
 // UNSUPPORTED: libcpp-has-no-threads
 // REQUIRES: thread-safety
@@ -20,8 +17,6 @@
 
 #include <mutex>
 
-#include "test_macros.h"
-
 std::mutex m;
 int foo __attribute__((guarded_by(m)));
 
@@ -29,10 +24,8 @@ void increment() __attribute__((requires_capability(m))) {
   foo++;
 }
 
-int main(int, char**) {
+int main() {
   m.lock();
   increment();
   m.unlock();
-
-  return 0;
 }

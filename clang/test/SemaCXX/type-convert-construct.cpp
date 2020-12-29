@@ -8,15 +8,7 @@ void f() {
   typedef int arr[];
   int v3 = arr(); // expected-error {{array types cannot be value-initialized}}
   typedef void fn_ty();
-  fn_ty(); // expected-error {{cannot create object of function type 'fn_ty'}}
-  fn_ty(0); // expected-error {{functional-style cast from 'int' to 'fn_ty'}}
-  fn_ty(0, 0); // expected-error {{cannot create object of function type 'fn_ty'}}
-#if __cplusplus >= 201103L
-  fn_ty{}; // expected-error {{cannot create object of function type 'fn_ty'}}
-  fn_ty{0}; // expected-error {{cannot create object of function type 'fn_ty'}}
-  fn_ty{0, 0}; // expected-error {{cannot create object of function type 'fn_ty'}}
-  fn_ty({}); // expected-error {{cannot create object of function type 'fn_ty'}}
-#endif
+  fn_ty(); // expected-error {{function types cannot be value-initialized}}
   int v4 = int();
   int v5 = int; // expected-error {{expected '(' for function-style cast or type construction}}
   typedef int T;

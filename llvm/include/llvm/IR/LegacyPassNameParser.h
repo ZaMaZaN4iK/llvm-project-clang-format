@@ -1,8 +1,9 @@
 //===- LegacyPassNameParser.h -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -80,15 +81,15 @@ public:
   // default implementation to sort the table before we print...
   void printOptionInfo(const cl::Option &O, size_t GlobalWidth) const override {
     PassNameParser *PNP = const_cast<PassNameParser*>(this);
-    array_pod_sort(PNP->Values.begin(), PNP->Values.end(), ValCompare);
+    array_pod_sort(PNP->Values.begin(), PNP->Values.end(), ValLessThan);
     cl::parser<const PassInfo*>::printOptionInfo(O, GlobalWidth);
   }
 
 private:
-  // ValCompare - Provide a sorting comparator for Values elements...
-  static int ValCompare(const PassNameParser::OptionInfo *VT1,
-                        const PassNameParser::OptionInfo *VT2) {
-    return VT1->Name.compare(VT2->Name);
+  // ValLessThan - Provide a sorting comparator for Values elements...
+  static int ValLessThan(const PassNameParser::OptionInfo *VT1,
+                         const PassNameParser::OptionInfo *VT2) {
+    return VT1->Name < VT2->Name;
   }
 };
 

@@ -1,8 +1,9 @@
 /*===- InstrProfilingUtil.h - Support library for PGO instrumentation -----===*\
 |*
-|* Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-|* See https://llvm.org/LICENSE.txt for license information.
-|* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+|*                     The LLVM Compiler Infrastructure
+|*
+|* This file is distributed under the University of Illinois Open Source
+|* License. See LICENSE.TXT for details.
 |*
 \*===----------------------------------------------------------------------===*/
 
@@ -15,26 +16,13 @@
 /*! \brief Create a directory tree. */
 void __llvm_profile_recursive_mkdir(char *Pathname);
 
-/*! Set the mode used when creating profile directories. */
-void __llvm_profile_set_dir_mode(unsigned Mode);
-
-/*! Return the directory creation mode. */
-unsigned __llvm_profile_get_dir_mode(void);
-
-int lprofLockFd(int fd);
-int lprofUnlockFd(int fd);
-int lprofLockFileHandle(FILE *F);
-int lprofUnlockFileHandle(FILE *F);
-
 /*! Open file \c Filename for read+write with write
  * lock for exclusive access. The caller will block
  * if the lock is already held by another process. */
 FILE *lprofOpenFileEx(const char *Filename);
-/* PS4 doesn't have setenv/getenv. Define a shim. */
+/* PS4 doesn't have getenv. Define a shim. */
 #if __ORBIS__
 static inline char *getenv(const char *name) { return NULL; }
-static inline int setenv(const char *name, const char *value, int overwrite)
-{ return 0; }
 #endif /* #if __ORBIS__ */
 
 /* GCOV_PREFIX and GCOV_PREFIX_STRIP support */
@@ -62,13 +50,5 @@ int lprofGetHostName(char *Name, int Len);
 
 unsigned lprofBoolCmpXchg(void **Ptr, void *OldV, void *NewV);
 void *lprofPtrFetchAdd(void **Mem, long ByteIncr);
-
-/* Temporarily suspend SIGKILL. Return value of 1 means a restore is needed.
- * Other return values mean no restore is needed.
- */
-int lprofSuspendSigKill();
-
-/* Restore previously suspended SIGKILL. */
-void lprofRestoreSigKill();
 
 #endif /* PROFILE_INSTRPROFILINGUTIL_H */

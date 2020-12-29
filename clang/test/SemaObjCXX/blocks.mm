@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify -fblocks -Wno-objc-root-class -std=c++14 %s
+// RUN: %clang_cc1 -fsyntax-only -verify -fblocks -Wno-objc-root-class -std=c++11 %s
 @protocol NSObject;
 
 void bar(id(^)(void));
@@ -76,27 +76,21 @@ namespace N1 {
 }
 
 // Make sure we successfully instantiate the copy constructor of a
-// __block variable's type when the variable is captured by an escaping block.
+// __block variable's type.
 namespace N2 {
   template <int n> struct A {
     A() {}
     A(const A &other) {
       int invalid[-n]; // expected-error 2 {{array with a negative size}}
     }
-    void m() {}
   };
-
-  typedef void (^BlockFnTy)();
-  void func(BlockFnTy);
 
   void test1() {
     __block A<1> x; // expected-note {{requested here}}
-    func(^{ x.m(); });
   }
 
   template <int n> void test2() {
     __block A<n> x; // expected-note {{requested here}}
-    func(^{ x.m(); });
   }
   template void test2<2>();
 }
@@ -149,17 +143,6 @@ namespace DependentReturn {
   bool operator!=(X, X);
 
   template void f<X>(X);
-}
-
-namespace GenericLambdaCapture {
-int test(int outerp) {
-  auto lambda =[&](auto p) {
-    return ^{
-      return p + outerp;
-    }();
-  };
-  return lambda(1);
-}
 }
 
 namespace MoveBlockVariable {

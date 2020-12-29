@@ -1,8 +1,9 @@
 //===- BranchProbability.h - Branch Probability Wrapper ---------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -72,7 +73,7 @@ public:
 
   void dump() const;
 
-  /// Scale a large integer.
+  /// \brief Scale a large integer.
   ///
   /// Scales \c Num.  Guarantees full precision.  Returns the floor of the
   /// result.
@@ -80,7 +81,7 @@ public:
   /// \return \c Num times \c this.
   uint64_t scale(uint64_t Num) const;
 
-  /// Scale a large integer by the inverse.
+  /// \brief Scale a large integer by the inverse.
   ///
   /// Scales \c Num by the inverse of \c this.  Guarantees full precision.
   /// Returns the floor of the result.
@@ -111,20 +112,6 @@ public:
     return *this;
   }
 
-  BranchProbability &operator*=(uint32_t RHS) {
-    assert(N != UnknownN &&
-           "Unknown probability cannot participate in arithmetics.");
-    N = (uint64_t(N) * RHS > D) ? D : N * RHS;
-    return *this;
-  }
-
-  BranchProbability &operator/=(BranchProbability RHS) {
-    assert(N != UnknownN && RHS.N != UnknownN &&
-           "Unknown probability cannot participate in arithmetics.");
-    N = (static_cast<uint64_t>(N) * D + RHS.N / 2) / RHS.N;
-    return *this;
-  }
-
   BranchProbability &operator/=(uint32_t RHS) {
     assert(N != UnknownN &&
            "Unknown probability cannot participate in arithmetics.");
@@ -135,38 +122,22 @@ public:
 
   BranchProbability operator+(BranchProbability RHS) const {
     BranchProbability Prob(*this);
-    Prob += RHS;
-    return Prob;
+    return Prob += RHS;
   }
 
   BranchProbability operator-(BranchProbability RHS) const {
     BranchProbability Prob(*this);
-    Prob -= RHS;
-    return Prob;
+    return Prob -= RHS;
   }
 
   BranchProbability operator*(BranchProbability RHS) const {
     BranchProbability Prob(*this);
-    Prob *= RHS;
-    return Prob;
-  }
-
-  BranchProbability operator*(uint32_t RHS) const {
-    BranchProbability Prob(*this);
-    Prob *= RHS;
-    return Prob;
-  }
-
-  BranchProbability operator/(BranchProbability RHS) const {
-    BranchProbability Prob(*this);
-    Prob /= RHS;
-    return Prob;
+    return Prob *= RHS;
   }
 
   BranchProbability operator/(uint32_t RHS) const {
     BranchProbability Prob(*this);
-    Prob /= RHS;
-    return Prob;
+    return Prob /= RHS;
   }
 
   bool operator==(BranchProbability RHS) const { return N == RHS.N; }

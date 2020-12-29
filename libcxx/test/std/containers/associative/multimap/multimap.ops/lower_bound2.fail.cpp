@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -28,12 +29,12 @@
 #error "This test requires is C++14 (or later)"
 #else
 
-int main(int, char**)
+int main()
 {
     {
     typedef std::multimap<int, double, transparent_less_private> M;
 
-    TEST_IGNORE_NODISCARD M().lower_bound(C2Int{5});
+    M().lower_bound(C2Int{5});
     }
 }
 #endif

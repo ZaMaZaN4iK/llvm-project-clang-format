@@ -1,22 +1,27 @@
 //===-- UtilityFunction.cpp -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "lldb/Host/Config.h"
-
+// C Includes
 #include <stdio.h>
 #if HAVE_SYS_TYPES_H
 #include <sys/types.h>
 #endif
 
+// C++ Includes
 
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Core/Module.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Expression/DiagnosticManager.h"
+#include "lldb/Expression/ExpressionSourceCode.h"
 #include "lldb/Expression/FunctionCaller.h"
 #include "lldb/Expression/IRExecutionUnit.h"
 #include "lldb/Expression/UtilityFunction.h"
@@ -24,26 +29,27 @@
 #include "lldb/Target/ExecutionContext.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Stream.h"
 
 using namespace lldb_private;
 using namespace lldb;
 
-char UtilityFunction::ID;
-
+//------------------------------------------------------------------
 /// Constructor
 ///
-/// \param[in] text
+/// @param[in] text
 ///     The text of the function.  Must be a full translation unit.
 ///
-/// \param[in] name
+/// @param[in] name
 ///     The name of the function, as used in the text.
+//------------------------------------------------------------------
 UtilityFunction::UtilityFunction(ExecutionContextScope &exe_scope,
                                  const char *text, const char *name)
     : Expression(exe_scope), m_execution_unit_sp(), m_jit_module_wp(),
-      m_function_text(), m_function_name(name) {}
+      m_function_text(ExpressionSourceCode::g_expression_prefix),
+      m_function_name(name) {
+  if (text && text[0])
+    m_function_text.append(text);
+}
 
 UtilityFunction::~UtilityFunction() {
   lldb::ProcessSP process_sp(m_jit_process_wp.lock());
@@ -59,7 +65,7 @@ UtilityFunction::~UtilityFunction() {
 
 FunctionCaller *UtilityFunction::MakeFunctionCaller(
     const CompilerType &return_type, const ValueList &arg_value_list,
-    lldb::ThreadSP thread_to_use_sp, Status &error) {
+    lldb::ThreadSP thread_to_use_sp, Error &error) {
   if (m_caller_up)
     return m_caller_up.get();
 

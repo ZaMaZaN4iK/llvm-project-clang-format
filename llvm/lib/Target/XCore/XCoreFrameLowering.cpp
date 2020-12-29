@@ -1,8 +1,9 @@
 //===-- XCoreFrameLowering.cpp - Frame info for XCore Target --------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -22,12 +23,12 @@
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
-#include "llvm/CodeGen/TargetLowering.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Target/TargetLowering.h"
 #include "llvm/Target/TargetOptions.h"
-#include <algorithm> // std::sort
+#include <algorithm>    // std::sort
 
 using namespace llvm;
 
@@ -150,7 +151,7 @@ static void GetSpillList(SmallVectorImpl<StackSlotInfo> &SpillList,
                                       Offset,
                                       FramePtr));
   }
-  llvm::sort(SpillList, CompareSSIOffset);
+  std::sort(SpillList.begin(), SpillList.end(), CompareSSIOffset);
 }
 
 /// Creates an ordered list of EH info register 'spills'.
@@ -169,7 +170,7 @@ static void GetEHSpillList(SmallVectorImpl<StackSlotInfo> &SpillList,
   SpillList.push_back(
       StackSlotInfo(EHSlot[0], MFI.getObjectOffset(EHSlot[1]),
                     TL->getExceptionSelectorRegister(PersonalityFn)));
-  llvm::sort(SpillList, CompareSSIOffset);
+  std::sort(SpillList.begin(), SpillList.end(), CompareSSIOffset);
 }
 
 static MachineMemOperand *getFrameIndexMMO(MachineBasicBlock &MBB,
@@ -211,7 +212,7 @@ static void RestoreSpillList(MachineBasicBlock &MBB,
 //===----------------------------------------------------------------------===//
 
 XCoreFrameLowering::XCoreFrameLowering(const XCoreSubtarget &sti)
-    : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, Align(4), 0) {
+  : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, 4, 0) {
   // Do nothing
 }
 
@@ -237,7 +238,7 @@ void XCoreFrameLowering::emitPrologue(MachineFunction &MF,
     report_fatal_error("emitPrologue unsupported alignment: "
                        + Twine(MFI.getMaxAlignment()));
 
-  const AttributeList &PAL = MF.getFunction().getAttributes();
+  const AttributeSet &PAL = MF.getFunction()->getAttributes();
   if (PAL.hasAttrSomewhere(Attribute::Nest))
     BuildMI(MBB, MBBI, dl, TII.get(XCore::LDWSP_ru6), XCore::R11).addImm(0);
     // FIX: Needs addMemOperand() but can't use getFixedStack() or getStack().
@@ -323,7 +324,7 @@ void XCoreFrameLowering::emitPrologue(MachineFunction &MF,
     if (XFI->hasEHSpillSlot()) {
       // The unwinder requires stack slot & CFI offsets for the exception info.
       // We do not save/spill these registers.
-      const Function *Fn = &MF.getFunction();
+      const Function *Fn = MF.getFunction();
       const Constant *PersonalityFn =
           Fn->hasPersonalityFn() ? Fn->getPersonalityFn() : nullptr;
       SmallVector<StackSlotInfo, 2> SpillList;
@@ -358,7 +359,7 @@ void XCoreFrameLowering::emitEpilogue(MachineFunction &MF,
   if (RetOpcode == XCore::EH_RETURN) {
     // 'Restore' the exception info the unwinder has placed into the stack
     // slots.
-    const Function *Fn = &MF.getFunction();
+    const Function *Fn = MF.getFunction();
     const Constant *PersonalityFn =
         Fn->hasPersonalityFn() ? Fn->getPersonalityFn() : nullptr;
     SmallVector<StackSlotInfo, 2> SpillList;
@@ -367,8 +368,8 @@ void XCoreFrameLowering::emitEpilogue(MachineFunction &MF,
     RestoreSpillList(MBB, MBBI, dl, TII, RemainingAdj, SpillList);
 
     // Return to the landing pad.
-    Register EhStackReg = MBBI->getOperand(0).getReg();
-    Register EhHandlerReg = MBBI->getOperand(1).getReg();
+    unsigned EhStackReg = MBBI->getOperand(0).getReg();
+    unsigned EhHandlerReg = MBBI->getOperand(1).getReg();
     BuildMI(MBB, MBBI, dl, TII.get(XCore::SETSP_1r)).addReg(EhStackReg);
     BuildMI(MBB, MBBI, dl, TII.get(XCore::BAU_1r)).addReg(EhHandlerReg);
     MBB.erase(MBBI);  // Erase the previous return instruction.
@@ -426,7 +427,7 @@ spillCalleeSavedRegisters(MachineBasicBlock &MBB,
   bool emitFrameMoves = XCoreRegisterInfo::needsFrameMoves(*MF);
 
   DebugLoc DL;
-  if (MI != MBB.end() && !MI->isDebugInstr())
+  if (MI != MBB.end() && !MI->isDebugValue())
     DL = MI->getDebugLoc();
 
   for (std::vector<CalleeSavedInfo>::const_iterator it = CSI.begin();
@@ -451,7 +452,7 @@ spillCalleeSavedRegisters(MachineBasicBlock &MBB,
 bool XCoreFrameLowering::
 restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
                             MachineBasicBlock::iterator MI,
-                            std::vector<CalleeSavedInfo> &CSI,
+                            const std::vector<CalleeSavedInfo> &CSI,
                             const TargetRegisterInfo *TRI) const{
   MachineFunction *MF = MBB.getParent();
   const TargetInstrInfo &TII = *MF->getSubtarget().getInstrInfo();
@@ -541,7 +542,7 @@ void XCoreFrameLowering::determineCalleeSaves(MachineFunction &MF,
   const MachineRegisterInfo &MRI = MF.getRegInfo();
   bool LRUsed = MRI.isPhysRegModified(XCore::LR);
 
-  if (!LRUsed && !MF.getFunction().isVarArg() &&
+  if (!LRUsed && !MF.getFunction()->isVarArg() &&
       MF.getFrameInfo().estimateStackSize(MF))
     // If we need to extend the stack it is more efficient to use entsp / retsp.
     // We force the LR to be saved so these instructions are used.
@@ -574,17 +575,18 @@ processFunctionBeforeFrameFinalized(MachineFunction &MF,
                                     RegScavenger *RS) const {
   assert(RS && "requiresRegisterScavenging failed");
   MachineFrameInfo &MFI = MF.getFrameInfo();
-  const TargetRegisterClass &RC = XCore::GRRegsRegClass;
-  const TargetRegisterInfo &TRI = *MF.getSubtarget().getRegisterInfo();
+  const TargetRegisterClass *RC = &XCore::GRRegsRegClass;
   XCoreFunctionInfo *XFI = MF.getInfo<XCoreFunctionInfo>();
   // Reserve slots close to SP or frame pointer for Scavenging spills.
   // When using SP for small frames, we don't need any scratch registers.
   // When using SP for large frames, we may need 2 scratch registers.
   // When using FP, for large or small frames, we may need 1 scratch register.
-  unsigned Size = TRI.getSpillSize(RC);
-  unsigned Align = TRI.getSpillAlignment(RC);
   if (XFI->isLargeFrame(MF) || hasFP(MF))
-    RS->addScavengingFrameIndex(MFI.CreateStackObject(Size, Align, false));
+    RS->addScavengingFrameIndex(MFI.CreateStackObject(RC->getSize(),
+                                                      RC->getAlignment(),
+                                                      false));
   if (XFI->isLargeFrame(MF) && !hasFP(MF))
-    RS->addScavengingFrameIndex(MFI.CreateStackObject(Size, Align, false));
+    RS->addScavengingFrameIndex(MFI.CreateStackObject(RC->getSize(),
+                                                      RC->getAlignment(),
+                                                      false));
 }

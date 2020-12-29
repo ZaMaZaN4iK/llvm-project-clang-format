@@ -1,14 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: libcpp-has-no-threads
-
-// FLAKY_TEST.
 
 // <condition_variable>
 
@@ -20,8 +19,6 @@
 #include <mutex>
 #include <thread>
 #include <cassert>
-
-#include "test_macros.h"
 
 std::condition_variable_any cv;
 
@@ -54,7 +51,7 @@ void f2()
     test2 = 2;
 }
 
-int main(int, char**)
+int main()
 {
     std::thread t1(f1);
     std::thread t2(f2);
@@ -98,6 +95,4 @@ int main(int, char**)
     }
     else
         assert(false);
-
-  return 0;
 }

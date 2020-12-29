@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,7 +21,7 @@
 #include <type_traits>
 
 #include "test_macros.h"
-#include "test_convertible.h"
+#include "test_convertible.hpp"
 #include "MoveOnly.h"
 
 #if TEST_STD_VER > 11
@@ -102,7 +103,7 @@ void test_default_constructible_extension_sfinae()
 #endif
 }
 
-int main(int, char**)
+int main()
 {
     {
         std::tuple<MoveOnly> t(MoveOnly(0));
@@ -146,7 +147,6 @@ int main(int, char**)
 #if TEST_STD_VER > 11
     {
         constexpr std::tuple<Empty> t0{Empty()};
-        (void)t0;
     }
     {
         constexpr std::tuple<A, A> t(3, 2);
@@ -156,6 +156,4 @@ int main(int, char**)
     // Check that SFINAE is properly applied with the default reduced arity
     // constructor extensions.
     test_default_constructible_extension_sfinae();
-
-  return 0;
 }

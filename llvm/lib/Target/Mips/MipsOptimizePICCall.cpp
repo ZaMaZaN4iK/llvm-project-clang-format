@@ -1,8 +1,9 @@
-//===- MipsOptimizePICCall.cpp - Optimize PIC Calls -----------------------===//
+//===--------- MipsOptimizePICCall.cpp - Optimize PIC Calls ---------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,33 +12,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MCTargetDesc/MipsBaseInfo.h"
 #include "Mips.h"
-#include "MipsRegisterInfo.h"
-#include "MipsSubtarget.h"
-#include "llvm/ADT/PointerUnion.h"
+#include "MCTargetDesc/MipsBaseInfo.h"
+#include "MipsMachineFunction.h"
+#include "MipsTargetMachine.h"
 #include "llvm/ADT/ScopedHashTable.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineDominators.h"
-#include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/CodeGen/TargetOpcodes.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/Support/Allocator.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/MachineValueType.h"
-#include "llvm/Support/RecyclingAllocator.h"
-#include <cassert>
-#include <utility>
-#include <vector>
 
 using namespace llvm;
 
@@ -53,18 +35,18 @@ static cl::opt<bool> EraseGPOpnd("mips-erase-gp-opnd",
                                  cl::Hidden);
 
 namespace {
+typedef PointerUnion<const Value *, const PseudoSourceValue *> ValueType;
 
-using ValueType = PointerUnion<const Value *, const PseudoSourceValue *>;
-using CntRegP = std::pair<unsigned, unsigned>;
-using AllocatorTy = RecyclingAllocator<BumpPtrAllocator,
-                                       ScopedHashTableVal<ValueType, CntRegP>>;
-using ScopedHTType = ScopedHashTable<ValueType, CntRegP,
-                                     DenseMapInfo<ValueType>, AllocatorTy>;
+typedef std::pair<unsigned, unsigned> CntRegP;
+typedef RecyclingAllocator<BumpPtrAllocator,
+                           ScopedHashTableVal<ValueType, CntRegP> >
+AllocatorTy;
+typedef ScopedHashTable<ValueType, CntRegP, DenseMapInfo<ValueType>,
+                        AllocatorTy> ScopedHTType;
 
 class MBBInfo {
 public:
   MBBInfo(MachineDomTreeNode *N);
-
   const MachineDomTreeNode *getNode() const;
   bool isVisited() const;
   void preVisit(ScopedHTType &ScopedHT);
@@ -77,7 +59,7 @@ private:
 
 class OptimizePICCall : public MachineFunctionPass {
 public:
-  OptimizePICCall() : MachineFunctionPass(ID) {}
+  OptimizePICCall(TargetMachine &tm) : MachineFunctionPass(ID) {}
 
   StringRef getPassName() const override { return "Mips OptimizePICCall"; }
 
@@ -89,10 +71,10 @@ public:
   }
 
 private:
-  /// Visit MBB.
+  /// \brief Visit MBB.
   bool visitNode(MBBInfo &MBBI);
 
-  /// Test if MI jumps to a function via a register.
+  /// \brief Test if MI jumps to a function via a register.
   ///
   /// Also, return the virtual register containing the target function's address
   /// and the underlying object in Reg and Val respectively, if the function's
@@ -100,25 +82,23 @@ private:
   bool isCallViaRegister(MachineInstr &MI, unsigned &Reg,
                          ValueType &Val) const;
 
-  /// Return the number of instructions that dominate the current
+  /// \brief Return the number of instructions that dominate the current
   /// instruction and load the function address from object Entry.
   unsigned getCount(ValueType Entry);
 
-  /// Return the destination virtual register of the last instruction
+  /// \brief Return the destination virtual register of the last instruction
   /// that loads from object Entry.
   unsigned getReg(ValueType Entry);
 
-  /// Update ScopedHT.
+  /// \brief Update ScopedHT.
   void incCntAndSetReg(ValueType Entry, unsigned Reg);
 
   ScopedHTType ScopedHT;
-
   static char ID;
 };
 
-} // end of anonymous namespace
-
 char OptimizePICCall::ID = 0;
+} // end of anonymous namespace
 
 /// Return the first MachineOperand of MI if it is a used virtual register.
 static MachineOperand *getCallTargetRegOpnd(MachineInstr &MI) {
@@ -127,7 +107,8 @@ static MachineOperand *getCallTargetRegOpnd(MachineInstr &MI) {
 
   MachineOperand &MO = MI.getOperand(0);
 
-  if (!MO.isReg() || !MO.isUse() || !Register::isVirtualRegister(MO.getReg()))
+  if (!MO.isReg() || !MO.isUse() ||
+      !TargetRegisterInfo::isVirtualRegister(MO.getReg()))
     return nullptr;
 
   return &MO;
@@ -135,10 +116,9 @@ static MachineOperand *getCallTargetRegOpnd(MachineInstr &MI) {
 
 /// Return type of register Reg.
 static MVT::SimpleValueType getRegTy(unsigned Reg, MachineFunction &MF) {
-  const TargetRegisterInfo &TRI = *MF.getSubtarget().getRegisterInfo();
   const TargetRegisterClass *RC = MF.getRegInfo().getRegClass(Reg);
-  assert(TRI.legalclasstypes_end(*RC) - TRI.legalclasstypes_begin(*RC) == 1);
-  return *TRI.legalclasstypes_begin(*RC);
+  assert(RC->vt_end() - RC->vt_begin() == 1);
+  return *RC->vt_begin();
 }
 
 /// Do the following transformation:
@@ -151,7 +131,7 @@ static void setCallTargetReg(MachineBasicBlock *MBB,
                              MachineBasicBlock::iterator I) {
   MachineFunction &MF = *MBB->getParent();
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
-  Register SrcReg = I->getOperand(0).getReg();
+  unsigned SrcReg = I->getOperand(0).getReg();
   unsigned DstReg = getRegTy(SrcReg, MF) == MVT::i32 ? Mips::T9 : Mips::T9_64;
   BuildMI(*MBB, I, I->getDebugLoc(), TII.get(TargetOpcode::COPY), DstReg)
       .addReg(SrcReg);
@@ -276,7 +256,7 @@ bool OptimizePICCall::isCallViaRegister(MachineInstr &MI, unsigned &Reg,
 
   // Get the instruction that loads the function address from the GOT.
   Reg = MO->getReg();
-  Val = nullptr;
+  Val = (Value*)nullptr;
   MachineRegisterInfo &MRI = MI.getParent()->getParent()->getRegInfo();
   MachineInstr *DefMI = MRI.getVRegDef(Reg);
 
@@ -316,6 +296,6 @@ void OptimizePICCall::incCntAndSetReg(ValueType Entry, unsigned Reg) {
 }
 
 /// Return an OptimizeCall object.
-FunctionPass *llvm::createMipsOptimizePICCallPass() {
-  return new OptimizePICCall();
+FunctionPass *llvm::createMipsOptimizePICCallPass(MipsTargetMachine &TM) {
+  return new OptimizePICCall(TM);
 }

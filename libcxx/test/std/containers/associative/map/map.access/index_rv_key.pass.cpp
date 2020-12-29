@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,12 +19,12 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "count_new.h"
+#include "count_new.hpp"
 #include "MoveOnly.h"
 #include "min_allocator.h"
 #include "container_test_types.h"
 
-int main(int, char**)
+int main()
 {
     {
     std::map<MoveOnly, double> m;
@@ -60,6 +61,7 @@ int main(int, char**)
         using Container = TCT::map<>;
         using Key = Container::key_type;
         using MappedType = Container::mapped_type;
+        using ValueTp = Container::value_type;
         ConstructController* cc = getConstructController();
         cc->reset();
         {
@@ -76,6 +78,4 @@ int main(int, char**)
             }
         }
     }
-
-  return 0;
 }

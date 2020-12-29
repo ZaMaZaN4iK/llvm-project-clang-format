@@ -1,35 +1,23 @@
-//===- BranchRelaxation.cpp -----------------------------------------------===//
+//===-- BranchRelaxation.cpp ----------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/CodeGen/Passes.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
-#include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/RegisterScavenging.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/Config/llvm-config.h"
-#include "llvm/IR/DebugLoc.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/Pass.h"
-#include "llvm/Support/Compiler.h"
+#include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Format.h"
-#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
-#include <cassert>
-#include <cstdint>
-#include <iterator>
-#include <memory>
 
 using namespace llvm;
 
@@ -42,7 +30,6 @@ STATISTIC(NumUnconditionalRelaxed, "Number of unconditional branches relaxed");
 #define BRANCH_RELAX_NAME "Branch relaxation pass"
 
 namespace {
-
 class BranchRelaxation : public MachineFunctionPass {
   /// BasicBlockInfo - Information about the offset and size of a single
   /// basic block.
@@ -51,32 +38,33 @@ class BranchRelaxation : public MachineFunctionPass {
     /// of this basic block.
     ///
     /// The offset is always aligned as required by the basic block.
-    unsigned Offset = 0;
+    unsigned Offset;
 
     /// Size - Size of the basic block in bytes.  If the block contains
     /// inline assembly, this is a worst case estimate.
     ///
     /// The size does not include any alignment padding whether from the
     /// beginning of the block, or from an aligned jump table at the end.
-    unsigned Size = 0;
+    unsigned Size;
 
-    BasicBlockInfo() = default;
+    BasicBlockInfo() : Offset(0), Size(0) {}
 
     /// Compute the offset immediately following this block. \p MBB is the next
     /// block.
     unsigned postOffset(const MachineBasicBlock &MBB) const {
-      const unsigned PO = Offset + Size;
-      const Align Alignment = MBB.getAlignment();
-      if (Alignment == 1)
+      unsigned PO = Offset + Size;
+      unsigned Align = MBB.getAlignment();
+      if (Align == 0)
         return PO;
 
-      const Align ParentAlign = MBB.getParent()->getAlignment();
-      if (Alignment <= ParentAlign)
-        return PO + offsetToAlignment(PO, Alignment);
+      unsigned AlignAmt = 1 << Align;
+      unsigned ParentAlign = MBB.getParent()->getAlignment();
+      if (Align <= ParentAlign)
+        return PO + OffsetToAlignment(PO, AlignAmt);
 
       // The alignment of this MBB is larger than the function's alignment, so we
       // can't tell whether or not it will insert nops. Assume that it will.
-      return PO + Alignment.value() + offsetToAlignment(PO, Alignment);
+      return PO + AlignAmt + OffsetToAlignment(PO, AlignAmt);
     }
   };
 
@@ -95,7 +83,7 @@ class BranchRelaxation : public MachineFunctionPass {
 
   MachineBasicBlock *splitBlockBeforeInstr(MachineInstr &MI,
                                            MachineBasicBlock *DestBB);
-  void adjustBlockOffsets(MachineBasicBlock &Start);
+  void adjustBlockOffsets(MachineBasicBlock &MBB);
   bool isBlockInRange(const MachineInstr &MI, const MachineBasicBlock &BB) const;
 
   bool fixupConditionalBranch(MachineInstr &MI);
@@ -107,18 +95,18 @@ class BranchRelaxation : public MachineFunctionPass {
 
 public:
   static char ID;
-
-  BranchRelaxation() : MachineFunctionPass(ID) {}
+  BranchRelaxation() : MachineFunctionPass(ID) { }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
-  StringRef getPassName() const override { return BRANCH_RELAX_NAME; }
+  StringRef getPassName() const override {
+    return BRANCH_RELAX_NAME;
+  }
 };
 
-} // end anonymous namespace
+}
 
 char BranchRelaxation::ID = 0;
-
 char &llvm::BranchRelaxationPassID = BranchRelaxation::ID;
 
 INITIALIZE_PASS(BranchRelaxation, DEBUG_TYPE, BRANCH_RELAX_NAME, false, false)
@@ -128,8 +116,9 @@ void BranchRelaxation::verify() {
 #ifndef NDEBUG
   unsigned PrevNum = MF->begin()->getNumber();
   for (MachineBasicBlock &MBB : *MF) {
-    const unsigned Num = MBB.getNumber();
-    assert(isAligned(MBB.getAlignment(), BlockInfo[Num].Offset));
+    unsigned Align = MBB.getAlignment();
+    unsigned Num = MBB.getNumber();
+    assert(BlockInfo[Num].Offset % (1u << Align) == 0);
     assert(!Num || BlockInfo[PrevNum].postOffset(MBB) <= BlockInfo[Num].Offset);
     assert(BlockInfo[Num].Size == computeBlockSize(MBB));
     PrevNum = Num;
@@ -137,16 +126,14 @@ void BranchRelaxation::verify() {
 #endif
 }
 
-#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
 /// print block size and offset information - debugging
-LLVM_DUMP_METHOD void BranchRelaxation::dumpBBs() {
+void BranchRelaxation::dumpBBs() {
   for (auto &MBB : *MF) {
     const BasicBlockInfo &BBI = BlockInfo[MBB.getNumber()];
-    dbgs() << format("%%bb.%u\toffset=%08x\t", MBB.getNumber(), BBI.Offset)
+    dbgs() << format("BB#%u\toffset=%08x\t", MBB.getNumber(), BBI.Offset)
            << format("size=%#x\n", BBI.Size);
   }
 }
-#endif
 
 /// scanFunction - Do the initial scan of the function, building up
 /// information about each block.
@@ -207,7 +194,7 @@ void BranchRelaxation::adjustBlockOffsets(MachineBasicBlock &Start) {
   }
 }
 
-/// Insert a new empty basic block and insert it after \BB
+  /// Insert a new empty basic block and insert it after \BB
 MachineBasicBlock *BranchRelaxation::createNewBlockAfter(MachineBasicBlock &BB) {
   // Create a new MBB for the code after the OrigBB.
   MachineBasicBlock *NewBB =
@@ -244,6 +231,7 @@ MachineBasicBlock *BranchRelaxation::splitBlockBeforeInstr(MachineInstr &MI,
   // Insert an entry into BlockInfo to align it properly with the block numbers.
   BlockInfo.insert(BlockInfo.begin() + NewBB->getNumber(), BasicBlockInfo());
 
+
   NewBB->transferSuccessors(OrigBB);
   OrigBB->addSuccessor(NewBB);
   OrigBB->addSuccessor(DestBB);
@@ -269,7 +257,7 @@ MachineBasicBlock *BranchRelaxation::splitBlockBeforeInstr(MachineInstr &MI,
 
   // Need to fix live-in lists if we track liveness.
   if (TRI->trackLivenessAfterRegAlloc(*MF))
-    computeAndAddLiveIns(LiveRegs, *NewBB);
+    computeLiveIns(LiveRegs, *TRI, *NewBB);
 
   ++NumSplit;
 
@@ -286,11 +274,13 @@ bool BranchRelaxation::isBlockInRange(
   if (TII->isBranchOffsetInRange(MI.getOpcode(), DestOffset - BrOffset))
     return true;
 
-  LLVM_DEBUG(dbgs() << "Out of range branch to destination "
-                    << printMBBReference(DestBB) << " from "
-                    << printMBBReference(*MI.getParent()) << " to "
-                    << DestOffset << " offset " << DestOffset - BrOffset << '\t'
-                    << MI);
+  DEBUG(
+    dbgs() << "Out of range branch to destination BB#" << DestBB.getNumber()
+           << " from BB#" << MI.getParent()->getNumber()
+           << " to " << DestOffset
+           << " offset " << DestOffset - BrOffset
+           << '\t' << MI
+  );
 
   return false;
 }
@@ -302,40 +292,7 @@ bool BranchRelaxation::fixupConditionalBranch(MachineInstr &MI) {
   DebugLoc DL = MI.getDebugLoc();
   MachineBasicBlock *MBB = MI.getParent();
   MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
-  MachineBasicBlock *NewBB = nullptr;
   SmallVector<MachineOperand, 4> Cond;
-
-  auto insertUncondBranch = [&](MachineBasicBlock *MBB,
-                                MachineBasicBlock *DestBB) {
-    unsigned &BBSize = BlockInfo[MBB->getNumber()].Size;
-    int NewBrSize = 0;
-    TII->insertUnconditionalBranch(*MBB, DestBB, DL, &NewBrSize);
-    BBSize += NewBrSize;
-  };
-  auto insertBranch = [&](MachineBasicBlock *MBB, MachineBasicBlock *TBB,
-                          MachineBasicBlock *FBB,
-                          SmallVectorImpl<MachineOperand>& Cond) {
-    unsigned &BBSize = BlockInfo[MBB->getNumber()].Size;
-    int NewBrSize = 0;
-    TII->insertBranch(*MBB, TBB, FBB, Cond, DL, &NewBrSize);
-    BBSize += NewBrSize;
-  };
-  auto removeBranch = [&](MachineBasicBlock *MBB) {
-    unsigned &BBSize = BlockInfo[MBB->getNumber()].Size;
-    int RemovedSize = 0;
-    TII->removeBranch(*MBB, &RemovedSize);
-    BBSize -= RemovedSize;
-  };
-
-  auto finalizeBlockChanges = [&](MachineBasicBlock *MBB,
-                                  MachineBasicBlock *NewBB) {
-    // Keep the block offsets up to date.
-    adjustBlockOffsets(*MBB);
-
-    // Need to fix live-in lists if we track liveness.
-    if (NewBB && TRI->trackLivenessAfterRegAlloc(*MF))
-      computeAndAddLiveIns(LiveRegs, *NewBB);
-  };
 
   bool Fail = TII->analyzeBranch(*MBB, TBB, FBB, Cond);
   assert(!Fail && "branches to be relaxed must be analyzable");
@@ -349,90 +306,67 @@ bool BranchRelaxation::fixupConditionalBranch(MachineInstr &MI) {
   // b   L1
   // L2:
 
-  bool ReversedCond = !TII->reverseBranchCondition(Cond);
-  if (ReversedCond) {
-    if (FBB && isBlockInRange(MI, *FBB)) {
-      // Last MI in the BB is an unconditional branch. We can simply invert the
-      // condition and swap destinations:
-      // beq L1
-      // b   L2
-      // =>
-      // bne L2
-      // b   L1
-      LLVM_DEBUG(dbgs() << "  Invert condition and swap "
-                           "its destination with "
-                        << MBB->back());
+  if (FBB && isBlockInRange(MI, *FBB)) {
+    // Last MI in the BB is an unconditional branch. We can simply invert the
+    // condition and swap destinations:
+    // beq L1
+    // b   L2
+    // =>
+    // bne L2
+    // b   L1
+    DEBUG(dbgs() << "  Invert condition and swap "
+                    "its destination with " << MBB->back());
 
-      removeBranch(MBB);
-      insertBranch(MBB, FBB, TBB, Cond);
-      finalizeBlockChanges(MBB, nullptr);
-      return true;
-    }
-    if (FBB) {
-      // We need to split the basic block here to obtain two long-range
-      // unconditional branches.
-      NewBB = createNewBlockAfter(*MBB);
+    TII->reverseBranchCondition(Cond);
+    int OldSize = 0, NewSize = 0;
+    TII->removeBranch(*MBB, &OldSize);
+    TII->insertBranch(*MBB, FBB, TBB, Cond, DL, &NewSize);
 
-      insertUncondBranch(NewBB, FBB);
-      // Update the succesor lists according to the transformation to follow.
-      // Do it here since if there's no split, no update is needed.
-      MBB->replaceSuccessor(FBB, NewBB);
-      NewBB->addSuccessor(FBB);
-    }
-
-    // We now have an appropriate fall-through block in place (either naturally or
-    // just created), so we can use the inverted the condition.
-    MachineBasicBlock &NextBB = *std::next(MachineFunction::iterator(MBB));
-
-    LLVM_DEBUG(dbgs() << "  Insert B to " << printMBBReference(*TBB)
-                      << ", invert condition and change dest. to "
-                      << printMBBReference(NextBB) << '\n');
-
-    removeBranch(MBB);
-    // Insert a new conditional branch and a new unconditional branch.
-    insertBranch(MBB, &NextBB, TBB, Cond);
-
-    finalizeBlockChanges(MBB, NewBB);
+    BlockInfo[MBB->getNumber()].Size += (NewSize - OldSize);
     return true;
+  } else if (FBB) {
+    // We need to split the basic block here to obtain two long-range
+    // unconditional branches.
+    auto &NewBB = *MF->CreateMachineBasicBlock(MBB->getBasicBlock());
+    MF->insert(++MBB->getIterator(), &NewBB);
+
+    // Insert an entry into BlockInfo to align it properly with the block
+    // numbers.
+    BlockInfo.insert(BlockInfo.begin() + NewBB.getNumber(), BasicBlockInfo());
+
+    unsigned &NewBBSize = BlockInfo[NewBB.getNumber()].Size;
+    int NewBrSize;
+    TII->insertUnconditionalBranch(NewBB, FBB, DL, &NewBrSize);
+    NewBBSize += NewBrSize;
+
+    // Update the successor lists according to the transformation to follow.
+    // Do it here since if there's no split, no update is needed.
+    MBB->replaceSuccessor(FBB, &NewBB);
+    NewBB.addSuccessor(FBB);
   }
-  // Branch cond can't be inverted.
-  // In this case we always add a block after the MBB.
-  LLVM_DEBUG(dbgs() << "  The branch condition can't be inverted. "
-                    << "  Insert a new BB after " << MBB->back());
 
-  if (!FBB)
-    FBB = &(*std::next(MachineFunction::iterator(MBB)));
+  // We now have an appropriate fall-through block in place (either naturally or
+  // just created), so we can invert the condition.
+  MachineBasicBlock &NextBB = *std::next(MachineFunction::iterator(MBB));
 
-  // This is the block with cond. branch and the distance to TBB is too long.
-  //    beq L1
-  // L2:
+  DEBUG(dbgs() << "  Insert B to BB#" << TBB->getNumber()
+               << ", invert condition and change dest. to BB#"
+               << NextBB.getNumber() << '\n');
 
-  // We do the following transformation:
-  //    beq NewBB
-  //    b L2
-  // NewBB:
-  //    b L1
-  // L2:
+  unsigned &MBBSize = BlockInfo[MBB->getNumber()].Size;
 
-  NewBB = createNewBlockAfter(*MBB);
-  insertUncondBranch(NewBB, TBB);
+  // Insert a new conditional branch and a new unconditional branch.
+  int RemovedSize = 0;
+  TII->reverseBranchCondition(Cond);
+  TII->removeBranch(*MBB, &RemovedSize);
+  MBBSize -= RemovedSize;
 
-  LLVM_DEBUG(dbgs() << "  Insert cond B to the new BB "
-                    << printMBBReference(*NewBB)
-                    << "  Keep the exiting condition.\n"
-                    << "  Insert B to " << printMBBReference(*FBB) << ".\n"
-                    << "  In the new BB: Insert B to "
-                    << printMBBReference(*TBB) << ".\n");
+  int AddedSize = 0;
+  TII->insertBranch(*MBB, &NextBB, TBB, Cond, DL, &AddedSize);
+  MBBSize += AddedSize;
 
-  // Update the successor lists according to the transformation to follow.
-  MBB->replaceSuccessor(TBB, NewBB);
-  NewBB->addSuccessor(TBB);
-
-  // Replace branch in the current (MBB) block.
-  removeBranch(MBB);
-  insertBranch(MBB, NewBB, FBB, Cond);
-
-  finalizeBlockChanges(MBB, NewBB);
+  // Finally, keep the block offsets up to date.
+  adjustBlockOffsets(*MBB);
   return true;
 }
 
@@ -542,7 +476,7 @@ bool BranchRelaxation::relaxBranchInstructions() {
 bool BranchRelaxation::runOnMachineFunction(MachineFunction &mf) {
   MF = &mf;
 
-  LLVM_DEBUG(dbgs() << "***** BranchRelaxation *****\n");
+  DEBUG(dbgs() << "***** BranchRelaxation *****\n");
 
   const TargetSubtargetInfo &ST = MF->getSubtarget();
   TII = ST.getInstrInfo();
@@ -559,7 +493,7 @@ bool BranchRelaxation::runOnMachineFunction(MachineFunction &mf) {
   // sizes of each block.
   scanFunction();
 
-  LLVM_DEBUG(dbgs() << "  Basic blocks before relaxation\n"; dumpBBs(););
+  DEBUG(dbgs() << "  Basic blocks before relaxation\n"; dumpBBs(););
 
   bool MadeChange = false;
   while (relaxBranchInstructions())
@@ -568,7 +502,7 @@ bool BranchRelaxation::runOnMachineFunction(MachineFunction &mf) {
   // After a while, this might be made debug-only, but it is not expensive.
   verify();
 
-  LLVM_DEBUG(dbgs() << "  Basic blocks after relaxation\n\n"; dumpBBs());
+  DEBUG(dbgs() << "  Basic blocks after relaxation\n\n"; dumpBBs());
 
   BlockInfo.clear();
 

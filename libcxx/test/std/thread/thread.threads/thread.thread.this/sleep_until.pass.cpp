@@ -1,13 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: libcpp-has-no-threads
-// FLAKY_TEST.
 
 // <thread>
 
@@ -18,12 +18,11 @@
 #include <cstdlib>
 #include <cassert>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     typedef std::chrono::system_clock Clock;
     typedef Clock::time_point time_point;
+    typedef Clock::duration duration;
     std::chrono::milliseconds ms(500);
     time_point t0 = Clock::now();
     std::this_thread::sleep_until(t0 + ms);
@@ -32,6 +31,4 @@ int main(int, char**)
     std::chrono::nanoseconds err = 5 * ms / 100;
     // The time slept is within 5% of 500ms
     assert(std::abs(ns.count()) < err.count());
-
-  return 0;
 }

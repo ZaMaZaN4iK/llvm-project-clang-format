@@ -1,8 +1,9 @@
 //===-- SBSymbol.h ----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -25,8 +26,6 @@ public:
   SBSymbol(const lldb::SBSymbol &rhs);
 
   const lldb::SBSymbol &operator=(const lldb::SBSymbol &rhs);
-
-  explicit operator bool() const;
 
   bool IsValid() const;
 
@@ -55,12 +54,16 @@ public:
 
   bool GetDescription(lldb::SBStream &description);
 
-  // Returns true if the symbol is externally visible in the module that it is
-  // defined in
+  //----------------------------------------------------------------------
+  // Returns true if the symbol is externally visible in the module that
+  // it is defined in
+  //----------------------------------------------------------------------
   bool IsExternal();
 
+  //----------------------------------------------------------------------
   // Returns true if the symbol was synthetically generated from something
   // other than the actual symbol table itself in the object file.
+  //----------------------------------------------------------------------
   bool IsSynthetic();
 
 protected:

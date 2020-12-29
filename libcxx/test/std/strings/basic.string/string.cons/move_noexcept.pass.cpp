@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,7 +22,14 @@
 #include "test_macros.h"
 #include "test_allocator.h"
 
-int main(int, char**)
+template <class T>
+struct some_alloc
+{
+    typedef T value_type;
+    some_alloc(const some_alloc&);
+};
+
+int main()
 {
     {
         typedef std::string C;
@@ -32,13 +40,11 @@ int main(int, char**)
         static_assert(std::is_nothrow_move_constructible<C>::value, "");
     }
     {
-        typedef std::basic_string<char, std::char_traits<char>, limited_allocator<char, 10>> C;
+        typedef std::basic_string<char, std::char_traits<char>, some_alloc<char>> C;
 #if TEST_STD_VER <= 14
         static_assert(!std::is_nothrow_move_constructible<C>::value, "");
 #else
         static_assert( std::is_nothrow_move_constructible<C>::value, "");
 #endif
     }
-
-  return 0;
 }

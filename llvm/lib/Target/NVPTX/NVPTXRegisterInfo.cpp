@@ -1,8 +1,9 @@
 //===- NVPTXRegisterInfo.cpp - NVPTX Register Information -----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,8 +18,8 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/MC/MachineLocation.h"
+#include "llvm/Target/TargetInstrInfo.h"
 
 using namespace llvm;
 
@@ -26,19 +27,12 @@ using namespace llvm;
 
 namespace llvm {
 std::string getNVPTXRegClassName(TargetRegisterClass const *RC) {
-  if (RC == &NVPTX::Float32RegsRegClass)
+  if (RC == &NVPTX::Float32RegsRegClass) {
     return ".f32";
-  if (RC == &NVPTX::Float16RegsRegClass)
-    // Ideally fp16 registers should be .f16, but this syntax is only
-    // supported on sm_53+. On the other hand, .b16 registers are
-    // accepted for all supported fp16 instructions on all GPU
-    // variants, so we can use them instead.
-    return ".b16";
-  if (RC == &NVPTX::Float16x2RegsRegClass)
-    return ".b32";
-  if (RC == &NVPTX::Float64RegsRegClass)
+  }
+  if (RC == &NVPTX::Float64RegsRegClass) {
     return ".f64";
-  if (RC == &NVPTX::Int64RegsRegClass)
+  } else if (RC == &NVPTX::Int64RegsRegClass) {
     // We use untyped (.b) integer registers here as NVCC does.
     // Correctness of generated code does not depend on register type,
     // but using .s/.u registers runs into ptxas bug that prevents
@@ -58,37 +52,40 @@ std::string getNVPTXRegClassName(TargetRegisterClass const *RC) {
     //   add.f16v2 rb32,rb32,rb32; // OK
     //   add.f16v2 rs32,rs32,rs32; // OK
     return ".b64";
-  if (RC == &NVPTX::Int32RegsRegClass)
+  } else if (RC == &NVPTX::Int32RegsRegClass) {
     return ".b32";
-  if (RC == &NVPTX::Int16RegsRegClass)
+  } else if (RC == &NVPTX::Int16RegsRegClass) {
     return ".b16";
-  if (RC == &NVPTX::Int1RegsRegClass)
+  } else if (RC == &NVPTX::Int1RegsRegClass) {
     return ".pred";
-  if (RC == &NVPTX::SpecialRegsRegClass)
+  } else if (RC == &NVPTX::SpecialRegsRegClass) {
     return "!Special!";
-  return "INTERNAL";
+  } else {
+    return "INTERNAL";
+  }
+  return "";
 }
 
 std::string getNVPTXRegClassStr(TargetRegisterClass const *RC) {
-  if (RC == &NVPTX::Float32RegsRegClass)
+  if (RC == &NVPTX::Float32RegsRegClass) {
     return "%f";
-  if (RC == &NVPTX::Float16RegsRegClass)
-    return "%h";
-  if (RC == &NVPTX::Float16x2RegsRegClass)
-    return "%hh";
-  if (RC == &NVPTX::Float64RegsRegClass)
+  }
+  if (RC == &NVPTX::Float64RegsRegClass) {
     return "%fd";
-  if (RC == &NVPTX::Int64RegsRegClass)
+  } else if (RC == &NVPTX::Int64RegsRegClass) {
     return "%rd";
-  if (RC == &NVPTX::Int32RegsRegClass)
+  } else if (RC == &NVPTX::Int32RegsRegClass) {
     return "%r";
-  if (RC == &NVPTX::Int16RegsRegClass)
+  } else if (RC == &NVPTX::Int16RegsRegClass) {
     return "%rs";
-  if (RC == &NVPTX::Int1RegsRegClass)
+  } else if (RC == &NVPTX::Int1RegsRegClass) {
     return "%p";
-  if (RC == &NVPTX::SpecialRegsRegClass)
+  } else if (RC == &NVPTX::SpecialRegsRegClass) {
     return "!Special!";
-  return "INTERNAL";
+  } else {
+    return "INTERNAL";
+  }
+  return "";
 }
 }
 
@@ -126,6 +123,6 @@ void NVPTXRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
 }
 
-Register NVPTXRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
+unsigned NVPTXRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   return NVPTX::VRFrame;
 }

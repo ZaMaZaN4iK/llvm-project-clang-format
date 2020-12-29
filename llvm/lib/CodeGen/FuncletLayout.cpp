@@ -1,8 +1,9 @@
 //===-- FuncletLayout.cpp - Contiguously lay out funclets -----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,11 +11,10 @@
 // funclets being contiguous.
 //
 //===----------------------------------------------------------------------===//
+#include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/Analysis.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/Passes.h"
-#include "llvm/InitializePasses.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "funclet-layout"
@@ -37,15 +37,12 @@ public:
 
 char FuncletLayout::ID = 0;
 char &llvm::FuncletLayoutID = FuncletLayout::ID;
-INITIALIZE_PASS(FuncletLayout, DEBUG_TYPE,
+INITIALIZE_PASS(FuncletLayout, "funclet-layout",
                 "Contiguously Lay Out Funclets", false, false)
 
 bool FuncletLayout::runOnMachineFunction(MachineFunction &F) {
-  // Even though this gets information from getEHScopeMembership(), this pass is
-  // only necessary for funclet-based EH personalities, in which these EH scopes
-  // are outlined at the end.
   DenseMap<const MachineBasicBlock *, int> FuncletMembership =
-      getEHScopeMembership(F);
+      getFuncletMembership(F);
   if (FuncletMembership.empty())
     return false;
 

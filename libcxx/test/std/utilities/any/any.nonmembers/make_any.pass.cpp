@@ -1,14 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
-
-// XFAIL: dylib-has-no-bad_any_cast && !libcpp-no-exceptions
 
 // <any>
 
@@ -20,7 +19,7 @@
 #include <cassert>
 
 #include "any_helpers.h"
-#include "count_new.h"
+#include "count_new.hpp"
 #include "test_macros.h"
 
 using std::any;
@@ -109,14 +108,14 @@ void test_make_any_throws()
 {
     {
         try {
-            TEST_IGNORE_NODISCARD std::make_any<Type>(101);
+            std::make_any<Type>(101);
             assert(false);
         } catch (int const&) {
         }
     }
     {
         try {
-            TEST_IGNORE_NODISCARD std::make_any<Type>({1, 2, 3}, 101);
+            std::make_any<Type>({1, 2, 3}, 101);
             assert(false);
         } catch (int const&) {
         }
@@ -125,7 +124,7 @@ void test_make_any_throws()
 
 #endif
 
-int main(int, char**) {
+int main() {
     test_make_any_type<small>();
     test_make_any_type<large>();
     test_make_any_type<small_throws_on_copy>();
@@ -138,6 +137,4 @@ int main(int, char**) {
     test_make_any_throws<LargeThrows>();
 
 #endif
-
-  return 0;
 }

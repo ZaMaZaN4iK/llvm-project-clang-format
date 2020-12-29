@@ -1,34 +1,28 @@
 //===-- ValueObjectConstResultImpl.h ----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ValueObjectConstResultImpl_h_
 #define liblldb_ValueObjectConstResultImpl_h_
 
-#include "lldb/Utility/ConstString.h"
-#include "lldb/lldb-defines.h"
-#include "lldb/lldb-forward.h"
-#include "lldb/lldb-private-enumerations.h"
-#include "lldb/lldb-types.h"
-
-#include <stddef.h>
-#include <stdint.h>
-namespace lldb_private {
-class CompilerType;
-class DataExtractor;
-class Status;
-class ValueObject;
-}
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/ValueObject.h"
 
 namespace lldb_private {
 
+//----------------------------------------------------------------------
 // A class wrapping common implementation details for operations in
 // ValueObjectConstResult ( & Child ) that may need to jump from the host
 // memory space into the target's memory space
+//----------------------------------------------------------------------
 class ValueObjectConstResultImpl {
 public:
   ValueObjectConstResultImpl(ValueObject *valobj,
@@ -36,7 +30,7 @@ public:
 
   virtual ~ValueObjectConstResultImpl() = default;
 
-  lldb::ValueObjectSP Dereference(Status &error);
+  lldb::ValueObjectSP Dereference(Error &error);
 
   ValueObject *CreateChildAtIndex(size_t idx, bool synthetic_array_member,
                                   int32_t synthetic_index);
@@ -46,7 +40,7 @@ public:
                             bool can_create,
                             ConstString name_const_str = ConstString());
 
-  lldb::ValueObjectSP AddressOf(Status &error);
+  lldb::ValueObjectSP AddressOf(Error &error);
 
   lldb::addr_t GetLiveAddress() { return m_live_address; }
 

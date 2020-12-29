@@ -1,8 +1,9 @@
 //===-- CommandAlias.cpp -----------------------------------------*- C++-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,11 +11,11 @@
 
 #include "llvm/Support/ErrorHandling.h"
 
+#include "lldb/Core/StreamString.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
 #include "lldb/Interpreter/CommandObject.h"
 #include "lldb/Interpreter/CommandReturnObject.h"
 #include "lldb/Interpreter/Options.h"
-#include "lldb/Utility/StreamString.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -30,8 +31,6 @@ static bool ProcessAliasOptionsArgs(lldb::CommandObjectSP &cmd_obj_sp,
 
   Args args(options_args);
   std::string options_string(options_args);
-  // TODO: Find a way to propagate errors in this CommandReturnObject up the
-  // stack.
   CommandReturnObject result;
   // Check to see if the command being aliased can take any command options.
   Options *options = cmd_obj_sp->GetOptions();
@@ -41,17 +40,12 @@ static bool ProcessAliasOptionsArgs(lldb::CommandObjectSP &cmd_obj_sp,
     ExecutionContext exe_ctx =
         cmd_obj_sp->GetCommandInterpreter().GetExecutionContext();
     options->NotifyOptionParsingStarting(&exe_ctx);
-
-    llvm::Expected<Args> args_or =
-        options->ParseAlias(args, option_arg_vector, options_string);
-    if (!args_or) {
-      result.AppendError(toString(args_or.takeError()));
-      result.AppendError("Unable to create requested alias.\n");
-      result.SetStatus(eReturnStatusFailed);
-      return false;
-    }
-    args = std::move(*args_or);
-    options->VerifyPartialOptions(result);
+    args.Unshift(llvm::StringRef("dummy_arg"));
+    options_string = args.ParseAliasOptions(*options, result, option_arg_vector,
+                                            options_args);
+    args.Shift();
+    if (result.Succeeded())
+      options->VerifyPartialOptions(result);
     if (!result.Succeeded() &&
         result.GetStatus() != lldb::eReturnStatusStarted) {
       result.AppendError("Unable to create requested alias.\n");
@@ -64,9 +58,8 @@ static bool ProcessAliasOptionsArgs(lldb::CommandObjectSP &cmd_obj_sp,
       option_arg_vector->emplace_back("<argument>", -1, options_string);
     else {
       for (auto &entry : args.entries()) {
-        if (!entry.ref().empty())
-          option_arg_vector->emplace_back(std::string("<argument>"), -1,
-                                          std::string(entry.ref()));
+        if (!entry.ref.empty())
+          option_arg_vector->emplace_back("<argument>", -1, entry.ref);
       }
     }
   }
@@ -116,16 +109,27 @@ bool CommandAlias::WantsCompletion() {
   return false;
 }
 
-void CommandAlias::HandleCompletion(CompletionRequest &request) {
+int CommandAlias::HandleCompletion(Args &input, int &cursor_index,
+                                   int &cursor_char_position,
+                                   int match_start_point,
+                                   int max_return_elements, bool &word_complete,
+                                   StringList &matches) {
   if (IsValid())
-    m_underlying_command_sp->HandleCompletion(request);
+    return m_underlying_command_sp->HandleCompletion(
+        input, cursor_index, cursor_char_position, match_start_point,
+        max_return_elements, word_complete, matches);
+  return -1;
 }
 
-void CommandAlias::HandleArgumentCompletion(
-    CompletionRequest &request, OptionElementVector &opt_element_vector) {
+int CommandAlias::HandleArgumentCompletion(
+    Args &input, int &cursor_index, int &cursor_char_position,
+    OptionElementVector &opt_element_vector, int match_start_point,
+    int max_return_elements, bool &word_complete, StringList &matches) {
   if (IsValid())
-    m_underlying_command_sp->HandleArgumentCompletion(request,
-                                                      opt_element_vector);
+    return m_underlying_command_sp->HandleArgumentCompletion(
+        input, cursor_index, cursor_char_position, opt_element_vector,
+        match_start_point, max_return_elements, word_complete, matches);
+  return -1;
 }
 
 Options *CommandAlias::GetOptions() {
@@ -158,7 +162,8 @@ void CommandAlias::GetAliasExpansion(StreamString &help_string) const {
       help_string.Printf(" %s", value.c_str());
     } else {
       help_string.Printf(" %s", opt.c_str());
-      if ((value != "<no-argument>") && (value != "<need-argument")) {
+      if ((value.compare("<no-argument>") != 0) &&
+          (value.compare("<need-argument") != 0)) {
         help_string.Printf(" %s", value.c_str());
       }
     }
@@ -186,8 +191,8 @@ bool CommandAlias::IsDashDashCommand() {
     }
   }
 
-  // if this is a nested alias, it may be adding arguments on top of an already
-  // dash-dash alias
+  // if this is a nested alias, it may be adding arguments on top of an
+  // already dash-dash alias
   if ((m_is_dashdash_alias == eLazyBoolNo) && IsNestedAlias())
     m_is_dashdash_alias =
         (GetUnderlyingCommand()->IsDashDashCommand() ? eLazyBoolYes
@@ -218,7 +223,8 @@ std::pair<lldb::CommandObjectSP, OptionArgVectorSP> CommandAlias::Desugar() {
 }
 
 // allow CommandAlias objects to provide their own help, but fallback to the
-// info for the underlying command if no customization has been provided
+// info
+// for the underlying command if no customization has been provided
 void CommandAlias::SetHelp(llvm::StringRef str) {
   this->CommandObject::SetHelp(str);
   m_did_set_help = true;

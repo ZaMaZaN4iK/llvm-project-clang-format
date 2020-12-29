@@ -1,8 +1,9 @@
 //===- HexagonMCELFStreamer.h - Hexagon subclass of MCElfStreamer ---------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,14 +22,10 @@ class HexagonMCELFStreamer : public MCELFStreamer {
   std::unique_ptr<MCInstrInfo> MCII;
 
 public:
-  HexagonMCELFStreamer(MCContext &Context, std::unique_ptr<MCAsmBackend> TAB,
-                       std::unique_ptr<MCObjectWriter> OW,
-                       std::unique_ptr<MCCodeEmitter> Emitter);
-
-  HexagonMCELFStreamer(MCContext &Context, std::unique_ptr<MCAsmBackend> TAB,
-                       std::unique_ptr<MCObjectWriter> OW,
-                       std::unique_ptr<MCCodeEmitter> Emitter,
-                       MCAssembler *Assembler);
+  HexagonMCELFStreamer(MCContext &Context, MCAsmBackend &TAB,
+                       raw_pwrite_stream &OS, MCCodeEmitter *Emitter)
+      : MCELFStreamer(Context, TAB, OS, Emitter),
+        MCII(createHexagonMCInstrInfo()) {}
 
   void EmitInstruction(const MCInst &Inst, const MCSubtargetInfo &STI) override;
   void EmitSymbol(const MCInst &Inst);
@@ -39,10 +36,8 @@ public:
                                  unsigned ByteAlignment, unsigned AccessSize);
 };
 
-MCStreamer *createHexagonELFStreamer(Triple const &TT, MCContext &Context,
-                                     std::unique_ptr<MCAsmBackend> MAB,
-                                     std::unique_ptr<MCObjectWriter> OW,
-                                     std::unique_ptr<MCCodeEmitter> CE);
+MCStreamer *createHexagonELFStreamer(MCContext &Context, MCAsmBackend &MAB,
+                                     raw_pwrite_stream &OS, MCCodeEmitter *CE);
 
 } // end namespace llvm
 

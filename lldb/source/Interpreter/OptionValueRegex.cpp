@@ -1,14 +1,19 @@
 //===-- OptionValueRegex.cpp ------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Interpreter/OptionValueRegex.h"
 
-#include "lldb/Utility/Stream.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -27,9 +32,9 @@ void OptionValueRegex::DumpValue(const ExecutionContext *exe_ctx, Stream &strm,
   }
 }
 
-Status OptionValueRegex::SetValueFromString(llvm::StringRef value,
-                                            VarSetOperationType op) {
-  Status error;
+Error OptionValueRegex::SetValueFromString(llvm::StringRef value,
+                                           VarSetOperationType op) {
+  Error error;
   switch (op) {
   case eVarSetOperationInvalid:
   case eVarSetOperationInsertBefore:
@@ -46,14 +51,16 @@ Status OptionValueRegex::SetValueFromString(llvm::StringRef value,
 
   case eVarSetOperationReplace:
   case eVarSetOperationAssign:
-    m_regex = RegularExpression(value);
-    if (m_regex.IsValid()) {
+    if (m_regex.Compile(value)) {
       m_value_was_set = true;
       NotifyValueChanged();
-    } else if (llvm::Error err = m_regex.GetError()) {
-      error.SetErrorString(llvm::toString(std::move(err)));
     } else {
-      error.SetErrorString("regex error");
+      char regex_error[1024];
+      if (m_regex.GetErrorAsCString(regex_error, sizeof(regex_error)))
+        error.SetErrorString(regex_error);
+      else
+        error.SetErrorStringWithFormat("regex error %u",
+                                       m_regex.GetErrorCode());
     }
     break;
   }

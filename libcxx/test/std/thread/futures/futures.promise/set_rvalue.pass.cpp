@@ -1,12 +1,12 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// UNSUPPORTED: c++98, c++03
+//
 // UNSUPPORTED: libcpp-has-no-threads, libcpp-no-exceptions
 
 // <future>
@@ -19,7 +19,7 @@
 #include <memory>
 #include <cassert>
 
-#include "test_macros.h"
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
 
 struct A
 {
@@ -28,8 +28,11 @@ struct A
     A(A&&) {throw 9;}
 };
 
-int main(int, char**)
+#endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
+
+int main()
 {
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
     {
         typedef std::unique_ptr<int> T;
         T i(new int(3));
@@ -62,6 +65,5 @@ int main(int, char**)
             assert(j == 9);
         }
     }
-
-  return 0;
+#endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
 }

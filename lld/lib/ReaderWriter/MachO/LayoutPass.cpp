@@ -1,19 +1,20 @@
 //===-- ReaderWriter/MachO/LayoutPass.cpp - Layout atoms ------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "LayoutPass.h"
 #include "lld/Core/Instrumentation.h"
+#include "lld/Core/Parallel.h"
 #include "lld/Core/PassManager.h"
 #include "lld/ReaderWriter/MachOLinkingContext.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/Parallel.h"
 #include <algorithm>
 #include <set>
 #include <utility>
@@ -190,7 +191,7 @@ static bool compareAtomsSub(const LayoutPass::SortKey &lc,
   // Sort atoms by their ordinal overrides only if they fall in the same
   // chain.
   if (leftRoot == rightRoot) {
-    LLVM_DEBUG(reason = formatReason("override", lc._override, rc._override));
+    DEBUG(reason = formatReason("override", lc._override, rc._override));
     return lc._override < rc._override;
   }
 
@@ -199,8 +200,8 @@ static bool compareAtomsSub(const LayoutPass::SortKey &lc,
   DefinedAtom::ContentPermissions rightPerms = rightRoot->permissions();
 
   if (leftPerms != rightPerms) {
-    LLVM_DEBUG(
-        reason = formatReason("contentPerms", (int)leftPerms, (int)rightPerms));
+    DEBUG(reason =
+              formatReason("contentPerms", (int)leftPerms, (int)rightPerms));
     return leftPerms < rightPerms;
   }
 
@@ -209,8 +210,7 @@ static bool compareAtomsSub(const LayoutPass::SortKey &lc,
   DefinedAtom::ContentType rightType = rightRoot->contentType();
 
   if (leftType != rightType) {
-    LLVM_DEBUG(reason =
-                   formatReason("contentType", (int)leftType, (int)rightType));
+    DEBUG(reason = formatReason("contentType", (int)leftType, (int)rightType));
     return leftType < rightType;
   }
 
@@ -226,8 +226,8 @@ static bool compareAtomsSub(const LayoutPass::SortKey &lc,
   const File *rightFile = &rightRoot->file();
 
   if (leftFile != rightFile) {
-    LLVM_DEBUG(reason = formatReason(".o order", (int)leftFile->ordinal(),
-                                     (int)rightFile->ordinal()));
+    DEBUG(reason = formatReason(".o order", (int)leftFile->ordinal(),
+                                (int)rightFile->ordinal()));
     return leftFile->ordinal() < rightFile->ordinal();
   }
 
@@ -236,13 +236,13 @@ static bool compareAtomsSub(const LayoutPass::SortKey &lc,
   uint64_t rightOrdinal = rightRoot->ordinal();
 
   if (leftOrdinal != rightOrdinal) {
-    LLVM_DEBUG(reason = formatReason("ordinal", (int)leftRoot->ordinal(),
-                                     (int)rightRoot->ordinal()));
+    DEBUG(reason = formatReason("ordinal", (int)leftRoot->ordinal(),
+                                (int)rightRoot->ordinal()));
     return leftOrdinal < rightOrdinal;
   }
 
-  llvm::errs() << "Unordered: <" << left->name() << "> <" << right->name()
-               << ">\n";
+  llvm::errs() << "Unordered: <" << left->name() << "> <"
+               << right->name() << ">\n";
   llvm_unreachable("Atoms with Same Ordinal!");
 }
 
@@ -251,7 +251,7 @@ static bool compareAtoms(const LayoutPass::SortKey &lc,
                          LayoutPass::SortOverride customSorter) {
   std::string reason;
   bool result = compareAtomsSub(lc, rc, customSorter, reason);
-  LLVM_DEBUG({
+  DEBUG({
     StringRef comp = result ? "<" : ">=";
     llvm::dbgs() << "Layout: '" << lc._atom.get()->name()
                  << "' " << comp << " '"
@@ -441,7 +441,7 @@ void LayoutPass::undecorate(File::AtomRange<DefinedAtom> &atomRange,
 
 /// Perform the actual pass
 llvm::Error LayoutPass::perform(SimpleFile &mergedFile) {
-  LLVM_DEBUG(llvm::dbgs() << "******** Laying out atoms:\n");
+  DEBUG(llvm::dbgs() << "******** Laying out atoms:\n");
   // sort the atoms
   ScopedTask task(getDefaultDomain(), "LayoutPass");
   File::AtomRange<DefinedAtom> atomRange = mergedFile.defined();
@@ -450,35 +450,35 @@ llvm::Error LayoutPass::perform(SimpleFile &mergedFile) {
   buildFollowOnTable(atomRange);
 
   // Check the structure of followon graph if running in debug mode.
-  LLVM_DEBUG(checkFollowonChain(atomRange));
+  DEBUG(checkFollowonChain(atomRange));
 
   // Build override maps
   buildOrdinalOverrideMap(atomRange);
 
-  LLVM_DEBUG({
+  DEBUG({
     llvm::dbgs() << "unsorted atoms:\n";
     printDefinedAtoms(atomRange);
   });
 
   std::vector<LayoutPass::SortKey> vec = decorate(atomRange);
-  sort(llvm::parallel::par, vec.begin(), vec.end(),
-       [&](const LayoutPass::SortKey &l, const LayoutPass::SortKey &r) -> bool {
-         return compareAtoms(l, r, _customSorter);
-       });
-  LLVM_DEBUG(checkTransitivity(vec, _customSorter));
+  parallel_sort(vec.begin(), vec.end(),
+      [&](const LayoutPass::SortKey &l, const LayoutPass::SortKey &r) -> bool {
+        return compareAtoms(l, r, _customSorter);
+      });
+  DEBUG(checkTransitivity(vec, _customSorter));
   undecorate(atomRange, vec);
 
-  LLVM_DEBUG({
+  DEBUG({
     llvm::dbgs() << "sorted atoms:\n";
     printDefinedAtoms(atomRange);
   });
 
-  LLVM_DEBUG(llvm::dbgs() << "******** Finished laying out atoms\n");
+  DEBUG(llvm::dbgs() << "******** Finished laying out atoms\n");
   return llvm::Error::success();
 }
 
 void addLayoutPass(PassManager &pm, const MachOLinkingContext &ctx) {
-  pm.add(std::make_unique<LayoutPass>(
+  pm.add(llvm::make_unique<LayoutPass>(
       ctx.registry(), [&](const DefinedAtom * left, const DefinedAtom * right,
                           bool & leftBeforeRight) ->bool {
     return ctx.customAtomOrderer(left, right, leftBeforeRight);

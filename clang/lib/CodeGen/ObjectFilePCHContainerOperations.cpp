@@ -1,8 +1,9 @@
 //===--- ObjectFilePCHContainerOperations.cpp -----------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,15 +14,16 @@
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/Basic/CodeGenOptions.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/CodeGen/BackendUtil.h"
+#include "clang/Frontend/CodeGenOptions.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/HeaderSearch.h"
 #include "clang/Lex/Preprocessor.h"
+#include "clang/Serialization/ASTWriter.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Bitstream/BitstreamReader.h"
+#include "llvm/Bitcode/BitstreamReader.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
@@ -69,8 +71,9 @@ class PCHContainerGenerator : public ASTConsumer {
     }
 
     bool VisitImportDecl(ImportDecl *D) {
-      if (!D->getImportedOwningModule())
-        DI.EmitImportDecl(*D);
+      auto *Import = cast<ImportDecl>(D);
+      if (!Import->getImportedOwningModule())
+        DI.EmitImportDecl(*Import);
       return true;
     }
 
@@ -149,13 +152,8 @@ public:
     CodeGenOpts.CodeModel = "default";
     CodeGenOpts.ThreadModel = "single";
     CodeGenOpts.DebugTypeExtRefs = true;
-    // When building a module MainFileName is the name of the modulemap file.
-    CodeGenOpts.MainFileName =
-        LangOpts.CurrentModule.empty() ? MainFileName : LangOpts.CurrentModule;
     CodeGenOpts.setDebugInfo(codegenoptions::FullDebugInfo);
     CodeGenOpts.setDebuggerTuning(CI.getCodeGenOpts().getDebuggerTuning());
-    CodeGenOpts.DebugPrefixMap =
-        CI.getInvocation().getCodeGenOpts().DebugPrefixMap;
   }
 
   ~PCHContainerGenerator() override = default;
@@ -173,8 +171,7 @@ public:
     // Prepare CGDebugInfo to emit debug info for a clang module.
     auto *DI = Builder->getModuleDebugInfo();
     StringRef ModuleName = llvm::sys::path::filename(MainFileName);
-    DI->setPCHDescriptor({ModuleName, "", OutputFileName,
-                          ASTFileSignature{{{~0U, ~0U, ~0U, ~0U, ~1U}}}});
+    DI->setPCHDescriptor({ModuleName, "", OutputFileName, ~1ULL});
     DI->setModuleMap(MMap);
   }
 
@@ -228,11 +225,6 @@ public:
       Builder->getModuleDebugInfo()->completeRequiredType(RD);
   }
 
-  void HandleImplicitImportDecl(ImportDecl *D) override {
-    if (!D->getImportedOwningModule())
-      Builder->getModuleDebugInfo()->EmitImportDecl(*D);
-  }
-
   /// Emit a container holding the serialized AST.
   void HandleTranslationUnit(ASTContext &Ctx) override {
     assert(M && VMContext && Builder);
@@ -249,11 +241,7 @@ public:
 
     // PCH files don't have a signature field in the control block,
     // but LLVM detects DWO CUs by looking for a non-zero DWO id.
-    // We use the lower 64 bits for debug info.
-    uint64_t Signature =
-        Buffer->Signature
-            ? (uint64_t)Buffer->Signature[1] << 32 | Buffer->Signature[0]
-            : ~1ULL;
+    uint64_t Signature = Buffer->Signature ? Buffer->Signature : ~1ULL;
     Builder->getModuleDebugInfo()->setDwoId(Signature);
 
     // Finalize the Builder.
@@ -279,7 +267,7 @@ public:
         *M, Ty, /*constant*/ true, llvm::GlobalVariable::InternalLinkage, Data,
         "__clang_ast");
     // The on-disk hashtable needs to be aligned.
-    ASTSym->setAlignment(llvm::Align(8));
+    ASTSym->setAlignment(8);
 
     // Mach-O also needs a segment name.
     if (Triple.isOSBinFormatMachO())
@@ -290,14 +278,14 @@ public:
     else
       ASTSym->setSection("__clangast");
 
-    LLVM_DEBUG({
+    DEBUG({
       // Print the IR for the PCH container to the debug output.
       llvm::SmallString<0> Buffer;
       clang::EmitBackendOutput(
           Diags, HeaderSearchOpts, CodeGenOpts, TargetOpts, LangOpts,
           Ctx.getTargetInfo().getDataLayout(), M.get(),
           BackendAction::Backend_EmitLL,
-          std::make_unique<llvm::raw_svector_ostream>(Buffer));
+          llvm::make_unique<llvm::raw_svector_ostream>(Buffer));
       llvm::dbgs() << Buffer;
     });
 
@@ -321,7 +309,7 @@ ObjectFilePCHContainerWriter::CreatePCHContainerGenerator(
     const std::string &OutputFileName,
     std::unique_ptr<llvm::raw_pwrite_stream> OS,
     std::shared_ptr<PCHBuffer> Buffer) const {
-  return std::make_unique<PCHContainerGenerator>(
+  return llvm::make_unique<PCHContainerGenerator>(
       CI, MainFileName, OutputFileName, std::move(OS), Buffer);
 }
 
@@ -335,20 +323,10 @@ ObjectFilePCHContainerReader::ExtractPCH(llvm::MemoryBufferRef Buffer) const {
     // Find the clang AST section in the container.
     for (auto &Section : OF->sections()) {
       StringRef Name;
-      if (Expected<StringRef> NameOrErr = Section.getName())
-        Name = *NameOrErr;
-      else
-        consumeError(NameOrErr.takeError());
-
+      Section.getName(Name);
       if ((!IsCOFF && Name == "__clangast") || (IsCOFF && Name == "clangast")) {
-        if (Expected<StringRef> E = Section.getContents())
-          return *E;
-        else {
-          handleAllErrors(E.takeError(), [&](const llvm::ErrorInfoBase &EIB) {
-            EIB.log(llvm::errs());
-          });
-          return "";
-        }
+        Section.getContents(PCH);
+        return PCH;
       }
     }
   }

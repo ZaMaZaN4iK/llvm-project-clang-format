@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,28 +11,23 @@
 
 // duration
 
-// static constexpr duration min(); // noexcept after C++17
+// static constexpr duration min();
 
 #include <chrono>
 #include <limits>
 #include <cassert>
 
-#include "test_macros.h"
 #include "../../rep.h"
 
 template <class D>
 void test()
 {
-    LIBCPP_ASSERT_NOEXCEPT(std::chrono::duration_values<typename D::rep>::min());
-#if TEST_STD_VER > 17
-    ASSERT_NOEXCEPT(       std::chrono::duration_values<typename D::rep>::min());
-#endif
     {
     typedef typename D::rep Rep;
     Rep min_rep = std::chrono::duration_values<Rep>::min();
     assert(D::min().count() == min_rep);
     }
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_CONSTEXPR
     {
     typedef typename D::rep Rep;
     constexpr Rep min_rep = std::chrono::duration_values<Rep>::min();
@@ -40,10 +36,8 @@ void test()
 #endif
 }
 
-int main(int, char**)
+int main()
 {
     test<std::chrono::duration<int> >();
     test<std::chrono::duration<Rep> >();
-
-  return 0;
 }

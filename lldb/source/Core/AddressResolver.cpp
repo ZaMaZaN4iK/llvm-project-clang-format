@@ -1,22 +1,30 @@
 //===-- AddressResolver.cpp -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Core/AddressResolver.h"
 
-#include "lldb/Core/SearchFilter.h"
+// Project includes
 
-namespace lldb_private {
-class ModuleList;
-}
+#include "lldb/Core/Address.h"
+#include "lldb/Core/Log.h"
+#include "lldb/Core/ModuleList.h"
+#include "lldb/Core/SearchFilter.h"
+#include "lldb/Core/Stream.h"
+#include "lldb/Core/StreamString.h"
+#include "lldb/Symbol/SymbolContext.h"
+#include "lldb/Target/Target.h"
 
 using namespace lldb_private;
 
+//----------------------------------------------------------------------
 // AddressResolver:
+//----------------------------------------------------------------------
 AddressResolver::AddressResolver() {}
 
 AddressResolver::~AddressResolver() {}

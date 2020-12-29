@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,7 +17,7 @@
 #include <cassert>
 #include "test_macros.h"
 
-int main(int, char**)
+int main()
 {
     {
         std::regex phone_numbers("\\d{3}-\\d{4}");
@@ -94,24 +95,4 @@ int main(int, char**)
         assert((*i2).position() == 0);
         assert((*i2).str() == "555-1234");
     }
-    { // https://bugs.llvm.org/show_bug.cgi?id=33681
-        std::regex rex(".*");
-        const char foo[] = "foo";
-    //  The -1 is because we don't want the implicit null from the array.
-        std::cregex_iterator i(std::begin(foo), std::end(foo) - 1, rex);
-        std::cregex_iterator e;
-        assert(i != e);
-        assert((*i).size() == 1);
-        assert((*i).str() == "foo");
-
-        ++i;
-        assert(i != e);
-        assert((*i).size() == 1);
-        assert((*i).str() == "");
-
-        ++i;
-        assert(i == e);
-    }
-
-  return 0;
 }

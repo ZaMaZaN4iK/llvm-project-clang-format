@@ -1,8 +1,9 @@
 //===-- msan_interface_internal.h -------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -68,8 +69,6 @@ SANITIZER_INTERFACE_ATTRIBUTE
 void __msan_unpoison(const void *a, uptr size);
 SANITIZER_INTERFACE_ATTRIBUTE
 void __msan_unpoison_string(const char *s);
-SANITIZER_INTERFACE_ATTRIBUTE
-void __msan_unpoison_param(uptr n);
 SANITIZER_INTERFACE_ATTRIBUTE
 void __msan_clear_and_unpoison(void *a, uptr size);
 SANITIZER_INTERFACE_ATTRIBUTE
@@ -175,12 +174,6 @@ void __msan_set_death_callback(void (*callback)(void));
 
 SANITIZER_INTERFACE_ATTRIBUTE
 void __msan_copy_shadow(void *dst, const void *src, uptr size);
-
-SANITIZER_INTERFACE_ATTRIBUTE
-void __msan_scoped_disable_interceptor_checks();
-
-SANITIZER_INTERFACE_ATTRIBUTE
-void __msan_scoped_enable_interceptor_checks();
 }  // extern "C"
 
 #endif  // MSAN_INTERFACE_INTERNAL_H

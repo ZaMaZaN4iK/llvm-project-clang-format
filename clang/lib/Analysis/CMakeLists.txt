@@ -11,18 +11,19 @@ add_clang_library(clangAnalysis
   CallGraph.cpp
   CloneDetection.cpp
   CocoaConventions.cpp
-  ConstructionContext.cpp
   Consumed.cpp
   CodeInjector.cpp
   Dominators.cpp
-  ExprMutationAnalyzer.cpp
+  FormatString.cpp
   LiveVariables.cpp
+  OSLog.cpp
   ObjCNoReturn.cpp
-  PathDiagnostic.cpp
   PostOrderCFGView.cpp
+  PrintfFormatString.cpp
   ProgramPoint.cpp
+  PseudoConstantAnalysis.cpp
   ReachableCode.cpp
-  RetainSummaryManager.cpp
+  ScanfFormatString.cpp
   ThreadSafety.cpp
   ThreadSafetyCommon.cpp
   ThreadSafetyLogical.cpp
@@ -31,9 +32,6 @@ add_clang_library(clangAnalysis
 
   LINK_LIBS
   clangAST
-  clangASTMatchers
   clangBasic
   clangLex
   )
-
-add_subdirectory(plugins)

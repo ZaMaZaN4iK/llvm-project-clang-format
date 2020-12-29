@@ -1,52 +1,51 @@
-//===- AMDGPUUnifyMetadata.cpp - Unify OpenCL metadata --------------------===//
+//===-- AMDGPUUnifyMetadata.cpp - Unify OpenCL metadata -------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // \file
-// This pass that unifies multiple OpenCL metadata due to linking.
+// \brief This pass that unifies multiple OpenCL metadata due to linking.
 //
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
-#include <algorithm>
-#include <cassert>
 
 using namespace llvm;
 
 namespace {
-
   namespace kOCLMD {
-
     const char SpirVer[]            = "opencl.spir.version";
     const char OCLVer[]             = "opencl.ocl.version";
     const char UsedExt[]            = "opencl.used.extensions";
     const char UsedOptCoreFeat[]    = "opencl.used.optional.core.features";
     const char CompilerOptions[]    = "opencl.compiler.options";
     const char LLVMIdent[]          = "llvm.ident";
+  }
 
-  } // end namespace kOCLMD
-
-  /// Unify multiple OpenCL metadata due to linking.
-  class AMDGPUUnifyMetadata : public ModulePass {
+  /// \brief Unify multiple OpenCL metadata due to linking.
+  class AMDGPUUnifyMetadata : public FunctionPass {
   public:
     static char ID;
-
-    explicit AMDGPUUnifyMetadata() : ModulePass(ID) {}
+    explicit AMDGPUUnifyMetadata() : FunctionPass(ID) {};
 
   private:
-    bool runOnModule(Module &M) override;
+    // This should really be a module pass but we have to run it as early
+    // as possible, so given function passes are executed first and
+    // TargetMachine::addEarlyAsPossiblePasses() expects only function passes
+    // it has to be a function pass.
+    virtual bool runOnModule(Module &M);
 
-    /// Unify version metadata.
+    // \todo: Convert to a module pass.
+    virtual bool runOnFunction(Function &F);
+
+    /// \brief Unify version metadata.
     /// \return true if changes are made.
     /// Assume the named metadata has operands each of which is a pair of
     /// integer constant, e.g.
@@ -61,7 +60,7 @@ namespace {
         return false;
       MDNode *MaxMD = nullptr;
       auto MaxVer = 0U;
-      for (auto VersionMD : NamedMD->operands()) {
+      for (const auto &VersionMD : NamedMD->operands()) {
         assert(VersionMD->getNumOperands() == 2);
         auto CMajor = mdconst::extract<ConstantInt>(VersionMD->getOperand(0));
         auto VersionMajor = CMajor->getZExtValue();
@@ -81,7 +80,7 @@ namespace {
       return true;
     }
 
-  /// Unify version metadata.
+  /// \brief Unify version metadata.
   /// \return true if changes are made.
   /// Assume the named metadata has operands each of which is a list e.g.
   /// !Name = {!n1, !n2}
@@ -94,7 +93,7 @@ namespace {
       return false;
 
     SmallVector<Metadata *, 4> All;
-    for (auto MD : NamedMD->operands())
+    for (const auto &MD : NamedMD->operands())
       for (const auto &Op : MD->operands())
         if (std::find(All.begin(), All.end(), Op.get()) == All.end())
           All.push_back(Op.get());
@@ -118,7 +117,7 @@ INITIALIZE_PASS(AMDGPUUnifyMetadata, "amdgpu-unify-metadata",
                 "Unify multiple OpenCL metadata due to linking",
                 false, false)
 
-ModulePass* llvm::createAMDGPUUnifyMetadataPass() {
+FunctionPass* llvm::createAMDGPUUnifyMetadataPass() {
   return new AMDGPUUnifyMetadata();
 }
 
@@ -143,4 +142,8 @@ bool AMDGPUUnifyMetadata::runOnModule(Module &M) {
     Changed |= unifyExtensionMD(M, I);
 
   return Changed;
+}
+
+bool AMDGPUUnifyMetadata::runOnFunction(Function &F) {
+  return runOnModule(*F.getParent());
 }

@@ -1,14 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
-
-// XFAIL: dylib-has-no-bad_any_cast && !libcpp-no-exceptions
 
 // <any>
 
@@ -26,7 +25,7 @@
 #include <cassert>
 
 #include "any_helpers.h"
-#include "count_new.h"
+#include "count_new.hpp"
 #include "test_macros.h"
 
 using std::any;
@@ -74,7 +73,7 @@ void checkThrows(any& a)
 {
 #if !defined(TEST_HAS_NO_EXCEPTIONS)
     try {
-        TEST_IGNORE_NODISCARD any_cast<Type>(a);
+        any_cast<Type>(a);
         assert(false);
     } catch (bad_any_cast const &) {
             // do nothing
@@ -83,7 +82,7 @@ void checkThrows(any& a)
     }
 
     try {
-        TEST_IGNORE_NODISCARD any_cast<ConstT>(static_cast<any const&>(a));
+        any_cast<ConstT>(static_cast<any const&>(a));
         assert(false);
     } catch (bad_any_cast const &) {
             // do nothing
@@ -97,7 +96,7 @@ void checkThrows(any& a)
             typename std::remove_reference<Type>::type&&,
             Type
         >::type;
-        TEST_IGNORE_NODISCARD any_cast<RefType>(static_cast<any&&>(a));
+        any_cast<RefType>(static_cast<any&&>(a));
         assert(false);
     } catch (bad_any_cast const &) {
             // do nothing
@@ -105,13 +104,13 @@ void checkThrows(any& a)
         assert(false);
     }
 #else
-    (TEST_IGNORE_NODISCARD a);
+    ((void)a);
 #endif
 }
 
 void test_cast_empty() {
     // None of these operations should allocate.
-    DisableAllocationGuard g; (TEST_IGNORE_NODISCARD g);
+    DisableAllocationGuard g; ((void)g);
     any a;
     checkThrows<int>(a);
 }
@@ -303,7 +302,7 @@ void test_cast_to_value() {
     assert(Type::count == 0);
 }
 
-int main(int, char**) {
+int main() {
     test_cast_is_not_noexcept();
     test_cast_return_type();
     test_cast_empty();
@@ -311,6 +310,4 @@ int main(int, char**) {
     test_cast_to_reference<large>();
     test_cast_to_value<small>();
     test_cast_to_value<large>();
-
-  return 0;
 }

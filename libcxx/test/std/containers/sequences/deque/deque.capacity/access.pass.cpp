@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,13 +20,11 @@
 //
 //       reference back();
 // const_reference back() const;
-// libc++ marks these as 'noexcept'
 
 #include <deque>
 #include <cassert>
 
 #include "min_allocator.h"
-#include "test_macros.h"
 
 template <class C>
 C
@@ -49,17 +48,10 @@ make(int size, int start = 0 )
     return c;
 }
 
-int main(int, char**)
+int main()
 {
     {
-        typedef std::deque<int> C;
-        C c = make<std::deque<int> >(10);
-        ASSERT_SAME_TYPE(decltype(c[0]), C::reference);
-        LIBCPP_ASSERT_NOEXCEPT(   c[0]);
-        LIBCPP_ASSERT_NOEXCEPT(   c.front());
-        ASSERT_SAME_TYPE(decltype(c.front()), C::reference);
-        LIBCPP_ASSERT_NOEXCEPT(   c.back());
-        ASSERT_SAME_TYPE(decltype(c.back()), C::reference);
+        std::deque<int> c = make<std::deque<int> >(10);
         for (int i = 0; i < 10; ++i)
             assert(c[i] == i);
         for (int i = 0; i < 10; ++i)
@@ -68,14 +60,7 @@ int main(int, char**)
         assert(c.back() == 9);
     }
     {
-        typedef std::deque<int> C;
-        const C c = make<std::deque<int> >(10);
-        ASSERT_SAME_TYPE(decltype(c[0]), C::const_reference);
-        LIBCPP_ASSERT_NOEXCEPT(   c[0]);
-        LIBCPP_ASSERT_NOEXCEPT(   c.front());
-        ASSERT_SAME_TYPE(decltype(c.front()), C::const_reference);
-        LIBCPP_ASSERT_NOEXCEPT(   c.back());
-        ASSERT_SAME_TYPE(decltype(c.back()), C::const_reference);
+        const std::deque<int> c = make<std::deque<int> >(10);
         for (int i = 0; i < 10; ++i)
             assert(c[i] == i);
         for (int i = 0; i < 10; ++i)
@@ -85,14 +70,7 @@ int main(int, char**)
     }
 #if TEST_STD_VER >= 11
     {
-        typedef std::deque<int, min_allocator<int>> C;
-        C c = make<std::deque<int, min_allocator<int>> >(10);
-        ASSERT_SAME_TYPE(decltype(c[0]), C::reference);
-        LIBCPP_ASSERT_NOEXCEPT(   c[0]);
-        LIBCPP_ASSERT_NOEXCEPT(   c.front());
-        ASSERT_SAME_TYPE(decltype(c.front()), C::reference);
-        LIBCPP_ASSERT_NOEXCEPT(   c.back());
-        ASSERT_SAME_TYPE(decltype(c.back()), C::reference);
+        std::deque<int, min_allocator<int>> c = make<std::deque<int, min_allocator<int>> >(10);
         for (int i = 0; i < 10; ++i)
             assert(c[i] == i);
         for (int i = 0; i < 10; ++i)
@@ -101,14 +79,7 @@ int main(int, char**)
         assert(c.back() == 9);
     }
     {
-        typedef std::deque<int, min_allocator<int>> C;
-        const C c = make<std::deque<int, min_allocator<int>> >(10);
-        ASSERT_SAME_TYPE(decltype(c[0]), C::const_reference);
-        LIBCPP_ASSERT_NOEXCEPT(   c[0]);
-        LIBCPP_ASSERT_NOEXCEPT(   c.front());
-        ASSERT_SAME_TYPE(decltype(c.front()), C::const_reference);
-        LIBCPP_ASSERT_NOEXCEPT(   c.back());
-        ASSERT_SAME_TYPE(decltype(c.back()), C::const_reference);
+        const std::deque<int, min_allocator<int>> c = make<std::deque<int, min_allocator<int>> >(10);
         for (int i = 0; i < 10; ++i)
             assert(c[i] == i);
         for (int i = 0; i < 10; ++i)
@@ -117,6 +88,4 @@ int main(int, char**)
         assert(c.back() == 9);
     }
 #endif
-
-  return 0;
 }

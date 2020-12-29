@@ -1,8 +1,9 @@
 //===- unittests/AST/CommentLexer.cpp ------ Comment lexer tests ----------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -319,10 +320,9 @@ TEST_F(CommentLexerTest, DoxygenCommand4) {
     ASSERT_EQ(array_lengthof(Text), Toks.size());
 
     for (size_t j = 0, e = Toks.size(); j != e; j++) {
-      if(Toks[j].is(tok::text)) {
+      if(Toks[j].is(tok::text))
         ASSERT_EQ(StringRef(Text[j]), Toks[j].getText())
           << "index " << i;
-      }
     }
   }
 }

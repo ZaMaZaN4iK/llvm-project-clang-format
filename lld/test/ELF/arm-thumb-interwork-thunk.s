@@ -1,5 +1,4 @@
-// REQUIRES: arm
-// RUN: llvm-mc -arm-add-build-attributes -filetype=obj -triple=armv7a-none-linux-gnueabi %s -o %t
+// RUN: llvm-mc -filetype=obj -triple=armv7a-none-linux-gnueabi %s -o %t
 // RUN: echo "SECTIONS { \
 // RUN:       . = SIZEOF_HEADERS; \
 // RUN:       .R_ARM_JUMP24_callee_1 : { *(.R_ARM_JUMP24_callee_low) } \
@@ -9,17 +8,18 @@
 // RUN:       .thumb_caller : { *(.thumb_caller) } \
 // RUN:       .R_ARM_JUMP24_callee_2 : { *(.R_ARM_JUMP24_callee_high) } \
 // RUN:       .R_ARM_THM_JUMP_callee_2 : { *(.R_ARM_THM_JUMP_callee_high) } \
-// RUN:       .got.plt 0x18b4 : {  }  } " > %t.script
-// RUN: ld.lld --script %t.script %t -o %t2
+// RUN:       .got.plt 0x1894 : {  }  } " > %t.script
+// RUN: ld.lld --script %t.script %t -o %t2 2>&1
 // RUN: llvm-objdump -d -triple=thumbv7a-none-linux-gnueabi %t2 | FileCheck -check-prefix=CHECK-THUMB -check-prefix=CHECK-ABS-THUMB %s
 // RUN: llvm-objdump -d -triple=armv7a-none-linux-gnueabi %t2 | FileCheck -check-prefix=CHECK-ARM -check-prefix=CHECK-ABS-ARM %s
-// RUN: ld.lld --script %t.script %t -pie -o %t3
-// RUN: ld.lld --script %t.script %t --shared -o %t4
+// RUN: ld.lld --script %t.script %t -pie -o %t3 2>&1
+// RUN: ld.lld --script %t.script %t --shared -o %t4 2>&1
 // RUN: llvm-objdump -d -triple=thumbv7a-none-linux-gnueabi %t3 | FileCheck -check-prefix=CHECK-THUMB -check-prefix=CHECK-PI-THUMB %s
 // RUN: llvm-objdump -d -triple=armv7a-none-linux-gnueabi %t3 | FileCheck -check-prefix=CHECK-ARM -check-prefix=CHECK-PI-ARM %s
 // RUN: llvm-objdump -d -triple=thumbv7a-none-linux-gnueabi %t4 | FileCheck -check-prefix=CHECK-THUMB -check-prefix=CHECK-PI-PLT-THUMB %s
 // RUN: llvm-objdump -d -triple=armv7a-none-linux-gnueabi %t4 | FileCheck -check-prefix=CHECK-ARM -check-prefix=CHECK-PI-PLT-ARM %s
-// RUN: llvm-readobj -S -r %t4 | FileCheck -check-prefix=CHECK-DSO-REL %s
+// RUN: llvm-readobj -s -r %t4 | FileCheck -check-prefix=CHECK-DSO-REL %s
+// REQUIRES: arm
 
 // Test ARM Thumb Interworking
 // The file is linked and checked 3 times to check the following contexts
@@ -39,7 +39,6 @@ thumb_callee1:
  bx lr
 
 // CHECK-THUMB: Disassembly of section .R_ARM_JUMP24_callee_1:
-// CHECK-THUMB-EMPTY:
 // CHECK-THUMB: thumb_callee1:
 // CHECK-THUMB: 1000:       70 47   bx
  .section .R_ARM_THM_JUMP_callee_low, "ax", %progbits
@@ -79,71 +78,65 @@ arm_caller:
  beq arm_callee2
  bne arm_callee3
  bx lr
-// CHECK-ARM-ABS-ARM: Disassembly of section .arm_caller:
-// CHECK-ARM-ABS-ARM-EMPTY:
-// CHECK-ARM-ABS-ARM-NEXT: arm_caller:
-// CHECK-ARM-ABS-ARM-NEXT:     1300:       3e ff ff fa     blx     #-776 <thumb_callee1>
-// CHECK-ARM-ABS-ARM-NEXT:     1304:       3d ff ff fa     blx     #-780 <thumb_callee1>
-// CHECK-ARM-ABS-ARM-NEXT:     1308:       06 00 00 ea     b       #24 <__ARMv7ABSLongThunk_thumb_callee1>
-// CHECK-ARM-ABS-ARM-NEXT:     130c:       05 00 00 ea     b       #20 <__ARMv7ABSLongThunk_thumb_callee1>
-// CHECK-ARM-ABS-ARM-NEXT:     1310:       07 00 00 ea     b       #28 <__ARMv7ABSLongThunk_thumb_callee2>
-// CHECK-ARM-ABS-ARM-NEXT:     1314:       09 00 00 ea     b       #36 <__ARMv7ABSLongThunk_thumb_callee3>
-// CHECK-ARM-ABS-ARM-NEXT:     1318:       78 ff ff ea     b       #-544 <arm_callee1>
-// CHECK-ARM-ABS-ARM-NEXT:     131c:       b7 00 00 0a     beq     #732 <arm_callee2>
-// CHECK-ARM-ABS-ARM-NEXT:     1320:       b7 00 00 1a     bne     #732 <arm_callee3>
-// CHECK-ARM-ABS-ARM-NEXT:     1324:       1e ff 2f e1     bx      lr
-// CHECK-ARM-ABS-ARM: __ARMv7ABSLongThunk_thumb_callee1:
+// CHECK-ABS-ARM: Disassembly of section .arm_caller:
+// CHECK-ABS-ARM-NEXT: arm_caller:
+// CHECK-ABS-ARM-NEXT: 1300:       3e ff ff fa     blx     #-776 <thumb_callee1>
+// CHECK-ABS-ARM-NEXT: 1304:       3d ff ff fa     blx     #-780 <thumb_callee1>
+// CHECK-ABS-ARM-NEXT: 1308:       06 00 00 ea     b       #24 <arm_caller+0x28>
+// CHECK-ABS-ARM-NEXT: 130c:       05 00 00 ea     b       #20 <arm_caller+0x28>
+// CHECK-ABS-ARM-NEXT: 1310:       07 00 00 ea     b       #28 <arm_caller+0x34>
+// CHECK-ABS-ARM-NEXT: 1314:       09 00 00 ea     b       #36 <arm_caller+0x40>
+// CHECK-ABS-ARM-NEXT: 1318:       78 ff ff ea     b       #-544 <arm_callee1>
+// CHECK-ABS-ARM-NEXT: 131c:       b7 00 00 0a     beq     #732 <arm_callee2>
+// CHECK-ABS-ARM-NEXT: 1320:       b7 00 00 1a     bne     #732 <arm_callee3>
+// CHECK-ABS-ARM-NEXT: 1324:       1e ff 2f e1     bx      lr
 // 0x1001 = thumb_callee1
-// CHECK-ARM-ABS-ARM-NEXT:     1328:       01 c0 01 e3     movw    r12, #4097
-// CHECK-ARM-ABS-ARM-NEXT:     132c:       00 c0 40 e3     movt    r12, #0
-// CHECK-ARM-ABS-ARM-NEXT:     1330:       1c ff 2f e1     bx      r12
+// CHECK-ABS-ARM-NEXT: 1328:       01 c0 01 e3     movw    r12, #4097
+// CHECK-ABS-ARM-NEXT: 132c:       00 c0 40 e3     movt    r12, #0
+// CHECK-ABS-ARM-NEXT: 1330:       1c ff 2f e1     bx      r12
 // 0x1501 = thumb_callee2
-// CHECK-ARM-ABS-ARM: __ARMv7ABSLongThunk_thumb_callee2:
-// CHECK-ARM-ABS-ARM-NEXT:     1334:       01 c5 01 e3     movw    r12, #5377
-// CHECK-ARM-ABS-ARM-NEXT:     1338:       00 c0 40 e3     movt    r12, #0
-// CHECK-ARM-ABS-ARM-NEXT:     133c:       1c ff 2f e1     bx      r12
+// CHECK-ABS-ARM-NEXT: 1334:       01 c5 01 e3     movw    r12, #5377
+// CHECK-ABS-ARM-NEXT: 1338:       00 c0 40 e3     movt    r12, #0
+// CHECK-ABS-ARM-NEXT: 133c:       1c ff 2f e1     bx      r12
 // 0x1503 = thumb_callee3
-// CHECK-ARM-ABS-ARM: __ARMv7ABSLongThunk_thumb_callee3:
-// CHECK-ARM-ABS-ARM-NEXT:     1340:       03 c5 01 e3     movw    r12, #5379
-// CHECK-ARM-ABS-ARM-NEXT:     1344:       00 c0 40 e3     movt    r12, #0
-// CHECK-ARM-ABS-ARM-NEXT:     1348:       1c ff 2f e1     bx      r12
+// CHECK-ABS-ARM-NEXT: 1340:       03 c5 01 e3     movw    r12, #5379
+// CHECK-ABS-ARM-NEXT: 1344:       00 c0 40 e3     movt    r12, #0
+// CHECK-ABS-ARM-NEXT: 1348:       1c ff 2f e1     bx      r12
 
 // CHECK-PI-ARM: Disassembly of section .arm_caller:
-// CHECK-PI-ARM-EMPTY:
 // CHECK-PI-ARM-NEXT: arm_caller:
-// CHECK-PI-ARM-NEXT:     1300:       3e ff ff fa     blx     #-776 <thumb_callee1>
-// CHECK-PI-ARM-NEXT:     1304:       3d ff ff fa     blx     #-780 <thumb_callee1>
-// CHECK-PI-ARM-NEXT:     1308:       06 00 00 ea     b       #24 <__ARMV7PILongThunk_thumb_callee1>
-// CHECK-PI-ARM-NEXT:     130c:       05 00 00 ea     b       #20 <__ARMV7PILongThunk_thumb_callee1>
-// CHECK-PI-ARM-NEXT:     1310:       08 00 00 ea     b       #32 <__ARMV7PILongThunk_thumb_callee2>
-// CHECK-PI-ARM-NEXT:     1314:       0b 00 00 ea     b       #44 <__ARMV7PILongThunk_thumb_callee3>
-// CHECK-PI-ARM-NEXT:     1318:       78 ff ff ea     b       #-544 <arm_callee1>
-// CHECK-PI-ARM-NEXT:     131c:       b7 00 00 0a     beq     #732 <arm_callee2>
-// CHECK-PI-ARM-NEXT:     1320:       b7 00 00 1a     bne     #732 <arm_callee3>
-// CHECK-PI-ARM-NEXT:     1324:       1e ff 2f e1     bx      lr
-// CHECK-PI-ARM: __ARMV7PILongThunk_thumb_callee1:
+// CHECK-PI-ARM-NEXT: 1300:       3e ff ff fa     blx     #-776 <thumb_callee1>
+// CHECK-PI-ARM-NEXT: 1304:       3d ff ff fa     blx     #-780 <thumb_callee1>
+// 0x1308 + 8 + 0x18 = 0x1328
+// CHECK-PI-ARM-NEXT: 1308:       06 00 00 ea     b       #24 <arm_caller+0x28>
+// 0x130c + 8 + 0x14 = 0x1328
+// CHECK-PI-ARM-NEXT: 130c:       05 00 00 ea     b       #20 <arm_caller+0x28>
+// 0x1310 + 8 + 0x20 = 0x1338
+// CHECK-PI-ARM-NEXT: 1310:       08 00 00 ea     b       #32 <arm_caller+0x38>
+// 0x1314 + 8 + 0x2c = 0x1348
+// CHECK-PI-ARM-NEXT: 1314:       0b 00 00 ea     b       #44 <arm_caller+0x48>
+// CHECK-PI-ARM-NEXT: 1318:       78 ff ff ea     b       #-544 <arm_callee1>
+// CHECK-PI-ARM-NEXT: 131c:       b7 00 00 0a     beq     #732 <arm_callee2>
+// CHECK-PI-ARM-NEXT: 1320:       b7 00 00 1a     bne     #732 <arm_callee3>
+// CHECK-PI-ARM-NEXT: 1324:       1e ff 2f e1     bx      lr
 // 0x1330 + 8 - 0x337 = 0x1001 = thumb_callee1
-// CHECK-PI-ARM-NEXT:     1328:       c9 cc 0f e3     movw    r12, #64713
-// CHECK-PI-ARM-NEXT:     132c:       ff cf 4f e3     movt    r12, #65535
-// CHECK-PI-ARM-NEXT:     1330:       0f c0 8c e0     add     r12, r12, pc
-// CHECK-PI-ARM-NEXT:     1334:       1c ff 2f e1     bx      r12
-// CHECK-PI-ARM: __ARMV7PILongThunk_thumb_callee2:
-
-// CHECK-PI-ARM-NEXT:     1338:       b9 c1 00 e3     movw    r12, #441
-// CHECK-PI-ARM-NEXT:     133c:       00 c0 40 e3     movt    r12, #0
-// CHECK-PI-ARM-NEXT:     1340:       0f c0 8c e0     add     r12, r12, pc
-// CHECK-PI-ARM-NEXT:     1344:       1c ff 2f e1     bx      r12
-// CHECK-PI-ARM: __ARMV7PILongThunk_thumb_callee3:
+// CHECK-PI-ARM-NEXT: 1328:       c9 cc 0f e3     movw    r12, #64713
+// CHECK-PI-ARM-NEXT: 132c:       ff cf 4f e3     movt    r12, #65535
+// CHECK-PI-ARM-NEXT: 1330:       0f c0 8c e0     add     r12, r12, pc
+// CHECK-PI-ARM-NEXT: 1334:       1c ff 2f e1     bx      r12
 // 0x1340 + 8 + 0x1b9 = 0x1501
-// CHECK-PI-ARM-NEXT:     1348:       ab c1 00 e3     movw    r12, #427
-// CHECK-PI-ARM-NEXT:     134c:       00 c0 40 e3     movt    r12, #0
-// CHECK-PI-ARM-NEXT:     1350:       0f c0 8c e0     add     r12, r12, pc
-// CHECK-PI-ARM-NEXT:     1354:       1c ff 2f e1     bx      r12
+// CHECK-PI-ARM-NEXT: 1338:       b9 c1 00 e3     movw    r12, #441
+// CHECK-PI-ARM-NEXT: 133c:       00 c0 40 e3     movt    r12, #0
+// CHECK-PI-ARM-NEXT: 1340:       0f c0 8c e0     add     r12, r12, pc
+// CHECK-PI-ARM-NEXT: 1344:       1c ff 2f e1     bx      r12
 // 1350 + 8 + 0x1ab = 0x1503
+// CHECK-PI-ARM-NEXT: 1348:       ab c1 00 e3     movw    r12, #427
+// CHECK-PI-ARM-NEXT: 134c:       00 c0 40 e3     movt    r12, #0
+// CHECK-PI-ARM-NEXT: 1350:       0f c0 8c e0     add     r12, r12, pc
+// CHECK-PI-ARM-NEXT: 1354:       1c ff 2f e1     bx      r12
 
 // All PLT entries are ARM, no need for interworking thunks
 // CHECK-PI-ARM-PLT: Disassembly of section .arm_caller:
-// CHECK-PI-ARM-PLT-EMPTY:
 // CHECK-PI-ARM-PLT-NEXT: arm_caller:
 // 0x17e4 PLT(thumb_callee1)
 // CHECK-PI-ARM-PLT-NEXT:    1300:       37 01 00 eb     bl      #1244
@@ -188,64 +181,63 @@ thumb_caller:
  beq.w arm_callee2
  bne.w arm_callee3
 // CHECK-ABS-THUMB: Disassembly of section .thumb_caller:
-// CHECK-ABS-THUMB-EMPTY:
 // CHECK-ABS-THUMB-NEXT: thumb_caller:
-// CHECK-ABS-THUMB-NEXT:     1400:       ff f7 7e ee     blx     #-772
-// CHECK-ABS-THUMB-NEXT:     1404:       ff f7 7c ee     blx     #-776
-// CHECK-ABS-THUMB-NEXT:     1408:       00 f0 0a b8     b.w     #20 <__Thumbv7ABSLongThunk_arm_callee1>
-// CHECK-ABS-THUMB-NEXT:     140c:       00 f0 0d b8     b.w     #26 <__Thumbv7ABSLongThunk_arm_callee2>
-// CHECK-ABS-THUMB-NEXT:     1410:       00 f0 10 b8     b.w     #32 <__Thumbv7ABSLongThunk_arm_callee3>
-// CHECK-ABS-THUMB-NEXT:     1414:       00 f0 04 80     beq.w   #8 <__Thumbv7ABSLongThunk_arm_callee1>
-// CHECK-ABS-THUMB-NEXT:     1418:       00 f0 07 80     beq.w   #14 <__Thumbv7ABSLongThunk_arm_callee2>
-// CHECK-ABS-THUMB-NEXT:     141c:       40 f0 0a 80     bne.w   #20 <__Thumbv7ABSLongThunk_arm_callee3>
-// CHECK-ABS-THUMB: __Thumbv7ABSLongThunk_arm_callee1:
+// 0x1400 + 4 - 0x304 = 0x1100 = arm_callee1
+// CHECK-ABS-THUMB-NEXT: 1400:       ff f7 7e ee     blx     #-772
+// 0x1404 + 4 - 0x308 = 0x1100 = arm_callee1
+// CHECK-ABS-THUMB-NEXT: 1404:       ff f7 7c ee     blx     #-776
+// 0x1408 + 4 + 0x14 = 0x520
+// CHECK-ABS-THUMB-NEXT: 1408:       00 f0 0a b8     b.w     #20
+// 0x140c + 4 + 0x1a = 0x52a
+// CHECK-ABS-THUMB-NEXT: 140c:       00 f0 0d b8     b.w     #26
+// 0x1410 + 4 + 0x20 = 0x534
+// CHECK-ABS-THUMB-NEXT: 1410:       00 f0 10 b8     b.w     #32
+// 0x1414 + 4 + 8 = 0x520
+// CHECK-ABS-THUMB-NEXT: 1414:       00 f0 04 80     beq.w   #8
+// 0x1418 + 4 + 0xe = 0x52a
+// CHECK-ABS-THUMB-NEXT: 1418:       00 f0 07 80     beq.w   #14
+// 0x141c + 4 + 0x14 = 0x534
+// CHECK-ABS-THUMB-NEXT: 141c:       40 f0 0a 80     bne.w   #20
 // 0x1100 = arm_callee1
-// CHECK-ABS-THUMB-NEXT:     1420:       41 f2 00 1c     movw    r12, #4352
-// CHECK-ABS-THUMB-NEXT:     1424:       c0 f2 00 0c     movt    r12, #0
-// CHECK-ABS-THUMB-NEXT:     1428:       60 47   bx      r12
-// CHECK-ABS-THUMB: __Thumbv7ABSLongThunk_arm_callee2:
+// CHECK-ABS-THUMB-NEXT: 1420:       41 f2 00 1c     movw    r12, #4352
+// CHECK-ABS-THUMB-NEXT: 1424:       c0 f2 00 0c     movt    r12, #0
+// CHECK-ABS-THUMB-NEXT: 1428:       60 47   bx      r12
 // 0x1600 = arm_callee2
-// CHECK-ABS-THUMB-NEXT:     142a:       41 f2 00 6c     movw    r12, #5632
-// CHECK-ABS-THUMB-NEXT:     142e:       c0 f2 00 0c     movt    r12, #0
-// CHECK-ABS-THUMB-NEXT:     1432:       60 47   bx      r12
+// CHECK-ABS-THUMB-NEXT: 142a:       41 f2 00 6c     movw    r12, #5632
+// CHECK-ABS-THUMB-NEXT: 142e:       c0 f2 00 0c     movt    r12, #0
+// CHECK-ABS-THUMB-NEXT: 1432:       60 47   bx      r12
 // 0x1604 = arm_callee3
-// CHECK-ABS-THUMB: __Thumbv7ABSLongThunk_arm_callee3:
-// CHECK-ABS-THUMB-NEXT:     1434:   41 f2 04 6c     movw    r12, #5636
-// CHECK-ABS-THUMB-NEXT:     1438:       c0 f2 00 0c     movt    r12, #0
-// CHECK-ABS-THUMB-NEXT:     143c:       60 47   bx      r12
+// CHECK-ABS-THUMB-NEXT: 1434:       41 f2 04 6c     movw    r12, #5636
+// CHECK-ABS-THUMB-NEXT: 1438:       c0 f2 00 0c     movt    r12, #0
+// CHECK-ABS-THUMB-NEXT: 143c:       60 47   bx      r12
 
 // CHECK-PI-THUMB: Disassembly of section .thumb_caller:
-// CHECK-PI-THUMB-EMPTY:
 // CHECK-PI-THUMB-NEXT: thumb_caller:
-// CHECK-PI-THUMB-NEXT:     1400:       ff f7 7e ee     blx     #-772
-// CHECK-PI-THUMB-NEXT:     1404:       ff f7 7c ee     blx     #-776
-// CHECK-PI-THUMB-NEXT:     1408:       00 f0 0a b8     b.w     #20 <__ThumbV7PILongThunk_arm_callee1>
-// CHECK-PI-THUMB-NEXT:     140c:       00 f0 0e b8     b.w     #28 <__ThumbV7PILongThunk_arm_callee2>
-// CHECK-PI-THUMB-NEXT:     1410:       00 f0 12 b8     b.w     #36 <__ThumbV7PILongThunk_arm_callee3>
-// CHECK-PI-THUMB-NEXT:     1414:       00 f0 04 80     beq.w   #8 <__ThumbV7PILongThunk_arm_callee1>
-// CHECK-PI-THUMB-NEXT:     1418:       00 f0 08 80     beq.w   #16 <__ThumbV7PILongThunk_arm_callee2>
-// CHECK-PI-THUMB-NEXT:     141c:       40 f0 0c 80     bne.w   #24 <__ThumbV7PILongThunk_arm_callee3>
-// CHECK-PI-THUMB: __ThumbV7PILongThunk_arm_callee1:
+// CHECK-PI-THUMB-NEXT: 1400:       ff f7 7e ee     blx     #-772
+// CHECK-PI-THUMB-NEXT: 1404:       ff f7 7c ee     blx     #-776
+// CHECK-PI-THUMB-NEXT: 1408:       00 f0 0a b8     b.w     #20
+// CHECK-PI-THUMB-NEXT: 140c:       00 f0 0e b8     b.w     #28
+// CHECK-PI-THUMB-NEXT: 1410:       00 f0 12 b8     b.w     #36
+// CHECK-PI-THUMB-NEXT: 1414:       00 f0 04 80     beq.w   #8
+// CHECK-PI-THUMB-NEXT: 1418:       00 f0 08 80     beq.w   #16
+// CHECK-PI-THUMB-NEXT: 141c:       40 f0 0c 80     bne.w   #24
 // 0x1428 + 4 - 0x32c = 0x1100 = arm_callee1
-// CHECK-PI-THUMB-NEXT:     1420:       4f f6 d4 4c     movw    r12, #64724
-// CHECK-PI-THUMB-NEXT:     1424:       cf f6 ff 7c     movt    r12, #65535
-// CHECK-PI-THUMB-NEXT:     1428:       fc 44   add     r12, pc
-// CHECK-PI-THUMB-NEXT:     142a:       60 47   bx      r12
-// CHECK-PI-THUMB: __ThumbV7PILongThunk_arm_callee2:
+// CHECK-PI-THUMB-NEXT: 1420:       4f f6 d4 4c     movw    r12, #64724
+// CHECK-PI-THUMB-NEXT: 1424:       cf f6 ff 7c     movt    r12, #65535
+// CHECK-PI-THUMB-NEXT: 1428:       fc 44   add     r12, pc
+// CHECK-PI-THUMB-NEXT: 142a:       60 47   bx      r12
 // 0x1434 + 4 + 0x1c8 = 0x1600 = arm_callee2
-// CHECK-PI-THUMB-NEXT:     142c:       40 f2 c8 1c     movw    r12, #456
-// CHECK-PI-THUMB-NEXT:     1430:       c0 f2 00 0c     movt    r12, #0
-// CHECK-PI-THUMB-NEXT:     1434:       fc 44   add     r12, pc
-// CHECK-PI-THUMB-NEXT:     1436:       60 47   bx      r12
-// CHECK-PI-THUMB: __ThumbV7PILongThunk_arm_callee3:
+// CHECK-PI-THUMB-NEXT: 142c:       40 f2 c8 1c     movw    r12, #456
+// CHECK-PI-THUMB-NEXT: 1430:       c0 f2 00 0c     movt    r12, #0
+// CHECK-PI-THUMB-NEXT: 1434:       fc 44   add     r12, pc
+// CHECK-PI-THUMB-NEXT: 1436:       60 47   bx      r12
 // 0x1440 + 4 + 0x1c0 = 0x1604 = arm_callee3
-// CHECK-PI-THUMB-NEXT:     1438:       40 f2 c0 1c     movw    r12, #448
-// CHECK-PI-THUMB-NEXT:     143c:       c0 f2 00 0c     movt    r12, #0
-// CHECK-PI-THUMB-NEXT:     1440:       fc 44   add     r12, pc
-// CHECK-PI-THUMB-NEXT:     1442:       60 47   bx      r12
+// CHECK-PI-THUMB-NEXT: 1438:       40 f2 c0 1c     movw    r12, #448
+// CHECK-PI-THUMB-NEXT: 143c:       c0 f2 00 0c     movt    r12, #0
+// CHECK-PI-THUMB-NEXT: 1440:       fc 44   add     r12, pc
+// CHECK-PI-THUMB-NEXT: 1442:       60 47   bx      r12
 
 // CHECK-PI-THUMB-PLT: Disassembly of section .arm_caller:
-// CHECK-PI-THUMB-PLT-EMPTY:
 // CHECK-PI-THUMB-PLT-NEXT: thumb_caller:
 // 0x1400 + 4 + 0x410 = 0x1814 = PLT(arm_callee1)
 // CHECK-PI-THUMB-PLT-NEXT:    1400:    00 f0 08 ea     blx     #1040
@@ -293,7 +285,6 @@ thumb_callee2:
 thumb_callee3:
  bx lr
 // CHECK-THUMB:  Disassembly of section .R_ARM_JUMP24_callee_2:
-// CHECK-THUMB-EMPTY:
 // CHECK-THUMB-NEXT: thumb_callee2:
 // CHECK-THUMB-NEXT: 1500:       70 47   bx      lr
 // CHECK-THUMB: thumb_callee3:
@@ -311,7 +302,6 @@ arm_callee2:
 arm_callee3:
  bx lr
 // CHECK-ARM: Disassembly of section .R_ARM_THM_JUMP_callee_2:
-// CHECK-ARM-EMPTY:
 // CHECK-ARM-NEXT: arm_callee2:
 // CHECK-ARM-NEXT:     1600:     1e ff 2f e1     bx      lr
 // CHECK-ARM: arm_callee3:
@@ -330,7 +320,6 @@ _start:
 
 
 // CHECK-PI-ARM-PLT: Disassembly of section .plt:
-// CHECK-PI-ARM-PLT-EMPTY:
 // CHECK-PI-ARM-PLT-NEXT: .plt:
 // CHECK-PI-ARM-PLT-NEXT: 17b0:         04 e0 2d e5     str     lr, [sp, #-4]!
 // CHECK-PI-ARM-PLT-NEXT: 17b4:         04 e0 9f e5     ldr     lr, [pc, #4]
@@ -378,11 +367,11 @@ _start:
 // CHECK-PI-ARM-PLT-NEXT: 183c:         00 f0 9c e5     ldr     pc, [r12]
 // CHECK-PI-ARM-PLT-NEXT: 1840:         7c 00 00 00
 
-// CHECK-DSO-REL:      0x18C0 R_ARM_JUMP_SLOT arm_caller
-// CHECK-DSO-REL-NEXT: 0x18C4 R_ARM_JUMP_SLOT thumb_caller
-// CHECK-DSO-REL-NEXT: 0x18C8 R_ARM_JUMP_SLOT thumb_callee1
-// CHECK-DSO-REL-NEXT: 0x18CC R_ARM_JUMP_SLOT thumb_callee2
-// CHECK-DSO-REL-NEXT: 0x18D0 R_ARM_JUMP_SLOT thumb_callee3
-// CHECK-DSO-REL-NEXT: 0x18D4 R_ARM_JUMP_SLOT arm_callee1
-// CHECK-DSO-REL-NEXT: 0x18D8 R_ARM_JUMP_SLOT arm_callee2
-// CHECK-DSO-REL-NEXT: 0x18DC R_ARM_JUMP_SLOT arm_callee3
+// CHECK-DSO-REL:      0x18A0 R_ARM_JUMP_SLOT arm_caller
+// CHECK-DSO-REL-NEXT: 0x18A4 R_ARM_JUMP_SLOT thumb_caller
+// CHECK-DSO-REL-NEXT: 0x18A8 R_ARM_JUMP_SLOT thumb_callee1
+// CHECK-DSO-REL-NEXT: 0x18AC R_ARM_JUMP_SLOT thumb_callee2
+// CHECK-DSO-REL-NEXT: 0x18B0 R_ARM_JUMP_SLOT thumb_callee3
+// CHECK-DSO-REL-NEXT: 0x18B4 R_ARM_JUMP_SLOT arm_callee1
+// CHECK-DSO-REL-NEXT: 0x18B8 R_ARM_JUMP_SLOT arm_callee2
+// CHECK-DSO-REL-NEXT: 0x18BC R_ARM_JUMP_SLOT arm_callee3

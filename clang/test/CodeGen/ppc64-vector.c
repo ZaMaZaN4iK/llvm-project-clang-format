@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -target-feature +altivec -triple powerpc64-unknown-linux-gnu -emit-llvm -o - %s | FileCheck %s
+// RUN: %clang_cc1 -faltivec -triple powerpc64-unknown-linux-gnu -emit-llvm -o - %s | FileCheck %s
 
 typedef short v2i16 __attribute__((vector_size (4)));
 typedef short v3i16 __attribute__((vector_size (6)));
@@ -39,7 +39,7 @@ v8i16 test_v8i16(v8i16 x)
   return x;
 }
 
-// CHECK: define void @test_v16i16(<16 x i16>* noalias sret %agg.result, <16 x i16>* %0)
+// CHECK: define void @test_v16i16(<16 x i16>* noalias sret %agg.result, <16 x i16>*)
 v16i16 test_v16i16(v16i16 x)
 {
   return x;

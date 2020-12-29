@@ -1,16 +1,21 @@
 //===-- LibCxxInitializerList.cpp -------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "LibCxx.h"
 
+#include "lldb/Core/ConstString.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/DataFormatters/FormattersHelpers.h"
-#include "lldb/Utility/ConstString.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -33,7 +38,7 @@ public:
 
   bool MightHaveChildren() override;
 
-  size_t GetIndexOfChildWithName(ConstString name) override;
+  size_t GetIndexOfChildWithName(const ConstString &name) override;
 
 private:
   ValueObject *m_start;
@@ -89,15 +94,17 @@ bool lldb_private::formatters::LibcxxInitializerListSyntheticFrontEnd::
 
   m_start = nullptr;
   m_num_elements = 0;
-  m_element_type = m_backend.GetCompilerType().GetTypeTemplateArgument(0);
-  if (!m_element_type.IsValid())
+  lldb::TemplateArgumentKind kind;
+  m_element_type = m_backend.GetCompilerType().GetTemplateArgument(0, kind);
+  if (kind != lldb::eTemplateArgumentKindType || !m_element_type.IsValid())
     return false;
 
-  if (llvm::Optional<uint64_t> size = m_element_type.GetByteSize(nullptr)) {
-    m_element_size = *size;
-    // Store raw pointers or end up with a circular dependency.
-    m_start = m_backend.GetChildMemberWithName(g___begin_, true).get();
-  }
+  m_element_size = m_element_type.GetByteSize(nullptr);
+
+  if (m_element_size > 0)
+    m_start =
+        m_backend.GetChildMemberWithName(g___begin_, true)
+            .get(); // store raw pointers or end up with a circular dependency
 
   return false;
 }
@@ -108,7 +115,7 @@ bool lldb_private::formatters::LibcxxInitializerListSyntheticFrontEnd::
 }
 
 size_t lldb_private::formatters::LibcxxInitializerListSyntheticFrontEnd::
-    GetIndexOfChildWithName(ConstString name) {
+    GetIndexOfChildWithName(const ConstString &name) {
   if (!m_start)
     return UINT32_MAX;
   return ExtractIndexFromString(name.GetCString());

@@ -1,13 +1,14 @@
 //===--- FormatToken.cpp - Format C++ code --------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file implements specific functions of \c FormatTokens and their
+/// \brief This file implements specific functions of \c FormatTokens and their
 /// roles.
 ///
 //===----------------------------------------------------------------------===//
@@ -24,9 +25,10 @@ namespace format {
 const char *getTokenTypeName(TokenType Type) {
   static const char *const TokNames[] = {
 #define TYPE(X) #X,
-      LIST_TOKEN_TYPES
+LIST_TOKEN_TYPES
 #undef TYPE
-      nullptr};
+    nullptr
+  };
 
   if (Type < NUM_TOKEN_TYPES)
     return TokNames[Type];
@@ -50,13 +52,11 @@ bool FormatToken::isSimpleTypeSpecifier() const {
   case tok::kw_half:
   case tok::kw_float:
   case tok::kw_double:
-  case tok::kw__Float16:
   case tok::kw___float128:
   case tok::kw_wchar_t:
   case tok::kw_bool:
   case tok::kw___underlying_type:
   case tok::annot_typename:
-  case tok::kw_char8_t:
   case tok::kw_char16_t:
   case tok::kw_char32_t:
   case tok::kw_typeof:

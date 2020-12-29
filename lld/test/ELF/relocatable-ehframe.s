@@ -2,7 +2,7 @@
 # RUN: llvm-mc -filetype=obj -triple=x86_64-unknown-linux %s -o %t1.o
 # RUN: llvm-mc -filetype=obj -triple=x86_64-unknown-linux %p/Inputs/relocatable-ehframe.s -o %t2.o
 # RUN: ld.lld -r %t1.o %t2.o -o %t
-# RUN: llvm-readobj -r -S --section-data %t | FileCheck %s
+# RUN: llvm-readobj -r -s -section-data %t | FileCheck %s
 
 # CHECK:      Name: .strtab
 # CHECK-NEXT: Type: SHT_STRTAB
@@ -10,13 +10,13 @@
 # CHECK-NEXT: ]
 # CHECK-NEXT: Address:
 # CHECK-NEXT: Offset
-# CHECK-NEXT: Size: 8
+# CHECK-NEXT: Size: 9
 # CHECK-NEXT: Link: 0
 # CHECK-NEXT: Info: 0
 # CHECK-NEXT: AddressAlignment: 1
 # CHECK-NEXT: EntrySize: 0
 # CHECK-NEXT: SectionData (
-# CHECK-NEXT:   0000: 005F7374 61727400                 |._start.|
+# CHECK-NEXT:   0000: 00005F73 74617274 00                 |.._start.|
 # CHECK-NEXT: )
 
 # CHECK:      Relocations [

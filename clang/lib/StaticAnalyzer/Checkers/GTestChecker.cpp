@@ -1,8 +1,9 @@
 //==- GTestChecker.cpp - Model gtest API --*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,7 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/AST/Expr.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -160,7 +161,7 @@ void GTestChecker::modelAssertionResultCopyConstructor(
     const CXXConstructorCall *Call, CheckerContext &C) const {
   assert(Call->getNumArgs() == 1);
 
-  // The first parameter of the copy constructor must be the other
+  // The first parameter of the the copy constructor must be the other
   // instance to initialize this instances fields from.
   SVal OtherVal = Call->getArgSVal(0);
   SVal ThisVal = Call->getCXXThisVal();
@@ -288,11 +289,11 @@ ProgramStateRef GTestChecker::assumeValuesEqual(SVal Val1, SVal Val2,
 }
 
 void ento::registerGTestChecker(CheckerManager &Mgr) {
-  Mgr.registerChecker<GTestChecker>();
-}
-
-bool ento::shouldRegisterGTestChecker(const LangOptions &LO) {
+  const LangOptions &LangOpts = Mgr.getLangOpts();
   // gtest is a C++ API so there is no sense running the checker
   // if not compiling for C++.
-  return LO.CPlusPlus;
+  if (!LangOpts.CPlusPlus)
+    return;
+
+  Mgr.registerChecker<GTestChecker>();
 }

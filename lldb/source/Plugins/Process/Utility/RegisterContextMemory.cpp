@@ -1,33 +1,40 @@
 //===-- RegisterContextMemory.cpp -------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "RegisterContextMemory.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "DynamicRegisterInfo.h"
+#include "lldb/Core/DataBufferHeap.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/RegisterValue.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/RegisterValue.h"
-#include "lldb/Utility/Status.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
+//----------------------------------------------------------------------
 // RegisterContextMemory constructor
+//----------------------------------------------------------------------
 RegisterContextMemory::RegisterContextMemory(Thread &thread,
                                              uint32_t concrete_frame_idx,
                                              DynamicRegisterInfo &reg_infos,
                                              addr_t reg_data_addr)
     : RegisterContext(thread, concrete_frame_idx), m_reg_infos(reg_infos),
       m_reg_valid(), m_reg_data(), m_reg_data_addr(reg_data_addr) {
-  // Resize our vector of bools to contain one bool for every register. We will
-  // use these boolean values to know when a register value is valid in
-  // m_reg_data.
+  // Resize our vector of bools to contain one bool for every register.
+  // We will use these boolean values to know when a register value
+  // is valid in m_reg_data.
   const size_t num_regs = reg_infos.GetNumRegisters();
   assert(num_regs > 0);
   m_reg_valid.resize(num_regs);
@@ -38,7 +45,9 @@ RegisterContextMemory::RegisterContextMemory(Thread &thread,
   m_reg_data.SetData(reg_data_sp);
 }
 
+//----------------------------------------------------------------------
 // Destructor
+//----------------------------------------------------------------------
 RegisterContextMemory::~RegisterContextMemory() {}
 
 void RegisterContextMemory::InvalidateAllRegisters() {
@@ -92,8 +101,8 @@ bool RegisterContextMemory::WriteRegister(const RegisterInfo *reg_info,
   if (m_reg_data_addr != LLDB_INVALID_ADDRESS) {
     const uint32_t reg_num = reg_info->kinds[eRegisterKindLLDB];
     addr_t reg_addr = m_reg_data_addr + reg_info->byte_offset;
-    Status error(WriteRegisterValueToMemory(reg_info, reg_addr,
-                                            reg_info->byte_size, reg_value));
+    Error error(WriteRegisterValueToMemory(reg_info, reg_addr,
+                                           reg_info->byte_size, reg_value));
     m_reg_valid[reg_num] = false;
     return error.Success();
   }
@@ -104,7 +113,7 @@ bool RegisterContextMemory::ReadAllRegisterValues(DataBufferSP &data_sp) {
   if (m_reg_data_addr != LLDB_INVALID_ADDRESS) {
     ProcessSP process_sp(CalculateProcess());
     if (process_sp) {
-      Status error;
+      Error error;
       if (process_sp->ReadMemory(m_reg_data_addr, data_sp->GetBytes(),
                                  data_sp->GetByteSize(),
                                  error) == data_sp->GetByteSize()) {
@@ -121,7 +130,7 @@ bool RegisterContextMemory::WriteAllRegisterValues(
   if (m_reg_data_addr != LLDB_INVALID_ADDRESS) {
     ProcessSP process_sp(CalculateProcess());
     if (process_sp) {
-      Status error;
+      Error error;
       SetAllRegisterValid(false);
       if (process_sp->WriteMemory(m_reg_data_addr, data_sp->GetBytes(),
                                   data_sp->GetByteSize(),

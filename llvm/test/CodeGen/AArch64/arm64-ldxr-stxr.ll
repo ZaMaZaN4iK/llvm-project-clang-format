@@ -1,5 +1,4 @@
 ; RUN: llc < %s -mtriple=arm64-linux-gnu | FileCheck %s
-; RUN: llc < %s -global-isel -global-isel-abort=2 -pass-remarks-missed=gisel* -mtriple=arm64-linux-gnu 2>&1 | FileCheck %s --check-prefixes=GISEL,FALLBACK
 
 %0 = type { i64, i64 }
 
@@ -33,7 +32,6 @@ declare i32 @llvm.aarch64.stxp(i64, i64, i8*) nounwind
 
 @var = global i64 0, align 8
 
-; FALLBACK-NOT: remark:{{.*}}test_load_i8
 define void @test_load_i8(i8* %addr) {
 ; CHECK-LABEL: test_load_i8:
 ; CHECK: ldxrb w[[LOADVAL:[0-9]+]], [x0]
@@ -41,12 +39,6 @@ define void @test_load_i8(i8* %addr) {
 ; CHECK-NOT: and
 ; CHECK: str x[[LOADVAL]], [{{x[0-9]+}}, :lo12:var]
 
-; FIXME: GlobalISel doesn't fold ands/adds into load/store addressing modes
-; right now/ So, we won't get the :lo12:var.
-; GISEL-LABEL: test_load_i8:
-; GISEL: ldxrb w[[LOADVAL:[0-9]+]], [x0]
-; GISEL-NOT: uxtb
-; GISEL: str x[[LOADVAL]], [{{x[0-9]+}}]
   %val = call i64 @llvm.aarch64.ldxr.p0i8(i8* %addr)
   %shortval = trunc i64 %val to i8
   %extval = zext i8 %shortval to i64
@@ -54,7 +46,6 @@ define void @test_load_i8(i8* %addr) {
   ret void
 }
 
-; FALLBACK-NOT: remark:{{.*}}test_load_i16
 define void @test_load_i16(i16* %addr) {
 ; CHECK-LABEL: test_load_i16:
 ; CHECK: ldxrh w[[LOADVAL:[0-9]+]], [x0]
@@ -62,10 +53,6 @@ define void @test_load_i16(i16* %addr) {
 ; CHECK-NOT: and
 ; CHECK: str x[[LOADVAL]], [{{x[0-9]+}}, :lo12:var]
 
-; GISEL-LABEL: test_load_i16:
-; GISEL: ldxrh w[[LOADVAL:[0-9]+]], [x0]
-; GISEL-NOT: uxtb
-; GISEL: str x[[LOADVAL]], [{{x[0-9]+}}]
   %val = call i64 @llvm.aarch64.ldxr.p0i16(i16* %addr)
   %shortval = trunc i64 %val to i16
   %extval = zext i16 %shortval to i64
@@ -73,7 +60,6 @@ define void @test_load_i16(i16* %addr) {
   ret void
 }
 
-; FALLBACK-NOT: remark:{{.*}}test_load_i32
 define void @test_load_i32(i32* %addr) {
 ; CHECK-LABEL: test_load_i32:
 ; CHECK: ldxr w[[LOADVAL:[0-9]+]], [x0]
@@ -81,10 +67,6 @@ define void @test_load_i32(i32* %addr) {
 ; CHECK-NOT: and
 ; CHECK: str x[[LOADVAL]], [{{x[0-9]+}}, :lo12:var]
 
-; GISEL-LABEL: test_load_i32:
-; GISEL: ldxr w[[LOADVAL:[0-9]+]], [x0]
-; GISEL-NOT: uxtb
-; GISEL: str x[[LOADVAL]], [{{x[0-9]+}}]
   %val = call i64 @llvm.aarch64.ldxr.p0i32(i32* %addr)
   %shortval = trunc i64 %val to i32
   %extval = zext i32 %shortval to i64
@@ -92,16 +74,11 @@ define void @test_load_i32(i32* %addr) {
   ret void
 }
 
-; FALLBACK-NOT: remark:{{.*}}test_load_i64
 define void @test_load_i64(i64* %addr) {
 ; CHECK-LABEL: test_load_i64:
 ; CHECK: ldxr x[[LOADVAL:[0-9]+]], [x0]
 ; CHECK: str x[[LOADVAL]], [{{x[0-9]+}}, :lo12:var]
 
-; GISEL-LABEL: test_load_i64:
-; GISEL: ldxr x[[LOADVAL:[0-9]+]], [x0]
-; GISEL-NOT: uxtb
-; GISEL: str x[[LOADVAL]], [{{x[0-9]+}}]
   %val = call i64 @llvm.aarch64.ldxr.p0i64(i64* %addr)
   store i64 %val, i64* @var, align 8
   ret void
@@ -113,57 +90,39 @@ declare i64 @llvm.aarch64.ldxr.p0i16(i16*) nounwind
 declare i64 @llvm.aarch64.ldxr.p0i32(i32*) nounwind
 declare i64 @llvm.aarch64.ldxr.p0i64(i64*) nounwind
 
-; FALLBACK-NOT: remark:{{.*}}test_store_i8
 define i32 @test_store_i8(i32, i8 %val, i8* %addr) {
 ; CHECK-LABEL: test_store_i8:
 ; CHECK-NOT: uxtb
 ; CHECK-NOT: and
 ; CHECK: stxrb w0, w1, [x2]
-; GISEL-LABEL: test_store_i8:
-; GISEL-NOT: uxtb
-; GISEL-NOT: and
-; GISEL: stxrb w0, w1, [x2]
   %extval = zext i8 %val to i64
   %res = call i32 @llvm.aarch64.stxr.p0i8(i64 %extval, i8* %addr)
   ret i32 %res
 }
 
-; FALLBACK-NOT: remark:{{.*}}test_store_i16
 define i32 @test_store_i16(i32, i16 %val, i16* %addr) {
 ; CHECK-LABEL: test_store_i16:
 ; CHECK-NOT: uxth
 ; CHECK-NOT: and
 ; CHECK: stxrh w0, w1, [x2]
-; GISEL-LABEL: test_store_i16:
-; GISEL-NOT: uxth
-; GISEL-NOT: and
-; GISEL: stxrh w0, w1, [x2]
   %extval = zext i16 %val to i64
   %res = call i32 @llvm.aarch64.stxr.p0i16(i64 %extval, i16* %addr)
   ret i32 %res
 }
 
-; FALLBACK-NOT: remark:{{.*}}test_store_i32
 define i32 @test_store_i32(i32, i32 %val, i32* %addr) {
 ; CHECK-LABEL: test_store_i32:
 ; CHECK-NOT: uxtw
 ; CHECK-NOT: and
 ; CHECK: stxr w0, w1, [x2]
-; GISEL-LABEL: test_store_i32:
-; GISEL-NOT: uxtw
-; GISEL-NOT: and
-; GISEL: stxr w0, w1, [x2]
   %extval = zext i32 %val to i64
   %res = call i32 @llvm.aarch64.stxr.p0i32(i64 %extval, i32* %addr)
   ret i32 %res
 }
 
-; FALLBACK-NOT: remark:{{.*}}test_store_i64
 define i32 @test_store_i64(i32, i64 %val, i64* %addr) {
 ; CHECK-LABEL: test_store_i64:
 ; CHECK: stxr w0, x1, [x2]
-; GISEL-LABEL: test_store_i64:
-; GISEL: stxr w0, x1, [x2]
   %res = call i32 @llvm.aarch64.stxr.p0i64(i64 %val, i64* %addr)
   ret i32 %res
 }
@@ -210,7 +169,6 @@ entry:
 declare %0 @llvm.aarch64.ldaxp(i8*) nounwind
 declare i32 @llvm.aarch64.stlxp(i64, i64, i8*) nounwind
 
-; FALLBACK-NOT: remark:{{.*}}test_load_acquire_i8
 define void @test_load_acquire_i8(i8* %addr) {
 ; CHECK-LABEL: test_load_acquire_i8:
 ; CHECK: ldaxrb w[[LOADVAL:[0-9]+]], [x0]
@@ -218,11 +176,6 @@ define void @test_load_acquire_i8(i8* %addr) {
 ; CHECK-NOT: and
 ; CHECK: str x[[LOADVAL]], [{{x[0-9]+}}, :lo12:var]
 
-; FIXME: GlobalISel doesn't fold ands/adds into load/store addressing modes
-; right now/ So, we won't get the :lo12:var.
-; GISEL-LABEL: test_load_acquire_i8:
-; GISEL: ldaxrb w[[LOADVAL:[0-9]+]], [x0]
-; GISEL-DAG: str x[[LOADVAL]], [{{x[0-9]+}}]
   %val = call i64 @llvm.aarch64.ldaxr.p0i8(i8* %addr)
   %shortval = trunc i64 %val to i8
   %extval = zext i8 %shortval to i64
@@ -230,7 +183,6 @@ define void @test_load_acquire_i8(i8* %addr) {
   ret void
 }
 
-; FALLBACK-NOT: remark:{{.*}}test_load_acquire_i16
 define void @test_load_acquire_i16(i16* %addr) {
 ; CHECK-LABEL: test_load_acquire_i16:
 ; CHECK: ldaxrh w[[LOADVAL:[0-9]+]], [x0]
@@ -238,9 +190,6 @@ define void @test_load_acquire_i16(i16* %addr) {
 ; CHECK-NOT: and
 ; CHECK: str x[[LOADVAL]], [{{x[0-9]+}}, :lo12:var]
 
-; GISEL-LABEL: test_load_acquire_i16:
-; GISEL: ldaxrh w[[LOADVAL:[0-9]+]], [x0]
-; GISEL: str x[[LOADVAL]], [{{x[0-9]+}}]
   %val = call i64 @llvm.aarch64.ldaxr.p0i16(i16* %addr)
   %shortval = trunc i64 %val to i16
   %extval = zext i16 %shortval to i64
@@ -248,7 +197,6 @@ define void @test_load_acquire_i16(i16* %addr) {
   ret void
 }
 
-; FALLBACK-NOT: remark:{{.*}}test_load_acquire_i32
 define void @test_load_acquire_i32(i32* %addr) {
 ; CHECK-LABEL: test_load_acquire_i32:
 ; CHECK: ldaxr w[[LOADVAL:[0-9]+]], [x0]
@@ -256,9 +204,6 @@ define void @test_load_acquire_i32(i32* %addr) {
 ; CHECK-NOT: and
 ; CHECK: str x[[LOADVAL]], [{{x[0-9]+}}, :lo12:var]
 
-; GISEL-LABEL: test_load_acquire_i32:
-; GISEL: ldaxr w[[LOADVAL:[0-9]+]], [x0]
-; GISEL: str x[[LOADVAL]], [{{x[0-9]+}}]
   %val = call i64 @llvm.aarch64.ldaxr.p0i32(i32* %addr)
   %shortval = trunc i64 %val to i32
   %extval = zext i32 %shortval to i64
@@ -266,15 +211,11 @@ define void @test_load_acquire_i32(i32* %addr) {
   ret void
 }
 
-; FALLBACK-NOT: remark:{{.*}}test_load_acquire_i64
 define void @test_load_acquire_i64(i64* %addr) {
 ; CHECK-LABEL: test_load_acquire_i64:
 ; CHECK: ldaxr x[[LOADVAL:[0-9]+]], [x0]
 ; CHECK: str x[[LOADVAL]], [{{x[0-9]+}}, :lo12:var]
 
-; GISEL-LABEL: test_load_acquire_i64:
-; GISEL: ldaxr x[[LOADVAL:[0-9]+]], [x0]
-; GISEL: str x[[LOADVAL]], [{{x[0-9]+}}]
   %val = call i64 @llvm.aarch64.ldaxr.p0i64(i64* %addr)
   store i64 %val, i64* @var, align 8
   ret void
@@ -286,57 +227,39 @@ declare i64 @llvm.aarch64.ldaxr.p0i16(i16*) nounwind
 declare i64 @llvm.aarch64.ldaxr.p0i32(i32*) nounwind
 declare i64 @llvm.aarch64.ldaxr.p0i64(i64*) nounwind
 
-; FALLBACK-NOT: remark:{{.*}}test_store_release_i8
 define i32 @test_store_release_i8(i32, i8 %val, i8* %addr) {
 ; CHECK-LABEL: test_store_release_i8:
 ; CHECK-NOT: uxtb
 ; CHECK-NOT: and
 ; CHECK: stlxrb w0, w1, [x2]
-; GISEL-LABEL: test_store_release_i8:
-; GISEL-NOT: uxtb
-; GISEL-NOT: and
-; GISEL: stlxrb w0, w1, [x2]
   %extval = zext i8 %val to i64
   %res = call i32 @llvm.aarch64.stlxr.p0i8(i64 %extval, i8* %addr)
   ret i32 %res
 }
 
-; FALLBACK-NOT: remark:{{.*}}test_store_release_i16
 define i32 @test_store_release_i16(i32, i16 %val, i16* %addr) {
 ; CHECK-LABEL: test_store_release_i16:
 ; CHECK-NOT: uxth
 ; CHECK-NOT: and
 ; CHECK: stlxrh w0, w1, [x2]
-; GISEL-LABEL: test_store_release_i16:
-; GISEL-NOT: uxth
-; GISEL-NOT: and
-; GISEL: stlxrh w0, w1, [x2]
   %extval = zext i16 %val to i64
   %res = call i32 @llvm.aarch64.stlxr.p0i16(i64 %extval, i16* %addr)
   ret i32 %res
 }
 
-; FALLBACK-NOT: remark:{{.*}}test_store_release_i32
 define i32 @test_store_release_i32(i32, i32 %val, i32* %addr) {
 ; CHECK-LABEL: test_store_release_i32:
 ; CHECK-NOT: uxtw
 ; CHECK-NOT: and
 ; CHECK: stlxr w0, w1, [x2]
-; GISEL-LABEL: test_store_release_i32:
-; GISEL-NOT: uxtw
-; GISEL-NOT: and
-; GISEL: stlxr w0, w1, [x2]
   %extval = zext i32 %val to i64
   %res = call i32 @llvm.aarch64.stlxr.p0i32(i64 %extval, i32* %addr)
   ret i32 %res
 }
 
-; FALLBACK-NOT: remark:{{.*}}test_store_release_i64
 define i32 @test_store_release_i64(i32, i64 %val, i64* %addr) {
 ; CHECK-LABEL: test_store_release_i64:
 ; CHECK: stlxr w0, x1, [x2]
-; GISEL-LABEL: test_store_release_i64:
-; GISEL: stlxr w0, x1, [x2]
   %res = call i32 @llvm.aarch64.stlxr.p0i64(i64 %val, i64* %addr)
   ret i32 %res
 }

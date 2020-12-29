@@ -1,8 +1,9 @@
-//===- JITSymbol.h - JIT symbol abstraction ---------------------*- C++ -*-===//
+//===----------- JITSymbol.h - JIT symbol abstraction -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,144 +19,58 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <map>
-#include <set>
 #include <string>
-
-#include "llvm/ADT/BitmaskEnum.h"
-#include "llvm/ADT/FunctionExtras.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Support/Error.h"
 
 namespace llvm {
 
 class GlobalValue;
 
 namespace object {
-
-class SymbolRef;
-
+  class BasicSymbolRef;
 } // end namespace object
 
-/// Represents an address in the target process's address space.
-using JITTargetAddress = uint64_t;
+/// @brief Represents an address in the target process's address space.
+typedef uint64_t JITTargetAddress;
 
-/// Convert a JITTargetAddress to a pointer.
-///
-/// Note: This is a raw cast of the address bit pattern to the given pointer
-/// type. When casting to a function pointer in order to execute JIT'd code
-/// jitTargetAddressToFunction should be preferred, as it will also perform
-/// pointer signing on targets that require it.
-template <typename T> T jitTargetAddressToPointer(JITTargetAddress Addr) {
-  static_assert(std::is_pointer<T>::value, "T must be a pointer type");
-  uintptr_t IntPtr = static_cast<uintptr_t>(Addr);
-  assert(IntPtr == Addr && "JITTargetAddress value out of range for uintptr_t");
-  return reinterpret_cast<T>(IntPtr);
-}
-
-/// Convert a JITTargetAddress to a callable function pointer.
-///
-/// Casts the given address to a callable function pointer. This operation
-/// will perform pointer signing for platforms that require it (e.g. arm64e).
-template <typename T> T jitTargetAddressToFunction(JITTargetAddress Addr) {
-  static_assert(
-      std::is_pointer<T>::value &&
-          std::is_function<typename std::remove_pointer<T>::type>::value,
-      "T must be a function pointer type");
-  return jitTargetAddressToPointer<T>(Addr);
-}
-
-/// Convert a pointer to a JITTargetAddress.
-template <typename T> JITTargetAddress pointerToJITTargetAddress(T *Ptr) {
-  return static_cast<JITTargetAddress>(reinterpret_cast<uintptr_t>(Ptr));
-}
-
-/// Flags for symbols in the JIT.
+/// @brief Flags for symbols in the JIT.
 class JITSymbolFlags {
 public:
-  using UnderlyingType = uint8_t;
-  using TargetFlagsType = uint8_t;
+  typedef uint8_t UnderlyingType;
 
   enum FlagNames : UnderlyingType {
     None = 0,
-    HasError = 1U << 0,
-    Weak = 1U << 1,
-    Common = 1U << 2,
-    Absolute = 1U << 3,
-    Exported = 1U << 4,
-    Callable = 1U << 5,
-    LLVM_MARK_AS_BITMASK_ENUM(/* LargestValue = */ Callable)
+    Weak = 1U << 0,
+    Common = 1U << 1,
+    Absolute = 1U << 2,
+    Exported = 1U << 3
   };
 
-  /// Default-construct a JITSymbolFlags instance.
-  JITSymbolFlags() = default;
+  /// @brief Default-construct a JITSymbolFlags instance.
+  JITSymbolFlags() : Flags(None) {}
 
-  /// Construct a JITSymbolFlags instance from the given flags.
+  /// @brief Construct a JITSymbolFlags instance from the given flags.
   JITSymbolFlags(FlagNames Flags) : Flags(Flags) {}
 
-  /// Construct a JITSymbolFlags instance from the given flags and target
-  ///        flags.
-  JITSymbolFlags(FlagNames Flags, TargetFlagsType TargetFlags)
-      : TargetFlags(TargetFlags), Flags(Flags) {}
-
-  /// Implicitly convert to bool. Returs true if any flag is set.
-  explicit operator bool() const { return Flags != None || TargetFlags != 0; }
-
-  /// Compare for equality.
-  bool operator==(const JITSymbolFlags &RHS) const {
-    return Flags == RHS.Flags && TargetFlags == RHS.TargetFlags;
-  }
-
-  /// Bitwise AND-assignment for FlagNames.
-  JITSymbolFlags &operator&=(const FlagNames &RHS) {
-    Flags &= RHS;
-    return *this;
-  }
-
-  /// Bitwise OR-assignment for FlagNames.
-  JITSymbolFlags &operator|=(const FlagNames &RHS) {
-    Flags |= RHS;
-    return *this;
-  }
-
-  /// Return true if there was an error retrieving this symbol.
-  bool hasError() const {
-    return (Flags & HasError) == HasError;
-  }
-
-  /// Returns true if the Weak flag is set.
+  /// @brief Returns true is the Weak flag is set.
   bool isWeak() const {
     return (Flags & Weak) == Weak;
   }
 
-  /// Returns true if the Common flag is set.
+  /// @brief Returns true is the Weak flag is set.
   bool isCommon() const {
     return (Flags & Common) == Common;
   }
 
-  /// Returns true if the symbol isn't weak or common.
-  bool isStrong() const {
+  bool isStrongDefinition() const {
     return !isWeak() && !isCommon();
   }
 
-  /// Returns true if the Exported flag is set.
+  /// @brief Returns true is the Weak flag is set.
   bool isExported() const {
     return (Flags & Exported) == Exported;
   }
 
-  /// Returns true if the given symbol is known to be callable.
-  bool isCallable() const { return (Flags & Callable) == Callable; }
-
-  /// Get the underlying flags value as an integer.
-  UnderlyingType getRawFlagsValue() const {
-    return static_cast<UnderlyingType>(Flags);
-  }
-
-  /// Return a reference to the target-specific flags.
-  TargetFlagsType& getTargetFlags() { return TargetFlags; }
-
-  /// Return a reference to the target-specific flags.
-  const TargetFlagsType& getTargetFlags() const { return TargetFlags; }
+  operator UnderlyingType&() { return Flags; }
 
   /// Construct a JITSymbolFlags value based on the flags of the given global
   /// value.
@@ -163,100 +78,56 @@ public:
 
   /// Construct a JITSymbolFlags value based on the flags of the given libobject
   /// symbol.
-  static Expected<JITSymbolFlags>
-  fromObjectSymbol(const object::SymbolRef &Symbol);
+  static JITSymbolFlags fromObjectSymbol(const object::BasicSymbolRef &Symbol);
 
 private:
-  TargetFlagsType TargetFlags = 0;
-  FlagNames Flags = None;
+  UnderlyingType Flags;
 };
 
-inline JITSymbolFlags operator&(const JITSymbolFlags &LHS,
-                                const JITSymbolFlags::FlagNames &RHS) {
-  JITSymbolFlags Tmp = LHS;
-  Tmp &= RHS;
-  return Tmp;
-}
-
-inline JITSymbolFlags operator|(const JITSymbolFlags &LHS,
-                                const JITSymbolFlags::FlagNames &RHS) {
-  JITSymbolFlags Tmp = LHS;
-  Tmp |= RHS;
-  return Tmp;
-}
-
-/// ARM-specific JIT symbol flags.
-/// FIXME: This should be moved into a target-specific header.
-class ARMJITSymbolFlags {
-public:
-  ARMJITSymbolFlags() = default;
-
-  enum FlagNames {
-    None = 0,
-    Thumb = 1 << 0
-  };
-
-  operator JITSymbolFlags::TargetFlagsType&() { return Flags; }
-
-  static ARMJITSymbolFlags fromObjectSymbol(const object::SymbolRef &Symbol);
-
-private:
-  JITSymbolFlags::TargetFlagsType Flags = 0;
-};
-
-/// Represents a symbol that has been evaluated to an address already.
+/// @brief Represents a symbol that has been evaluated to an address already.
 class JITEvaluatedSymbol {
 public:
-  JITEvaluatedSymbol() = default;
+  /// @brief Create a 'null' symbol.
+  JITEvaluatedSymbol(std::nullptr_t)
+      : Address(0) {}
 
-  /// Create a 'null' symbol.
-  JITEvaluatedSymbol(std::nullptr_t) {}
-
-  /// Create a symbol for the given address and flags.
+  /// @brief Create a symbol for the given address and flags.
   JITEvaluatedSymbol(JITTargetAddress Address, JITSymbolFlags Flags)
       : Address(Address), Flags(Flags) {}
 
-  /// An evaluated symbol converts to 'true' if its address is non-zero.
+  /// @brief An evaluated symbol converts to 'true' if its address is non-zero.
   explicit operator bool() const { return Address != 0; }
 
-  /// Return the address of this symbol.
+  /// @brief Return the address of this symbol.
   JITTargetAddress getAddress() const { return Address; }
 
-  /// Return the flags for this symbol.
+  /// @brief Return the flags for this symbol.
   JITSymbolFlags getFlags() const { return Flags; }
 
-  /// Set the flags for this symbol.
-  void setFlags(JITSymbolFlags Flags) { this->Flags = std::move(Flags); }
-
 private:
-  JITTargetAddress Address = 0;
+  JITTargetAddress Address;
   JITSymbolFlags Flags;
 };
 
-/// Represents a symbol in the JIT.
+/// @brief Represents a symbol in the JIT.
 class JITSymbol {
 public:
-  using GetAddressFtor = unique_function<Expected<JITTargetAddress>()>;
+  typedef std::function<JITTargetAddress()> GetAddressFtor;
 
-  /// Create a 'null' symbol, used to represent a "symbol not found"
-  ///        result from a successful (non-erroneous) lookup.
+  /// @brief Create a 'null' symbol that represents failure to find a symbol
+  ///        definition.
   JITSymbol(std::nullptr_t)
       : CachedAddr(0) {}
 
-  /// Create a JITSymbol representing an error in the symbol lookup
-  ///        process (e.g. a network failure during a remote lookup).
-  JITSymbol(Error Err)
-    : Err(std::move(Err)), Flags(JITSymbolFlags::HasError) {}
-
-  /// Create a symbol for a definition with a known address.
+  /// @brief Create a symbol for a definition with a known address.
   JITSymbol(JITTargetAddress Addr, JITSymbolFlags Flags)
       : CachedAddr(Addr), Flags(Flags) {}
 
-  /// Construct a JITSymbol from a JITEvaluatedSymbol.
+  /// @brief Construct a JITSymbol from a JITEvaluatedSymbol.
   JITSymbol(JITEvaluatedSymbol Sym)
       : CachedAddr(Sym.getAddress()), Flags(Sym.getFlags()) {}
 
-  /// Create a symbol for a definition that doesn't have a known address
+  /// @brief Create a symbol for a definition that doesn't have a known address
   ///        yet.
   /// @param GetAddress A functor to materialize a definition (fixing the
   ///        address) on demand.
@@ -268,57 +139,16 @@ public:
   JITSymbol(GetAddressFtor GetAddress, JITSymbolFlags Flags)
       : GetAddress(std::move(GetAddress)), CachedAddr(0), Flags(Flags) {}
 
-  JITSymbol(const JITSymbol&) = delete;
-  JITSymbol& operator=(const JITSymbol&) = delete;
+  /// @brief Returns true if the symbol exists, false otherwise.
+  explicit operator bool() const { return CachedAddr || GetAddress; }
 
-  JITSymbol(JITSymbol &&Other)
-    : GetAddress(std::move(Other.GetAddress)), Flags(std::move(Other.Flags)) {
-    if (Flags.hasError())
-      Err = std::move(Other.Err);
-    else
-      CachedAddr = std::move(Other.CachedAddr);
-  }
-
-  JITSymbol& operator=(JITSymbol &&Other) {
-    GetAddress = std::move(Other.GetAddress);
-    Flags = std::move(Other.Flags);
-    if (Flags.hasError())
-      Err = std::move(Other.Err);
-    else
-      CachedAddr = std::move(Other.CachedAddr);
-    return *this;
-  }
-
-  ~JITSymbol() {
-    if (Flags.hasError())
-      Err.~Error();
-    else
-      CachedAddr.~JITTargetAddress();
-  }
-
-  /// Returns true if the symbol exists, false otherwise.
-  explicit operator bool() const {
-    return !Flags.hasError() && (CachedAddr || GetAddress);
-  }
-
-  /// Move the error field value out of this JITSymbol.
-  Error takeError() {
-    if (Flags.hasError())
-      return std::move(Err);
-    return Error::success();
-  }
-
-  /// Get the address of the symbol in the target address space. Returns
+  /// @brief Get the address of the symbol in the target address space. Returns
   ///        '0' if the symbol does not exist.
-  Expected<JITTargetAddress> getAddress() {
-    assert(!Flags.hasError() && "getAddress called on error value");
+  JITTargetAddress getAddress() {
     if (GetAddress) {
-      if (auto CachedAddrOrErr = GetAddress()) {
-        GetAddress = nullptr;
-        CachedAddr = *CachedAddrOrErr;
-        assert(CachedAddr && "Symbol could not be materialized.");
-      } else
-        return CachedAddrOrErr.takeError();
+      CachedAddr = GetAddress();
+      assert(CachedAddr && "Symbol could not be materialized.");
+      GetAddress = nullptr;
     }
     return CachedAddr;
   }
@@ -327,56 +157,14 @@ public:
 
 private:
   GetAddressFtor GetAddress;
-  union {
-    JITTargetAddress CachedAddr;
-    Error Err;
-  };
+  JITTargetAddress CachedAddr;
   JITSymbolFlags Flags;
 };
 
-/// Symbol resolution interface.
-///
-/// Allows symbol flags and addresses to be looked up by name.
-/// Symbol queries are done in bulk (i.e. you request resolution of a set of
-/// symbols, rather than a single one) to reduce IPC overhead in the case of
-/// remote JITing, and expose opportunities for parallel compilation.
+/// \brief Symbol resolution.
 class JITSymbolResolver {
 public:
-  using LookupSet = std::set<StringRef>;
-  using LookupResult = std::map<StringRef, JITEvaluatedSymbol>;
-  using OnResolvedFunction = unique_function<void(Expected<LookupResult>)>;
-
   virtual ~JITSymbolResolver() = default;
-
-  /// Returns the fully resolved address and flags for each of the given
-  ///        symbols.
-  ///
-  /// This method will return an error if any of the given symbols can not be
-  /// resolved, or if the resolution process itself triggers an error.
-  virtual void lookup(const LookupSet &Symbols,
-                      OnResolvedFunction OnResolved) = 0;
-
-  /// Returns the subset of the given symbols that should be materialized by
-  /// the caller. Only weak/common symbols should be looked up, as strong
-  /// definitions are implicitly always part of the caller's responsibility.
-  virtual Expected<LookupSet>
-  getResponsibilitySet(const LookupSet &Symbols) = 0;
-
-private:
-  virtual void anchor();
-};
-
-/// Legacy symbol resolution interface.
-class LegacyJITSymbolResolver : public JITSymbolResolver {
-public:
-  /// Performs lookup by, for each symbol, first calling
-  ///        findSymbolInLogicalDylib and if that fails calling
-  ///        findSymbol.
-  void lookup(const LookupSet &Symbols, OnResolvedFunction OnResolved) final;
-
-  /// Performs flags lookup by calling findSymbolInLogicalDylib and
-  ///        returning the flags value for that symbol.
-  Expected<LookupSet> getResponsibilitySet(const LookupSet &Symbols) final;
 
   /// This method returns the address of the specified symbol if it exists
   /// within the logical dynamic library represented by this JITSymbolResolver.

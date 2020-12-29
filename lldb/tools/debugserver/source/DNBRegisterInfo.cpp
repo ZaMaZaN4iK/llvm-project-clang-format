@@ -1,8 +1,9 @@
 //===-- DNBRegisterInfo.cpp -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -34,7 +35,7 @@ bool DNBRegisterValueClass::IsValid() const {
   do {                                                                         \
     if (pos < end) {                                                           \
       if (i > 0) {                                                             \
-        strlcpy(pos, ", ", end - pos);                                         \
+        strncpy(pos, ", ", end - pos);                                         \
         pos += 2;                                                              \
       }                                                                        \
     }                                                                          \
@@ -68,7 +69,7 @@ void DNBRegisterValueClass::Dump(const char *pre, const char *post) const {
                  value.v_uint64[1]);
         break;
       default:
-        strlcpy(str, "0x", 3);
+        strncpy(str, "0x", 3);
         pos = str + 2;
         for (uint32_t i = 0; i < info.size; ++i) {
           if (pos < end)
@@ -155,7 +156,6 @@ void DNBRegisterValueClass::Dump(const char *pre, const char *post) const {
             DNBLogError(
                 "unsupported vector format %d, defaulting to hex bytes.",
                 info.format);
-            [[clang::fallthrough]];
           case VectorOfUInt8:
             snprintf(str, sizeof(str), "%s", "uint8   { ");
             pos = str + strlen(str);

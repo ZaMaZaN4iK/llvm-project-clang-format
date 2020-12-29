@@ -1,8 +1,9 @@
 //===-- Sink.cpp - Code Sinking -------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,7 +22,6 @@
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
@@ -68,22 +68,22 @@ static bool isSafeToMove(Instruction *Inst, AliasAnalysis &AA,
   if (LoadInst *L = dyn_cast<LoadInst>(Inst)) {
     MemoryLocation Loc = MemoryLocation::get(L);
     for (Instruction *S : Stores)
-      if (isModSet(AA.getModRefInfo(S, Loc)))
+      if (AA.getModRefInfo(S, Loc) & MRI_Mod)
         return false;
   }
 
-  if (Inst->isTerminator() || isa<PHINode>(Inst) || Inst->isEHPad() ||
+  if (isa<TerminatorInst>(Inst) || isa<PHINode>(Inst) || Inst->isEHPad() ||
       Inst->mayThrow())
     return false;
 
-  if (auto *Call = dyn_cast<CallBase>(Inst)) {
+  if (auto CS = CallSite(Inst)) {
     // Convergent operations cannot be made control-dependent on additional
     // values.
-    if (Call->isConvergent())
+    if (CS.hasFnAttr(Attribute::Convergent))
       return false;
 
     for (Instruction *S : Stores)
-      if (isModSet(AA.getModRefInfo(S, Call)))
+      if (AA.getModRefInfo(S, CS) & MRI_Mod)
         return false;
   }
 
@@ -104,7 +104,7 @@ static bool IsAcceptableTarget(Instruction *Inst, BasicBlock *SuccToSinkTo,
 
   // It's never legal to sink an instruction into a block which terminates in an
   // EH-pad.
-  if (SuccToSinkTo->getTerminator()->isExceptionalTerminator())
+  if (SuccToSinkTo->getTerminator()->isExceptional())
     return false;
 
   // If the block has multiple predecessors, this would introduce computation
@@ -114,7 +114,7 @@ static bool IsAcceptableTarget(Instruction *Inst, BasicBlock *SuccToSinkTo,
   if (SuccToSinkTo->getUniquePredecessor() != Inst->getParent()) {
     // We cannot sink a load across a critical edge - there may be stores in
     // other code paths.
-    if (Inst->mayReadFromMemory())
+    if (!isSafeToSpeculativelyExecute(Inst))
       return false;
 
     // We don't want to sink across a critical edge if we don't dominate the
@@ -164,14 +164,13 @@ static bool SinkInstruction(Instruction *Inst,
 
   // Instructions can only be sunk if all their uses are in blocks
   // dominated by one of the successors.
-  // Look at all the dominated blocks and see if we can sink it in one.
+  // Look at all the postdominators and see if we can sink it in one.
   DomTreeNode *DTN = DT.getNode(Inst->getParent());
   for (DomTreeNode::iterator I = DTN->begin(), E = DTN->end();
       I != E && SuccToSinkTo == nullptr; ++I) {
     BasicBlock *Candidate = (*I)->getBlock();
-    // A node always immediate-dominates its children on the dominator
-    // tree.
-    if (IsAcceptableTarget(Inst, Candidate, DT, LI))
+    if ((*I)->getIDom()->getBlock() == Inst->getParent() &&
+        IsAcceptableTarget(Inst, Candidate, DT, LI))
       SuccToSinkTo = Candidate;
   }
 
@@ -187,9 +186,11 @@ static bool SinkInstruction(Instruction *Inst,
   if (!SuccToSinkTo)
     return false;
 
-  LLVM_DEBUG(dbgs() << "Sink" << *Inst << " (";
-             Inst->getParent()->printAsOperand(dbgs(), false); dbgs() << " -> ";
-             SuccToSinkTo->printAsOperand(dbgs(), false); dbgs() << ")\n");
+  DEBUG(dbgs() << "Sink" << *Inst << " (";
+        Inst->getParent()->printAsOperand(dbgs(), false);
+        dbgs() << " -> ";
+        SuccToSinkTo->printAsOperand(dbgs(), false);
+        dbgs() << ")\n");
 
   // Move the instruction.
   Inst->moveBefore(&*SuccToSinkTo->getFirstInsertionPt());
@@ -242,7 +243,7 @@ static bool iterativelySinkInstructions(Function &F, DominatorTree &DT,
 
   do {
     MadeChange = false;
-    LLVM_DEBUG(dbgs() << "Sinking iteration " << NumSinkIter << "\n");
+    DEBUG(dbgs() << "Sinking iteration " << NumSinkIter << "\n");
     // Process all basic blocks.
     for (BasicBlock &I : F)
       MadeChange |= ProcessBlock(I, DT, LI, AA);
@@ -261,8 +262,9 @@ PreservedAnalyses SinkingPass::run(Function &F, FunctionAnalysisManager &AM) {
   if (!iterativelySinkInstructions(F, DT, LI, AA))
     return PreservedAnalyses::all();
 
-  PreservedAnalyses PA;
-  PA.preserveSet<CFGAnalyses>();
+  auto PA = PreservedAnalyses();
+  PA.preserve<DominatorTreeAnalysis>();
+  PA.preserve<LoopAnalysis>();
   return PA;
 }
 

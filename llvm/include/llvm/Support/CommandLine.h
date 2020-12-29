@@ -1,8 +1,9 @@
 //===- llvm/Support/CommandLine.h - Command line handler --------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,23 +21,18 @@
 #define LLVM_SUPPORT_COMMANDLINE_H
 
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/None.h"
-#include "llvm/ADT/Optional.h"
-#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/iterator_range.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ManagedStatic.h"
-#include "llvm/Support/VirtualFileSystem.h"
-#include "llvm/Support/raw_ostream.h"
 #include <cassert>
 #include <climits>
 #include <cstddef>
-#include <functional>
 #include <initializer_list>
 #include <string>
 #include <type_traits>
@@ -45,7 +41,6 @@
 namespace llvm {
 
 class StringSaver;
-class raw_ostream;
 
 /// cl Namespace - This namespace contains all of the command line option
 /// processing machinery.  It is intentionally a short name to make qualified
@@ -55,22 +50,9 @@ namespace cl {
 //===----------------------------------------------------------------------===//
 // ParseCommandLineOptions - Command line option processing entry point.
 //
-// Returns true on success. Otherwise, this will print the error message to
-// stderr and exit if \p Errs is not set (nullptr by default), or print the
-// error message to \p Errs and return false if \p Errs is provided.
-//
-// If EnvVar is not nullptr, command-line options are also parsed from the
-// environment variable named by EnvVar.  Precedence is given to occurrences
-// from argv.  This precedence is currently implemented by parsing argv after
-// the environment variable, so it is only implemented correctly for options
-// that give precedence to later occurrences.  If your program supports options
-// that give precedence to earlier occurrences, you will need to extend this
-// function to support it correctly.
 bool ParseCommandLineOptions(int argc, const char *const *argv,
                              StringRef Overview = "",
-                             raw_ostream *Errs = nullptr,
-                             const char *EnvVar = nullptr,
-                             bool LongOptionsUseDoubleDash = false);
+                             bool IgnoreErrors = false);
 
 //===----------------------------------------------------------------------===//
 // ParseEnvironmentOptions - Environment variable option processing alternate
@@ -79,15 +61,12 @@ bool ParseCommandLineOptions(int argc, const char *const *argv,
 void ParseEnvironmentOptions(const char *progName, const char *envvar,
                              const char *Overview = "");
 
-// Function pointer type for printing version information.
-using VersionPrinterTy = std::function<void(raw_ostream &)>;
-
 ///===---------------------------------------------------------------------===//
 /// SetVersionPrinter - Override the default (LLVM specific) version printer
 ///                     used to print out the version when --version is given
 ///                     on the command line. This allows other systems using the
 ///                     CommandLine utilities to print their own version string.
-void SetVersionPrinter(VersionPrinterTy func);
+void SetVersionPrinter(void (*func)());
 
 ///===---------------------------------------------------------------------===//
 /// AddExtraVersionPrinter - Add an extra printer to use in addition to the
@@ -96,7 +75,7 @@ void SetVersionPrinter(VersionPrinterTy func);
 ///                          which will be called after the basic LLVM version
 ///                          printing is complete. Each can then add additional
 ///                          information specific to the tool.
-void AddExtraVersionPrinter(VersionPrinterTy func);
+void AddExtraVersionPrinter(void (*func)());
 
 // PrintOptionValues - Print option values.
 // With -print-options print the difference between option values and defaults.
@@ -107,7 +86,7 @@ void PrintOptionValues();
 // Forward declaration - AddLiteralOption needs to be up here to make gcc happy.
 class Option;
 
-/// Adds a new option for parsing and provides the option it refers to.
+/// \brief Adds a new option for parsing and provides the option it refers to.
 ///
 /// \param O pointer to the option
 /// \param Name the string name for the option to handle during parsing
@@ -159,30 +138,22 @@ enum OptionHidden {   // Control whether -help shows this option
 // enabled, and used, the value for the flag comes from the suffix of the
 // argument.
 //
-// AlwaysPrefix - Only allow the behavior enabled by the Prefix flag and reject
-// the Option=Value form.
+// Grouping - With this option enabled, multiple letter options are allowed to
+// bunch together with only a single hyphen for the whole group.  This allows
+// emulation of the behavior that ls uses for example: ls -la === ls -l -a
 //
 
 enum FormattingFlags {
   NormalFormatting = 0x00, // Nothing special
   Positional = 0x01,       // Is a positional argument, no '-' required
   Prefix = 0x02,           // Can this option directly prefix its value?
-  AlwaysPrefix = 0x03      // Can this option only directly prefix its value?
+  Grouping = 0x03          // Can this option group with other options?
 };
 
 enum MiscFlags {             // Miscellaneous flags to adjust argument
   CommaSeparated = 0x01,     // Should this cl::list split between commas?
   PositionalEatsArgs = 0x02, // Should this positional cl::list eat -args?
-  Sink = 0x04,               // Should this cl::list eat all unknown options?
-
-  // Grouping - Can this option group with other options?
-  // If this is enabled, multiple letter options are allowed to bunch together
-  // with only a single hyphen for the whole group.  This allows emulation
-  // of the behavior that ls uses for example: ls -la === ls -l -a
-  Grouping = 0x08,
-
-  // Default option
-  DefaultOption = 0x10
+  Sink = 0x04                // Should this cl::list eat all unknown options?
 };
 
 //===----------------------------------------------------------------------===//
@@ -268,27 +239,26 @@ class Option {
   // Out of line virtual function to provide home for the class.
   virtual void anchor();
 
-  uint16_t NumOccurrences; // The number of times specified
+  int NumOccurrences; // The number of times specified
   // Occurrences, HiddenFlag, and Formatting are all enum types but to avoid
   // problems with signed enums in bitfields.
-  uint16_t Occurrences : 3; // enum NumOccurrencesFlag
+  unsigned Occurrences : 3; // enum NumOccurrencesFlag
   // not using the enum type for 'Value' because zero is an implementation
   // detail representing the non-value
-  uint16_t Value : 2;
-  uint16_t HiddenFlag : 2; // enum OptionHidden
-  uint16_t Formatting : 2; // enum FormattingFlags
-  uint16_t Misc : 5;
-  uint16_t FullyInitialized : 1; // Has addArgument been called?
-  uint16_t Position;             // Position of last occurrence of the option
-  uint16_t AdditionalVals;       // Greater than 0 for multi-valued option.
+  unsigned Value : 2;
+  unsigned HiddenFlag : 2; // enum OptionHidden
+  unsigned Formatting : 2; // enum FormattingFlags
+  unsigned Misc : 3;
+  unsigned Position;       // Position of last occurrence of the option
+  unsigned AdditionalVals; // Greater than 0 for multi-valued option.
 
 public:
   StringRef ArgStr;   // The argument string itself (ex: "help", "o")
   StringRef HelpStr;  // The descriptive text message for -help
   StringRef ValueStr; // String describing what the value of this option is
-  SmallVector<OptionCategory *, 1>
-      Categories;                    // The Categories this option belongs to
-  SmallPtrSet<SubCommand *, 1> Subs; // The subcommands this option belongs to.
+  OptionCategory *Category; // The Category this option belongs to
+  SmallPtrSet<SubCommand *, 4> Subs; // The subcommands this option belongs to.
+  bool FullyInitialized;    // Has addArguemnt been called?
 
   inline enum NumOccurrencesFlag getNumOccurrencesFlag() const {
     return (enum NumOccurrencesFlag)Occurrences;
@@ -314,7 +284,6 @@ public:
   bool hasArgStr() const { return !ArgStr.empty(); }
   bool isPositional() const { return getFormattingFlag() == cl::Positional; }
   bool isSink() const { return getMiscFlags() & cl::Sink; }
-  bool isDefaultOption() const { return getMiscFlags() & cl::DefaultOption; }
 
   bool isConsumeAfter() const {
     return getNumOccurrencesFlag() == cl::ConsumeAfter;
@@ -338,16 +307,15 @@ public:
   void setFormattingFlag(enum FormattingFlags V) { Formatting = V; }
   void setMiscFlag(enum MiscFlags M) { Misc |= M; }
   void setPosition(unsigned pos) { Position = pos; }
-  void addCategory(OptionCategory &C);
+  void setCategory(OptionCategory &C) { Category = &C; }
   void addSubCommand(SubCommand &S) { Subs.insert(&S); }
 
 protected:
   explicit Option(enum NumOccurrencesFlag OccurrencesFlag,
                   enum OptionHidden Hidden)
       : NumOccurrences(0), Occurrences(OccurrencesFlag), Value(0),
-        HiddenFlag(Hidden), Formatting(NormalFormatting), Misc(0),
-        FullyInitialized(false), Position(0), AdditionalVals(0) {
-    Categories.push_back(&GeneralCategory);
+        HiddenFlag(Hidden), Formatting(NormalFormatting), Misc(0), Position(0),
+        AdditionalVals(0), Category(&GeneralCategory), FullyInitialized(false) {
   }
 
   inline void setNumAdditionalVals(unsigned n) { AdditionalVals = n; }
@@ -375,11 +343,6 @@ public:
 
   virtual void printOptionValue(size_t GlobalWidth, bool Force) const = 0;
 
-  virtual void setDefault() = 0;
-
-  static void printHelpStr(StringRef HelpStr, size_t Indent,
-                           size_t FirstLineIndentedBy);
-
   virtual void getExtraOptionNames(SmallVectorImpl<StringRef> &) {}
 
   // addOccurrence - Wrapper around handleOccurrence that enforces Flags.
@@ -388,13 +351,10 @@ public:
                              bool MultiArg = false);
 
   // Prints option name followed by message.  Always returns true.
-  bool error(const Twine &Message, StringRef ArgName = StringRef(), raw_ostream &Errs = llvm::errs());
-  bool error(const Twine &Message, raw_ostream &Errs) {
-    return error(Message, StringRef(), Errs);
-  }
+  bool error(const Twine &Message, StringRef ArgName = StringRef());
 
   inline int getNumOccurrences() const { return NumOccurrences; }
-  void reset();
+  inline void reset() { NumOccurrences = 0; }
 };
 
 //===----------------------------------------------------------------------===//
@@ -459,7 +419,7 @@ struct cat {
 
   cat(OptionCategory &c) : Category(c) {}
 
-  template <class Opt> void apply(Opt &O) const { O.addCategory(Category); }
+  template <class Opt> void apply(Opt &O) const { O.setCategory(Category); }
 };
 
 // sub - Specify the subcommand that this option belongs to.
@@ -471,43 +431,6 @@ struct sub {
   template <class Opt> void apply(Opt &O) const { O.addSubCommand(Sub); }
 };
 
-// Specify a callback function to be called when an option is seen.
-// Can be used to set other options automatically.
-template <typename R, typename Ty> struct cb {
-  std::function<R(Ty)> CB;
-
-  cb(std::function<R(Ty)> CB) : CB(CB) {}
-
-  template <typename Opt> void apply(Opt &O) const { O.setCallback(CB); }
-};
-
-namespace detail {
-template <typename F>
-struct callback_traits : public callback_traits<decltype(&F::operator())> {};
-
-template <typename R, typename C, typename... Args>
-struct callback_traits<R (C::*)(Args...) const> {
-  using result_type = R;
-  using arg_type = typename std::tuple_element<0, std::tuple<Args...>>::type;
-  static_assert(sizeof...(Args) == 1, "callback function must have one and only one parameter");
-  static_assert(std::is_same<result_type, void>::value,
-                "callback return type must be void");
-  static_assert(
-      std::is_lvalue_reference<arg_type>::value &&
-          std::is_const<typename std::remove_reference<arg_type>::type>::value,
-      "callback arg_type must be a const lvalue reference");
-};
-} // namespace detail
-
-template <typename F>
-cb<typename detail::callback_traits<F>::result_type,
-   typename detail::callback_traits<F>::arg_type>
-callback(F CB) {
-  using result_type = typename detail::callback_traits<F>::result_type;
-  using arg_type = typename detail::callback_traits<F>::arg_type;
-  return cb<result_type, arg_type>(CB);
-}
-
 //===----------------------------------------------------------------------===//
 // OptionValue class
 
@@ -518,8 +441,8 @@ struct GenericOptionValue {
 protected:
   GenericOptionValue() = default;
   GenericOptionValue(const GenericOptionValue&) = default;
-  GenericOptionValue &operator=(const GenericOptionValue &) = default;
   ~GenericOptionValue() = default;
+  GenericOptionValue &operator=(const GenericOptionValue &) = default;
 
 private:
   virtual void anchor();
@@ -532,7 +455,7 @@ template <class DataType> struct OptionValue;
 template <class DataType, bool isClass>
 struct OptionValueBase : public GenericOptionValue {
   // Temporary storage for argument passing.
-  using WrapperType = OptionValue<DataType>;
+  typedef OptionValue<DataType> WrapperType;
 
   bool hasValue() const { return false; }
 
@@ -558,8 +481,8 @@ template <class DataType> class OptionValueCopy : public GenericOptionValue {
 
 protected:
   OptionValueCopy(const OptionValueCopy&) = default;
-  OptionValueCopy &operator=(const OptionValueCopy &) = default;
   ~OptionValueCopy() = default;
+  OptionValueCopy &operator=(const OptionValueCopy&) = default;
 
 public:
   OptionValueCopy() = default;
@@ -590,13 +513,13 @@ public:
 // Non-class option values.
 template <class DataType>
 struct OptionValueBase<DataType, false> : OptionValueCopy<DataType> {
-  using WrapperType = DataType;
+  typedef DataType WrapperType;
 
 protected:
   OptionValueBase() = default;
   OptionValueBase(const OptionValueBase&) = default;
-  OptionValueBase &operator=(const OptionValueBase &) = default;
   ~OptionValueBase() = default;
+  OptionValueBase &operator=(const OptionValueBase&) = default;
 };
 
 // Top-level option class.
@@ -619,7 +542,7 @@ enum boolOrDefault { BOU_UNSET, BOU_TRUE, BOU_FALSE };
 template <>
 struct OptionValue<cl::boolOrDefault> final
     : OptionValueCopy<cl::boolOrDefault> {
-  using WrapperType = cl::boolOrDefault;
+  typedef cl::boolOrDefault WrapperType;
 
   OptionValue() = default;
 
@@ -636,7 +559,7 @@ private:
 
 template <>
 struct OptionValue<std::string> final : OptionValueCopy<std::string> {
-  using WrapperType = StringRef;
+  typedef StringRef WrapperType;
 
   OptionValue() = default;
 
@@ -807,15 +730,13 @@ protected:
   public:
     OptionInfo(StringRef name, DataType v, StringRef helpStr)
         : GenericOptionInfo(name, helpStr), V(v) {}
-
     OptionValue<DataType> V;
   };
   SmallVector<OptionInfo, 8> Values;
 
 public:
   parser(Option &O) : generic_parser_base(O) {}
-
-  using parser_data_type = DataType;
+  typedef DataType parser_data_type;
 
   // Implement virtual functions needed by generic_parser_base
   unsigned getNumOptions() const override { return unsigned(Values.size()); }
@@ -872,8 +793,6 @@ class basic_parser_impl { // non-template implementation of basic_parser<t>
 public:
   basic_parser_impl(Option &) {}
 
-  virtual ~basic_parser_impl() {}
-
   enum ValueExpected getValueExpectedFlagDefault() const {
     return ValueRequired;
   }
@@ -901,6 +820,8 @@ public:
   virtual void anchor();
 
 protected:
+  ~basic_parser_impl() = default;
+
   // A helper for basic_parser::printOptionDiff.
   void printOptionName(const Option &O, size_t GlobalWidth) const;
 };
@@ -910,16 +831,19 @@ protected:
 //
 template <class DataType> class basic_parser : public basic_parser_impl {
 public:
-  using parser_data_type = DataType;
-  using OptVal = OptionValue<DataType>;
-
   basic_parser(Option &O) : basic_parser_impl(O) {}
+
+  typedef DataType parser_data_type;
+  typedef OptionValue<DataType> OptVal;
+
+protected:
+  ~basic_parser() = default;
 };
 
 //--------------------------------------------------
 // parser<bool>
 //
-template <> class parser<bool> : public basic_parser<bool> {
+template <> class parser<bool> final : public basic_parser<bool> {
 public:
   parser(Option &O) : basic_parser(O) {}
 
@@ -946,7 +870,8 @@ extern template class basic_parser<bool>;
 
 //--------------------------------------------------
 // parser<boolOrDefault>
-template <> class parser<boolOrDefault> : public basic_parser<boolOrDefault> {
+template <>
+class parser<boolOrDefault> final : public basic_parser<boolOrDefault> {
 public:
   parser(Option &O) : basic_parser(O) {}
 
@@ -972,7 +897,7 @@ extern template class basic_parser<boolOrDefault>;
 //--------------------------------------------------
 // parser<int>
 //
-template <> class parser<int> : public basic_parser<int> {
+template <> class parser<int> final : public basic_parser<int> {
 public:
   parser(Option &O) : basic_parser(O) {}
 
@@ -992,53 +917,9 @@ public:
 extern template class basic_parser<int>;
 
 //--------------------------------------------------
-// parser<long>
-//
-template <> class parser<long> final : public basic_parser<long> {
-public:
-  parser(Option &O) : basic_parser(O) {}
-
-  // parse - Return true on error.
-  bool parse(Option &O, StringRef ArgName, StringRef Arg, long &Val);
-
-  // getValueName - Overload in subclass to provide a better default value.
-  StringRef getValueName() const override { return "long"; }
-
-  void printOptionDiff(const Option &O, long V, OptVal Default,
-                       size_t GlobalWidth) const;
-
-  // An out-of-line virtual method to provide a 'home' for this class.
-  void anchor() override;
-};
-
-extern template class basic_parser<long>;
-
-//--------------------------------------------------
-// parser<long long>
-//
-template <> class parser<long long> : public basic_parser<long long> {
-public:
-  parser(Option &O) : basic_parser(O) {}
-
-  // parse - Return true on error.
-  bool parse(Option &O, StringRef ArgName, StringRef Arg, long long &Val);
-
-  // getValueName - Overload in subclass to provide a better default value.
-  StringRef getValueName() const override { return "long"; }
-
-  void printOptionDiff(const Option &O, long long V, OptVal Default,
-                       size_t GlobalWidth) const;
-
-  // An out-of-line virtual method to provide a 'home' for this class.
-  void anchor() override;
-};
-
-extern template class basic_parser<long long>;
-
-//--------------------------------------------------
 // parser<unsigned>
 //
-template <> class parser<unsigned> : public basic_parser<unsigned> {
+template <> class parser<unsigned> final : public basic_parser<unsigned> {
 public:
   parser(Option &O) : basic_parser(O) {}
 
@@ -1058,33 +939,11 @@ public:
 extern template class basic_parser<unsigned>;
 
 //--------------------------------------------------
-// parser<unsigned long>
-//
-template <>
-class parser<unsigned long> final : public basic_parser<unsigned long> {
-public:
-  parser(Option &O) : basic_parser(O) {}
-
-  // parse - Return true on error.
-  bool parse(Option &O, StringRef ArgName, StringRef Arg, unsigned long &Val);
-
-  // getValueName - Overload in subclass to provide a better default value.
-  StringRef getValueName() const override { return "ulong"; }
-
-  void printOptionDiff(const Option &O, unsigned long V, OptVal Default,
-                       size_t GlobalWidth) const;
-
-  // An out-of-line virtual method to provide a 'home' for this class.
-  void anchor() override;
-};
-
-extern template class basic_parser<unsigned long>;
-
-//--------------------------------------------------
 // parser<unsigned long long>
 //
 template <>
-class parser<unsigned long long> : public basic_parser<unsigned long long> {
+class parser<unsigned long long> final
+    : public basic_parser<unsigned long long> {
 public:
   parser(Option &O) : basic_parser(O) {}
 
@@ -1093,7 +952,7 @@ public:
              unsigned long long &Val);
 
   // getValueName - Overload in subclass to provide a better default value.
-  StringRef getValueName() const override { return "ulong"; }
+  StringRef getValueName() const override { return "uint"; }
 
   void printOptionDiff(const Option &O, unsigned long long V, OptVal Default,
                        size_t GlobalWidth) const;
@@ -1107,7 +966,7 @@ extern template class basic_parser<unsigned long long>;
 //--------------------------------------------------
 // parser<double>
 //
-template <> class parser<double> : public basic_parser<double> {
+template <> class parser<double> final : public basic_parser<double> {
 public:
   parser(Option &O) : basic_parser(O) {}
 
@@ -1129,7 +988,7 @@ extern template class basic_parser<double>;
 //--------------------------------------------------
 // parser<float>
 //
-template <> class parser<float> : public basic_parser<float> {
+template <> class parser<float> final : public basic_parser<float> {
 public:
   parser(Option &O) : basic_parser(O) {}
 
@@ -1151,7 +1010,7 @@ extern template class basic_parser<float>;
 //--------------------------------------------------
 // parser<std::string>
 //
-template <> class parser<std::string> : public basic_parser<std::string> {
+template <> class parser<std::string> final : public basic_parser<std::string> {
 public:
   parser(Option &O) : basic_parser(O) {}
 
@@ -1176,7 +1035,7 @@ extern template class basic_parser<std::string>;
 //--------------------------------------------------
 // parser<char>
 //
-template <> class parser<char> : public basic_parser<char> {
+template <> class parser<char> final : public basic_parser<char> {
 public:
   parser(Option &O) : basic_parser(O) {}
 
@@ -1289,11 +1148,7 @@ template <> struct applicator<FormattingFlags> {
 };
 
 template <> struct applicator<MiscFlags> {
-  static void opt(MiscFlags MF, Option &O) {
-    assert((MF != Grouping || O.ArgStr.size() == 1) &&
-           "cl::Grouping can only apply to single charater Options.");
-    O.setMiscFlag(MF);
-  }
+  static void opt(MiscFlags MF, Option &O) { O.setMiscFlag(MF); }
 };
 
 // apply method - Apply modifiers to an option in a type safe way.
@@ -1425,14 +1280,12 @@ class opt : public Option,
       return true; // Parse error!
     this->setValue(Val);
     this->setPosition(pos);
-    Callback(Val);
     return false;
   }
 
   enum ValueExpected getValueExpectedFlagDefault() const override {
     return Parser.getValueExpectedFlagDefault();
   }
-
   void getExtraOptionNames(SmallVectorImpl<StringRef> &OptionNames) override {
     return Parser.getExtraOptionNames(OptionNames);
   }
@@ -1441,7 +1294,6 @@ class opt : public Option,
   size_t getOptionWidth() const override {
     return Parser.getOptionWidth(*this);
   }
-
   void printOptionInfo(size_t GlobalWidth) const override {
     Parser.printOptionInfo(*this, GlobalWidth);
   }
@@ -1452,20 +1304,6 @@ class opt : public Option,
                                        this->getDefault(), GlobalWidth);
     }
   }
-
-  template <class T, class = typename std::enable_if<
-            std::is_assignable<T&, T>::value>::type>
-  void setDefaultImpl() {
-    const OptionValue<DataType> &V = this->getDefault();
-    if (V.hasValue())
-      this->setValue(V.getValue());
-  }
-
-  template <class T, class = typename std::enable_if<
-            !std::is_assignable<T&, T>::value>::type>
-  void setDefaultImpl(...) {}
-
-  void setDefault() override { setDefaultImpl<DataType>(); }
 
   void done() {
     addArgument();
@@ -1484,7 +1322,6 @@ public:
 
   template <class T> DataType &operator=(const T &Val) {
     this->setValue(Val);
-    Callback(Val);
     return this->getValue();
   }
 
@@ -1494,14 +1331,6 @@ public:
     apply(this, Ms...);
     done();
   }
-
-  void setCallback(
-      std::function<void(const typename ParserClass::parser_data_type &)> CB) {
-    Callback = CB;
-  }
-
-  std::function<void(const typename ParserClass::parser_data_type &)> Callback =
-      [](const typename ParserClass::parser_data_type &) {};
 };
 
 extern template class opt<unsigned>;
@@ -1522,8 +1351,6 @@ template <class DataType, class StorageClass> class list_storage {
 
 public:
   list_storage() = default;
-
-  void clear() {}
 
   bool setLocation(Option &O, StorageClass &L) {
     if (Location)
@@ -1551,18 +1378,16 @@ template <class DataType> class list_storage<DataType, bool> {
   std::vector<DataType> Storage;
 
 public:
-  using iterator = typename std::vector<DataType>::iterator;
+  typedef typename std::vector<DataType>::iterator iterator;
 
   iterator begin() { return Storage.begin(); }
   iterator end() { return Storage.end(); }
 
-  using const_iterator = typename std::vector<DataType>::const_iterator;
-
+  typedef typename std::vector<DataType>::const_iterator const_iterator;
   const_iterator begin() const { return Storage.begin(); }
   const_iterator end() const { return Storage.end(); }
 
-  using size_type = typename std::vector<DataType>::size_type;
-
+  typedef typename std::vector<DataType>::size_type size_type;
   size_type size() const { return Storage.size(); }
 
   bool empty() const { return Storage.empty(); }
@@ -1570,15 +1395,10 @@ public:
   void push_back(const DataType &value) { Storage.push_back(value); }
   void push_back(DataType &&value) { Storage.push_back(value); }
 
-  using reference = typename std::vector<DataType>::reference;
-  using const_reference = typename std::vector<DataType>::const_reference;
-
+  typedef typename std::vector<DataType>::reference reference;
+  typedef typename std::vector<DataType>::const_reference const_reference;
   reference operator[](size_type pos) { return Storage[pos]; }
   const_reference operator[](size_type pos) const { return Storage[pos]; }
-
-  void clear() {
-    Storage.clear();
-  }
 
   iterator erase(const_iterator pos) { return Storage.erase(pos); }
   iterator erase(const_iterator first, const_iterator last) {
@@ -1627,7 +1447,6 @@ class list : public Option, public list_storage<DataType, StorageClass> {
   enum ValueExpected getValueExpectedFlagDefault() const override {
     return Parser.getValueExpectedFlagDefault();
   }
-
   void getExtraOptionNames(SmallVectorImpl<StringRef> &OptionNames) override {
     return Parser.getExtraOptionNames(OptionNames);
   }
@@ -1641,7 +1460,6 @@ class list : public Option, public list_storage<DataType, StorageClass> {
     list_storage<DataType, StorageClass>::addValue(Val);
     setPosition(pos);
     Positions.push_back(pos);
-    Callback(Val);
     return false;
   }
 
@@ -1649,18 +1467,12 @@ class list : public Option, public list_storage<DataType, StorageClass> {
   size_t getOptionWidth() const override {
     return Parser.getOptionWidth(*this);
   }
-
   void printOptionInfo(size_t GlobalWidth) const override {
     Parser.printOptionInfo(*this, GlobalWidth);
   }
 
   // Unimplemented: list options don't currently store their default value.
   void printOptionValue(size_t /*GlobalWidth*/, bool /*Force*/) const override {
-  }
-
-  void setDefault() override {
-    Positions.clear();
-    list_storage<DataType, StorageClass>::clear();
   }
 
   void done() {
@@ -1688,14 +1500,6 @@ public:
     apply(this, Ms...);
     done();
   }
-
-  void setCallback(
-      std::function<void(const typename ParserClass::parser_data_type &)> CB) {
-    Callback = CB;
-  }
-
-  std::function<void(const typename ParserClass::parser_data_type &)> Callback =
-      [](const typename ParserClass::parser_data_type &) {};
 };
 
 // multi_val - Modifier to set the number of additional values.
@@ -1782,7 +1586,6 @@ class bits : public Option, public bits_storage<DataType, Storage> {
   enum ValueExpected getValueExpectedFlagDefault() const override {
     return Parser.getValueExpectedFlagDefault();
   }
-
   void getExtraOptionNames(SmallVectorImpl<StringRef> &OptionNames) override {
     return Parser.getExtraOptionNames(OptionNames);
   }
@@ -1796,7 +1599,6 @@ class bits : public Option, public bits_storage<DataType, Storage> {
     this->addValue(Val);
     setPosition(pos);
     Positions.push_back(pos);
-    Callback(Val);
     return false;
   }
 
@@ -1804,7 +1606,6 @@ class bits : public Option, public bits_storage<DataType, Storage> {
   size_t getOptionWidth() const override {
     return Parser.getOptionWidth(*this);
   }
-
   void printOptionInfo(size_t GlobalWidth) const override {
     Parser.printOptionInfo(*this, GlobalWidth);
   }
@@ -1812,8 +1613,6 @@ class bits : public Option, public bits_storage<DataType, Storage> {
   // Unimplemented: bits options don't currently store their default values.
   void printOptionValue(size_t /*GlobalWidth*/, bool /*Force*/) const override {
   }
-
-  void setDefault() override {}
 
   void done() {
     addArgument();
@@ -1838,14 +1637,6 @@ public:
     apply(this, Ms...);
     done();
   }
-
-  void setCallback(
-      std::function<void(const typename ParserClass::parser_data_type &)> CB) {
-    Callback = CB;
-  }
-
-  std::function<void(const typename ParserClass::parser_data_type &)> Callback =
-      [](const typename ParserClass::parser_data_type &) {};
 };
 
 //===----------------------------------------------------------------------===//
@@ -1873,8 +1664,6 @@ class alias : public Option {
   void printOptionValue(size_t /*GlobalWidth*/, bool /*Force*/) const override {
   }
 
-  void setDefault() override { AliasFor->setDefault(); }
-
   ValueExpected getValueExpectedFlagDefault() const override {
     return AliasFor->getValueExpectedFlag();
   }
@@ -1884,10 +1673,7 @@ class alias : public Option {
       error("cl::alias must have argument name specified!");
     if (!AliasFor)
       error("cl::alias must have an cl::aliasopt(option) specified!");
-    if (!Subs.empty())
-      error("cl::alias must not have cl::sub(), aliased option's cl::sub() will be used!");
     Subs = AliasFor->Subs;
-    Categories = AliasFor->Categories;
     addArgument();
   }
 
@@ -1934,6 +1720,8 @@ void PrintVersionMessage();
 /// This function just prints the help message, exactly the same way as if the
 /// -help or -help-hidden option had been given on the command line.
 ///
+/// NOTE: THIS FUNCTION TERMINATES THE PROGRAM!
+///
 /// \param Hidden if true will print hidden options
 /// \param Categorized if true print options in categories
 void PrintHelpMessage(bool Hidden = false, bool Categorized = false);
@@ -1942,8 +1730,8 @@ void PrintHelpMessage(bool Hidden = false, bool Categorized = false);
 // Public interface for accessing registered options.
 //
 
-/// Use this to get a StringMap to all registered named options
-/// (e.g. -help).
+/// \brief Use this to get a StringMap to all registered named options
+/// (e.g. -help). Note \p Map Should be an empty StringMap.
 ///
 /// \return A reference to the StringMap used by the cl APIs to parse options.
 ///
@@ -1971,7 +1759,7 @@ void PrintHelpMessage(bool Hidden = false, bool Categorized = false);
 /// than just handing around a global list.
 StringMap<Option *> &getRegisteredOptions(SubCommand &Sub = *TopLevelSubCommand);
 
-/// Use this to get all registered SubCommands from the provided parser.
+/// \brief Use this to get all registered SubCommands from the provided parser.
 ///
 /// \return A range of all SubCommand pointers registered with the parser.
 ///
@@ -1997,7 +1785,7 @@ getRegisteredSubcommands();
 // Standalone command line processing utilities.
 //
 
-/// Tokenizes a command line that can contain escapes and quotes.
+/// \brief Tokenizes a command line that can contain escapes and quotes.
 //
 /// The quoting rules match those used by GCC and other tools that use
 /// libiberty's buildargv() or expandargv() utilities, and do not match bash.
@@ -2013,7 +1801,7 @@ void TokenizeGNUCommandLine(StringRef Source, StringSaver &Saver,
                             SmallVectorImpl<const char *> &NewArgv,
                             bool MarkEOLs = false);
 
-/// Tokenizes a Windows command line which may contain quotes and escaped
+/// \brief Tokenizes a Windows command line which may contain quotes and escaped
 /// quotes.
 ///
 /// See MSDN docs for CommandLineToArgvW for information on the quoting rules.
@@ -2028,40 +1816,13 @@ void TokenizeWindowsCommandLine(StringRef Source, StringSaver &Saver,
                                 SmallVectorImpl<const char *> &NewArgv,
                                 bool MarkEOLs = false);
 
-/// String tokenization function type.  Should be compatible with either
+/// \brief String tokenization function type.  Should be compatible with either
 /// Windows or Unix command line tokenizers.
-using TokenizerCallback = void (*)(StringRef Source, StringSaver &Saver,
-                                   SmallVectorImpl<const char *> &NewArgv,
-                                   bool MarkEOLs);
+typedef void (*TokenizerCallback)(StringRef Source, StringSaver &Saver,
+                                  SmallVectorImpl<const char *> &NewArgv,
+                                  bool MarkEOLs);
 
-/// Tokenizes content of configuration file.
-///
-/// \param [in] Source The string representing content of config file.
-/// \param [in] Saver Delegates back to the caller for saving parsed strings.
-/// \param [out] NewArgv All parsed strings are appended to NewArgv.
-/// \param [in] MarkEOLs Added for compatibility with TokenizerCallback.
-///
-/// It works like TokenizeGNUCommandLine with ability to skip comment lines.
-///
-void tokenizeConfigFile(StringRef Source, StringSaver &Saver,
-                        SmallVectorImpl<const char *> &NewArgv,
-                        bool MarkEOLs = false);
-
-/// Reads command line options from the given configuration file.
-///
-/// \param [in] CfgFileName Path to configuration file.
-/// \param [in] Saver  Objects that saves allocated strings.
-/// \param [out] Argv Array to which the read options are added.
-/// \return true if the file was successfully read.
-///
-/// It reads content of the specified file, tokenizes it and expands "@file"
-/// commands resolving file names in them relative to the directory where
-/// CfgFilename resides.
-///
-bool readConfigFile(StringRef CfgFileName, StringSaver &Saver,
-                    SmallVectorImpl<const char *> &Argv);
-
-/// Expand response files on a command line recursively using the given
+/// \brief Expand response files on a command line recursively using the given
 /// StringSaver and tokenization strategy.  Argv should contain the command line
 /// before expansion and will be modified in place. If requested, Argv will
 /// also be populated with nullptrs indicating where each response file line
@@ -2076,18 +1837,12 @@ bool readConfigFile(StringRef CfgFileName, StringSaver &Saver,
 /// with nullptrs in the Argv vector.
 /// \param [in] RelativeNames true if names of nested response files must be
 /// resolved relative to including file.
-/// \param [in] FS File system used for all file access when running the tool.
-/// \param [in] CurrentDir Path used to resolve relative rsp files. If set to
-/// None, process' cwd is used instead.
 /// \return true if all @files were expanded successfully or there were none.
-bool ExpandResponseFiles(
-    StringSaver &Saver, TokenizerCallback Tokenizer,
-    SmallVectorImpl<const char *> &Argv, bool MarkEOLs = false,
-    bool RelativeNames = false,
-    llvm::vfs::FileSystem &FS = *llvm::vfs::getRealFileSystem(),
-    llvm::Optional<llvm::StringRef> CurrentDir = llvm::None);
+bool ExpandResponseFiles(StringSaver &Saver, TokenizerCallback Tokenizer,
+                         SmallVectorImpl<const char *> &Argv,
+                         bool MarkEOLs = false, bool RelativeNames = false);
 
-/// Mark all options not part of this category as cl::ReallyHidden.
+/// \brief Mark all options not part of this category as cl::ReallyHidden.
 ///
 /// \param Category the category of options to keep displaying
 ///
@@ -2097,7 +1852,7 @@ bool ExpandResponseFiles(
 void HideUnrelatedOptions(cl::OptionCategory &Category,
                           SubCommand &Sub = *TopLevelSubCommand);
 
-/// Mark all options not part of the categories as cl::ReallyHidden.
+/// \brief Mark all options not part of the categories as cl::ReallyHidden.
 ///
 /// \param Categories the categories of options to keep displaying.
 ///
@@ -2107,22 +1862,18 @@ void HideUnrelatedOptions(cl::OptionCategory &Category,
 void HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *> Categories,
                           SubCommand &Sub = *TopLevelSubCommand);
 
-/// Reset all command line options to a state that looks as if they have
+/// \brief Reset all command line options to a state that looks as if they have
 /// never appeared on the command line.  This is useful for being able to parse
 /// a command line multiple times (especially useful for writing tests).
 void ResetAllOptionOccurrences();
 
-/// Reset the command line parser back to its initial state.  This
+/// \brief Reset the command line parser back to its initial state.  This
 /// removes
 /// all options, categories, and subcommands and returns the parser to a state
 /// where no options are supported.
 void ResetCommandLineParser();
 
-/// Parses `Arg` into the option handler `Handler`.
-bool ProvidePositionalOption(Option *Handler, StringRef Arg, int i);
-
 } // end namespace cl
-
 } // end namespace llvm
 
 #endif // LLVM_SUPPORT_COMMANDLINE_H

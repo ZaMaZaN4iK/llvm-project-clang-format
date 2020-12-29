@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,8 +18,6 @@
 #include <mutex>
 #include <cassert>
 
-#include "test_macros.h"
-
 struct mutex
 {
     static int lock_count;
@@ -32,7 +31,7 @@ int mutex::unlock_count = 0;
 
 mutex m;
 
-int main(int, char**)
+int main()
 {
     std::unique_lock<mutex> lk(m);
     assert(lk.mutex() == &m);
@@ -44,6 +43,4 @@ int main(int, char**)
     assert(lk.owns_lock() == false);
     assert(mutex::lock_count == 1);
     assert(mutex::unlock_count == 0);
-
-  return 0;
 }

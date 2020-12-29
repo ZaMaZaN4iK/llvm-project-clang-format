@@ -1,15 +1,14 @@
 //===-- sanitizer_common_interceptors_ioctl.inc -----------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // Ioctl handling in common sanitizer interceptors.
 //===----------------------------------------------------------------------===//
-
-#if !SANITIZER_NETBSD
 
 #include "sanitizer_flags.h"
 
@@ -58,9 +57,7 @@ static void ioctl_table_fill() {
   _(SIOCGIFCONF, CUSTOM, 0);
   _(SIOCGPGRP, WRITE, sizeof(int));
   _(SIOCSPGRP, READ, sizeof(int));
-#if !SANITIZER_SOLARIS
   _(TIOCCONS, NONE, 0);
-#endif
   _(TIOCEXCL, NONE, 0);
   _(TIOCGETD, WRITE, sizeof(int));
   _(TIOCGPGRP, WRITE, pid_t_sz);
@@ -479,7 +476,7 @@ struct ioctl_desc_compare {
 
 static void ioctl_init() {
   ioctl_table_fill();
-  Sort(ioctl_table, ioctl_table_size, ioctl_desc_compare());
+  InternalSort(&ioctl_table, ioctl_table_size, ioctl_desc_compare());
 
   bool bad = false;
   for (unsigned i = 0; i < ioctl_table_size - 1; ++i) {
@@ -605,5 +602,3 @@ static void ioctl_common_post(void *ctx, const ioctl_desc *desc, int res, int d,
     COMMON_INTERCEPTOR_WRITE_RANGE(ctx, ifc->ifc_ifcu.ifcu_req, ifc->ifc_len);
   }
 }
-
-#endif

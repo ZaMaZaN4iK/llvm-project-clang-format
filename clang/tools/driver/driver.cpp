@@ -1,8 +1,9 @@
 //===-- driver.cpp - Clang GCC-Compatible Driver --------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,11 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/Driver/Driver.h"
 #include "clang/Basic/DiagnosticOptions.h"
-#include "clang/Basic/Stack.h"
-#include "clang/Config/config.h"
 #include "clang/Driver/Compilation.h"
+#include "clang/Driver/Driver.h"
 #include "clang/Driver/DriverDiagnostic.h"
 #include "clang/Driver/Options.h"
 #include "clang/Driver/ToolChain.h"
@@ -27,17 +26,17 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Option/OptTable.h"
 #include "llvm/Option/Option.h"
-#include "llvm/Support/BuryPointer.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/CrashRecoveryContext.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
-#include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/Regex.h"
@@ -54,15 +53,8 @@ using namespace clang::driver;
 using namespace llvm::opt;
 
 std::string GetExecutablePath(const char *Argv0, bool CanonicalPrefixes) {
-  if (!CanonicalPrefixes) {
-    SmallString<128> ExecutablePath(Argv0);
-    // Do a PATH lookup if Argv0 isn't a valid path.
-    if (!llvm::sys::fs::exists(ExecutablePath))
-      if (llvm::ErrorOr<std::string> P =
-              llvm::sys::findProgramByName(ExecutablePath))
-        ExecutablePath = *P;
-    return ExecutablePath.str();
-  }
+  if (!CanonicalPrefixes)
+    return Argv0;
 
   // This just needs to be some symbol in the binary; C++ doesn't
   // allow taking the address of ::main however.
@@ -206,30 +198,24 @@ extern int cc1_main(ArrayRef<const char *> Argv, const char *Argv0,
                     void *MainAddr);
 extern int cc1as_main(ArrayRef<const char *> Argv, const char *Argv0,
                       void *MainAddr);
-extern int cc1gen_reproducer_main(ArrayRef<const char *> Argv,
-                                  const char *Argv0, void *MainAddr);
 
-static void insertTargetAndModeArgs(const ParsedClangName &NameParts,
+static void insertTargetAndModeArgs(StringRef Target, StringRef Mode,
                                     SmallVectorImpl<const char *> &ArgVector,
                                     std::set<std::string> &SavedStrings) {
-  // Put target and mode arguments at the start of argument list so that
-  // arguments specified in command line could override them. Avoid putting
-  // them at index 0, as an option like '-cc1' must remain the first.
-  int InsertionPoint = 0;
-  if (ArgVector.size() > 0)
-    ++InsertionPoint;
-
-  if (NameParts.DriverMode) {
+  if (!Mode.empty()) {
     // Add the mode flag to the arguments.
-    ArgVector.insert(ArgVector.begin() + InsertionPoint,
-                     GetStableCStr(SavedStrings, NameParts.DriverMode));
+    auto it = ArgVector.begin();
+    if (it != ArgVector.end())
+      ++it;
+    ArgVector.insert(it, GetStableCStr(SavedStrings, Mode));
   }
 
-  if (NameParts.TargetIsValid) {
-    const char *arr[] = {"-target", GetStableCStr(SavedStrings,
-                                                  NameParts.TargetPrefix)};
-    ArgVector.insert(ArgVector.begin() + InsertionPoint,
-                     std::begin(arr), std::end(arr));
+  if (!Target.empty()) {
+    auto it = ArgVector.begin();
+    if (it != ArgVector.end())
+      ++it;
+    const char *arr[] = {"-target", GetStableCStr(SavedStrings, Target)};
+    ArgVector.insert(it, std::begin(arr), std::end(arr));
   }
 }
 
@@ -263,30 +249,25 @@ static void FixupDiagPrefixExeName(TextDiagnosticPrinter *DiagClient,
                                    const std::string &Path) {
   // If the clang binary happens to be named cl.exe for compatibility reasons,
   // use clang-cl.exe as the prefix to avoid confusion between clang and MSVC.
-  StringRef ExeBasename(llvm::sys::path::stem(Path));
-  if (ExeBasename.equals_lower("cl"))
-    ExeBasename = "clang-cl";
+  StringRef ExeBasename(llvm::sys::path::filename(Path));
+  if (ExeBasename.equals_lower("cl.exe"))
+    ExeBasename = "clang-cl.exe";
   DiagClient->setPrefix(ExeBasename);
 }
 
 // This lets us create the DiagnosticsEngine with a properly-filled-out
 // DiagnosticOptions instance.
 static DiagnosticOptions *
-CreateAndPopulateDiagOpts(ArrayRef<const char *> argv, bool &UseNewCC1Process) {
+CreateAndPopulateDiagOpts(ArrayRef<const char *> argv) {
   auto *DiagOpts = new DiagnosticOptions;
+  std::unique_ptr<OptTable> Opts(createDriverOptTable());
   unsigned MissingArgIndex, MissingArgCount;
-  InputArgList Args = getDriverOptTable().ParseArgs(
-      argv.slice(1), MissingArgIndex, MissingArgCount);
+  InputArgList Args =
+      Opts->ParseArgs(argv.slice(1), MissingArgIndex, MissingArgCount);
   // We ignore MissingArgCount and the return value of ParseDiagnosticArgs.
   // Any errors that would be diagnosed here will also be diagnosed later,
   // when the DiagnosticsEngine actually exists.
   (void)ParseDiagnosticArgs(*DiagOpts, Args);
-
-  UseNewCC1Process =
-      Args.hasFlag(clang::driver::options::OPT_fno_integrated_cc1,
-                   clang::driver::options::OPT_fintegrated_cc1,
-                   /*Default=*/CLANG_SPAWN_CC1);
-
   return DiagOpts;
 }
 
@@ -312,43 +293,39 @@ static void SetInstallDir(SmallVectorImpl<const char *> &argv,
     TheDriver.setInstalledDir(InstalledPathParent);
 }
 
-static int ExecuteCC1Tool(SmallVectorImpl<const char *> &ArgV) {
-  // If we call the cc1 tool from the clangDriver library (through
-  // Driver::CC1Main), we need to clean up the options usage count. The options
-  // are currently global, and they might have been used previously by the
-  // driver.
-  llvm::cl::ResetAllOptionOccurrences();
+static int ExecuteCC1Tool(ArrayRef<const char *> argv, StringRef Tool) {
+  void *GetExecutablePathVP = (void *)(intptr_t) GetExecutablePath;
+  if (Tool == "")
+    return cc1_main(argv.slice(2), argv[0], GetExecutablePathVP);
+  if (Tool == "as")
+    return cc1as_main(argv.slice(2), argv[0], GetExecutablePathVP);
 
-  llvm::BumpPtrAllocator A;
-  llvm::StringSaver Saver(A);
-  llvm::cl::ExpandResponseFiles(Saver, &llvm::cl::TokenizeGNUCommandLine, ArgV,
-                                /*MarkEOLs=*/false);
-  StringRef Tool = ArgV[1];
-  void *GetExecutablePathVP = (void *)(intptr_t)GetExecutablePath;
-  if (Tool == "-cc1")
-    return cc1_main(makeArrayRef(ArgV).slice(2), ArgV[0], GetExecutablePathVP);
-  if (Tool == "-cc1as")
-    return cc1as_main(makeArrayRef(ArgV).slice(2), ArgV[0],
-                      GetExecutablePathVP);
-  if (Tool == "-cc1gen-reproducer")
-    return cc1gen_reproducer_main(makeArrayRef(ArgV).slice(2), ArgV[0],
-                                  GetExecutablePathVP);
   // Reject unknown tools.
-  llvm::errs() << "error: unknown integrated tool '" << Tool << "'. "
-               << "Valid tools include '-cc1' and '-cc1as'.\n";
+  llvm::errs() << "error: unknown integrated tool '" << Tool << "'\n";
   return 1;
 }
 
 int main(int argc_, const char **argv_) {
-  noteBottomOfStack();
-  llvm::InitLLVM X(argc_, argv_);
-  SmallVector<const char *, 256> argv(argv_, argv_ + argc_);
+  llvm::sys::PrintStackTraceOnErrorSignal(argv_[0]);
+  llvm::PrettyStackTraceProgram X(argc_, argv_);
+  llvm::llvm_shutdown_obj Y; // Call llvm_shutdown() on exit.
 
   if (llvm::sys::Process::FixupStandardFileDescriptors())
     return 1;
 
+  SmallVector<const char *, 256> argv;
+  llvm::SpecificBumpPtrAllocator<char> ArgAllocator;
+  std::error_code EC = llvm::sys::Process::GetArgumentVector(
+      argv, llvm::makeArrayRef(argv_, argc_), ArgAllocator);
+  if (EC) {
+    llvm::errs() << "error: couldn't get arguments: " << EC.message() << '\n';
+    return 1;
+  }
+
   llvm::InitializeAllTargets();
-  auto TargetAndMode = ToolChain::getTargetAndModeFromProgramName(argv[0]);
+  std::string ProgName = argv[0];
+  std::pair<std::string, std::string> TargetAndMode =
+      ToolChain::getTargetAndModeFromProgramName(ProgName);
 
   llvm::BumpPtrAllocator A;
   llvm::StringSaver Saver(A);
@@ -361,8 +338,8 @@ int main(int argc_, const char **argv_) {
   // Finally, our -cc1 tools don't care which tokenization mode we use because
   // response files written by clang will tokenize the same way in either mode.
   bool ClangCLMode = false;
-  if (StringRef(TargetAndMode.DriverMode).equals("--driver-mode=cl") ||
-      llvm::find_if(argv, [](const char *F) {
+  if (TargetAndMode.second == "--driver-mode=cl" ||
+      std::find_if(argv.begin(), argv.end(), [](const char *F) {
         return F && strcmp(F, "--driver-mode=cl") == 0;
       }) != argv.end()) {
     ClangCLMode = true;
@@ -400,11 +377,9 @@ int main(int argc_, const char **argv_) {
       auto newEnd = std::remove(argv.begin(), argv.end(), nullptr);
       argv.resize(newEnd - argv.begin());
     }
-    return ExecuteCC1Tool(argv);
+    return ExecuteCC1Tool(argv, argv[1] + 4);
   }
 
-  // Handle options that need handling before the real command line parsing in
-  // Driver::BuildCompilation()
   bool CanonicalPrefixes = true;
   for (int i = 1, size = argv.size(); i < size; ++i) {
     // Skip end-of-line response file markers
@@ -449,14 +424,8 @@ int main(int argc_, const char **argv_) {
 
   std::string Path = GetExecutablePath(argv[0], CanonicalPrefixes);
 
-  // Whether the cc1 tool should be called inside the current process, or if we
-  // should spawn a new clang subprocess (old behavior).
-  // Not having an additional process saves some execution time of Windows,
-  // and makes debugging and profiling easier.
-  bool UseNewCC1Process;
-
   IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts =
-      CreateAndPopulateDiagOpts(argv, UseNewCC1Process);
+      CreateAndPopulateDiagOpts(argv);
 
   TextDiagnosticPrinter *DiagClient
     = new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts);
@@ -478,74 +447,58 @@ int main(int argc_, const char **argv_) {
 
   Driver TheDriver(Path, llvm::sys::getDefaultTargetTriple(), Diags);
   SetInstallDir(argv, TheDriver, CanonicalPrefixes);
-  TheDriver.setTargetAndMode(TargetAndMode);
 
-  insertTargetAndModeArgs(TargetAndMode, argv, SavedStrings);
+  insertTargetAndModeArgs(TargetAndMode.first, TargetAndMode.second, argv,
+                          SavedStrings);
 
   SetBackdoorDriverOutputsFromEnvVars(TheDriver);
 
-  if (!UseNewCC1Process) {
-    TheDriver.CC1Main = &ExecuteCC1Tool;
-    // Ensure the CC1Command actually catches cc1 crashes
-    llvm::CrashRecoveryContext::Enable();
-  }
-
   std::unique_ptr<Compilation> C(TheDriver.BuildCompilation(argv));
-  int Res = 1;
-  bool IsCrash = false;
-  if (C && !C->containsError()) {
-    SmallVector<std::pair<int, const Command *>, 4> FailingCommands;
+  int Res = 0;
+  SmallVector<std::pair<int, const Command *>, 4> FailingCommands;
+  if (C.get())
     Res = TheDriver.ExecuteCompilation(*C, FailingCommands);
 
-    // Force a crash to test the diagnostics.
-    if (TheDriver.GenReproducer) {
-      Diags.Report(diag::err_drv_force_crash)
-        << !::getenv("FORCE_CLANG_DIAGNOSTICS_CRASH");
+  // Force a crash to test the diagnostics.
+  if (::getenv("FORCE_CLANG_DIAGNOSTICS_CRASH")) {
+    Diags.Report(diag::err_drv_force_crash) << "FORCE_CLANG_DIAGNOSTICS_CRASH";
 
-      // Pretend that every command failed.
-      FailingCommands.clear();
-      for (const auto &J : C->getJobs())
-        if (const Command *C = dyn_cast<Command>(&J))
-          FailingCommands.push_back(std::make_pair(-1, C));
-    }
+    // Pretend that every command failed.
+    FailingCommands.clear();
+    for (const auto &J : C->getJobs())
+      if (const Command *C = dyn_cast<Command>(&J))
+        FailingCommands.push_back(std::make_pair(-1, C));
+  }
 
-    for (const auto &P : FailingCommands) {
-      int CommandRes = P.first;
-      const Command *FailingCommand = P.second;
-      if (!Res)
-        Res = CommandRes;
+  for (const auto &P : FailingCommands) {
+    int CommandRes = P.first;
+    const Command *FailingCommand = P.second;
+    if (!Res)
+      Res = CommandRes;
 
-      // If result status is < 0, then the driver command signalled an error.
-      // If result status is 70, then the driver command reported a fatal error.
-      // On Windows, abort will return an exit code of 3.  In these cases,
-      // generate additional diagnostic information if possible.
-      IsCrash = CommandRes < 0 || CommandRes == 70;
-#ifdef _WIN32
-      IsCrash |= CommandRes == 3;
+    // If result status is < 0, then the driver command signalled an error.
+    // If result status is 70, then the driver command reported a fatal error.
+    // On Windows, abort will return an exit code of 3.  In these cases,
+    // generate additional diagnostic information if possible.
+    bool DiagnoseCrash = CommandRes < 0 || CommandRes == 70;
+#ifdef LLVM_ON_WIN32
+    DiagnoseCrash |= CommandRes == 3;
 #endif
-      if (IsCrash) {
-        TheDriver.generateCompilationDiagnostics(*C, *FailingCommand);
-        break;
-      }
+    if (DiagnoseCrash) {
+      TheDriver.generateCompilationDiagnostics(*C, *FailingCommand);
+      break;
     }
   }
 
   Diags.getClient()->finish();
 
-  if (!UseNewCC1Process && IsCrash) {
-    // When crashing in -fintegrated-cc1 mode, bury the timer pointers, because
-    // the internal linked list might point to already released stack frames.
-    llvm::BuryPointer(llvm::TimerGroup::aquireDefaultGroup());
-  } else {
-    // If any timers were active but haven't been destroyed yet, print their
-    // results now.  This happens in -disable-free mode.
-    llvm::TimerGroup::printAll(llvm::errs());
-    llvm::TimerGroup::clearAll();
-  }
+  // If any timers were active but haven't been destroyed yet, print their
+  // results now.  This happens in -disable-free mode.
+  llvm::TimerGroup::printAll(llvm::errs());
 
-#ifdef _WIN32
+#ifdef LLVM_ON_WIN32
   // Exit status should not be negative on Win32, unless abnormal termination.
-  // Once abnormal termination was caught, negative status should not be
+  // Once abnormal termiation was caught, negative status should not be
   // propagated.
   if (Res < 0)
     Res = 1;

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,10 +23,8 @@
 #include <tuple>
 #include <cassert>
 #include <cstdlib>
-#include "uses_alloc_types.h"
-#include "controlled_allocators.h"
-
-#include "test_macros.h"
+#include "uses_alloc_types.hpp"
+#include "controlled_allocators.hpp"
 
 
 void test_no_inner_alloc()
@@ -40,7 +39,6 @@ void test_no_inner_alloc()
         using SA = std::scoped_allocator_adaptor<Alloc>;
         static_assert(std::uses_allocator<T, CountingAllocator<T> >::value, "");
         Pair * ptr = (Pair*)std::malloc(sizeof(Pair));
-        assert(ptr);
         Alloc CA(P);
         SA A(CA);
         A.construct(ptr);
@@ -63,7 +61,6 @@ void test_no_inner_alloc()
         using SA = std::scoped_allocator_adaptor<Alloc>;
         static_assert(std::uses_allocator<T, CountingAllocator<T> >::value, "");
         Pair * ptr = (Pair*)std::malloc(sizeof(Pair));
-        assert(ptr);
         Alloc CA(P);
         SA A(CA);
         A.construct(ptr);
@@ -80,6 +77,7 @@ void test_no_inner_alloc()
 
 void test_with_inner_alloc()
 {
+    using VoidAlloc1 = CountingAllocator<void, 1>;
     using VoidAlloc2 = CountingAllocator<void, 2>;
 
     AllocController POuter;
@@ -95,7 +93,6 @@ void test_with_inner_alloc()
         static_assert(!std::uses_allocator<T, Outer>::value, "");
         static_assert(std::uses_allocator<T, Inner>::value, "");
         Pair * ptr = (Pair*)std::malloc(sizeof(Pair));
-        assert(ptr);
         Outer O(POuter);
         Inner I(PInner);
         SA A(O, I);
@@ -122,7 +119,6 @@ void test_with_inner_alloc()
         static_assert(!std::uses_allocator<T, Outer>::value, "");
         static_assert(std::uses_allocator<T, Inner>::value, "");
         Pair * ptr = (Pair*)std::malloc(sizeof(Pair));
-        assert(ptr);
         Outer O(POuter);
         Inner I(PInner);
         SA A(O, I);
@@ -137,9 +133,7 @@ void test_with_inner_alloc()
         std::free(ptr);
     }
 }
-int main(int, char**) {
+int main() {
     test_no_inner_alloc();
     test_with_inner_alloc();
-
-  return 0;
 }

@@ -1,15 +1,16 @@
 //===--- SimplifyBooleanExpr.h clang-tidy -----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_READABILITY_SIMPLIFY_BOOLEAN_EXPR_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_READABILITY_SIMPLIFY_BOOLEAN_EXPR_H
 
-#include "../ClangTidyCheck.h"
+#include "../ClangTidy.h"
 
 namespace clang {
 namespace tidy {
@@ -29,10 +30,17 @@ public:
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
 
 private:
-  class Visitor;
+  void matchBoolBinOpExpr(ast_matchers::MatchFinder *Finder, bool Value,
+                          StringRef OperatorName, StringRef BooleanId);
 
-  void reportBinOp(const ast_matchers::MatchFinder::MatchResult &Result,
-                   const BinaryOperator *Op);
+  void matchExprBinOpBool(ast_matchers::MatchFinder *Finder, bool Value,
+                          StringRef OperatorName, StringRef BooleanId);
+
+  void matchBoolCompOpExpr(ast_matchers::MatchFinder *Finder, bool Value,
+                           StringRef OperatorName, StringRef BooleanId);
+
+  void matchExprCompOpBool(ast_matchers::MatchFinder *Finder, bool Value,
+                           StringRef OperatorName, StringRef BooleanId);
 
   void matchBoolCondition(ast_matchers::MatchFinder *Finder, bool Value,
                           StringRef BooleanId);
@@ -48,6 +56,11 @@ private:
 
   void matchCompoundIfReturnsBool(ast_matchers::MatchFinder *Finder, bool Value,
                                   StringRef Id);
+
+  void
+  replaceWithExpression(const ast_matchers::MatchFinder::MatchResult &Result,
+                        const CXXBoolLiteralExpr *BoolLiteral, bool UseLHS,
+                        bool Negated = false);
 
   void
   replaceWithThenStatement(const ast_matchers::MatchFinder::MatchResult &Result,

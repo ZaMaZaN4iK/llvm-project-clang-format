@@ -1,14 +1,17 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // type_traits
 
 // is_rvalue_reference
+
+// UNSUPPORTED: c++98, c++03
 
 #include <type_traits>
 #include <cstddef>        // for std::nullptr_t
@@ -70,7 +73,7 @@ struct incomplete_type;
 
 typedef void (*FunctionPtr)();
 
-int main(int, char**)
+int main()
 {
     test_is_rvalue_reference<int&&>();
 
@@ -91,6 +94,4 @@ int main(int, char**)
     test_is_not_rvalue_reference<NotEmpty>();
     test_is_not_rvalue_reference<Abstract>();
     test_is_not_rvalue_reference<incomplete_type>();
-
-  return 0;
 }

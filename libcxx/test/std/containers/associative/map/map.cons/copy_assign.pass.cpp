@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,7 +21,6 @@
 
 #include <iostream>
 
-#include "test_macros.h"
 #include "../../../test_compare.h"
 #include "test_allocator.h"
 #include "min_allocator.h"
@@ -109,7 +109,7 @@ bool balanced_allocs() {
     }
 #endif
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::pair<const int, double> V;
@@ -338,6 +338,4 @@ int main(int, char**)
     }
     assert(balanced_allocs());
 #endif
-
-  return 0;
 }

@@ -1,8 +1,9 @@
 //===-- SelectHelper.cpp ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,28 +14,26 @@
 #define _DARWIN_UNLIMITED_SELECT
 #endif
 
-#include "lldb/Utility/SelectHelper.h"
-#include "lldb/Utility/LLDBAssert.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/lldb-enumerations.h"
-#include "lldb/lldb-types.h"
-
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/Optional.h"
-
-#include <algorithm>
-#include <chrono>
-
+// C Includes
 #include <errno.h>
 #if defined(_WIN32)
 // Define NOMINMAX to avoid macros that conflict with std::min and std::max
 #define NOMINMAX
 #include <winsock2.h>
 #else
-#include <sys/time.h>
 #include <sys/select.h>
 #endif
 
+// C++ Includes
+#include <algorithm>
+
+// Other libraries and framework includes
+#include "llvm/ADT/SmallVector.h"
+
+// Project includes
+#include "lldb/Core/Error.h"
+#include "lldb/Utility/LLDBAssert.h"
+#include "lldb/Utility/SelectHelper.h"
 
 SelectHelper::SelectHelper()
     : m_fd_map(), m_end_time() // Infinite timeout unless
@@ -90,14 +89,14 @@ static void updateMaxFd(llvm::Optional<lldb::socket_t> &vold,
     vold = std::max(*vold, vnew);
 }
 
-lldb_private::Status SelectHelper::Select() {
-  lldb_private::Status error;
-#ifdef _WIN32
+lldb_private::Error SelectHelper::Select() {
+  lldb_private::Error error;
+#ifdef _MSC_VER
   // On windows FD_SETSIZE limits the number of file descriptors, not their
   // numeric value.
   lldbassert(m_fd_map.size() <= FD_SETSIZE);
   if (m_fd_map.size() > FD_SETSIZE)
-    return lldb_private::Status("Too many file descriptors for select()");
+    return lldb_private::Error("Too many file descriptors for select()");
 #endif
 
   llvm::Optional<lldb::socket_t> max_read_fd;
@@ -107,9 +106,9 @@ lldb_private::Status SelectHelper::Select() {
   for (auto &pair : m_fd_map) {
     pair.second.PrepareForSelect();
     const lldb::socket_t fd = pair.first;
-#if !defined(__APPLE__) && !defined(_WIN32)
-    lldbassert(fd < static_cast<int>(FD_SETSIZE));
-    if (fd >= static_cast<int>(FD_SETSIZE)) {
+#if !defined(__APPLE__) && !defined(_MSC_VER)
+    lldbassert(fd < FD_SETSIZE);
+    if (fd >= FD_SETSIZE) {
       error.SetErrorStringWithFormat("%i is too large for select()", fd);
       return error;
     }
@@ -132,7 +131,9 @@ lldb_private::Status SelectHelper::Select() {
   fd_set *read_fdset_ptr = nullptr;
   fd_set *write_fdset_ptr = nullptr;
   fd_set *error_fdset_ptr = nullptr;
+//----------------------------------------------------------------------
 // Initialize and zero out the fdsets
+//----------------------------------------------------------------------
 #if defined(__APPLE__)
   llvm::SmallVector<fd_set, 1> read_fdset;
   llvm::SmallVector<fd_set, 1> write_fdset;
@@ -174,7 +175,9 @@ lldb_private::Status SelectHelper::Select() {
     error_fdset_ptr = &error_fdset;
   }
 #endif
+  //----------------------------------------------------------------------
   // Set the FD bits in the fdsets for read/write/error
+  //----------------------------------------------------------------------
   for (auto &pair : m_fd_map) {
     const lldb::socket_t fd = pair.first;
 
@@ -188,13 +191,17 @@ lldb_private::Status SelectHelper::Select() {
       FD_SET(fd, error_fdset_ptr);
   }
 
+  //----------------------------------------------------------------------
   // Setup our timeout time value if needed
+  //----------------------------------------------------------------------
   struct timeval *tv_ptr = nullptr;
   struct timeval tv = {0, 0};
 
-  while (true) {
+  while (1) {
     using namespace std::chrono;
+    //------------------------------------------------------------------
     // Setup out relative timeout based on the end time if we have one
+    //------------------------------------------------------------------
     if (m_end_time.hasValue()) {
       tv_ptr = &tv;
       const auto remaining_dur = duration_cast<microseconds>(
@@ -227,9 +234,8 @@ lldb_private::Status SelectHelper::Select() {
       error.SetErrorString("timed out");
       return error;
     } else {
-      // One or more descriptors were set, update the FDInfo::select_is_set
-      // mask so users can ask the SelectHelper class so clients can call one
-      // of:
+      // One or more descriptors were set, update the FDInfo::select_is_set mask
+      // so users can ask the SelectHelper class so clients can call one of:
 
       for (auto &pair : m_fd_map) {
         const int fd = pair.first;

@@ -1,6 +1,6 @@
 // RUN: llvm-tblgen -gen-asm-matcher -I %p/../../include %s | FileCheck %s
 
-// Check that specifying AsmVariant works correctly
+// Check that cpecifying AsmVariant works correctly
 
 include "llvm/Target/Target.td"
 
@@ -31,7 +31,6 @@ def foo : Instruction {
   let InOperandList = (ins);
   let AsmString = "foo";
   let AsmVariantName = "Foo";
-  let Namespace = "Arch";
 }
 
 def BarAlias : InstAlias<"bar", (foo)> {

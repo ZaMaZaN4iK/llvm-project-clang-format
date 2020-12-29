@@ -433,7 +433,7 @@ void wrapOneInFixit(struct StructWithPointer *s) {
 }
 
 void unaryOpNoFixit() {
-  if (~ 1)
+  if (- 1)
     return; // CHECK-NOT: fix-it:"{{.*}}":{[[@LINE-1]]
   unaryOpNoFixit(); // expected-warning {{code will never be executed}}
 }
@@ -450,55 +450,4 @@ void unaryOpFixitCastSubExpr(int x) {
     return; // CHECK: fix-it:"{{.*}}":{[[@LINE-1]]:7-[[@LINE-1]]:7}:"/* DISABLES CODE */ ("
             // CHECK: fix-it:"{{.*}}":{[[@LINE-2]]:15-[[@LINE-2]]:15}:")"
   unaryOpFixitCastSubExpr(x); // expected-warning {{code will never be executed}}
-}
-
-#define false 0
-#define true 1
-
-void testTrueFalseMacros() {
-  if (false) // expected-note {{silence by adding parentheses to mark code as explicitly dead}}
-    testTrueFalseMacros(); // expected-warning {{code will never be executed}}
-  if (!true) // expected-note {{silence by adding parentheses to mark code as explicitly dead}}
-    testTrueFalseMacros(); // expected-warning {{code will never be executed}}
-}
-
-int pr13910_foo(int x) {
-  if (x == 1)
-    return 0;
-  else
-    return x;
-  __builtin_unreachable(); // expected no warning
-  __builtin_assume(0); // expected no warning
-}
-
-int pr13910_bar(int x) {
-  switch (x) {
-  default:
-    return x + 1;
-  }
-  pr13910_foo(x); // expected-warning {{code will never be executed}}
-}
-
-int pr13910_bar2(int x) {
-  if (x == 1)
-    return 0;
-  else
-    return x;
-  pr13910_foo(x);          // expected-warning {{code will never be executed}}
-  __builtin_unreachable(); // expected no warning
-  __builtin_assume(0);     // expected no warning
-  pr13910_foo(x);          // expected-warning {{code will never be executed}}
-}
-
-void pr13910_noreturn() {
-  raze();
-  __builtin_unreachable(); // expected no warning
-  __builtin_assume(0); // expected no warning
-}
-
-void pr13910_assert() {
-  myassert(0 && "unreachable");
-  return;
-  __builtin_unreachable(); // expected no warning
-  __builtin_assume(0); // expected no warning
 }

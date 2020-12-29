@@ -1,8 +1,9 @@
-//===- Archive.cpp - ar File Format implementation ------------------------===//
+//===- Archive.cpp - ar File Format implementation --------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,28 +12,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Object/Archive.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/Object/Binary.h"
-#include "llvm/Object/Error.h"
-#include "llvm/Support/Chrono.h"
 #include "llvm/Support/Endian.h"
-#include "llvm/Support/Error.h"
-#include "llvm/Support/ErrorOr.h"
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
-#include "llvm/Support/raw_ostream.h"
-#include <algorithm>
-#include <cassert>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <memory>
-#include <string>
-#include <system_error>
 
 using namespace llvm;
 using namespace object;
@@ -41,7 +25,7 @@ using namespace llvm::support::endian;
 static const char *const Magic = "!<arch>\n";
 static const char *const ThinMagic = "!<thin>\n";
 
-void Archive::anchor() {}
+void Archive::anchor() { }
 
 static Error
 malformedError(Twine Msg) {
@@ -77,8 +61,8 @@ ArchiveMemberHeader::ArchiveMemberHeader(const Archive *Parent,
     if (Err) {
       std::string Buf;
       raw_string_ostream OS(Buf);
-      OS.write_escaped(StringRef(ArMemHdr->Terminator,
-                                 sizeof(ArMemHdr->Terminator)));
+      OS.write_escaped(llvm::StringRef(ArMemHdr->Terminator,
+                                       sizeof(ArMemHdr->Terminator)));
       OS.flush();
       std::string Msg("terminator characters in archive member \"" + Buf +
                       "\" not the correct \"`\\n\" values for the archive "
@@ -113,13 +97,13 @@ Expected<StringRef> ArchiveMemberHeader::getRawName() const {
     EndCond = ' ';
   else
     EndCond = '/';
-  StringRef::size_type end =
-      StringRef(ArMemHdr->Name, sizeof(ArMemHdr->Name)).find(EndCond);
-  if (end == StringRef::npos)
+  llvm::StringRef::size_type end =
+      llvm::StringRef(ArMemHdr->Name, sizeof(ArMemHdr->Name)).find(EndCond);
+  if (end == llvm::StringRef::npos)
     end = sizeof(ArMemHdr->Name);
   assert(end <= sizeof(ArMemHdr->Name) && end > 0);
   // Don't include the EndCond if there is one.
-  return StringRef(ArMemHdr->Name, end);
+  return llvm::StringRef(ArMemHdr->Name, end);
 }
 
 // This gets the name looking up long names. Size is the size of the archive
@@ -174,19 +158,15 @@ Expected<StringRef> ArchiveMemberHeader::getName(uint64_t Size) const {
                             "the end of the string table for archive member "
                             "header at offset " + Twine(ArchiveOffset));
     }
+    const char *addr = Parent->getStringTable().begin() + StringOffset;
 
     // GNU long file names end with a "/\n".
     if (Parent->kind() == Archive::K_GNU ||
-        Parent->kind() == Archive::K_GNU64) {
-      size_t End = Parent->getStringTable().find('\n', /*From=*/StringOffset);
-      if (End == StringRef::npos || End < 1 ||
-          Parent->getStringTable()[End - 1] != '/') {
-        return malformedError("string table at long name offset " +
-                              Twine(StringOffset) + "not terminated");
-      }
-      return Parent->getStringTable().slice(StringOffset, End - 1);
+        Parent->kind() == Archive::K_MIPS64) {
+      StringRef::size_type End = StringRef(addr).find('\n');
+      return StringRef(addr, End - 1);
     }
-    return Parent->getStringTable().begin() + StringOffset;
+    return addr;
   }
 
   if (Name.startswith("#1/")) {
@@ -223,14 +203,14 @@ Expected<StringRef> ArchiveMemberHeader::getName(uint64_t Size) const {
   return Name.drop_back(1);
 }
 
-Expected<uint64_t> ArchiveMemberHeader::getSize() const {
-  uint64_t Ret;
-  if (StringRef(ArMemHdr->Size,
-                sizeof(ArMemHdr->Size)).rtrim(" ").getAsInteger(10, Ret)) {
+Expected<uint32_t> ArchiveMemberHeader::getSize() const {
+  uint32_t Ret;
+  if (llvm::StringRef(ArMemHdr->Size,
+        sizeof(ArMemHdr->Size)).rtrim(" ").getAsInteger(10, Ret)) {
     std::string Buf;
     raw_string_ostream OS(Buf);
-    OS.write_escaped(StringRef(ArMemHdr->Size,
-                               sizeof(ArMemHdr->Size)).rtrim(" "));
+    OS.write_escaped(llvm::StringRef(ArMemHdr->Size,
+                                     sizeof(ArMemHdr->Size)).rtrim(" "));
     OS.flush();
     uint64_t Offset = reinterpret_cast<const char *>(ArMemHdr) -
                       Parent->getData().data();
@@ -247,8 +227,8 @@ Expected<sys::fs::perms> ArchiveMemberHeader::getAccessMode() const {
                 sizeof(ArMemHdr->AccessMode)).rtrim(' ').getAsInteger(8, Ret)) {
     std::string Buf;
     raw_string_ostream OS(Buf);
-    OS.write_escaped(StringRef(ArMemHdr->AccessMode,
-                               sizeof(ArMemHdr->AccessMode)).rtrim(" "));
+    OS.write_escaped(llvm::StringRef(ArMemHdr->AccessMode,
+                                   sizeof(ArMemHdr->AccessMode)).rtrim(" "));
     OS.flush();
     uint64_t Offset = reinterpret_cast<const char *>(ArMemHdr) -
                       Parent->getData().data();
@@ -267,8 +247,8 @@ ArchiveMemberHeader::getLastModified() const {
           .getAsInteger(10, Seconds)) {
     std::string Buf;
     raw_string_ostream OS(Buf);
-    OS.write_escaped(StringRef(ArMemHdr->LastModified,
-                               sizeof(ArMemHdr->LastModified)).rtrim(" "));
+    OS.write_escaped(llvm::StringRef(ArMemHdr->LastModified,
+                                   sizeof(ArMemHdr->LastModified)).rtrim(" "));
     OS.flush();
     uint64_t Offset = reinterpret_cast<const char *>(ArMemHdr) -
                       Parent->getData().data();
@@ -341,7 +321,7 @@ Archive::Child::Child(const Archive *Parent, const char *Start, Error *Err)
 
   ErrorAsOutParameter ErrAsOutParam(Err);
 
-  // If there was an error in the construction of the Header
+  // If there was an error in the construction of the Header 
   // then just return with the error now set.
   if (*Err)
     return;
@@ -511,7 +491,7 @@ Expected<MemoryBufferRef> Archive::Child::getMemoryBufferRef() const {
   StringRef Name = NameOrErr.get();
   Expected<StringRef> Buf = getBuffer();
   if (!Buf)
-    return createFileError(Name, Buf.takeError());
+    return Buf.takeError();
   return MemoryBufferRef(*Buf, Name);
 }
 
@@ -550,7 +530,7 @@ Archive::Archive(MemoryBufferRef Source, Error &Err)
   } else if (Buffer.startswith(Magic)) {
     IsThin = false;
   } else {
-    Err = make_error<GenericBinaryError>("file too small to be an archive",
+    Err = make_error<GenericBinaryError>("File too small to be an archive",
                                          object_error::invalid_file_type);
     return;
   }
@@ -701,7 +681,7 @@ Archive::Archive(MemoryBufferRef Source, Error &Err)
   }
 
   if (Name == "//") {
-    Format = has64SymTable ? K_GNU64 : K_GNU;
+    Format = has64SymTable ? K_MIPS64 : K_GNU;
     // The string table is never an external member, but we still
     // must check any Expected<> return value.
     Expected<StringRef> BufOrErr = C->getBuffer();
@@ -718,7 +698,7 @@ Archive::Archive(MemoryBufferRef Source, Error &Err)
   }
 
   if (Name[0] != '/') {
-    Format = has64SymTable ? K_GNU64 : K_GNU;
+    Format = has64SymTable ? K_MIPS64 : K_GNU;
     setFirstRegular(*C);
     Err = Error::success();
     return;
@@ -778,18 +758,19 @@ Archive::child_iterator Archive::child_begin(Error &Err,
     return child_end();
 
   if (SkipInternal)
-    return child_iterator::itr(
-        Child(this, FirstRegularData, FirstRegularStartOfFile), Err);
+    return child_iterator(Child(this, FirstRegularData,
+                                FirstRegularStartOfFile),
+                          &Err);
 
   const char *Loc = Data.getBufferStart() + strlen(Magic);
   Child C(this, Loc, &Err);
   if (Err)
     return child_end();
-  return child_iterator::itr(C, Err);
+  return child_iterator(C, &Err);
 }
 
 Archive::child_iterator Archive::child_end() const {
-  return child_iterator::end(Child(nullptr, nullptr, nullptr));
+  return child_iterator(Child(nullptr, nullptr, nullptr), nullptr);
 }
 
 StringRef Archive::Symbol::getName() const {
@@ -799,14 +780,14 @@ StringRef Archive::Symbol::getName() const {
 Expected<Archive::Child> Archive::Symbol::getMember() const {
   const char *Buf = Parent->getSymbolTable().begin();
   const char *Offsets = Buf;
-  if (Parent->kind() == K_GNU64 || Parent->kind() == K_DARWIN64)
+  if (Parent->kind() == K_MIPS64 || Parent->kind() == K_DARWIN64)
     Offsets += sizeof(uint64_t);
   else
     Offsets += sizeof(uint32_t);
-  uint64_t Offset = 0;
+  uint32_t Offset = 0;
   if (Parent->kind() == K_GNU) {
     Offset = read32be(Offsets + SymbolIndex * 4);
-  } else if (Parent->kind() == K_GNU64) {
+  } else if (Parent->kind() == K_MIPS64) {
     Offset = read64be(Offsets + SymbolIndex * 8);
   } else if (Parent->kind() == K_BSD) {
     // The SymbolIndex is an index into the ranlib structs that start at
@@ -904,7 +885,7 @@ Archive::symbol_iterator Archive::symbol_begin() const {
     uint32_t symbol_count = 0;
     symbol_count = read32be(buf);
     buf += sizeof(uint32_t) + (symbol_count * (sizeof(uint32_t)));
-  } else if (kind() == K_GNU64) {
+  } else if (kind() == K_MIPS64) {
     uint64_t symbol_count = read64be(buf);
     buf += sizeof(uint64_t) + (symbol_count * (sizeof(uint64_t)));
   } else if (kind() == K_BSD) {
@@ -961,7 +942,7 @@ uint32_t Archive::getNumberOfSymbols() const {
   const char *buf = getSymbolTable().begin();
   if (kind() == K_GNU)
     return read32be(buf);
-  if (kind() == K_GNU64)
+  if (kind() == K_MIPS64)
     return read64be(buf);
   if (kind() == K_BSD)
     return read32le(buf) / 8;

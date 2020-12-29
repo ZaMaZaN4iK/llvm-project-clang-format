@@ -83,8 +83,8 @@ int t5() {
 }
 
 
-__attribute ((deprecated)) // expected-note {{'DEPRECATED' has been explicitly marked deprecated here}}
-@interface DEPRECATED { 
+__attribute ((deprecated))  
+@interface DEPRECATED { // expected-note 2 {{'DEPRECATED' has been explicitly marked deprecated here}}
   @public int ivar; 
   DEPRECATED *ivar2; // no warning.
 } 
@@ -98,17 +98,9 @@ __attribute ((deprecated)) // expected-note {{'DEPRECATED' has been explicitly m
 @end
 
 @interface DEPRECATED (Category2) // no warning.
-- (id)meth;
 @end
 
-__attribute__((deprecated))
-void depr_function();
-
-@implementation DEPRECATED (Category2) // no warning
-- (id)meth {
-  depr_function(); // no warning.
-  return 0;
-}
+@implementation DEPRECATED (Category2) // expected-warning {{'DEPRECATED' is deprecated}}
 @end
 
 @interface NS : DEPRECATED  // expected-warning {{'DEPRECATED' is deprecated}}
@@ -129,15 +121,9 @@ void test(Test2 *foo) {
 }
 
 __attribute__((deprecated))
-@interface A(Blah) // no warning
-- (A*)getA;
+@interface A(Blah) // expected-error{{attributes may not be specified on a category}}
 @end
 
-@implementation A(Blah) // Don't warn by default
-- (A*)getA {
-  return self;
-}
-@end
 
 typedef struct {
 	int x;

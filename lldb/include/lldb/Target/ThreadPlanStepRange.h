@@ -1,14 +1,19 @@
 //===-- ThreadPlanStepRange.h -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ThreadPlanStepRange_h_
 #define liblldb_ThreadPlanStepRange_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Core/AddressRange.h"
 #include "lldb/Target/StackID.h"
 #include "lldb/Target/Thread.h"
@@ -53,9 +58,10 @@ protected:
                                              size_t &insn_offset);
 
   // Pushes a plan to proceed through the next section of instructions in the
-  // range - usually just a RunToAddress plan to run to the next branch.
-  // Returns true if it pushed such a plan.  If there was no available 'quick
-  // run' plan, then just single step.
+  // range - usually just a RunToAddress
+  // plan to run to the next branch.  Returns true if it pushed such a plan.  If
+  // there was no available 'quick run'
+  // plan, then just single step.
   bool SetNextBranchBreakpoint();
 
   void ClearNextBranchBreakpoint();
@@ -76,12 +82,6 @@ protected:
   lldb::BreakpointSP m_next_branch_bp_sp;
   bool m_use_fast_step;
   bool m_given_ranges_only;
-  bool m_found_calls = false; // When we set the next branch breakpoint for
-                              // step over, we now extend them past call insns
-                              // that directly return.  But if we do that we
-                              // need to run all threads, or we might cause
-                              // deadlocks.  This tells us whether we found
-                              // any calls in setting the next branch breakpoint.
 
 private:
   std::vector<lldb::DisassemblerSP> m_instruction_ranges;

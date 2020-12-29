@@ -1,8 +1,9 @@
 //===-- asan_test_config.h --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,9 +17,13 @@
 #ifndef ASAN_TEST_CONFIG_H
 #define ASAN_TEST_CONFIG_H
 
+#include <vector>
 #include <string>
+#include <map>
 
 using std::string;
+using std::vector;
+using std::map;
 
 #ifndef ASAN_UAR
 # error "please define ASAN_UAR"

@@ -57,7 +57,7 @@ declare i32 @foo() #0
 ; CHECK-NOT: b L
 
 ; CHECK: [[IF_END_BB]]:
-; CHECK: mov{{.*}}, #7
+; CHECK: #0x7
 ; CHECK: ret
 define i32 @block_split(i32 %a, i32 %b) #0 {
 entry:

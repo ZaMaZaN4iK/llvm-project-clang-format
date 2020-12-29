@@ -1,8 +1,9 @@
 //===- DAGISelMatcherEmitter.cpp - Matcher Emitter ------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,51 +11,37 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "CodeGenDAGPatterns.h"
 #include "DAGISelMatcher.h"
+#include "CodeGenDAGPatterns.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/StringMap.h"
-#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/Format.h"
-#include "llvm/Support/SourceMgr.h"
-#include "llvm/TableGen/Error.h"
+#include "llvm/Support/FormattedStream.h"
 #include "llvm/TableGen/Record.h"
 using namespace llvm;
 
 enum {
-  IndexWidth = 6,
-  FullIndexWidth = IndexWidth + 4,
-  HistOpcWidth = 40,
+  CommentIndent = 30
 };
 
-cl::OptionCategory DAGISelCat("Options for -gen-dag-isel");
-
 // To reduce generated source code size.
-static cl::opt<bool> OmitComments("omit-comments",
-                                  cl::desc("Do not generate comments"),
-                                  cl::init(false), cl::cat(DAGISelCat));
-
-static cl::opt<bool> InstrumentCoverage(
-    "instrument-coverage",
-    cl::desc("Generates tables to help identify patterns matched"),
-    cl::init(false), cl::cat(DAGISelCat));
+static cl::opt<bool>
+OmitComments("omit-comments", cl::desc("Do not generate comments"),
+             cl::init(false));
 
 namespace {
 class MatcherTableEmitter {
   const CodeGenDAGPatterns &CGP;
-
+  
   DenseMap<TreePattern *, unsigned> NodePredicateMap;
   std::vector<TreePredicateFn> NodePredicates;
-  std::vector<TreePredicateFn> NodePredicatesWithOperands;
 
   // We de-duplicate the predicates by code string, and use this map to track
   // all the patterns with "identical" predicates.
   StringMap<TinyPtrVector<TreePattern *>> NodePredicatesByCodeToRun;
-
+  
   StringMap<unsigned> PatternPredicateMap;
   std::vector<std::string> PatternPredicates;
 
@@ -65,38 +52,19 @@ class MatcherTableEmitter {
   DenseMap<Record*, unsigned> NodeXFormMap;
   std::vector<Record*> NodeXForms;
 
-  std::vector<std::string> VecIncludeStrings;
-  MapVector<std::string, unsigned, StringMap<unsigned> > VecPatterns;
-
-  unsigned getPatternIdxFromTable(std::string &&P, std::string &&include_loc) {
-    const auto It = VecPatterns.find(P);
-    if (It == VecPatterns.end()) {
-      VecPatterns.insert(make_pair(std::move(P), VecPatterns.size()));
-      VecIncludeStrings.push_back(std::move(include_loc));
-      return VecIncludeStrings.size() - 1;
-    }
-    return It->second;
-  }
-
 public:
   MatcherTableEmitter(const CodeGenDAGPatterns &cgp)
     : CGP(cgp) {}
 
   unsigned EmitMatcherList(const Matcher *N, unsigned Indent,
-                           unsigned StartIdx, raw_ostream &OS);
+                           unsigned StartIdx, formatted_raw_ostream &OS);
 
-  void EmitPredicateFunctions(raw_ostream &OS);
+  void EmitPredicateFunctions(formatted_raw_ostream &OS);
 
-  void EmitHistogram(const Matcher *N, raw_ostream &OS);
-
-  void EmitPatternMatchTable(raw_ostream &OS);
-
+  void EmitHistogram(const Matcher *N, formatted_raw_ostream &OS);
 private:
-  void EmitNodePredicatesFunction(const std::vector<TreePredicateFn> &Preds,
-                                  StringRef Decl, raw_ostream &OS);
-
   unsigned EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
-                       raw_ostream &OS);
+                       formatted_raw_ostream &OS);
 
   unsigned getNodePredicate(TreePredicateFn Pred) {
     TreePattern *TP = Pred.getOrigPatFragRecord();
@@ -106,20 +74,12 @@ private:
           NodePredicatesByCodeToRun[Pred.getCodeToRunOnSDNode()];
       if (SameCodePreds.empty()) {
         // We've never seen a predicate with the same code: allocate an entry.
-        if (Pred.usesOperands()) {
-          NodePredicatesWithOperands.push_back(Pred);
-          Entry = NodePredicatesWithOperands.size();
-        } else {
-          NodePredicates.push_back(Pred);
-          Entry = NodePredicates.size();
-        }
+        NodePredicates.push_back(Pred);
+        Entry = NodePredicates.size();
       } else {
         // We did see an identical predicate: re-use it.
         Entry = NodePredicateMap[SameCodePreds.front()];
         assert(Entry != 0);
-        assert(TreePredicateFn(SameCodePreds.front()).usesOperands() ==
-               Pred.usesOperands() &&
-               "PatFrags with some code must have same usesOperands setting");
       }
       // In both cases, we've never seen this particular predicate before, so
       // mark it in the list of predicates sharing the same code.
@@ -127,7 +87,7 @@ private:
     }
     return Entry-1;
   }
-
+  
   unsigned getPatternPredicate(StringRef PredName) {
     unsigned &Entry = PatternPredicateMap[PredName];
     if (Entry == 0) {
@@ -156,14 +116,6 @@ private:
 
 };
 } // end anonymous namespace.
-
-static std::string GetPatFromTreePatternNode(const TreePatternNode *N) {
-  std::string str;
-  raw_string_ostream Stream(str);
-  Stream << *N;
-  Stream.str();
-  return str;
-}
 
 static unsigned GetVBRSize(unsigned Val) {
   if (Val <= 127) return 1;
@@ -198,90 +150,12 @@ static uint64_t EmitVBRValue(uint64_t Val, raw_ostream &OS) {
   return NumBytes+1;
 }
 
-// This is expensive and slow.
-static std::string getIncludePath(const Record *R) {
-  std::string str;
-  raw_string_ostream Stream(str);
-  auto Locs = R->getLoc();
-  SMLoc L;
-  if (Locs.size() > 1) {
-    // Get where the pattern prototype was instantiated
-    L = Locs[1];
-  } else if (Locs.size() == 1) {
-    L = Locs[0];
-  }
-  unsigned CurBuf = SrcMgr.FindBufferContainingLoc(L);
-  assert(CurBuf && "Invalid or unspecified location!");
-
-  Stream << SrcMgr.getBufferInfo(CurBuf).Buffer->getBufferIdentifier() << ":"
-         << SrcMgr.FindLineNumber(L, CurBuf);
-  Stream.str();
-  return str;
-}
-
-static void BeginEmitFunction(raw_ostream &OS, StringRef RetType,
-                              StringRef Decl, bool AddOverride) {
-  OS << "#ifdef GET_DAGISEL_DECL\n";
-  OS << RetType << ' ' << Decl;
-  if (AddOverride)
-    OS << " override";
-  OS << ";\n"
-        "#endif\n"
-        "#if defined(GET_DAGISEL_BODY) || DAGISEL_INLINE\n";
-  OS << RetType << " DAGISEL_CLASS_COLONCOLON " << Decl << "\n";
-  if (AddOverride) {
-    OS << "#if DAGISEL_INLINE\n"
-          "  override\n"
-          "#endif\n";
-  }
-}
-
-static void EndEmitFunction(raw_ostream &OS) {
-  OS << "#endif // GET_DAGISEL_BODY\n\n";
-}
-
-void MatcherTableEmitter::EmitPatternMatchTable(raw_ostream &OS) {
-
-  assert(isUInt<16>(VecPatterns.size()) &&
-         "Using only 16 bits to encode offset into Pattern Table");
-  assert(VecPatterns.size() == VecIncludeStrings.size() &&
-         "The sizes of Pattern and include vectors should be the same");
-
-  BeginEmitFunction(OS, "StringRef", "getPatternForIndex(unsigned Index)",
-                    true/*AddOverride*/);
-  OS << "{\n";
-  OS << "static const char * PATTERN_MATCH_TABLE[] = {\n";
-
-  for (const auto &It : VecPatterns) {
-    OS << "\"" << It.first << "\",\n";
-  }
-
-  OS << "\n};";
-  OS << "\nreturn StringRef(PATTERN_MATCH_TABLE[Index]);";
-  OS << "\n}\n";
-  EndEmitFunction(OS);
-
-  BeginEmitFunction(OS, "StringRef", "getIncludePathForIndex(unsigned Index)",
-                    true/*AddOverride*/);
-  OS << "{\n";
-  OS << "static const char * INCLUDE_PATH_TABLE[] = {\n";
-
-  for (const auto &It : VecIncludeStrings) {
-    OS << "\"" << It << "\",\n";
-  }
-
-  OS << "\n};";
-  OS << "\nreturn StringRef(INCLUDE_PATH_TABLE[Index]);";
-  OS << "\n}\n";
-  EndEmitFunction(OS);
-}
-
 /// EmitMatcher - Emit bytes for the specified matcher and return
 /// the number of bytes emitted.
 unsigned MatcherTableEmitter::
 EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
-            raw_ostream &OS) {
-  OS.indent(Indent*2);
+            formatted_raw_ostream &OS) {
+  OS.PadToColumn(Indent*2);
 
   switch (N->getKind()) {
   case Matcher::Scope: {
@@ -297,10 +171,10 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
         ++CurrentIdx;
       } else  {
         if (!OmitComments) {
-          OS << "/*" << format_decimal(CurrentIdx, IndexWidth) << "*/";
-          OS.indent(Indent*2) << "/*Scope*/ ";
+          OS << "/*" << CurrentIdx << "*/";
+          OS.PadToColumn(Indent*2) << "/*Scope*/ ";
         } else
-          OS.indent(Indent*2);
+          OS.PadToColumn(Indent*2);
       }
 
       // We need to encode the child and the offset of the failure code before
@@ -316,8 +190,9 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
 
         TmpBuf.clear();
         raw_svector_ostream OS(TmpBuf);
+        formatted_raw_ostream FOS(OS);
         ChildSize = EmitMatcherList(SM->getChild(i), Indent+1,
-                                    CurrentIdx+VBRSize, OS);
+                                    CurrentIdx+VBRSize, FOS);
       } while (GetVBRSize(ChildSize) != VBRSize);
 
       assert(ChildSize != 0 && "Should not have a zero-sized child!");
@@ -327,7 +202,8 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
         OS << "/*->" << CurrentIdx+ChildSize << "*/";
 
         if (i == 0)
-          OS << " // " << SM->getNumChildren() << " children in Scope";
+          OS.PadToColumn(CommentIndent) << "// " << SM->getNumChildren()
+            << " children in Scope";
       }
 
       OS << '\n' << TmpBuf;
@@ -336,8 +212,8 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
 
     // Emit a zero as a sentinel indicating end of 'Scope'.
     if (!OmitComments)
-      OS << "/*" << format_decimal(CurrentIdx, IndexWidth) << "*/";
-    OS.indent(Indent*2) << "0, ";
+      OS << "/*" << CurrentIdx << "*/";
+    OS.PadToColumn(Indent*2) << "0, ";
     if (!OmitComments)
       OS << "/*End of Scope*/";
     OS << '\n';
@@ -347,9 +223,9 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
   case Matcher::RecordNode:
     OS << "OPC_RecordNode,";
     if (!OmitComments)
-      OS << " // #"
-         << cast<RecordMatcher>(N)->getResultNo() << " = "
-         << cast<RecordMatcher>(N)->getWhatFor();
+      OS.PadToColumn(CommentIndent) << "// #"
+        << cast<RecordMatcher>(N)->getResultNo() << " = "
+        << cast<RecordMatcher>(N)->getWhatFor();
     OS << '\n';
     return 1;
 
@@ -357,9 +233,9 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
     OS << "OPC_RecordChild" << cast<RecordChildMatcher>(N)->getChildNo()
        << ',';
     if (!OmitComments)
-      OS << " // #"
-         << cast<RecordChildMatcher>(N)->getResultNo() << " = "
-         << cast<RecordChildMatcher>(N)->getWhatFor();
+      OS.PadToColumn(CommentIndent) << "// #"
+        << cast<RecordChildMatcher>(N)->getResultNo() << " = "
+        << cast<RecordChildMatcher>(N)->getWhatFor();
     OS << '\n';
     return 1;
 
@@ -401,29 +277,17 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
     StringRef Pred =cast<CheckPatternPredicateMatcher>(N)->getPredicate();
     OS << "OPC_CheckPatternPredicate, " << getPatternPredicate(Pred) << ',';
     if (!OmitComments)
-      OS << " // " << Pred;
+      OS.PadToColumn(CommentIndent) << "// " << Pred;
     OS << '\n';
     return 2;
   }
   case Matcher::CheckPredicate: {
     TreePredicateFn Pred = cast<CheckPredicateMatcher>(N)->getPredicate();
-    unsigned OperandBytes = 0;
-
-    if (Pred.usesOperands()) {
-      unsigned NumOps = cast<CheckPredicateMatcher>(N)->getNumOperands();
-      OS << "OPC_CheckPredicateWithOperands, " << NumOps << "/*#Ops*/, ";
-      for (unsigned i = 0; i < NumOps; ++i)
-        OS << cast<CheckPredicateMatcher>(N)->getOperandNo(i) << ", ";
-      OperandBytes = 1 + NumOps;
-    } else {
-      OS << "OPC_CheckPredicate, ";
-    }
-
-    OS << getNodePredicate(Pred) << ',';
+    OS << "OPC_CheckPredicate, " << getNodePredicate(Pred) << ',';
     if (!OmitComments)
-      OS << " // " << Pred.getFnName();
+      OS.PadToColumn(CommentIndent) << "// " << Pred.getFnName();
     OS << '\n';
-    return 2 + OperandBytes;
+    return 2;
   }
 
   case Matcher::CheckOpcode:
@@ -474,16 +338,17 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
 
         TmpBuf.clear();
         raw_svector_ostream OS(TmpBuf);
+        formatted_raw_ostream FOS(OS);
         ChildSize = EmitMatcherList(Child, Indent+1, CurrentIdx+VBRSize+IdxSize,
-                                    OS);
+                                    FOS);
       } while (GetVBRSize(ChildSize) != VBRSize);
 
       assert(ChildSize != 0 && "Should not have a zero-sized child!");
 
       if (i != 0) {
         if (!OmitComments)
-          OS << "/*" << format_decimal(CurrentIdx, IndexWidth) << "*/";
-        OS.indent(Indent*2);
+          OS << "/*" << CurrentIdx << "*/";
+        OS.PadToColumn(Indent*2);
         if (!OmitComments)
           OS << (isa<SwitchOpcodeMatcher>(N) ?
                      "/*SwitchOpcode*/ " : "/*SwitchType*/ ");
@@ -508,11 +373,11 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
 
     // Emit the final zero to terminate the switch.
     if (!OmitComments)
-      OS << "/*" << format_decimal(CurrentIdx, IndexWidth) << "*/";
-    OS.indent(Indent*2) << "0,";
+      OS << "/*" << CurrentIdx << "*/";
+    OS.PadToColumn(Indent*2) << "0, ";
     if (!OmitComments)
       OS << (isa<SwitchOpcodeMatcher>(N) ?
-             " // EndSwitchOpcode" : " // EndSwitchType");
+             "// EndSwitchOpcode" : "// EndSwitchType");
 
     OS << '\n';
     ++CurrentIdx;
@@ -520,14 +385,11 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
   }
 
  case Matcher::CheckType:
-    if (cast<CheckTypeMatcher>(N)->getResNo() == 0) {
-      OS << "OPC_CheckType, "
-         << getEnumName(cast<CheckTypeMatcher>(N)->getType()) << ",\n";
-      return 2;
-    }
-    OS << "OPC_CheckTypeRes, " << cast<CheckTypeMatcher>(N)->getResNo()
-       << ", " << getEnumName(cast<CheckTypeMatcher>(N)->getType()) << ",\n";
-    return 3;
+    assert(cast<CheckTypeMatcher>(N)->getResNo() == 0 &&
+           "FIXME: Add support for CheckType of resno != 0");
+    OS << "OPC_CheckType, "
+       << getEnumName(cast<CheckTypeMatcher>(N)->getType()) << ",\n";
+    return 2;
 
   case Matcher::CheckChildType:
     OS << "OPC_CheckChild"
@@ -554,11 +416,6 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
        << cast<CheckCondCodeMatcher>(N)->getCondCodeName() << ",\n";
     return 2;
 
-  case Matcher::CheckChild2CondCode:
-    OS << "OPC_CheckChild2CondCode, ISD::"
-       << cast<CheckChild2CondCodeMatcher>(N)->getCondCodeName() << ",\n";
-    return 2;
-
   case Matcher::CheckValueType:
     OS << "OPC_CheckValueType, MVT::"
        << cast<CheckValueTypeMatcher>(N)->getTypeName() << ",\n";
@@ -571,7 +428,7 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
        << CCPM->getMatchNumber() << ',';
 
     if (!OmitComments) {
-      OS << " // " << Pattern.getSelectFunc();
+      OS.PadToColumn(CommentIndent) << "// " << Pattern.getSelectFunc();
       OS << ":$" << CCPM->getName();
       for (unsigned i = 0, e = Pattern.getNumOperands(); i != e; ++i)
         OS << " #" << CCPM->getFirstResult()+i;
@@ -599,14 +456,6 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
 
   case Matcher::CheckFoldableChainNode:
     OS << "OPC_CheckFoldableChainNode,\n";
-    return 1;
-
-  case Matcher::CheckImmAllOnesV:
-    OS << "OPC_CheckImmAllOnesV,\n";
-    return 1;
-
-  case Matcher::CheckImmAllZerosV:
-    OS << "OPC_CheckImmAllZerosV,\n";
     return 1;
 
   case Matcher::EmitInteger: {
@@ -670,51 +519,24 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
     OS << '\n';
     return 2+MN->getNumNodes();
   }
-  case Matcher::EmitCopyToReg: {
-    const auto *C2RMatcher = cast<EmitCopyToRegMatcher>(N);
-    int Bytes = 3;
-    const CodeGenRegister *Reg = C2RMatcher->getDestPhysReg();
-    if (Reg->EnumValue > 255) {
-      assert(isUInt<16>(Reg->EnumValue) && "not handled");
-      OS << "OPC_EmitCopyToReg2, " << C2RMatcher->getSrcSlot() << ", "
-         << "TARGET_VAL(" << getQualifiedName(Reg->TheDef) << "),\n";
-      ++Bytes;
-    } else {
-      OS << "OPC_EmitCopyToReg, " << C2RMatcher->getSrcSlot() << ", "
-         << getQualifiedName(Reg->TheDef) << ",\n";
-    }
-
-    return Bytes;
-  }
+  case Matcher::EmitCopyToReg:
+    OS << "OPC_EmitCopyToReg, "
+       << cast<EmitCopyToRegMatcher>(N)->getSrcSlot() << ", "
+       << getQualifiedName(cast<EmitCopyToRegMatcher>(N)->getDestPhysReg())
+       << ",\n";
+    return 3;
   case Matcher::EmitNodeXForm: {
     const EmitNodeXFormMatcher *XF = cast<EmitNodeXFormMatcher>(N);
     OS << "OPC_EmitNodeXForm, " << getNodeXFormID(XF->getNodeXForm()) << ", "
        << XF->getSlot() << ',';
     if (!OmitComments)
-      OS << " // "<<XF->getNodeXForm()->getName();
+      OS.PadToColumn(CommentIndent) << "// "<<XF->getNodeXForm()->getName();
     OS <<'\n';
     return 3;
   }
 
   case Matcher::EmitNode:
   case Matcher::MorphNodeTo: {
-    auto NumCoveredBytes = 0;
-    if (InstrumentCoverage) {
-      if (const MorphNodeToMatcher *SNT = dyn_cast<MorphNodeToMatcher>(N)) {
-        NumCoveredBytes = 3;
-        OS << "OPC_Coverage, ";
-        std::string src =
-            GetPatFromTreePatternNode(SNT->getPattern().getSrcPattern());
-        std::string dst =
-            GetPatFromTreePatternNode(SNT->getPattern().getDstPattern());
-        Record *PatRecord = SNT->getPattern().getSrcRecord();
-        std::string include_src = getIncludePath(PatRecord);
-        unsigned Offset =
-            getPatternIdxFromTable(src + " -> " + dst, std::move(include_src));
-        OS << "TARGET_VAL(" << Offset << "),\n";
-        OS.indent(FullIndexWidth + Indent * 2);
-      }
-    }
     const EmitNodeMatcherCommon *EN = cast<EmitNodeMatcherCommon>(N);
     OS << (isa<EmitNodeMatcher>(EN) ? "OPC_EmitNode" : "OPC_MorphNodeTo");
     bool CompressVTs = EN->getNumVTs() < 3;
@@ -731,7 +553,7 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
       OS << "|OPFL_Variadic" << EN->getNumFixedArityOperands();
     OS << ",\n";
 
-    OS.indent(FullIndexWidth + Indent*2+4);
+    OS.PadToColumn(Indent*2+4);
     if (!CompressVTs) {
       OS << EN->getNumVTs();
       if (!OmitComments)
@@ -753,7 +575,7 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
       // Print the result #'s for EmitNode.
       if (const EmitNodeMatcher *E = dyn_cast<EmitNodeMatcher>(EN)) {
         if (unsigned NumResults = EN->getNumVTs()) {
-          OS << " // Results =";
+          OS.PadToColumn(CommentIndent) << "// Results =";
           unsigned First = E->getFirstResultSlot();
           for (unsigned i = 0; i != NumResults; ++i)
             OS << " #" << First+i;
@@ -762,49 +584,33 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
       OS << '\n';
 
       if (const MorphNodeToMatcher *SNT = dyn_cast<MorphNodeToMatcher>(N)) {
-        OS.indent(FullIndexWidth + Indent*2) << "// Src: "
+        OS.PadToColumn(Indent*2) << "// Src: "
           << *SNT->getPattern().getSrcPattern() << " - Complexity = "
           << SNT->getPattern().getPatternComplexity(CGP) << '\n';
-        OS.indent(FullIndexWidth + Indent*2) << "// Dst: "
+        OS.PadToColumn(Indent*2) << "// Dst: "
           << *SNT->getPattern().getDstPattern() << '\n';
       }
     } else
       OS << '\n';
 
-    return 5 + !CompressVTs + EN->getNumVTs() + NumOperandBytes +
-           NumCoveredBytes;
+    return 5 + !CompressVTs + EN->getNumVTs() + NumOperandBytes;
   }
   case Matcher::CompleteMatch: {
     const CompleteMatchMatcher *CM = cast<CompleteMatchMatcher>(N);
-    auto NumCoveredBytes = 0;
-    if (InstrumentCoverage) {
-      NumCoveredBytes = 3;
-      OS << "OPC_Coverage, ";
-      std::string src =
-          GetPatFromTreePatternNode(CM->getPattern().getSrcPattern());
-      std::string dst =
-          GetPatFromTreePatternNode(CM->getPattern().getDstPattern());
-      Record *PatRecord = CM->getPattern().getSrcRecord();
-      std::string include_src = getIncludePath(PatRecord);
-      unsigned Offset =
-          getPatternIdxFromTable(src + " -> " + dst, std::move(include_src));
-      OS << "TARGET_VAL(" << Offset << "),\n";
-      OS.indent(FullIndexWidth + Indent * 2);
-    }
     OS << "OPC_CompleteMatch, " << CM->getNumResults() << ", ";
     unsigned NumResultBytes = 0;
     for (unsigned i = 0, e = CM->getNumResults(); i != e; ++i)
       NumResultBytes += EmitVBRValue(CM->getResult(i), OS);
     OS << '\n';
     if (!OmitComments) {
-      OS.indent(FullIndexWidth + Indent*2) << " // Src: "
+      OS.PadToColumn(Indent*2) << "// Src: "
         << *CM->getPattern().getSrcPattern() << " - Complexity = "
         << CM->getPattern().getPatternComplexity(CGP) << '\n';
-      OS.indent(FullIndexWidth + Indent*2) << " // Dst: "
+      OS.PadToColumn(Indent*2) << "// Dst: "
         << *CM->getPattern().getDstPattern();
     }
     OS << '\n';
-    return 2 + NumResultBytes + NumCoveredBytes;
+    return 2 + NumResultBytes;
   }
   }
   llvm_unreachable("Unreachable");
@@ -813,11 +619,11 @@ EmitMatcher(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
 /// EmitMatcherList - Emit the bytes for the specified matcher subtree.
 unsigned MatcherTableEmitter::
 EmitMatcherList(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
-                raw_ostream &OS) {
+                formatted_raw_ostream &OS) {
   unsigned Size = 0;
   while (N) {
     if (!OmitComments)
-      OS << "/*" << format_decimal(CurrentIdx, IndexWidth) << "*/";
+      OS << "/*" << CurrentIdx << "*/";
     unsigned MatcherSize = EmitMatcher(N, Indent, CurrentIdx, OS);
     Size += MatcherSize;
     CurrentIdx += MatcherSize;
@@ -829,67 +635,46 @@ EmitMatcherList(const Matcher *N, unsigned Indent, unsigned CurrentIdx,
   return Size;
 }
 
-void MatcherTableEmitter::EmitNodePredicatesFunction(
-    const std::vector<TreePredicateFn> &Preds, StringRef Decl,
-    raw_ostream &OS) {
-  if (Preds.empty())
-    return;
-
-  BeginEmitFunction(OS, "bool", Decl, true/*AddOverride*/);
-  OS << "{\n";
-  OS << "  switch (PredNo) {\n";
-  OS << "  default: llvm_unreachable(\"Invalid predicate in table?\");\n";
-  for (unsigned i = 0, e = Preds.size(); i != e; ++i) {
-    // Emit the predicate code corresponding to this pattern.
-    TreePredicateFn PredFn = Preds[i];
-
-    assert(!PredFn.isAlwaysTrue() && "No code in this predicate");
-    OS << "  case " << i << ": { \n";
-    for (auto *SimilarPred :
-          NodePredicatesByCodeToRun[PredFn.getCodeToRunOnSDNode()])
-      OS << "    // " << TreePredicateFn(SimilarPred).getFnName() <<'\n';
-
-    OS << PredFn.getCodeToRunOnSDNode() << "\n  }\n";
-  }
-  OS << "  }\n";
-  OS << "}\n";
-  EndEmitFunction(OS);
-}
-
-void MatcherTableEmitter::EmitPredicateFunctions(raw_ostream &OS) {
+void MatcherTableEmitter::EmitPredicateFunctions(formatted_raw_ostream &OS) {
   // Emit pattern predicates.
   if (!PatternPredicates.empty()) {
-    BeginEmitFunction(OS, "bool",
-          "CheckPatternPredicate(unsigned PredNo) const", true/*AddOverride*/);
-    OS << "{\n";
+    OS << "bool CheckPatternPredicate(unsigned PredNo) const override {\n";
     OS << "  switch (PredNo) {\n";
     OS << "  default: llvm_unreachable(\"Invalid predicate in table?\");\n";
     for (unsigned i = 0, e = PatternPredicates.size(); i != e; ++i)
       OS << "  case " << i << ": return "  << PatternPredicates[i] << ";\n";
     OS << "  }\n";
-    OS << "}\n";
-    EndEmitFunction(OS);
+    OS << "}\n\n";
   }
 
   // Emit Node predicates.
-  EmitNodePredicatesFunction(
-      NodePredicates, "CheckNodePredicate(SDNode *Node, unsigned PredNo) const",
-      OS);
-  EmitNodePredicatesFunction(
-      NodePredicatesWithOperands,
-      "CheckNodePredicateWithOperands(SDNode *Node, unsigned PredNo, "
-      "const SmallVectorImpl<SDValue> &Operands) const",
-      OS);
+  if (!NodePredicates.empty()) {
+    OS << "bool CheckNodePredicate(SDNode *Node,\n";
+    OS << "                        unsigned PredNo) const override {\n";
+    OS << "  switch (PredNo) {\n";
+    OS << "  default: llvm_unreachable(\"Invalid predicate in table?\");\n";
+    for (unsigned i = 0, e = NodePredicates.size(); i != e; ++i) {
+      // Emit the predicate code corresponding to this pattern.
+      TreePredicateFn PredFn = NodePredicates[i];
+      
+      assert(!PredFn.isAlwaysTrue() && "No code in this predicate");
+      OS << "  case " << i << ": { \n";
+      for (auto *SimilarPred :
+           NodePredicatesByCodeToRun[PredFn.getCodeToRunOnSDNode()])
+        OS << "    // " << TreePredicateFn(SimilarPred).getFnName() <<'\n';
+      
+      OS << PredFn.getCodeToRunOnSDNode() << "\n  }\n";
+    }
+    OS << "  }\n";
+    OS << "}\n\n";
+  }
 
   // Emit CompletePattern matchers.
   // FIXME: This should be const.
   if (!ComplexPatterns.empty()) {
-    BeginEmitFunction(OS, "bool",
-          "CheckComplexPattern(SDNode *Root, SDNode *Parent,\n"
-          "      SDValue N, unsigned PatternNo,\n"
-          "      SmallVectorImpl<std::pair<SDValue, SDNode*>> &Result)",
-          true/*AddOverride*/);
-    OS << "{\n";
+    OS << "bool CheckComplexPattern(SDNode *Root, SDNode *Parent,\n";
+    OS << "                         SDValue N, unsigned PatternNo,\n";
+    OS << "         SmallVectorImpl<std::pair<SDValue, SDNode*> > &Result) override {\n";
     OS << "  unsigned NextRes = Result.size();\n";
     OS << "  switch (PatternNo) {\n";
     OS << "  default: llvm_unreachable(\"Invalid pattern # in table?\");\n";
@@ -901,13 +686,8 @@ void MatcherTableEmitter::EmitPredicateFunctions(raw_ostream &OS) {
         ++NumOps;  // Get the chained node too.
 
       OS << "  case " << i << ":\n";
-      if (InstrumentCoverage)
-        OS << "  {\n";
       OS << "    Result.resize(NextRes+" << NumOps << ");\n";
-      if (InstrumentCoverage)
-        OS << "    bool Succeeded = " << P.getSelectFunc();
-      else
-        OS << "  return " << P.getSelectFunc();
+      OS << "    return "  << P.getSelectFunc();
 
       OS << "(";
       // If the complex pattern wants the root of the match, pass it in as the
@@ -924,26 +704,16 @@ void MatcherTableEmitter::EmitPredicateFunctions(raw_ostream &OS) {
       for (unsigned i = 0; i != NumOps; ++i)
         OS << ", Result[NextRes+" << i << "].first";
       OS << ");\n";
-      if (InstrumentCoverage) {
-        OS << "    if (Succeeded)\n";
-        OS << "       dbgs() << \"\\nCOMPLEX_PATTERN: " << P.getSelectFunc()
-           << "\\n\" ;\n";
-        OS << "    return Succeeded;\n";
-        OS << "    }\n";
-      }
     }
     OS << "  }\n";
-    OS << "}\n";
-    EndEmitFunction(OS);
+    OS << "}\n\n";
   }
 
 
   // Emit SDNodeXForm handlers.
   // FIXME: This should be const.
   if (!NodeXForms.empty()) {
-    BeginEmitFunction(OS, "SDValue",
-          "RunSDNodeXForm(SDValue V, unsigned XFormNo)", true/*AddOverride*/);
-    OS << "{\n";
+    OS << "SDValue RunSDNodeXForm(SDValue V, unsigned XFormNo) override {\n";
     OS << "  switch (XFormNo) {\n";
     OS << "  default: llvm_unreachable(\"Invalid xform # in table?\");\n";
 
@@ -969,8 +739,7 @@ void MatcherTableEmitter::EmitPredicateFunctions(raw_ostream &OS) {
       OS << Code << "\n  }\n";
     }
     OS << "  }\n";
-    OS << "}\n";
-    EndEmitFunction(OS);
+    OS << "}\n\n";
   }
 }
 
@@ -996,54 +765,8 @@ static void BuildHistogram(const Matcher *M, std::vector<unsigned> &OpcodeFreq){
   }
 }
 
-static StringRef getOpcodeString(Matcher::KindTy Kind) {
-  switch (Kind) {
-  case Matcher::Scope: return "OPC_Scope"; break;
-  case Matcher::RecordNode: return "OPC_RecordNode"; break;
-  case Matcher::RecordChild: return "OPC_RecordChild"; break;
-  case Matcher::RecordMemRef: return "OPC_RecordMemRef"; break;
-  case Matcher::CaptureGlueInput: return "OPC_CaptureGlueInput"; break;
-  case Matcher::MoveChild: return "OPC_MoveChild"; break;
-  case Matcher::MoveParent: return "OPC_MoveParent"; break;
-  case Matcher::CheckSame: return "OPC_CheckSame"; break;
-  case Matcher::CheckChildSame: return "OPC_CheckChildSame"; break;
-  case Matcher::CheckPatternPredicate:
-    return "OPC_CheckPatternPredicate"; break;
-  case Matcher::CheckPredicate: return "OPC_CheckPredicate"; break;
-  case Matcher::CheckOpcode: return "OPC_CheckOpcode"; break;
-  case Matcher::SwitchOpcode: return "OPC_SwitchOpcode"; break;
-  case Matcher::CheckType: return "OPC_CheckType"; break;
-  case Matcher::SwitchType: return "OPC_SwitchType"; break;
-  case Matcher::CheckChildType: return "OPC_CheckChildType"; break;
-  case Matcher::CheckInteger: return "OPC_CheckInteger"; break;
-  case Matcher::CheckChildInteger: return "OPC_CheckChildInteger"; break;
-  case Matcher::CheckCondCode: return "OPC_CheckCondCode"; break;
-  case Matcher::CheckChild2CondCode: return "OPC_CheckChild2CondCode"; break;
-  case Matcher::CheckValueType: return "OPC_CheckValueType"; break;
-  case Matcher::CheckComplexPat: return "OPC_CheckComplexPat"; break;
-  case Matcher::CheckAndImm: return "OPC_CheckAndImm"; break;
-  case Matcher::CheckOrImm: return "OPC_CheckOrImm"; break;
-  case Matcher::CheckFoldableChainNode:
-    return "OPC_CheckFoldableChainNode"; break;
-  case Matcher::CheckImmAllOnesV: return "OPC_CheckImmAllOnesV"; break;
-  case Matcher::CheckImmAllZerosV: return "OPC_CheckImmAllZerosV"; break;
-  case Matcher::EmitInteger: return "OPC_EmitInteger"; break;
-  case Matcher::EmitStringInteger: return "OPC_EmitStringInteger"; break;
-  case Matcher::EmitRegister: return "OPC_EmitRegister"; break;
-  case Matcher::EmitConvertToTarget: return "OPC_EmitConvertToTarget"; break;
-  case Matcher::EmitMergeInputChains: return "OPC_EmitMergeInputChains"; break;
-  case Matcher::EmitCopyToReg: return "OPC_EmitCopyToReg"; break;
-  case Matcher::EmitNode: return "OPC_EmitNode"; break;
-  case Matcher::MorphNodeTo: return "OPC_MorphNodeTo"; break;
-  case Matcher::EmitNodeXForm: return "OPC_EmitNodeXForm"; break;
-  case Matcher::CompleteMatch: return "OPC_CompleteMatch"; break;
-  }
-
-  llvm_unreachable("Unhandled opcode?");
-}
-
 void MatcherTableEmitter::EmitHistogram(const Matcher *M,
-                                        raw_ostream &OS) {
+                                        formatted_raw_ostream &OS) {
   if (OmitComments)
     return;
 
@@ -1052,9 +775,47 @@ void MatcherTableEmitter::EmitHistogram(const Matcher *M,
 
   OS << "  // Opcode Histogram:\n";
   for (unsigned i = 0, e = OpcodeFreq.size(); i != e; ++i) {
-    OS << "  // #"
-       << left_justify(getOpcodeString((Matcher::KindTy)i), HistOpcWidth)
-       << " = " << OpcodeFreq[i] << '\n';
+    OS << "  // #";
+    switch ((Matcher::KindTy)i) {
+    case Matcher::Scope: OS << "OPC_Scope"; break;
+    case Matcher::RecordNode: OS << "OPC_RecordNode"; break;
+    case Matcher::RecordChild: OS << "OPC_RecordChild"; break;
+    case Matcher::RecordMemRef: OS << "OPC_RecordMemRef"; break;
+    case Matcher::CaptureGlueInput: OS << "OPC_CaptureGlueInput"; break;
+    case Matcher::MoveChild: OS << "OPC_MoveChild"; break;
+    case Matcher::MoveParent: OS << "OPC_MoveParent"; break;
+    case Matcher::CheckSame: OS << "OPC_CheckSame"; break;
+    case Matcher::CheckChildSame: OS << "OPC_CheckChildSame"; break;
+    case Matcher::CheckPatternPredicate:
+      OS << "OPC_CheckPatternPredicate"; break;
+    case Matcher::CheckPredicate: OS << "OPC_CheckPredicate"; break;
+    case Matcher::CheckOpcode: OS << "OPC_CheckOpcode"; break;
+    case Matcher::SwitchOpcode: OS << "OPC_SwitchOpcode"; break;
+    case Matcher::CheckType: OS << "OPC_CheckType"; break;
+    case Matcher::SwitchType: OS << "OPC_SwitchType"; break;
+    case Matcher::CheckChildType: OS << "OPC_CheckChildType"; break;
+    case Matcher::CheckInteger: OS << "OPC_CheckInteger"; break;
+    case Matcher::CheckChildInteger: OS << "OPC_CheckChildInteger"; break;
+    case Matcher::CheckCondCode: OS << "OPC_CheckCondCode"; break;
+    case Matcher::CheckValueType: OS << "OPC_CheckValueType"; break;
+    case Matcher::CheckComplexPat: OS << "OPC_CheckComplexPat"; break;
+    case Matcher::CheckAndImm: OS << "OPC_CheckAndImm"; break;
+    case Matcher::CheckOrImm: OS << "OPC_CheckOrImm"; break;
+    case Matcher::CheckFoldableChainNode:
+      OS << "OPC_CheckFoldableChainNode"; break;
+    case Matcher::EmitInteger: OS << "OPC_EmitInteger"; break;
+    case Matcher::EmitStringInteger: OS << "OPC_EmitStringInteger"; break;
+    case Matcher::EmitRegister: OS << "OPC_EmitRegister"; break;
+    case Matcher::EmitConvertToTarget: OS << "OPC_EmitConvertToTarget"; break;
+    case Matcher::EmitMergeInputChains: OS << "OPC_EmitMergeInputChains"; break;
+    case Matcher::EmitCopyToReg: OS << "OPC_EmitCopyToReg"; break;
+    case Matcher::EmitNode: OS << "OPC_EmitNode"; break;
+    case Matcher::MorphNodeTo: OS << "OPC_MorphNodeTo"; break;
+    case Matcher::EmitNodeXForm: OS << "OPC_EmitNodeXForm"; break;
+    case Matcher::CompleteMatch: OS << "OPC_CompleteMatch"; break;
+    }
+
+    OS.PadToColumn(40) << " = " << OpcodeFreq[i] << '\n';
   }
   OS << '\n';
 }
@@ -1062,72 +823,28 @@ void MatcherTableEmitter::EmitHistogram(const Matcher *M,
 
 void llvm::EmitMatcherTable(const Matcher *TheMatcher,
                             const CodeGenDAGPatterns &CGP,
-                            raw_ostream &OS) {
-  OS << "#if defined(GET_DAGISEL_DECL) && defined(GET_DAGISEL_BODY)\n";
-  OS << "#error GET_DAGISEL_DECL and GET_DAGISEL_BODY cannot be both defined, ";
-  OS << "undef both for inline definitions\n";
-  OS << "#endif\n\n";
+                            raw_ostream &O) {
+  formatted_raw_ostream OS(O);
 
-  // Emit a check for omitted class name.
-  OS << "#ifdef GET_DAGISEL_BODY\n";
-  OS << "#define LOCAL_DAGISEL_STRINGIZE(X) LOCAL_DAGISEL_STRINGIZE_(X)\n";
-  OS << "#define LOCAL_DAGISEL_STRINGIZE_(X) #X\n";
-  OS << "static_assert(sizeof(LOCAL_DAGISEL_STRINGIZE(GET_DAGISEL_BODY)) > 1,"
-        "\n";
-  OS << "   \"GET_DAGISEL_BODY is empty: it should be defined with the class "
-        "name\");\n";
-  OS << "#undef LOCAL_DAGISEL_STRINGIZE_\n";
-  OS << "#undef LOCAL_DAGISEL_STRINGIZE\n";
-  OS << "#endif\n\n";
+  OS << "// The main instruction selector code.\n";
+  OS << "SDNode *SelectCode(SDNode *N) {\n";
 
-  OS << "#if !defined(GET_DAGISEL_DECL) && !defined(GET_DAGISEL_BODY)\n";
-  OS << "#define DAGISEL_INLINE 1\n";
-  OS << "#else\n";
-  OS << "#define DAGISEL_INLINE 0\n";
-  OS << "#endif\n\n";
-
-  OS << "#if !DAGISEL_INLINE\n";
-  OS << "#define DAGISEL_CLASS_COLONCOLON GET_DAGISEL_BODY ::\n";
-  OS << "#else\n";
-  OS << "#define DAGISEL_CLASS_COLONCOLON\n";
-  OS << "#endif\n\n";
-
-  BeginEmitFunction(OS, "void", "SelectCode(SDNode *N)", false/*AddOverride*/);
   MatcherTableEmitter MatcherEmitter(CGP);
 
-  OS << "{\n";
   OS << "  // Some target values are emitted as 2 bytes, TARGET_VAL handles\n";
   OS << "  // this.\n";
   OS << "  #define TARGET_VAL(X) X & 255, unsigned(X) >> 8\n";
   OS << "  static const unsigned char MatcherTable[] = {\n";
-  unsigned TotalSize = MatcherEmitter.EmitMatcherList(TheMatcher, 1, 0, OS);
+  unsigned TotalSize = MatcherEmitter.EmitMatcherList(TheMatcher, 6, 0, OS);
   OS << "    0\n  }; // Total Array size is " << (TotalSize+1) << " bytes\n\n";
 
   MatcherEmitter.EmitHistogram(TheMatcher, OS);
 
   OS << "  #undef TARGET_VAL\n";
   OS << "  SelectCodeCommon(N, MatcherTable,sizeof(MatcherTable));\n";
+  OS << "  return nullptr;\n";
   OS << "}\n";
-  EndEmitFunction(OS);
 
   // Next up, emit the function for node and pattern predicates:
   MatcherEmitter.EmitPredicateFunctions(OS);
-
-  if (InstrumentCoverage)
-    MatcherEmitter.EmitPatternMatchTable(OS);
-
-  // Clean up the preprocessor macros.
-  OS << "\n";
-  OS << "#ifdef DAGISEL_INLINE\n";
-  OS << "#undef DAGISEL_INLINE\n";
-  OS << "#endif\n";
-  OS << "#ifdef DAGISEL_CLASS_COLONCOLON\n";
-  OS << "#undef DAGISEL_CLASS_COLONCOLON\n";
-  OS << "#endif\n";
-  OS << "#ifdef GET_DAGISEL_DECL\n";
-  OS << "#undef GET_DAGISEL_DECL\n";
-  OS << "#endif\n";
-  OS << "#ifdef GET_DAGISEL_BODY\n";
-  OS << "#undef GET_DAGISEL_BODY\n";
-  OS << "#endif\n";
 }

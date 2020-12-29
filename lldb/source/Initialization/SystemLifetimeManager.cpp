@@ -1,8 +1,9 @@
 //===-- SystemLifetimeManager.cpp ------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -23,7 +24,7 @@ SystemLifetimeManager::~SystemLifetimeManager() {
          "SystemLifetimeManager destroyed without calling Terminate!");
 }
 
-llvm::Error SystemLifetimeManager::Initialize(
+void SystemLifetimeManager::Initialize(
     std::unique_ptr<SystemInitializer> initializer,
     LoadPluginCallbackType plugin_callback) {
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
@@ -34,13 +35,9 @@ llvm::Error SystemLifetimeManager::Initialize(
     m_initialized = true;
     m_initializer = std::move(initializer);
 
-    if (auto e = m_initializer->Initialize())
-      return e;
-
+    m_initializer->Initialize();
     Debugger::Initialize(plugin_callback);
   }
-
-  return llvm::Error::success();
 }
 
 void SystemLifetimeManager::Terminate() {

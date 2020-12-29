@@ -1,4 +1,4 @@
-// RUN: %libomp-compile-and-run
+// RUN: %libomp-compile -lpthread && %libomp-run
 // The runtime currently does not get dependency information from GCC.
 // UNSUPPORTED: gcc
 
@@ -116,7 +116,7 @@ int main()
     {
 /*
  *      Corresponds to:
-        #pragma omp target nowait
+        #pragma omp target nowait depend(out: dep)
         {
             my_sleep( 0.1 );
         }

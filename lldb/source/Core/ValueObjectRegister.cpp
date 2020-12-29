@@ -1,36 +1,27 @@
 //===-- ValueObjectRegister.cpp ---------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Core/ValueObjectRegister.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Core/Module.h"
-#include "lldb/Core/Value.h"
+#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Symbol/CompilerType.h"
-#include "lldb/Symbol/TypeSystem.h"
+#include "lldb/Symbol/TypeList.h"
 #include "lldb/Target/ExecutionContext.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/RegisterContext.h"
-#include "lldb/Target/StackFrame.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Scalar.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/Stream.h"
-
-#include "llvm/ADT/StringRef.h"
-
-#include <assert.h>
-#include <memory>
-
-namespace lldb_private {
-class ExecutionContextScope;
-}
+#include "lldb/Target/Thread.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -77,7 +68,7 @@ bool ValueObjectRegisterContext::UpdateValue() {
   else
     m_reg_ctx_sp.reset();
 
-  if (m_reg_ctx_sp.get() == nullptr) {
+  if (m_reg_ctx_sp.get() == NULL) {
     SetValueIsValid(false);
     m_error.SetErrorToGenericError();
   } else
@@ -88,7 +79,7 @@ bool ValueObjectRegisterContext::UpdateValue() {
 
 ValueObject *ValueObjectRegisterContext::CreateChildAtIndex(
     size_t idx, bool synthetic_array_member, int32_t synthetic_index) {
-  ValueObject *new_valobj = nullptr;
+  ValueObject *new_valobj = NULL;
 
   const size_t num_children = GetNumChildren();
   if (idx < num_children) {
@@ -113,7 +104,7 @@ ValueObjectRegisterSet::Create(ExecutionContextScope *exe_scope,
 ValueObjectRegisterSet::ValueObjectRegisterSet(ExecutionContextScope *exe_scope,
                                                lldb::RegisterContextSP &reg_ctx,
                                                uint32_t reg_set_idx)
-    : ValueObject(exe_scope), m_reg_ctx_sp(reg_ctx), m_reg_set(nullptr),
+    : ValueObject(exe_scope), m_reg_ctx_sp(reg_ctx), m_reg_set(NULL),
       m_reg_set_idx(reg_set_idx) {
   assert(reg_ctx);
   m_reg_set = reg_ctx->GetRegisterSet(m_reg_set_idx);
@@ -150,13 +141,13 @@ bool ValueObjectRegisterSet::UpdateValue() {
   SetValueDidChange(false);
   ExecutionContext exe_ctx(GetExecutionContextRef());
   StackFrame *frame = exe_ctx.GetFramePtr();
-  if (frame == nullptr)
+  if (frame == NULL)
     m_reg_ctx_sp.reset();
   else {
     m_reg_ctx_sp = frame->GetRegisterContext();
     if (m_reg_ctx_sp) {
       const RegisterSet *reg_set = m_reg_ctx_sp->GetRegisterSet(m_reg_set_idx);
-      if (reg_set == nullptr)
+      if (reg_set == NULL)
         m_reg_ctx_sp.reset();
       else if (m_reg_set != reg_set) {
         SetValueDidChange(true);
@@ -176,7 +167,7 @@ bool ValueObjectRegisterSet::UpdateValue() {
 
 ValueObject *ValueObjectRegisterSet::CreateChildAtIndex(
     size_t idx, bool synthetic_array_member, int32_t synthetic_index) {
-  ValueObject *valobj = nullptr;
+  ValueObject *valobj = NULL;
   if (m_reg_ctx_sp && m_reg_set) {
     const size_t num_children = GetNumChildren();
     if (idx < num_children)
@@ -187,13 +178,13 @@ ValueObject *ValueObjectRegisterSet::CreateChildAtIndex(
 }
 
 lldb::ValueObjectSP
-ValueObjectRegisterSet::GetChildMemberWithName(ConstString name,
+ValueObjectRegisterSet::GetChildMemberWithName(const ConstString &name,
                                                bool can_create) {
-  ValueObject *valobj = nullptr;
+  ValueObject *valobj = NULL;
   if (m_reg_ctx_sp && m_reg_set) {
     const RegisterInfo *reg_info =
         m_reg_ctx_sp->GetRegisterInfoByName(name.AsCString());
-    if (reg_info != nullptr)
+    if (reg_info != NULL)
       valobj = new ValueObjectRegister(*this, m_reg_ctx_sp,
                                        reg_info->kinds[eRegisterKindLLDB]);
   }
@@ -204,11 +195,11 @@ ValueObjectRegisterSet::GetChildMemberWithName(ConstString name,
 }
 
 size_t
-ValueObjectRegisterSet::GetIndexOfChildWithName(ConstString name) {
+ValueObjectRegisterSet::GetIndexOfChildWithName(const ConstString &name) {
   if (m_reg_ctx_sp && m_reg_set) {
     const RegisterInfo *reg_info =
         m_reg_ctx_sp->GetRegisterInfoByName(name.AsCString());
-    if (reg_info != nullptr)
+    if (reg_info != NULL)
       return reg_info->kinds[eRegisterKindLLDB];
   }
   return UINT32_MAX;
@@ -257,19 +248,15 @@ ValueObjectRegister::~ValueObjectRegister() {}
 CompilerType ValueObjectRegister::GetCompilerTypeImpl() {
   if (!m_compiler_type.IsValid()) {
     ExecutionContext exe_ctx(GetExecutionContextRef());
-    if (auto *target = exe_ctx.GetTargetPtr()) {
-      if (auto *exe_module = target->GetExecutableModulePointer()) {
-        auto type_system_or_err =
+    Target *target = exe_ctx.GetTargetPtr();
+    if (target) {
+      Module *exe_module = target->GetExecutableModulePointer();
+      if (exe_module) {
+        TypeSystem *type_system =
             exe_module->GetTypeSystemForLanguage(eLanguageTypeC);
-        if (auto err = type_system_or_err.takeError()) {
-          LLDB_LOG_ERROR(
-              lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_TYPES),
-              std::move(err), "Unable to get CompilerType from TypeSystem");
-        } else {
-          m_compiler_type =
-              type_system_or_err->GetBuiltinTypeForEncodingAndBitSize(
-                  m_reg_info.encoding, m_reg_info.byte_size * 8);
-        }
+        if (type_system)
+          m_compiler_type = type_system->GetBuiltinTypeForEncodingAndBitSize(
+              m_reg_info.encoding, m_reg_info.byte_size * 8);
       }
     }
   }
@@ -283,8 +270,7 @@ ConstString ValueObjectRegister::GetTypeName() {
 }
 
 size_t ValueObjectRegister::CalculateNumChildren(uint32_t max) {
-  ExecutionContext exe_ctx(GetExecutionContextRef());
-  auto children_count = GetCompilerType().GetNumChildren(true, &exe_ctx);
+  auto children_count = GetCompilerType().GetNumChildren(true);
   return children_count <= max ? children_count : max;
 }
 
@@ -294,7 +280,7 @@ bool ValueObjectRegister::UpdateValue() {
   m_error.Clear();
   ExecutionContext exe_ctx(GetExecutionContextRef());
   StackFrame *frame = exe_ctx.GetFramePtr();
-  if (frame == nullptr) {
+  if (frame == NULL) {
     m_reg_ctx_sp.reset();
     m_reg_value.Clear();
   }
@@ -323,7 +309,7 @@ bool ValueObjectRegister::UpdateValue() {
 }
 
 bool ValueObjectRegister::SetValueFromCString(const char *value_str,
-                                              Status &error) {
+                                              Error &error) {
   // The new value will be in the m_data.  Copy that into our register value.
   error =
       m_reg_value.SetValueFromString(&m_reg_info, llvm::StringRef(value_str));
@@ -337,7 +323,7 @@ bool ValueObjectRegister::SetValueFromCString(const char *value_str,
     return false;
 }
 
-bool ValueObjectRegister::SetData(DataExtractor &data, Status &error) {
+bool ValueObjectRegister::SetData(DataExtractor &data, Error &error) {
   error = m_reg_value.SetValueFromData(&m_reg_info, data, 0, false);
   if (error.Success()) {
     if (m_reg_ctx_sp->WriteRegister(&m_reg_info, m_reg_value)) {

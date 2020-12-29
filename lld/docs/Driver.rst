@@ -2,9 +2,6 @@
 Driver
 ======
 
-Note: this document discuss Mach-O port of LLD. For ELF and COFF,
-see :doc:`index`.
-
 .. contents::
    :local:
 
@@ -57,15 +54,15 @@ Adding an Option to an existing Flavor
 
 #. Modify :cpp:func:`lld::FlavorDriver::parse` in :file:
    `lib/Driver/{Flavor}Driver.cpp` to call the targetInfo setter
-   for the option.
+   for corresponding to the option.
 
-#. Modify {Flavor}Reader and {Flavor}Writer to use the new targetInfo option.
+#. Modify {Flavor}Reader and {Flavor}Writer to use the new targtInfo option.
 
 
 Adding a Flavor
 ===============
 
-#. Add an entry for the flavor in :file:`include/lld/Common/Driver.h` to
+#. Add an entry for the flavor in :file:`include/lld/Driver/Driver.h` to
    :cpp:class:`lld::UniversalDriver::Flavor`.
 
 #. Add an entry in :file:`lib/Driver/UniversalDriver.cpp` to

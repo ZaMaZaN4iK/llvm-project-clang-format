@@ -1,7 +1,7 @@
-// RUN: %clangxx -frtti -fsanitize=vptr -fno-sanitize-recover=vptr,null -g %s -O3 -o %t
+// RUN: %clangxx -frtti -fsanitize=vptr -fno-sanitize-recover=vptr -g %s -O3 -o %t
 // RUN: not %run %t 2>&1 | FileCheck %s --check-prefix=CHECK-CORRUPTED-VTABLE --strict-whitespace
 
-// UNSUPPORTED: windows-msvc
+// UNSUPPORTED: win32
 // REQUIRES: stable-runtime, cxxabi
 #include <cstddef>
 
@@ -13,7 +13,7 @@ struct S {
   virtual int v() { return 0; }
 };
 
-// See the proper definition in ubsan_type_hash_itanium.cpp
+// See the proper definition in ubsan_type_hash_itanium.cc
 struct VtablePrefix {
   signed long Offset;
   std::type_info *TypeInfo;

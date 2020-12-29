@@ -1,18 +1,5 @@
 add_lldb_unittest(SymbolFilePDBTests
   SymbolFilePDBTests.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbHost
-    lldbSymbol
-    lldbPluginObjectFilePECOFF
-    lldbPluginSymbolFileDWARF
-    lldbPluginSymbolFilePDB
-    lldbUtilityHelpers
-    LLVMTestingSupport
-  LINK_COMPONENTS
-    Support
-    DebugInfoPDB
   )
 
 set(test_inputs

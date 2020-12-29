@@ -1,35 +1,47 @@
 //===-- ValueObjectCast.cpp -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Core/ValueObjectCast.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/Log.h"
+#include "lldb/Core/Module.h"
 #include "lldb/Core/Value.h"
 #include "lldb/Core/ValueObject.h"
-#include "lldb/Symbol/CompilerType.h"
-#include "lldb/Target/ExecutionContext.h"
-#include "lldb/Utility/Scalar.h"
-#include "lldb/Utility/Status.h"
+#include "lldb/Core/ValueObjectList.h"
 
-namespace lldb_private {
-class ConstString;
-}
+#include "lldb/Symbol/CompilerType.h"
+#include "lldb/Symbol/ObjectFile.h"
+#include "lldb/Symbol/SymbolContext.h"
+#include "lldb/Symbol/Type.h"
+#include "lldb/Symbol/Variable.h"
+
+#include "lldb/Target/ExecutionContext.h"
+#include "lldb/Target/Process.h"
+#include "lldb/Target/RegisterContext.h"
+#include "lldb/Target/Target.h"
+#include "lldb/Target/Thread.h"
 
 using namespace lldb_private;
 
 lldb::ValueObjectSP ValueObjectCast::Create(ValueObject &parent,
-                                            ConstString name,
+                                            const ConstString &name,
                                             const CompilerType &cast_type) {
   ValueObjectCast *cast_valobj_ptr =
       new ValueObjectCast(parent, name, cast_type);
   return cast_valobj_ptr->GetSP();
 }
 
-ValueObjectCast::ValueObjectCast(ValueObject &parent, ConstString name,
+ValueObjectCast::ValueObjectCast(ValueObject &parent, const ConstString &name,
                                  const CompilerType &cast_type)
     : ValueObject(parent), m_cast_type(cast_type) {
   SetName(name);
@@ -43,9 +55,7 @@ ValueObjectCast::~ValueObjectCast() {}
 CompilerType ValueObjectCast::GetCompilerTypeImpl() { return m_cast_type; }
 
 size_t ValueObjectCast::CalculateNumChildren(uint32_t max) {
-  ExecutionContext exe_ctx(GetExecutionContextRef());
-  auto children_count = GetCompilerType().GetNumChildren(
-      true, &exe_ctx);
+  auto children_count = GetCompilerType().GetNumChildren(true);
   return children_count <= max ? children_count : max;
 }
 
@@ -72,14 +82,14 @@ bool ValueObjectCast::UpdateValue() {
     m_value.SetCompilerType(compiler_type);
     SetAddressTypeOfChildren(m_parent->GetAddressTypeOfChildren());
     if (!CanProvideValue()) {
-      // this value object represents an aggregate type whose children have
-      // values, but this object does not. So we say we are changed if our
-      // location has changed.
+      // this value object represents an aggregate type whose
+      // children have values, but this object does not. So we
+      // say we are changed if our location has changed.
       SetValueDidChange(m_value.GetValueType() != old_value.GetValueType() ||
                         m_value.GetScalar() != old_value.GetScalar());
     }
     ExecutionContext exe_ctx(GetExecutionContextRef());
-    m_error = m_value.GetValueAsData(&exe_ctx, m_data, GetModule().get());
+    m_error = m_value.GetValueAsData(&exe_ctx, m_data, 0, GetModule().get());
     SetValueDidChange(m_parent->GetValueDidChange());
     return true;
   }

@@ -1,8 +1,9 @@
 //===-- sanitizer_atomic_clang.h --------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -70,15 +71,16 @@ INLINE typename T::Type atomic_exchange(volatile T *a,
   return v;
 }
 
-template <typename T>
-INLINE bool atomic_compare_exchange_strong(volatile T *a, typename T::Type *cmp,
+template<typename T>
+INLINE bool atomic_compare_exchange_strong(volatile T *a,
+                                           typename T::Type *cmp,
                                            typename T::Type xchg,
                                            memory_order mo) {
   typedef typename T::Type Type;
   Type cmpv = *cmp;
-  Type prev;
-  prev = __sync_val_compare_and_swap(&a->val_dont_use, cmpv, xchg);
-  if (prev == cmpv) return true;
+  Type prev = __sync_val_compare_and_swap(&a->val_dont_use, cmpv, xchg);
+  if (prev == cmpv)
+    return true;
   *cmp = prev;
   return false;
 }
@@ -92,13 +94,6 @@ INLINE bool atomic_compare_exchange_weak(volatile T *a,
 }
 
 }  // namespace __sanitizer
-
-// This include provides explicit template instantiations for atomic_uint64_t
-// on MIPS32, which does not directly support 8 byte atomics. It has to
-// proceed the template definitions above.
-#if defined(_MIPS_SIM) && defined(_ABIO32)
-  #include "sanitizer_atomic_clang_mips.h"
-#endif
 
 #undef ATOMIC_ORDER
 

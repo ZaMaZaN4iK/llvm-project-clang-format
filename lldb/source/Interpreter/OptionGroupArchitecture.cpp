@@ -1,14 +1,19 @@
 //===-- OptionGroupArchitecture.cpp -----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Interpreter/OptionGroupArchitecture.h"
-#include "lldb/Host/OptionParser.h"
-#include "lldb/Target/Platform.h"
+
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Utility/Utils.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -17,9 +22,9 @@ OptionGroupArchitecture::OptionGroupArchitecture() : m_arch_str() {}
 
 OptionGroupArchitecture::~OptionGroupArchitecture() {}
 
-static constexpr OptionDefinition g_option_table[] = {
+static OptionDefinition g_option_table[] = {
     {LLDB_OPT_SET_1, false, "arch", 'a', OptionParser::eRequiredArgument,
-     nullptr, {}, 0, eArgTypeArchitecture,
+     nullptr, nullptr, 0, eArgTypeArchitecture,
      "Specify the architecture for the target."},
 };
 
@@ -29,15 +34,17 @@ llvm::ArrayRef<OptionDefinition> OptionGroupArchitecture::GetDefinitions() {
 
 bool OptionGroupArchitecture::GetArchitecture(Platform *platform,
                                               ArchSpec &arch) {
-  arch = Platform::GetAugmentedArchSpec(platform, m_arch_str);
+  if (m_arch_str.empty())
+    arch.Clear();
+  else
+    arch.SetTriple(m_arch_str.c_str(), platform);
   return arch.IsValid();
 }
 
-Status
-OptionGroupArchitecture::SetOptionValue(uint32_t option_idx,
-                                        llvm::StringRef option_arg,
-                                        ExecutionContext *execution_context) {
-  Status error;
+Error OptionGroupArchitecture::SetOptionValue(
+    uint32_t option_idx, llvm::StringRef option_arg,
+    ExecutionContext *execution_context) {
+  Error error;
   const int short_option = g_option_table[option_idx].short_option;
 
   switch (short_option) {
@@ -46,7 +53,8 @@ OptionGroupArchitecture::SetOptionValue(uint32_t option_idx,
     break;
 
   default:
-    llvm_unreachable("Unimplemented option");
+    error.SetErrorStringWithFormat("unrecognized option '%c'", short_option);
+    break;
   }
 
   return error;

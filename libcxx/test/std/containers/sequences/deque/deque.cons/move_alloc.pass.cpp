@@ -1,12 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// UNSUPPORTED: c++98, c++03
 
 // <deque>
 
@@ -15,16 +14,16 @@
 #include <deque>
 #include <cassert>
 
-#include "test_macros.h"
 #include "MoveOnly.h"
 #include "test_allocator.h"
 #include "min_allocator.h"
 
-int main(int, char**)
+int main()
 {
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
     {
         int ab[] = {3, 4, 2, 8, 0, 1, 44, 34, 45, 96, 80, 1, 13, 31, 45};
-        const int* an = ab + sizeof(ab)/sizeof(ab[0]);
+        int* an = ab + sizeof(ab)/sizeof(ab[0]);
         typedef test_allocator<MoveOnly> A;
         std::deque<MoveOnly, A> c1(A(1));
         for (int* p = ab; p < an; ++p)
@@ -32,14 +31,14 @@ int main(int, char**)
         std::deque<MoveOnly, A> c2(A(1));
         for (int* p = ab; p < an; ++p)
             c2.push_back(MoveOnly(*p));
-        std::deque<MoveOnly, A> c3(std::move(c1), A(3)); // unequal allocator
+        std::deque<MoveOnly, A> c3(std::move(c1), A(3));
         assert(c2 == c3);
         assert(c3.get_allocator() == A(3));
-        LIBCPP_ASSERT(c1.size() != 0);
+        assert(c1.size() != 0);
     }
     {
         int ab[] = {3, 4, 2, 8, 0, 1, 44, 34, 45, 96, 80, 1, 13, 31, 45};
-        const int* an = ab + sizeof(ab)/sizeof(ab[0]);
+        int* an = ab + sizeof(ab)/sizeof(ab[0]);
         typedef test_allocator<MoveOnly> A;
         std::deque<MoveOnly, A> c1(A(1));
         for (int* p = ab; p < an; ++p)
@@ -47,14 +46,14 @@ int main(int, char**)
         std::deque<MoveOnly, A> c2(A(1));
         for (int* p = ab; p < an; ++p)
             c2.push_back(MoveOnly(*p));
-        std::deque<MoveOnly, A> c3(std::move(c1), A(1)); // equal allocator
+        std::deque<MoveOnly, A> c3(std::move(c1), A(1));
         assert(c2 == c3);
         assert(c3.get_allocator() == A(1));
-        LIBCPP_ASSERT(c1.size() == 0);
+        assert(c1.size() == 0);
     }
     {
         int ab[] = {3, 4, 2, 8, 0, 1, 44, 34, 45, 96, 80, 1, 13, 31, 45};
-        const int* an = ab + sizeof(ab)/sizeof(ab[0]);
+        int* an = ab + sizeof(ab)/sizeof(ab[0]);
         typedef other_allocator<MoveOnly> A;
         std::deque<MoveOnly, A> c1(A(1));
         for (int* p = ab; p < an; ++p)
@@ -62,14 +61,15 @@ int main(int, char**)
         std::deque<MoveOnly, A> c2(A(1));
         for (int* p = ab; p < an; ++p)
             c2.push_back(MoveOnly(*p));
-        std::deque<MoveOnly, A> c3(std::move(c1), A(3)); // unequal allocator
+        std::deque<MoveOnly, A> c3(std::move(c1), A(3));
         assert(c2 == c3);
         assert(c3.get_allocator() == A(3));
-        LIBCPP_ASSERT(c1.size() != 0);
+        assert(c1.size() != 0);
     }
+#if TEST_STD_VER >= 11
     {
         int ab[] = {3, 4, 2, 8, 0, 1, 44, 34, 45, 96, 80, 1, 13, 31, 45};
-        const int* an = ab + sizeof(ab)/sizeof(ab[0]);
+        int* an = ab + sizeof(ab)/sizeof(ab[0]);
         typedef min_allocator<MoveOnly> A;
         std::deque<MoveOnly, A> c1(A{});
         for (int* p = ab; p < an; ++p)
@@ -77,11 +77,11 @@ int main(int, char**)
         std::deque<MoveOnly, A> c2(A{});
         for (int* p = ab; p < an; ++p)
             c2.push_back(MoveOnly(*p));
-        std::deque<MoveOnly, A> c3(std::move(c1), A());  // equal allocator
+        std::deque<MoveOnly, A> c3(std::move(c1), A());
         assert(c2 == c3);
         assert(c3.get_allocator() == A());
-        LIBCPP_ASSERT(c1.size() == 0);
+        assert(c1.size() == 0);
     }
-
-  return 0;
+#endif
+#endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
 }

@@ -1,8 +1,9 @@
 //===---- RuntimeDyldMachOI386.h ---- MachO/I386 specific code. ---*- C++ -*-=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,7 +27,7 @@ public:
                        JITSymbolResolver &Resolver)
       : RuntimeDyldMachOCRTPBase(MM, Resolver) {}
 
-  unsigned getMaxStubSize() const override { return 0; }
+  unsigned getMaxStubSize() override { return 0; }
 
   unsigned getStubAlignment() override { return 1; }
 
@@ -96,7 +97,7 @@ public:
   }
 
   void resolveRelocation(const RelocationEntry &RE, uint64_t Value) override {
-    LLVM_DEBUG(dumpRelocationToResolve(RE, Value));
+    DEBUG(dumpRelocationToResolve(RE, Value));
 
     const SectionEntry &Section = Sections[RE.SectionID];
     uint8_t *LocalAddress = Section.getAddressWithOffset(RE.Offset);
@@ -128,10 +129,7 @@ public:
   Error finalizeSection(const ObjectFile &Obj, unsigned SectionID,
                        const SectionRef &Section) {
     StringRef Name;
-    if (Expected<StringRef> NameOrErr = Section.getName())
-      Name = *NameOrErr;
-    else
-      consumeError(NameOrErr.takeError());
+    Section.getName(Name);
 
     if (Name == "__jump_table")
       return populateJumpTable(cast<MachOObjectFile>(Obj), Section, SectionID);
@@ -194,11 +192,11 @@ private:
     // Compute the addend 'C' from the original expression 'A - B + C'.
     Addend -= AddrA - AddrB;
 
-    LLVM_DEBUG(dbgs() << "Found SECTDIFF: AddrA: " << AddrA
-                      << ", AddrB: " << AddrB << ", Addend: " << Addend
-                      << ", SectionA ID: " << SectionAID << ", SectionAOffset: "
-                      << SectionAOffset << ", SectionB ID: " << SectionBID
-                      << ", SectionBOffset: " << SectionBOffset << "\n");
+    DEBUG(dbgs() << "Found SECTDIFF: AddrA: " << AddrA << ", AddrB: " << AddrB
+                 << ", Addend: " << Addend << ", SectionA ID: " << SectionAID
+                 << ", SectionAOffset: " << SectionAOffset
+                 << ", SectionB ID: " << SectionBID
+                 << ", SectionBOffset: " << SectionBOffset << "\n");
     RelocationEntry R(SectionID, Offset, RelocType, Addend, SectionAID,
                       SectionAOffset, SectionBID, SectionBOffset,
                       IsPCRel, Size);

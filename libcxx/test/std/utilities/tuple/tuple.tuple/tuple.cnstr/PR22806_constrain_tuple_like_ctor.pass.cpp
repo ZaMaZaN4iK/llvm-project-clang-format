@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -23,8 +24,6 @@
 #include <tuple>
 #include <memory>
 #include <cassert>
-
-#include "test_macros.h"
 
 template <class Tp>
 using uncvref_t = typename std::remove_cv<typename std::remove_reference<Tp>::type>::type;
@@ -80,7 +79,7 @@ struct ConvertibleFromInt {
   ConvertibleFromInt(int) : state(FromInt) {}
 };
 
-int main(int, char**)
+int main()
 {
     // Test for the creation of dangling references when a tuple is used to
     // store a reference to another tuple as its only element.
@@ -90,7 +89,7 @@ int main(int, char**)
     // when both #1 and #2 participate in partial ordering #2 will always
     // be chosen over #1.
     // See PR22806  and LWG issue #2549 for more information.
-    // (https://bugs.llvm.org/show_bug.cgi?id=22806)
+    // (https://llvm.org/bugs/show_bug.cgi?id=22806)
     using T = std::tuple<int>;
     std::allocator<int> A;
     { // rvalue reference
@@ -145,8 +144,8 @@ int main(int, char**)
         assert(&std::get<0>(t2) == &t1);
     }
     // Test constructing a 1-tuple of the form tuple<UDT> from another 1-tuple
-    // 'tuple<T>' where UDT *can* be constructed from 'tuple<T>'. In this case
-    // the 'tuple(UTypes...)' ctor should be chosen and 'UDT' constructed from
+    // 'tuple<T>' where UDT *can* be constructed from 'tuple<T>' In this case
+    // the 'tuple(UTypes...)' ctor should be choosen and 'UDT' constructed frow
     // 'tuple<T>'.
     {
         using VT = ConstructibleFromTupleAndInt;
@@ -176,6 +175,4 @@ int main(int, char**)
         std::tuple<VT> t2 = {t1};
         assert(std::get<0>(t2).state == VT::FromInt);
     }
-
-  return 0;
 }

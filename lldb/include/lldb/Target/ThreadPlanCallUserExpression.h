@@ -1,15 +1,20 @@
 //===-- ThreadPlanCallUserExpression.h --------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ThreadPlanCallUserExpression_h_
 #define liblldb_ThreadPlanCallUserExpression_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadPlan.h"
 #include "lldb/Target/ThreadPlanCallFunction.h"
@@ -30,8 +35,6 @@ public:
 
   void GetDescription(Stream *s, lldb::DescriptionLevel level) override;
 
-  void DidPush() override;
-
   void WillPop() override;
 
   lldb::StopInfoSP GetRealStopInfo() override;
@@ -45,7 +48,6 @@ public:
   }
 
 protected:
-  void DoTakedown(bool success) override;
 private:
   lldb::UserExpressionSP
       m_user_expression_sp; // This is currently just used to ensure the

@@ -6,14 +6,6 @@
 // RUN:   -emit-llvm -o - %s | FileCheck %s
 // RUN: %clang_cc1 -triple s390x-linux-gnu -target-cpu arch11 \
 // RUN:   -emit-llvm -o - %s | FileCheck %s
-// RUN: %clang_cc1 -triple s390x-linux-gnu -target-cpu z14 \
-// RUN:   -emit-llvm -o - %s | FileCheck %s
-// RUN: %clang_cc1 -triple s390x-linux-gnu -target-cpu arch12 \
-// RUN:   -emit-llvm -o - %s | FileCheck %s
-// RUN: %clang_cc1 -triple s390x-linux-gnu -target-cpu z15 \
-// RUN:   -emit-llvm -o - %s | FileCheck %s
-// RUN: %clang_cc1 -triple s390x-linux-gnu -target-cpu arch13 \
-// RUN:   -emit-llvm -o - %s | FileCheck %s
 
 // Scalar types
 
@@ -33,7 +25,7 @@ long long pass_longlong(long long arg) { return arg; }
 // CHECK-LABEL: define i64 @pass_longlong(i64 %{{.*}})
 
 __int128 pass_int128(__int128 arg) { return arg; }
-// CHECK-LABEL: define void @pass_int128(i128* noalias sret %{{.*}}, i128* %0)
+// CHECK-LABEL: define void @pass_int128(i128* noalias sret %{{.*}}, i128*)
 
 float pass_float(float arg) { return arg; }
 // CHECK-LABEL: define float @pass_float(float %{{.*}})
@@ -42,7 +34,7 @@ double pass_double(double arg) { return arg; }
 // CHECK-LABEL: define double @pass_double(double %{{.*}})
 
 long double pass_longdouble(long double arg) { return arg; }
-// CHECK-LABEL: define void @pass_longdouble(fp128* noalias sret %{{.*}}, fp128* %0)
+// CHECK-LABEL: define void @pass_longdouble(fp128* noalias sret %{{.*}}, fp128*)
 
 
 // Complex types

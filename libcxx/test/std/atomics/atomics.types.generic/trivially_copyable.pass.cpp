@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -58,8 +59,6 @@
 #include <thread> // for thread_id
 #include <chrono> // for nanoseconds
 
-#include "test_macros.h"
-
 struct TriviallyCopyable {
     TriviallyCopyable ( int i ) : i_(i) {}
     int i_;
@@ -70,11 +69,9 @@ void test ( T t ) {
     std::atomic<T> t0(t);
     }
 
-int main(int, char**)
+int main()
 {
     test(TriviallyCopyable(42));
     test(std::this_thread::get_id());
     test(std::chrono::nanoseconds(2));
-
-  return 0;
 }

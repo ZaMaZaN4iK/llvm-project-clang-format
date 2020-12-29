@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,7 +14,7 @@
 // function(Fp);
 
 // Ensure that __not_null works for all function types.
-// See https://bugs.llvm.org/show_bug.cgi?id=23589
+// See https://llvm.org/bugs/show_bug.cgi?id=23589
 
 //------------------------------------------------------------------------------
 // TESTING std::function<...>::__not_null(Callable)
@@ -30,7 +31,7 @@
 //    types can be null. The other categories are not tested here.
 //  3) '__not_null(Callable)' is well formed when the call signature includes
 //      varargs.
-//  4) '__not_null(Callable)' works for Callable types with all arities less
+//  4) '__not_null(Callable)' works for Callable types with all aritys less
 //     than or equal to 3 in C++03.
 //  5) '__not_null(Callable)' works when 'Callable' is a member function
 //     pointer to a cv or ref qualified function type.
@@ -239,10 +240,8 @@ void test_md() {
     test_imp<int MemData::*, int(MemData&)>();
 }
 
-int main(int, char**) {
+int main() {
     test_func();
     test_mf();
     test_md();
-
-  return 0;
 }

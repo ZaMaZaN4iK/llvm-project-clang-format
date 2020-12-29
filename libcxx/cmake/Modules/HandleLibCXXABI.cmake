@@ -8,8 +8,7 @@
 #
 # Parameters:
 #   abidefines: A list of defines needed to compile libc++ with the ABI library
-#   abishared : The shared ABI library to link against.
-#   abistatic : The static ABI library to link against.
+#   abilib    : The ABI library to link against.
 #   abifiles  : A list of files (which may be relative paths) to copy into the
 #               libc++ build tree for the build.  These files will be copied
 #               twice: once into include/, so the libc++ build itself can find
@@ -19,8 +18,7 @@
 #   abidirs   : A list of relative paths to create under an include directory
 #               in the libc++ build directory.
 #
-
-macro(setup_abi_lib abidefines abishared abistatic abifiles abidirs)
+macro(setup_abi_lib abidefines abilib abifiles abidirs)
   list(APPEND LIBCXX_COMPILE_FLAGS ${abidefines})
   set(LIBCXX_CXX_ABI_INCLUDE_PATHS "${LIBCXX_CXX_ABI_INCLUDE_PATHS}"
     CACHE PATH
@@ -30,9 +28,17 @@ macro(setup_abi_lib abidefines abishared abistatic abifiles abidirs)
     CACHE PATH
     "Paths to C++ ABI library directory"
     )
-  set(LIBCXX_CXX_SHARED_ABI_LIBRARY ${abishared})
-  set(LIBCXX_CXX_STATIC_ABI_LIBRARY ${abistatic})
+  set(LIBCXX_CXX_ABI_LIBRARY ${abilib})
   set(LIBCXX_ABILIB_FILES ${abifiles})
+
+  # The place in the build tree where we store out-of-source headers.
+  set(LIBCXX_BUILD_HEADERS_ROOT "${CMAKE_BINARY_DIR}/include/c++-build")
+  file(MAKE_DIRECTORY "${LIBCXX_BUILD_HEADERS_ROOT}")
+  file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include/c++/v1")
+  foreach(_d ${abidirs})
+    file(MAKE_DIRECTORY "${LIBCXX_BUILD_HEADERS_ROOT}/${_d}")
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include/c++/v1/${_d}")
+  endforeach()
 
   foreach(fpath ${LIBCXX_ABILIB_FILES})
     set(found FALSE)
@@ -41,31 +47,20 @@ macro(setup_abi_lib abidefines abishared abistatic abifiles abidirs)
         set(found TRUE)
         get_filename_component(dstdir ${fpath} PATH)
         get_filename_component(ifile ${fpath} NAME)
-        set(src ${incpath}/${fpath})
-
-        set(dst ${LIBCXX_BINARY_INCLUDE_DIR}/${dstdir}/${ifile})
-        add_custom_command(OUTPUT ${dst}
-            DEPENDS ${src}
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${src} ${dst}
-            COMMENT "Copying C++ ABI header ${fpath}...")
-        list(APPEND abilib_headers "${dst}")
-
-        if (NOT LIBCXX_USING_INSTALLED_LLVM AND LIBCXX_HEADER_DIR)
-          set(dst "${LIBCXX_HEADER_DIR}/include/c++/v1/${dstdir}/${fpath}")
-          add_custom_command(OUTPUT ${dst}
-              DEPENDS ${src}
-              COMMAND ${CMAKE_COMMAND} -E copy_if_different ${src} ${dst}
-              COMMENT "Copying C++ ABI header ${fpath}...")
-          list(APPEND abilib_headers "${dst}")
-        endif()
-
+        file(COPY "${incpath}/${fpath}"
+          DESTINATION "${LIBCXX_BUILD_HEADERS_ROOT}/${dstdir}"
+          )
+        file(COPY "${incpath}/${fpath}"
+          DESTINATION "${CMAKE_BINARY_DIR}/include/c++/v1/${dstdir}"
+          )
         if (LIBCXX_INSTALL_HEADERS)
-          install(FILES "${LIBCXX_BINARY_INCLUDE_DIR}/${fpath}"
-            DESTINATION ${LIBCXX_INSTALL_HEADER_PREFIX}include/c++/v1/${dstdir}
-            COMPONENT cxx-headers
+          install(FILES "${LIBCXX_BUILD_HEADERS_ROOT}/${fpath}"
+            DESTINATION include/c++/v1/${dstdir}
+            COMPONENT libcxx
             PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
             )
         endif()
+        list(APPEND abilib_headers "${LIBCXX_BUILD_HEADERS_ROOT}/${fpath}")
       endif()
     endforeach()
     if (NOT found)
@@ -73,9 +68,7 @@ macro(setup_abi_lib abidefines abishared abistatic abifiles abidirs)
     endif()
   endforeach()
 
-  include_directories("${LIBCXX_BINARY_INCLUDE_DIR}")
-  add_custom_target(cxx_abi_headers ALL DEPENDS ${abilib_headers})
-  set(LIBCXX_CXX_ABI_HEADER_TARGET "cxx_abi_headers")
+  include_directories("${LIBCXX_BUILD_HEADERS_ROOT}")
 endmacro()
 
 
@@ -95,33 +88,28 @@ if ("${LIBCXX_CXX_ABI_LIBNAME}" STREQUAL "libstdc++" OR
   endif()
   setup_abi_lib(
     "-D__GLIBCXX__ ${_LIBSUPCXX_DEFINES}"
-    "${_LIBSUPCXX_LIBNAME}" "${_LIBSUPCXX_LIBNAME}" "${_LIBSUPCXX_INCLUDE_FILES}" "bits"
+    "${_LIBSUPCXX_LIBNAME}" "${_LIBSUPCXX_INCLUDE_FILES}" "bits"
     )
 elseif ("${LIBCXX_CXX_ABI_LIBNAME}" STREQUAL "libcxxabi")
   if (LIBCXX_CXX_ABI_INTREE)
     # Link against just-built "cxxabi" target.
-    set(CXXABI_SHARED_LIBNAME cxxabi_shared)
-    set(CXXABI_STATIC_LIBNAME cxxabi_static)
+    if (LIBCXX_ENABLE_STATIC_ABI_LIBRARY)
+        set(CXXABI_LIBNAME cxxabi_static)
+    else()
+        set(CXXABI_LIBNAME cxxabi_shared)
+    endif()
+    set(LIBCXX_LIBCPPABI_VERSION "2" PARENT_SCOPE)
   else()
     # Assume c++abi is installed in the system, rely on -lc++abi link flag.
-    set(CXXABI_SHARED_LIBNAME "c++abi")
-    set(CXXABI_STATIC_LIBNAME "c++abi")
+    set(CXXABI_LIBNAME "c++abi")
   endif()
-  if (LIBCXX_CXX_ABI_SYSTEM)
-    set(HEADERS "")
-  else()
-    set(HEADERS "cxxabi.h;__cxxabi_config.h")
-  endif()
-  setup_abi_lib(
-    "-DLIBCXX_BUILDING_LIBCXXABI"
-    "${CXXABI_SHARED_LIBNAME}" "${CXXABI_STATIC_LIBNAME}" "${HEADERS}" "")
-elseif ("${LIBCXX_CXX_ABI_LIBNAME}" STREQUAL "libcxxrt")
-  setup_abi_lib(
-    "-DLIBCXXRT"
-    "cxxrt" "cxxrt" "cxxabi.h;unwind.h;unwind-arm.h;unwind-itanium.h" ""
+  setup_abi_lib("-DLIBCXX_BUILDING_LIBCXXABI"
+    ${CXXABI_LIBNAME} "cxxabi.h;__cxxabi_config.h" ""
     )
-elseif ("${LIBCXX_CXX_ABI_LIBNAME}" STREQUAL "vcruntime")
- # Nothing TODO
+elseif ("${LIBCXX_CXX_ABI_LIBNAME}" STREQUAL "libcxxrt")
+  setup_abi_lib("-DLIBCXXRT"
+    "cxxrt" "cxxabi.h;unwind.h;unwind-arm.h;unwind-itanium.h" ""
+    )
 elseif ("${LIBCXX_CXX_ABI_LIBNAME}" STREQUAL "none")
   list(APPEND LIBCXX_COMPILE_FLAGS "-D_LIBCPP_BUILDING_HAS_NO_ABI_LIBRARY")
 elseif ("${LIBCXX_CXX_ABI_LIBNAME}" STREQUAL "default")

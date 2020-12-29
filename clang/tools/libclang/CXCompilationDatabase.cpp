@@ -145,23 +145,36 @@ clang_CompileCommand_getArg(CXCompileCommand CCmd, unsigned Arg)
 unsigned
 clang_CompileCommand_getNumMappedSources(CXCompileCommand CCmd)
 {
-  // Left here for backward compatibility. No mapped sources exists in the C++
-  // backend anymore.
-  return 0;
+  if (!CCmd)
+    return 0;
+
+  return static_cast<CompileCommand *>(CCmd)->MappedSources.size();
 }
 
 CXString
 clang_CompileCommand_getMappedSourcePath(CXCompileCommand CCmd, unsigned I)
 {
-  // Left here for backward compatibility. No mapped sources exists in the C++
-  // backend anymore.
-  return cxstring::createNull();
+  if (!CCmd)
+    return cxstring::createNull();
+
+  CompileCommand *Cmd = static_cast<CompileCommand *>(CCmd);
+
+  if (I >= Cmd->MappedSources.size())
+    return cxstring::createNull();
+
+  return cxstring::createRef(Cmd->MappedSources[I].first.c_str());
 }
 
 CXString
 clang_CompileCommand_getMappedSourceContent(CXCompileCommand CCmd, unsigned I)
 {
-  // Left here for backward compatibility. No mapped sources exists in the C++
-  // backend anymore.
-  return cxstring::createNull();
+  if (!CCmd)
+    return cxstring::createNull();
+
+  CompileCommand *Cmd = static_cast<CompileCommand *>(CCmd);
+
+  if (I >= Cmd->MappedSources.size())
+    return cxstring::createNull();
+
+  return cxstring::createRef(Cmd->MappedSources[I].second.c_str());
 }

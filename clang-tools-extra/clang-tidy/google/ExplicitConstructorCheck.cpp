@@ -1,8 +1,9 @@
 //===--- ExplicitConstructorCheck.cpp - clang-tidy ------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -23,15 +24,12 @@ void ExplicitConstructorCheck::registerMatchers(MatchFinder *Finder) {
   // provide any benefit to other languages, despite being benign.
   if (!getLangOpts().CPlusPlus)
     return;
-  Finder->addMatcher(
-      cxxConstructorDecl(unless(anyOf(isImplicit(), // Compiler-generated.
-                                      isDeleted(), isInstantiated())))
-          .bind("ctor"),
-      this);
+  Finder->addMatcher(cxxConstructorDecl(unless(isInstantiated())).bind("ctor"),
+                     this);
   Finder->addMatcher(
       cxxConversionDecl(unless(anyOf(isExplicit(), // Already marked explicit.
                                      isImplicit(), // Compiler-generated.
-                                     isDeleted(), isInstantiated())))
+                                     isInstantiated())))
 
           .bind("conversion"),
       this);
@@ -90,8 +88,6 @@ void ExplicitConstructorCheck::check(const MatchFinder::MatchResult &Result) {
 
   if (const auto *Conversion =
       Result.Nodes.getNodeAs<CXXConversionDecl>("conversion")) {
-    if (Conversion->isOutOfLine())
-      return;
     SourceLocation Loc = Conversion->getLocation();
     // Ignore all macros until we learn to ignore specific ones (e.g. used in
     // gmock to define matchers).
@@ -103,8 +99,10 @@ void ExplicitConstructorCheck::check(const MatchFinder::MatchResult &Result) {
   }
 
   const auto *Ctor = Result.Nodes.getNodeAs<CXXConstructorDecl>("ctor");
-  if (Ctor->isOutOfLine() || Ctor->getNumParams() == 0 ||
-      Ctor->getMinRequiredArguments() > 1)
+  // Do not be confused: isExplicit means 'explicit' keyword is present,
+  // isImplicit means that it's a compiler-generated constructor.
+  if (Ctor->isOutOfLine() || Ctor->isImplicit() || Ctor->isDeleted() ||
+      Ctor->getNumParams() == 0 || Ctor->getMinRequiredArguments() > 1)
     return;
 
   bool takesInitializerList = isStdInitializerList(
@@ -117,7 +115,7 @@ void ExplicitConstructorCheck::check(const MatchFinder::MatchResult &Result) {
     };
     SourceRange ExplicitTokenRange =
         FindToken(*Result.SourceManager, getLangOpts(),
-                  Ctor->getOuterLocStart(), Ctor->getEndLoc(), isKWExplicit);
+                  Ctor->getOuterLocStart(), Ctor->getLocEnd(), isKWExplicit);
     StringRef ConstructorDescription;
     if (Ctor->isMoveConstructor())
       ConstructorDescription = "move";

@@ -1,8 +1,9 @@
 //===-- SequenceToOffsetTable.h - Compress similar sequences ----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -36,7 +37,7 @@ class SequenceToOffsetTable {
 
   // Define a comparator for SeqT that sorts a suffix immediately before a
   // sequence with that suffix.
-  struct SeqLess {
+  struct SeqLess : public std::binary_function<SeqT, SeqT, bool> {
     Less L;
     bool operator()(const SeqT &A, const SeqT &B) const {
       return std::lexicographical_compare(A.rbegin(), A.rend(),
@@ -83,7 +84,7 @@ public:
   bool empty() const { return Seqs.empty(); }
 
   unsigned size() const {
-    assert((empty() || Entries) && "Call layout() before size()");
+    assert(Entries && "Call layout() before size()");
     return Entries;
   }
 
@@ -113,7 +114,7 @@ public:
   void emit(raw_ostream &OS,
             void (*Print)(raw_ostream&, ElemT),
             const char *Term = "0") const {
-    assert((empty() || Entries) && "Call layout() before emit()");
+    assert(Entries && "Call layout() before emit()");
     for (typename SeqMap::const_iterator I = Seqs.begin(), E = Seqs.end();
          I != E; ++I) {
       OS << "  /* " << I->second << " */ ";

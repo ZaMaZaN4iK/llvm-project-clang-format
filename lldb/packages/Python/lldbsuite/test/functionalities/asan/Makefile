@@ -1,4 +1,6 @@
-C_SOURCES := main.c
-CFLAGS_EXTRAS := -fsanitize=address -g -gcolumn-info
+LEVEL = ../../make
 
-include Makefile.rules
+C_SOURCES := main.c
+CFLAGS_EXTRAS := -fsanitize=address -g
+
+include $(LEVEL)/Makefile.rules

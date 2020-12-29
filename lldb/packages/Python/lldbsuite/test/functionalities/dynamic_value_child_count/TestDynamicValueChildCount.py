@@ -2,8 +2,12 @@
 Test that dynamic values update their child count correctly
 """
 
+from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -35,7 +39,7 @@ class DynamicValueChildCountTestCase(TestBase):
         """Test fetching C++ dynamic values from pointers & references."""
         """Get argument vals for the call stack when stopped on a breakpoint."""
         self.build(dictionary=self.getBuildFlags())
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target from the debugger.
 

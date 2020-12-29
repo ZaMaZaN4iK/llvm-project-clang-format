@@ -1,5 +1,4 @@
 // RUN: not llvm-mc -triple aarch64--none-eabi -filetype obj < %s -o /dev/null 2>&1 | FileCheck %s
-// RUN: not llvm-mc -triple aarch64-windows -filetype obj < %s -o /dev/null 2>&1 | FileCheck %s
 
 // CHECK: :[[@LINE+1]]:{{[0-9]+}}: error: fixup value out of range
   adr x0, distant
@@ -55,22 +54,6 @@
 // CHECK: :[[@LINE+1]]:{{[0-9]+}}: error: fixup not sufficiently aligned
   b unaligned
 
-// CHECK: :[[@LINE+1]]:{{[0-9]+}}: error: fixup value out of range
-  movz x0, #:abs_g0:value1
-
-// CHECK: :[[@LINE+1]]:{{[0-9]+}}: error: fixup value out of range
-  movz x0, #:abs_g1:value2
-
-// CHECK: :[[@LINE+1]]:{{[0-9]+}}: error: fixup value out of range
-  movz x0, #:abs_g0_s:value1
-
-// CHECK: :[[@LINE+1]]:{{[0-9]+}}: error: fixup value out of range
-  movz x0, #:abs_g1_s:value2
-
-// CHECK: :[[@LINE+1]]:{{[0-9]+}}: error: relocation for a thread-local variable points to an absolute symbol
-  movz x0, #:tprel_g0:value1
-
-
   .byte 0
 unaligned:
   .byte 0
@@ -79,5 +62,3 @@ unaligned:
   .balign 8
 distant:
   .word 0
-value1 = 0x12345678
-value2 = 0x123456789

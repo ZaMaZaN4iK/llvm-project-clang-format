@@ -1,8 +1,9 @@
 //===-- DelaySlotFiller.cpp - SPARC delay slot filler ---------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,10 +19,10 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetRegisterInfo.h"
 
 using namespace llvm;
 
@@ -37,7 +38,7 @@ static cl::opt<bool> DisableDelaySlotFiller(
 
 namespace {
   struct Filler : public MachineFunctionPass {
-    const SparcSubtarget *Subtarget = nullptr;
+    const SparcSubtarget *Subtarget;
 
     static char ID;
     Filler() : MachineFunctionPass(ID) {}
@@ -95,7 +96,7 @@ namespace {
 /// createSparcDelaySlotFillerPass - Returns a pass that fills in delay
 /// slots in Sparc MachineFunctions
 ///
-FunctionPass *llvm::createSparcDelaySlotFillerPass() {
+FunctionPass *llvm::createSparcDelaySlotFillerPass(TargetMachine &tm) {
   return new Filler;
 }
 
@@ -206,8 +207,8 @@ Filler::findDelayInstr(MachineBasicBlock &MBB,
     if (!done)
       --I;
 
-    // skip debug instruction
-    if (I->isDebugInstr())
+    // skip debug value
+    if (I->isDebugValue())
       continue;
 
     if (I->hasUnmodeledSideEffects() || I->isInlineAsm() || I->isPosition() ||
@@ -253,7 +254,7 @@ bool Filler::delayHasHazard(MachineBasicBlock::iterator candidate,
     if (!MO.isReg())
       continue; // skip
 
-    Register Reg = MO.getReg();
+    unsigned Reg = MO.getReg();
 
     if (MO.isDef()) {
       // check whether Reg is defined or used before delay slot.
@@ -324,7 +325,7 @@ void Filler::insertDefsUses(MachineBasicBlock::iterator MI,
     if (!MO.isReg())
       continue;
 
-    Register Reg = MO.getReg();
+    unsigned Reg = MO.getReg();
     if (Reg == 0)
       continue;
     if (MO.isDef())
@@ -380,7 +381,7 @@ static bool combineRestoreADD(MachineBasicBlock::iterator RestoreMI,
   //
   // After :  restore <op0>, <op1>, %o[0-7]
 
-  Register reg = AddMI->getOperand(0).getReg();
+  unsigned reg = AddMI->getOperand(0).getReg();
   if (reg < SP::I0 || reg > SP::I7)
     return false;
 
@@ -408,7 +409,7 @@ static bool combineRestoreOR(MachineBasicBlock::iterator RestoreMI,
   //
   // After :  restore <op0>, <op1>, %o[0-7]
 
-  Register reg = OrMI->getOperand(0).getReg();
+  unsigned reg = OrMI->getOperand(0).getReg();
   if (reg < SP::I0 || reg > SP::I7)
     return false;
 
@@ -446,7 +447,7 @@ static bool combineRestoreSETHIi(MachineBasicBlock::iterator RestoreMI,
   //
   // After :  restore %g0, (imm3<<10), %o[0-7]
 
-  Register reg = SetHiMI->getOperand(0).getReg();
+  unsigned reg = SetHiMI->getOperand(0).getReg();
   if (reg < SP::I0 || reg > SP::I7)
     return false;
 

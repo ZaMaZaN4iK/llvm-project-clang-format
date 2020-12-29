@@ -1,8 +1,9 @@
 //===- llvm/unittest/ADT/StringRefTest.cpp - StringRef unit tests ---------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -34,24 +35,30 @@ std::ostream &operator<<(std::ostream &OS,
 // Check that we can't accidentally assign a temporary std::string to a
 // StringRef. (Unfortunately we can't make use of the same thing with
 // constructors.)
+//
+// Disable this check under MSVC; even MSVC 2015 isn't consistent between
+// std::is_assignable and actually writing such an assignment.
+#if !defined(_MSC_VER)
 static_assert(
-    !std::is_assignable<StringRef&, std::string>::value,
+    !std::is_assignable<StringRef, std::string>::value,
     "Assigning from prvalue std::string");
 static_assert(
-    !std::is_assignable<StringRef&, std::string &&>::value,
+    !std::is_assignable<StringRef, std::string &&>::value,
     "Assigning from xvalue std::string");
 static_assert(
-    std::is_assignable<StringRef&, std::string &>::value,
+    std::is_assignable<StringRef, std::string &>::value,
     "Assigning from lvalue std::string");
 static_assert(
-    std::is_assignable<StringRef&, const char *>::value,
+    std::is_assignable<StringRef, const char *>::value,
     "Assigning from prvalue C string");
 static_assert(
-    std::is_assignable<StringRef&, const char * &&>::value,
+    std::is_assignable<StringRef, const char * &&>::value,
     "Assigning from xvalue C string");
 static_assert(
-    std::is_assignable<StringRef&, const char * &>::value,
+    std::is_assignable<StringRef, const char * &>::value,
     "Assigning from lvalue C string");
+#endif
+
 
 namespace {
 TEST(StringRefTest, Construction) {
@@ -174,17 +181,6 @@ TEST(StringRefTest, Split) {
             Str.rsplit('l'));
   EXPECT_EQ(std::make_pair(StringRef("hell"), StringRef("")),
             Str.rsplit('o'));
-
-  EXPECT_EQ(std::make_pair(StringRef("he"), StringRef("o")),
-		    Str.rsplit("ll"));
-  EXPECT_EQ(std::make_pair(StringRef(""), StringRef("ello")),
-		    Str.rsplit("h"));
-  EXPECT_EQ(std::make_pair(StringRef("hell"), StringRef("")),
-	      Str.rsplit("o"));
-  EXPECT_EQ(std::make_pair(StringRef("hello"), StringRef("")),
-		    Str.rsplit("::"));
-  EXPECT_EQ(std::make_pair(StringRef("hel"), StringRef("o")),
-		    Str.rsplit("l"));
 }
 
 TEST(StringRefTest, Split2) {
@@ -324,20 +320,16 @@ TEST(StringRefTest, Trim) {
   StringRef Str0("hello");
   StringRef Str1(" hello ");
   StringRef Str2("  hello  ");
-  StringRef Str3("\t\n\v\f\r  hello  \t\n\v\f\r");
 
   EXPECT_EQ(StringRef("hello"), Str0.rtrim());
   EXPECT_EQ(StringRef(" hello"), Str1.rtrim());
   EXPECT_EQ(StringRef("  hello"), Str2.rtrim());
-  EXPECT_EQ(StringRef("\t\n\v\f\r  hello"), Str3.rtrim());
   EXPECT_EQ(StringRef("hello"), Str0.ltrim());
   EXPECT_EQ(StringRef("hello "), Str1.ltrim());
   EXPECT_EQ(StringRef("hello  "), Str2.ltrim());
-  EXPECT_EQ(StringRef("hello  \t\n\v\f\r"), Str3.ltrim());
   EXPECT_EQ(StringRef("hello"), Str0.trim());
   EXPECT_EQ(StringRef("hello"), Str1.trim());
   EXPECT_EQ(StringRef("hello"), Str2.trim());
-  EXPECT_EQ(StringRef("hello"), Str3.trim());
 
   EXPECT_EQ(StringRef("ello"), Str0.trim("hhhhhhhhhhh"));
 
@@ -509,33 +501,11 @@ TEST(StringRefTest, Count) {
   EXPECT_EQ(1U, Str.count("hello"));
   EXPECT_EQ(1U, Str.count("ello"));
   EXPECT_EQ(0U, Str.count("zz"));
-  EXPECT_EQ(0U, Str.count(""));
-
-  StringRef OverlappingAbba("abbabba");
-  EXPECT_EQ(1U, OverlappingAbba.count("abba"));
-  StringRef NonOverlappingAbba("abbaabba");
-  EXPECT_EQ(2U, NonOverlappingAbba.count("abba"));
-  StringRef ComplexAbba("abbabbaxyzabbaxyz");
-  EXPECT_EQ(2U, ComplexAbba.count("abba"));
 }
 
 TEST(StringRefTest, EditDistance) {
-  StringRef Hello("hello");
-  EXPECT_EQ(2U, Hello.edit_distance("hill"));
-
-  StringRef Industry("industry");
-  EXPECT_EQ(6U, Industry.edit_distance("interest"));
-
-  StringRef Soylent("soylent green is people");
-  EXPECT_EQ(19U, Soylent.edit_distance("people soiled our green"));
-  EXPECT_EQ(26U, Soylent.edit_distance("people soiled our green",
-                                      /* allow replacements = */ false));
-  EXPECT_EQ(9U, Soylent.edit_distance("people soiled our green",
-                                      /* allow replacements = */ true,
-                                      /* max edit distance = */ 8));
-  EXPECT_EQ(53U, Soylent.edit_distance("people soiled our green "
-                                       "people soiled our green "
-                                       "people soiled our green "));
+  StringRef Str("hello");
+  EXPECT_EQ(2U, Str.edit_distance("hill"));
 }
 
 TEST(StringRefTest, Misc) {
@@ -882,33 +852,6 @@ TEST(StringRefTest, consumeIntegerSigned) {
   }
 }
 
-struct GetDoubleStrings {
-  const char *Str;
-  bool AllowInexact;
-  bool ShouldFail;
-  double D;
-} DoubleStrings[] = {{"0", false, false, 0.0},
-                     {"0.0", false, false, 0.0},
-                     {"-0.0", false, false, -0.0},
-                     {"123.45", false, true, 123.45},
-                     {"123.45", true, false, 123.45},
-                     {"1.8e308", true, false, std::numeric_limits<double>::infinity()},
-                     {"1.8e308", false, true, std::numeric_limits<double>::infinity()},
-                     {"0x0.0000000000001P-1023", false, true, 0.0},
-                     {"0x0.0000000000001P-1023", true, false, 0.0},
-                    };
-
-TEST(StringRefTest, getAsDouble) {
-  for (const auto &Entry : DoubleStrings) {
-    double Result;
-    StringRef S(Entry.Str);
-    EXPECT_EQ(Entry.ShouldFail, S.getAsDouble(Result, Entry.AllowInexact));
-    if (!Entry.ShouldFail) {
-      EXPECT_EQ(Result, Entry.D);
-    }
-  }
-}
-
 static const char *join_input[] = { "a", "b", "c" };
 static const char join_result1[] = "a";
 static const char join_result2[] = "a:b:c";
@@ -934,8 +877,6 @@ TEST(StringRefTest, joinStrings) {
   bool v2_join2 = join(v2.begin(), v2.end(), ":") == join_result2;
   EXPECT_TRUE(v2_join2);
   bool v2_join3 = join(v2.begin(), v2.end(), "::") == join_result3;
-  EXPECT_TRUE(v2_join3);
-  v2_join3 = join(v2, "::") == join_result3;
   EXPECT_TRUE(v2_join3);
 }
 
@@ -1062,21 +1003,9 @@ TEST(StringRefTest, DropWhileUntil) {
 }
 
 TEST(StringRefTest, StringLiteral) {
-  constexpr StringRef StringRefs[] = {"Foo", "Bar"};
-  EXPECT_EQ(StringRef("Foo"), StringRefs[0]);
-  EXPECT_EQ(StringRef("Bar"), StringRefs[1]);
-
   constexpr StringLiteral Strings[] = {"Foo", "Bar"};
   EXPECT_EQ(StringRef("Foo"), Strings[0]);
   EXPECT_EQ(StringRef("Bar"), Strings[1]);
 }
-
-// Check gtest prints StringRef as a string instead of a container of chars.
-// The code is in utils/unittest/googletest/internal/custom/gtest-printers.h
-TEST(StringRefTest, GTestPrinter) {
-  EXPECT_EQ(R"("foo")", ::testing::PrintToString(StringRef("foo")));
-}
-
-static_assert(is_trivially_copyable<StringRef>::value, "trivially copyable");
 
 } // end anonymous namespace

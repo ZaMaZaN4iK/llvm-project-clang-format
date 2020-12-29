@@ -1,21 +1,25 @@
 //===-- Property.h ----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_Property_h_
 #define liblldb_Property_h_
 
-#include "lldb/Interpreter/OptionValue.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/Flags.h"
-#include "lldb/lldb-defines.h"
-#include "lldb/lldb-private-types.h"
-
+// C Includes
+// C++ Includes
 #include <string>
+
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/Flags.h"
+#include "lldb/Interpreter/OptionValue.h"
+#include "lldb/lldb-defines.h"
 
 namespace lldb_private {
 
@@ -27,17 +31,15 @@ struct PropertyDefinition {
   bool global; // false == this setting is a global setting by default
   uintptr_t default_uint_value;
   const char *default_cstr_value;
-  OptionEnumValues enum_values;
+  OptionEnumValueElement *enum_values;
   const char *description;
 };
-
-using PropertyDefinitions = llvm::ArrayRef<PropertyDefinition>;
 
 class Property {
 public:
   Property(const PropertyDefinition &definition);
 
-  Property(ConstString name, ConstString desc, bool is_global,
+  Property(const ConstString &name, const ConstString &desc, bool is_global,
            const lldb::OptionValueSP &value_sp);
 
   llvm::StringRef GetName() const { return m_name.GetStringRef(); }
@@ -64,7 +66,8 @@ public:
                        uint32_t output_width,
                        bool display_qualified_name) const;
 
-  void SetValueChangedCallback(std::function<void()> callback);
+  void SetValueChangedCallback(OptionValueChangedCallback callback,
+                               void *baton);
 
 protected:
   ConstString m_name;

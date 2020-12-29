@@ -1,8 +1,9 @@
 //===- ConcreteSymbolEnumerator.h -------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -33,16 +34,27 @@ public:
 
   std::unique_ptr<ChildType> getChildAtIndex(uint32_t Index) const override {
     std::unique_ptr<PDBSymbol> Child = Enumerator->getChildAtIndex(Index);
-    return unique_dyn_cast_or_null<ChildType>(Child);
+    return make_concrete_child(std::move(Child));
   }
 
   std::unique_ptr<ChildType> getNext() override {
-    return unique_dyn_cast_or_null<ChildType>(Enumerator->getNext());
+    std::unique_ptr<PDBSymbol> Child = Enumerator->getNext();
+    return make_concrete_child(std::move(Child));
   }
 
   void reset() override { Enumerator->reset(); }
 
+  ConcreteSymbolEnumerator<ChildType> *clone() const override {
+    std::unique_ptr<IPDBEnumSymbols> WrappedClone(Enumerator->clone());
+    return new ConcreteSymbolEnumerator<ChildType>(std::move(WrappedClone));
+  }
+
 private:
+  std::unique_ptr<ChildType>
+  make_concrete_child(std::unique_ptr<PDBSymbol> Child) const {
+    ChildType *ConcreteChild = dyn_cast_or_null<ChildType>(Child.release());
+    return std::unique_ptr<ChildType>(ConcreteChild);
+  }
 
   std::unique_ptr<IPDBEnumSymbols> Enumerator;
 };

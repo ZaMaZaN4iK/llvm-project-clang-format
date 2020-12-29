@@ -1,10 +1,3 @@
-add_lldb_library(lldbPluginDynamicLoaderStatic PLUGIN
+add_lldb_library(lldbPluginDynamicLoaderStatic
   DynamicLoaderStatic.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbHost
-    lldbSymbol
-    lldbTarget
-    lldbUtility
   )

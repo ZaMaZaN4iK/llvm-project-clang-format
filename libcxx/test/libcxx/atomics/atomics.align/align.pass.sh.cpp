@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -35,7 +36,7 @@ template <typename T> struct atomic_test : public std::__atomic_base<T> {
   }
 };
 
-int main(int, char**) {
+int main() {
 
 // structs and unions can't be defined in the template invocation.
 // Work around this with a typedef.
@@ -89,6 +90,4 @@ int main(int, char**) {
   CHECK_ALIGNMENT(struct LLIArr16 { long long int i[16]; });
   CHECK_ALIGNMENT(struct Padding { char c; /* padding */ long long int i; });
   CHECK_ALIGNMENT(union IntFloat { int i; float f; });
-
-  return 0;
 }

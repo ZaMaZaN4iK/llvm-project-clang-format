@@ -1,8 +1,9 @@
 //===--- PrintPreprocessedOutput.cpp - Implement the -E mode --------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -37,8 +38,8 @@ static void PrintMacroDefinition(const IdentifierInfo &II, const MacroInfo &MI,
 
   if (MI.isFunctionLike()) {
     OS << '(';
-    if (!MI.param_empty()) {
-      MacroInfo::param_iterator AI = MI.param_begin(), E = MI.param_end();
+    if (!MI.arg_empty()) {
+      MacroInfo::arg_iterator AI = MI.arg_begin(), E = MI.arg_end();
       for (; AI+1 != E; ++AI) {
         OS << (*AI)->getName();
         OS << ',';
@@ -129,8 +130,7 @@ public:
                           StringRef FileName, bool IsAngled,
                           CharSourceRange FilenameRange, const FileEntry *File,
                           StringRef SearchPath, StringRef RelativePath,
-                          const Module *Imported,
-                          SrcMgr::CharacteristicKind FileType) override;
+                          const Module *Imported) override;
   void Ident(SourceLocation Loc, StringRef str) override;
   void PragmaMessage(SourceLocation Loc, StringRef Namespace,
                      PragmaMessageKind Kind, StringRef Str) override;
@@ -143,10 +143,6 @@ public:
                      ArrayRef<int> Ids) override;
   void PragmaWarningPush(SourceLocation Loc, int Level) override;
   void PragmaWarningPop(SourceLocation Loc) override;
-  void PragmaExecCharsetPush(SourceLocation Loc, StringRef Str) override;
-  void PragmaExecCharsetPop(SourceLocation Loc) override;
-  void PragmaAssumeNonNullBegin(SourceLocation Loc) override;
-  void PragmaAssumeNonNullEnd(SourceLocation Loc) override;
 
   bool HandleFirstTokOnLine(Token &Tok);
 
@@ -161,7 +157,7 @@ public:
   }
   bool MoveToLine(unsigned LineNo);
 
-  bool AvoidConcat(const Token &PrevPrevTok, const Token &PrevTok,
+  bool AvoidConcat(const Token &PrevPrevTok, const Token &PrevTok, 
                    const Token &Tok) {
     return ConcatInfo.AvoidConcat(PrevPrevTok, PrevTok, Tok);
   }
@@ -176,11 +172,7 @@ public:
 
   /// MacroUndefined - This hook is called whenever a macro #undef is seen.
   void MacroUndefined(const Token &MacroNameTok,
-                      const MacroDefinition &MD,
-                      const MacroDirective *Undef) override;
-
-  void BeginModule(const Module *M);
-  void EndModule(const Module *M);
+                      const MacroDefinition &MD) override;
 };
 }  // end anonymous namespace
 
@@ -249,7 +241,7 @@ PrintPPOutputPPCallbacks::startNewLineIfNeeded(bool ShouldUpdateCurrentLine) {
       ++CurLine;
     return true;
   }
-
+  
   return false;
 }
 
@@ -263,11 +255,11 @@ void PrintPPOutputPPCallbacks::FileChanged(SourceLocation Loc,
   // Unless we are exiting a #include, make sure to skip ahead to the line the
   // #include directive was at.
   SourceManager &SourceMgr = SM;
-
+  
   PresumedLoc UserLoc = SourceMgr.getPresumedLoc(Loc);
   if (UserLoc.isInvalid())
     return;
-
+  
   unsigned NewLine = UserLoc.getLine();
 
   if (Reason == PPCallbacks::EnterFile) {
@@ -282,7 +274,7 @@ void PrintPPOutputPPCallbacks::FileChanged(SourceLocation Loc,
     // off by one. We can do better by simply incrementing NewLine here.
     NewLine += 1;
   }
-
+  
   CurLine = NewLine;
 
   CurFilename.clear();
@@ -293,7 +285,7 @@ void PrintPPOutputPPCallbacks::FileChanged(SourceLocation Loc,
     startNewLineIfNeeded(/*ShouldUpdateCurrentLine=*/false);
     return;
   }
-
+  
   if (!Initialized) {
     WriteLineInfo(CurLine);
     Initialized = true;
@@ -322,77 +314,54 @@ void PrintPPOutputPPCallbacks::FileChanged(SourceLocation Loc,
   }
 }
 
-void PrintPPOutputPPCallbacks::InclusionDirective(
-    SourceLocation HashLoc,
-    const Token &IncludeTok,
-    StringRef FileName,
-    bool IsAngled,
-    CharSourceRange FilenameRange,
-    const FileEntry *File,
-    StringRef SearchPath,
-    StringRef RelativePath,
-    const Module *Imported,
-    SrcMgr::CharacteristicKind FileType) {
-  // In -dI mode, dump #include directives prior to dumping their content or
-  // interpretation.
-  if (DumpIncludeDirectives) {
+void PrintPPOutputPPCallbacks::InclusionDirective(SourceLocation HashLoc,
+                                                  const Token &IncludeTok,
+                                                  StringRef FileName,
+                                                  bool IsAngled,
+                                                  CharSourceRange FilenameRange,
+                                                  const FileEntry *File,
+                                                  StringRef SearchPath,
+                                                  StringRef RelativePath,
+                                                  const Module *Imported) {
+  if (Imported) {
+    // When preprocessing, turn implicit imports into @imports.
+    // FIXME: This is a stop-gap until a more comprehensive "preprocessing with
+    // modules" solution is introduced.
     startNewLineIfNeeded();
     MoveToLine(HashLoc);
-    const std::string TokenText = PP.getSpelling(IncludeTok);
-    assert(!TokenText.empty());
-    OS << "#" << TokenText << " "
-       << (IsAngled ? '<' : '"') << FileName << (IsAngled ? '>' : '"')
-       << " /* clang -E -dI */";
-    setEmittedDirectiveOnThisLine();
+    if (PP.getLangOpts().ObjC2) {
+      OS << "@import " << Imported->getFullModuleName() << ";"
+         << " /* clang -E: implicit import for \"" << File->getName()
+         << "\" */";
+    } else {
+      const std::string TokenText = PP.getSpelling(IncludeTok);
+      assert(!TokenText.empty());
+      OS << "#" << TokenText << " "
+         << (IsAngled ? '<' : '"')
+         << FileName
+         << (IsAngled ? '>' : '"')
+         << " /* clang -E: implicit import for module "
+         << Imported->getFullModuleName() << " */";
+    }
+    // Since we want a newline after the @import, but not a #<line>, start a new
+    // line immediately.
+    EmittedTokensOnThisLine = true;
     startNewLineIfNeeded();
-  }
-
-  // When preprocessing, turn implicit imports into module import pragmas.
-  if (Imported) {
-    switch (IncludeTok.getIdentifierInfo()->getPPKeywordID()) {
-    case tok::pp_include:
-    case tok::pp_import:
-    case tok::pp_include_next:
+  } else {
+    // Not a module import; it's a more vanilla inclusion of some file using one
+    // of: #include, #import, #include_next, #include_macros.
+    if (DumpIncludeDirectives) {
       startNewLineIfNeeded();
       MoveToLine(HashLoc);
-      OS << "#pragma clang module import " << Imported->getFullModuleName(true)
-         << " /* clang -E: implicit import for "
-         << "#" << PP.getSpelling(IncludeTok) << " "
+      const std::string TokenText = PP.getSpelling(IncludeTok);
+      assert(!TokenText.empty());
+      OS << "#" << TokenText << " "
          << (IsAngled ? '<' : '"') << FileName << (IsAngled ? '>' : '"')
-         << " */";
-      // Since we want a newline after the pragma, but not a #<line>, start a
-      // new line immediately.
-      EmittedTokensOnThisLine = true;
+         << " /* clang -E -dI */";
+      setEmittedDirectiveOnThisLine();
       startNewLineIfNeeded();
-      break;
-
-    case tok::pp___include_macros:
-      // #__include_macros has no effect on a user of a preprocessed source
-      // file; the only effect is on preprocessing.
-      //
-      // FIXME: That's not *quite* true: it causes the module in question to
-      // be loaded, which can affect downstream diagnostics.
-      break;
-
-    default:
-      llvm_unreachable("unknown include directive kind");
-      break;
     }
   }
-}
-
-/// Handle entering the scope of a module during a module compilation.
-void PrintPPOutputPPCallbacks::BeginModule(const Module *M) {
-  startNewLineIfNeeded();
-  OS << "#pragma clang module begin " << M->getFullModuleName(true);
-  setEmittedDirectiveOnThisLine();
-}
-
-/// Handle leaving the scope of a module during a module compilation.
-void PrintPPOutputPPCallbacks::EndModule(const Module *M) {
-  startNewLineIfNeeded();
-  OS << "#pragma clang module end /*" << M->getFullModuleName(true) << "*/";
-  setEmittedDirectiveOnThisLine();
 }
 
 /// Ident - Handle #ident directives when read by the preprocessor.
@@ -420,8 +389,7 @@ void PrintPPOutputPPCallbacks::MacroDefined(const Token &MacroNameTok,
 }
 
 void PrintPPOutputPPCallbacks::MacroUndefined(const Token &MacroNameTok,
-                                              const MacroDefinition &MD,
-                                              const MacroDirective *Undef) {
+                                              const MacroDefinition &MD) {
   // Only print out macro definitions in -dD mode.
   if (!DumpDefines) return;
 
@@ -555,40 +523,6 @@ void PrintPPOutputPPCallbacks::PragmaWarningPop(SourceLocation Loc) {
   setEmittedDirectiveOnThisLine();
 }
 
-void PrintPPOutputPPCallbacks::PragmaExecCharsetPush(SourceLocation Loc,
-                                                     StringRef Str) {
-  startNewLineIfNeeded();
-  MoveToLine(Loc);
-  OS << "#pragma character_execution_set(push";
-  if (!Str.empty())
-    OS << ", " << Str;
-  OS << ')';
-  setEmittedDirectiveOnThisLine();
-}
-
-void PrintPPOutputPPCallbacks::PragmaExecCharsetPop(SourceLocation Loc) {
-  startNewLineIfNeeded();
-  MoveToLine(Loc);
-  OS << "#pragma character_execution_set(pop)";
-  setEmittedDirectiveOnThisLine();
-}
-
-void PrintPPOutputPPCallbacks::
-PragmaAssumeNonNullBegin(SourceLocation Loc) {
-  startNewLineIfNeeded();
-  MoveToLine(Loc);
-  OS << "#pragma clang assume_nonnull begin";
-  setEmittedDirectiveOnThisLine();
-}
-
-void PrintPPOutputPPCallbacks::
-PragmaAssumeNonNullEnd(SourceLocation Loc) {
-  startNewLineIfNeeded();
-  MoveToLine(Loc);
-  OS << "#pragma clang assume_nonnull end";
-  setEmittedDirectiveOnThisLine();
-}
-
 /// HandleFirstTokOnLine - When emitting a preprocessed file in -E mode, this
 /// is called for the first token on each new line.  If this really is the start
 /// of a new logical line, handle it and return true, otherwise return false.
@@ -664,7 +598,7 @@ struct UnknownPragmaHandler : public PragmaHandler {
                        bool RequireTokenExpansion)
       : Prefix(prefix), Callbacks(callbacks),
         ShouldExpandTokens(RequireTokenExpansion) {}
-  void HandlePragma(Preprocessor &PP, PragmaIntroducer Introducer,
+  void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
                     Token &PragmaTok) override {
     // Figure out what line we went to and insert the appropriate number of
     // newline characters.
@@ -675,11 +609,10 @@ struct UnknownPragmaHandler : public PragmaHandler {
     if (ShouldExpandTokens) {
       // The first token does not have expanded macros. Expand them, if
       // required.
-      auto Toks = std::make_unique<Token[]>(1);
+      auto Toks = llvm::make_unique<Token[]>(1);
       Toks[0] = PragmaTok;
       PP.EnterTokenStream(std::move(Toks), /*NumToks=*/1,
-                          /*DisableMacroExpansion=*/false,
-                          /*IsReinject=*/false);
+                          /*DisableMacroExpansion=*/false);
       PP.Lex(PragmaTok);
     }
     Token PrevToken;
@@ -743,45 +676,11 @@ static void PrintPreprocessedTokens(Preprocessor &PP, Token &Tok,
       // -traditional-cpp the lexer keeps /all/ whitespace, including comments.
       SourceLocation StartLoc = Tok.getLocation();
       Callbacks->MoveToLine(StartLoc.getLocWithOffset(Tok.getLength()));
-    } else if (Tok.is(tok::eod)) {
-      // Don't print end of directive tokens, since they are typically newlines
-      // that mess up our line tracking. These come from unknown pre-processor
-      // directives or hash-prefixed comments in standalone assembly files.
-      PP.Lex(Tok);
-      continue;
-    } else if (Tok.is(tok::annot_module_include)) {
+    } else if (Tok.is(tok::annot_module_include) ||
+               Tok.is(tok::annot_module_begin) ||
+               Tok.is(tok::annot_module_end)) {
       // PrintPPOutputPPCallbacks::InclusionDirective handles producing
       // appropriate output here. Ignore this token entirely.
-      PP.Lex(Tok);
-      continue;
-    } else if (Tok.is(tok::annot_module_begin)) {
-      // FIXME: We retrieve this token after the FileChanged callback, and
-      // retrieve the module_end token before the FileChanged callback, so
-      // we render this within the file and render the module end outside the
-      // file, but this is backwards from the token locations: the module_begin
-      // token is at the include location (outside the file) and the module_end
-      // token is at the EOF location (within the file).
-      Callbacks->BeginModule(
-          reinterpret_cast<Module *>(Tok.getAnnotationValue()));
-      PP.Lex(Tok);
-      continue;
-    } else if (Tok.is(tok::annot_module_end)) {
-      Callbacks->EndModule(
-          reinterpret_cast<Module *>(Tok.getAnnotationValue()));
-      PP.Lex(Tok);
-      continue;
-    } else if (Tok.is(tok::annot_header_unit)) {
-      // This is a header-name that has been (effectively) converted into a
-      // module-name.
-      // FIXME: The module name could contain non-identifier module name
-      // components. We don't have a good way to round-trip those.
-      Module *M = reinterpret_cast<Module *>(Tok.getAnnotationValue());
-      std::string Name = M->getFullModuleName();
-      OS.write(Name.data(), Name.size());
-      Callbacks->HandleNewlinesInToken(Name.data(), Name.size());
-    } else if (Tok.isAnnotation()) {
-      // Ignore annotation tokens created by pragmas - the pragmas themselves
-      // will be reproduced in the preprocessed output.
       PP.Lex(Tok);
       continue;
     } else if (IdentifierInfo *II = Tok.getIdentifierInfo()) {
@@ -789,7 +688,7 @@ static void PrintPreprocessedTokens(Preprocessor &PP, Token &Tok,
     } else if (Tok.isLiteral() && !Tok.needsCleaning() &&
                Tok.getLiteralData()) {
       OS.write(Tok.getLiteralData(), Tok.getLength());
-    } else if (Tok.getLength() < llvm::array_lengthof(Buffer)) {
+    } else if (Tok.getLength() < 256) {
       const char *TokPtr = Buffer;
       unsigned Len = PP.getSpelling(Tok, TokPtr);
       OS.write(TokPtr, Len);
@@ -800,12 +699,12 @@ static void PrintPreprocessedTokens(Preprocessor &PP, Token &Tok,
         Callbacks->HandleNewlinesInToken(TokPtr, Len);
     } else {
       std::string S = PP.getSpelling(Tok);
-      OS.write(S.data(), S.size());
+      OS.write(&S[0], S.size());
 
       // Tokens that can contain embedded newlines need to adjust our current
       // line number.
       if (Tok.getKind() == tok::comment || Tok.getKind() == tok::unknown)
-        Callbacks->HandleNewlinesInToken(S.data(), S.size());
+        Callbacks->HandleNewlinesInToken(&S[0], S.size());
     }
     Callbacks->setEmittedTokensOnThisLine();
 
@@ -874,33 +773,26 @@ void clang::DoPrintPreprocessedInput(Preprocessor &PP, raw_ostream *OS,
 
   // Expand macros in pragmas with -fms-extensions.  The assumption is that
   // the majority of pragmas in such a file will be Microsoft pragmas.
-  // Remember the handlers we will add so that we can remove them later.
-  std::unique_ptr<UnknownPragmaHandler> MicrosoftExtHandler(
-      new UnknownPragmaHandler(
-          "#pragma", Callbacks,
-          /*RequireTokenExpansion=*/PP.getLangOpts().MicrosoftExt));
-
-  std::unique_ptr<UnknownPragmaHandler> GCCHandler(new UnknownPragmaHandler(
-      "#pragma GCC", Callbacks,
+  PP.AddPragmaHandler(new UnknownPragmaHandler(
+      "#pragma", Callbacks,
       /*RequireTokenExpansion=*/PP.getLangOpts().MicrosoftExt));
-
-  std::unique_ptr<UnknownPragmaHandler> ClangHandler(new UnknownPragmaHandler(
-      "#pragma clang", Callbacks,
-      /*RequireTokenExpansion=*/PP.getLangOpts().MicrosoftExt));
-
-  PP.AddPragmaHandler(MicrosoftExtHandler.get());
-  PP.AddPragmaHandler("GCC", GCCHandler.get());
-  PP.AddPragmaHandler("clang", ClangHandler.get());
+  PP.AddPragmaHandler(
+      "GCC", new UnknownPragmaHandler(
+                 "#pragma GCC", Callbacks,
+                 /*RequireTokenExpansion=*/PP.getLangOpts().MicrosoftExt));
+  PP.AddPragmaHandler(
+      "clang", new UnknownPragmaHandler(
+                   "#pragma clang", Callbacks,
+                   /*RequireTokenExpansion=*/PP.getLangOpts().MicrosoftExt));
 
   // The tokens after pragma omp need to be expanded.
   //
   //  OpenMP [2.1, Directive format]
   //  Preprocessing tokens following the #pragma omp are subject to macro
   //  replacement.
-  std::unique_ptr<UnknownPragmaHandler> OpenMPHandler(
-      new UnknownPragmaHandler("#pragma omp", Callbacks,
-                               /*RequireTokenExpansion=*/true));
-  PP.AddPragmaHandler("omp", OpenMPHandler.get());
+  PP.AddPragmaHandler("omp",
+                      new UnknownPragmaHandler("#pragma omp", Callbacks,
+                                               /*RequireTokenExpansion=*/true));
 
   PP.addPPCallbacks(std::unique_ptr<PPCallbacks>(Callbacks));
 
@@ -928,11 +820,4 @@ void clang::DoPrintPreprocessedInput(Preprocessor &PP, raw_ostream *OS,
   // Read all the preprocessed tokens, printing them out to the stream.
   PrintPreprocessedTokens(PP, Tok, Callbacks, *OS);
   *OS << '\n';
-
-  // Remove the handlers we just added to leave the preprocessor in a sane state
-  // so that it can be reused (for example by a clang::Parser instance).
-  PP.RemovePragmaHandler(MicrosoftExtHandler.get());
-  PP.RemovePragmaHandler("GCC", GCCHandler.get());
-  PP.RemovePragmaHandler("clang", ClangHandler.get());
-  PP.RemovePragmaHandler("omp", OpenMPHandler.get());
 }

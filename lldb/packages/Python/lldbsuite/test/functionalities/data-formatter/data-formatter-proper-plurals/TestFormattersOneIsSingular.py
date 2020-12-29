@@ -2,8 +2,12 @@
 Test lldb data formatter subsystem.
 """
 
+from __future__ import print_function
 
 
+import datetime
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -28,7 +32,7 @@ class DataFormatterOneIsSingularTestCase(TestBase):
 
     def oneness_data_formatter_commands(self):
         """Test that 1 item is not as reported as 1 items."""
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(
             self, "main.m", self.line, num_expected_locations=1, loc_exact=True)

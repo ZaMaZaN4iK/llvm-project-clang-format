@@ -1,16 +1,21 @@
 //===-- ThreadMemory.h ------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ThreadMemory_h_
 #define liblldb_ThreadMemory_h_
 
+// C Includes
+// C++ Includes
 #include <string>
 
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Target/Thread.h"
 
 class ThreadMemory : public lldb_private::Thread {
@@ -19,7 +24,7 @@ public:
                const lldb::ValueObjectSP &thread_info_valobj_sp);
 
   ThreadMemory(lldb_private::Process &process, lldb::tid_t tid,
-               llvm::StringRef name, llvm::StringRef queue,
+               const char *name, const char *queue,
                lldb::addr_t register_data_addr);
 
   ~ThreadMemory() override;

@@ -1,13 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: c++98, c++03, c++11, c++14
-
 // <numeric>
 
 // template<class _M, class _N>
@@ -15,12 +15,8 @@
 
 #include <numeric>
 #include <cassert>
-#include <climits>
-#include <cstdint>
 #include <cstdlib>    // for rand()
-#include <type_traits>
-
-#include "test_macros.h"
+#include <iostream>
 
 constexpr struct {
   int x;
@@ -39,24 +35,21 @@ constexpr struct {
 
 
 template <typename Input1, typename Input2, typename Output>
-constexpr bool test0(int in1, int in2, int out)
+constexpr bool test0(Input1 in1, Input2 in2, Output out)
 {
-    auto value1 = static_cast<Input1>(in1);
-    auto value2 = static_cast<Input2>(in2);
-    static_assert(std::is_same_v<Output, decltype(std::gcd(value1, value2))>, "");
-    static_assert(std::is_same_v<Output, decltype(std::gcd(value2, value1))>, "");
-    assert(static_cast<Output>(out) == std::gcd(value1, value2));
-    return true;
+    static_assert((std::is_same<Output, decltype(std::gcd(in1, in2))>::value), "" );
+    static_assert((std::is_same<Output, decltype(std::gcd(in2, in1))>::value), "" );
+    return out == std::gcd(in1, in2) ? true : (std::abort(), false);
 }
 
 
 template <typename Input1, typename Input2 = Input1>
 constexpr bool do_test(int = 0)
 {
-    using S1 = std::make_signed_t<Input1>;
-    using S2 = std::make_signed_t<Input2>;
-    using U1 = std::make_unsigned_t<Input1>;
-    using U2 = std::make_unsigned_t<Input2>;
+    using S1 = typename std::make_signed<Input1>::type;
+    using S2 = typename std::make_signed<Input2>::type;
+    using U1 = typename std::make_unsigned<Input1>::type;
+    using U2 = typename std::make_unsigned<Input2>::type;
     bool accumulate = true;
     for (auto TC : Cases) {
         { // Test with two signed types
@@ -93,7 +86,7 @@ constexpr bool do_test(int = 0)
     return accumulate;
 }
 
-int main(int, char**)
+int main()
 {
     auto non_cce = std::rand(); // a value that can't possibly be constexpr
 
@@ -109,15 +102,15 @@ int main(int, char**)
     assert(do_test<long>(non_cce));
     assert(do_test<long long>(non_cce));
 
-    static_assert(do_test<std::int8_t>(), "");
-    static_assert(do_test<std::int16_t>(), "");
-    static_assert(do_test<std::int32_t>(), "");
-    static_assert(do_test<std::int64_t>(), "");
+    static_assert(do_test< int8_t>(), "");
+    static_assert(do_test<int16_t>(), "");
+    static_assert(do_test<int32_t>(), "");
+    static_assert(do_test<int64_t>(), "");
 
-    assert(do_test<std::int8_t>(non_cce));
-    assert(do_test<std::int16_t>(non_cce));
-    assert(do_test<std::int32_t>(non_cce));
-    assert(do_test<std::int64_t>(non_cce));
+    assert(do_test< int8_t>(non_cce));
+    assert(do_test<int16_t>(non_cce));
+    assert(do_test<int32_t>(non_cce));
+    assert(do_test<int64_t>(non_cce));
 
     static_assert(do_test<signed char, int>(), "");
     static_assert(do_test<int, signed char>(), "");
@@ -136,13 +129,4 @@ int main(int, char**)
     assert((do_test<long, int>(non_cce)));
     assert((do_test<int, long long>(non_cce)));
     assert((do_test<long long, int>(non_cce)));
-
-//  LWG#2837
-    {
-    auto res = std::gcd(static_cast<std::int64_t>(1234), INT32_MIN);
-    static_assert(std::is_same_v<decltype(res), std::int64_t>, "");
-    assert(res == 2);
-    }
-
-  return 0;
 }

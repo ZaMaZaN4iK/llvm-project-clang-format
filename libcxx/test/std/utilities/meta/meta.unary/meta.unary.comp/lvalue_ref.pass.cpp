@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,8 +12,6 @@
 // lvalue_ref
 
 #include <type_traits>
-
-#include "test_macros.h"
 
 template <class T>
 void test_lvalue_ref()
@@ -26,10 +25,8 @@ void test_lvalue_ref()
     static_assert(!std::is_member_pointer<T>::value, "");
 }
 
-int main(int, char**)
+int main()
 {
     test_lvalue_ref<int&>();
     test_lvalue_ref<const int&>();
-
-  return 0;
 }

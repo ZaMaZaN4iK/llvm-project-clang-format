@@ -1,8 +1,9 @@
 //===-- EditLineWin.cpp -----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -315,8 +316,8 @@ int el_get(EditLine *el, int code, ...) {
 }
 
 int el_source(EditLine *el, const char *file) {
-  // init edit line by reading the contents of 'file' nothing to do here on
-  // windows...
+  // init edit line by reading the contents of 'file'
+  // nothing to do here on windows...
   return 0;
 }
 
@@ -341,8 +342,8 @@ void history_end(History *) {
 }
 
 int history(History *, HistEvent *, int op, ...) {
-  // perform operation 'op' on the history list with optional arguments as
-  // needed by the operation.
+  // perform operation 'op' on the history list with
+  // optional arguments as needed by the operation.
   return 0;
 }
 

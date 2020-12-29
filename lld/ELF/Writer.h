@@ -1,15 +1,15 @@
 //===- Writer.h -------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLD_ELF_WRITER_H
 #define LLD_ELF_WRITER_H
 
-#include "Config.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 #include <cstdint>
@@ -18,50 +18,49 @@
 namespace lld {
 namespace elf {
 class InputFile;
-class OutputSection;
-class InputSectionBase;
-void copySectionsIntoPartitions();
-template <class ELFT> void createSyntheticSections();
-void combineEhSections();
+class OutputSectionBase;
+template <class ELFT> class InputSectionBase;
+template <class ELFT> class ObjectFile;
+template <class ELFT> class SymbolTable;
 template <class ELFT> void writeResult();
+template <class ELFT> void markLive();
+template <class ELFT> bool isRelroSection(const OutputSectionBase *Sec);
 
 // This describes a program header entry.
 // Each contains type, access flags and range of output sections that will be
 // placed in it.
 struct PhdrEntry {
-  PhdrEntry(unsigned type, unsigned flags)
-      : p_align(type == llvm::ELF::PT_LOAD ? config->maxPageSize : 0),
-        p_type(type), p_flags(flags) {}
-  void add(OutputSection *sec);
+  PhdrEntry(unsigned Type, unsigned Flags);
+  void add(OutputSectionBase *Sec);
 
   uint64_t p_paddr = 0;
   uint64_t p_vaddr = 0;
+  uint64_t p_align = 0;
   uint64_t p_memsz = 0;
   uint64_t p_filesz = 0;
   uint64_t p_offset = 0;
-  uint32_t p_align = 0;
   uint32_t p_type = 0;
   uint32_t p_flags = 0;
 
-  OutputSection *firstSec = nullptr;
-  OutputSection *lastSec = nullptr;
-  bool hasLMA = false;
-
-  uint64_t lmaOffset = 0;
+  OutputSectionBase *First = nullptr;
+  OutputSectionBase *Last = nullptr;
+  bool HasLMA = false;
 };
 
-void addReservedSymbols();
-llvm::StringRef getOutputSectionName(const InputSectionBase *s);
+llvm::StringRef getOutputSectionName(llvm::StringRef Name);
 
-template <class ELFT> uint32_t calcMipsEFlags();
+template <class ELFT>
+void allocateHeaders(llvm::MutableArrayRef<PhdrEntry>,
+                     llvm::ArrayRef<OutputSectionBase *>);
+template <class ELFT> void reportDiscarded(InputSectionBase<ELFT> *IS);
 
-uint8_t getMipsFpAbiFlag(uint8_t oldFlag, uint8_t newFlag,
-                         llvm::StringRef fileName);
+template <class ELFT> uint32_t getMipsEFlags();
 
-bool isMipsN32Abi(const InputFile *f);
-bool isMicroMips();
-bool isMipsR6();
-} // namespace elf
-} // namespace lld
+uint8_t getMipsFpAbiFlag(uint8_t OldFlag, uint8_t NewFlag,
+                         llvm::StringRef FileName);
+
+bool isMipsN32Abi(const InputFile *F);
+}
+}
 
 #endif

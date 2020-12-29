@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,8 +15,6 @@
 
 #include <locale>
 #include <cassert>
-
-#include "test_macros.h"
 
 typedef std::num_put<char, char*> F;
 
@@ -33,7 +32,7 @@ public:
 
 int my_facet::count = 0;
 
-int main(int, char**)
+int main()
 {
     {
         std::locale l(std::locale::classic(), new my_facet);
@@ -50,6 +49,4 @@ int main(int, char**)
         assert(my_facet::count == 1);
     }
     assert(my_facet::count == 0);
-
-  return 0;
 }

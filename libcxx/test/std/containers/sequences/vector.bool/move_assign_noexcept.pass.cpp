@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -56,47 +57,36 @@ struct some_alloc3
     typedef std::false_type is_always_equal;
 };
 
-int main(int, char**)
+int main()
 {
-#if defined(_LIBCPP_VERSION)
     {
         typedef std::vector<bool> C;
-        static_assert(std::is_nothrow_move_assignable<C>::value, "");
+        LIBCPP_STATIC_ASSERT(std::is_nothrow_move_assignable<C>::value, "");
     }
-#endif // _LIBCPP_VERSION
     {
         typedef std::vector<bool, test_allocator<bool>> C;
         static_assert(!std::is_nothrow_move_assignable<C>::value, "");
     }
-#if defined(_LIBCPP_VERSION)
     {
         typedef std::vector<bool, other_allocator<bool>> C;
-        static_assert(std::is_nothrow_move_assignable<C>::value, "");
+        LIBCPP_STATIC_ASSERT(std::is_nothrow_move_assignable<C>::value, "");
     }
-#endif // _LIBCPP_VERSION
     {
+        typedef std::vector<bool, some_alloc<bool>> C;
 #if TEST_STD_VER > 14
-#if defined(_LIBCPP_VERSION)
-        typedef std::vector<bool, some_alloc<bool>> C;
-        static_assert( std::is_nothrow_move_assignable<C>::value, "");
-#endif // _LIBCPP_VERSION
+        LIBCPP_STATIC_ASSERT( std::is_nothrow_move_assignable<C>::value, "");
 #else
-        typedef std::vector<bool, some_alloc<bool>> C;
         static_assert(!std::is_nothrow_move_assignable<C>::value, "");
 #endif
     }
 #if TEST_STD_VER > 14
-#if defined(_LIBCPP_VERSION)
     {  // POCMA false, is_always_equal true
         typedef std::vector<bool, some_alloc2<bool>> C;
-        static_assert( std::is_nothrow_move_assignable<C>::value, "");
+        LIBCPP_STATIC_ASSERT( std::is_nothrow_move_assignable<C>::value, "");
     }
-#endif // _LIBCPP_VERSION
     {  // POCMA false, is_always_equal false
         typedef std::vector<bool, some_alloc3<bool>> C;
         static_assert(!std::is_nothrow_move_assignable<C>::value, "");
     }
 #endif
-
-  return 0;
 }

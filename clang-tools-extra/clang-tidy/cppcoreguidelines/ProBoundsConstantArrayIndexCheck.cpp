@@ -1,8 +1,9 @@
 //===--- ProBoundsConstantArrayIndexCheck.cpp - clang-tidy-----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,7 +23,7 @@ ProBoundsConstantArrayIndexCheck::ProBoundsConstantArrayIndexCheck(
     StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context), GslHeader(Options.get("GslHeader", "")),
       IncludeStyle(utils::IncludeSorter::parseIncludeStyle(
-          Options.getLocalOrGlobal("IncludeStyle", "llvm"))) {}
+          Options.get("IncludeStyle", "llvm"))) {}
 
 void ProBoundsConstantArrayIndexCheck::storeOptions(
     ClangTidyOptions::OptionMap &Opts) {
@@ -31,13 +32,13 @@ void ProBoundsConstantArrayIndexCheck::storeOptions(
 }
 
 void ProBoundsConstantArrayIndexCheck::registerPPCallbacks(
-    const SourceManager &SM, Preprocessor *PP, Preprocessor *ModuleExpanderPP) {
+    CompilerInstance &Compiler) {
   if (!getLangOpts().CPlusPlus)
     return;
 
-  Inserter = std::make_unique<utils::IncludeInserter>(SM, getLangOpts(),
-                                                       IncludeStyle);
-  PP->addPPCallbacks(Inserter->CreatePPCallbacks());
+  Inserter.reset(new utils::IncludeInserter(
+      Compiler.getSourceManager(), Compiler.getLangOpts(), IncludeStyle));
+  Compiler.getPreprocessor().addPPCallbacks(Inserter->CreatePPCallbacks());
 }
 
 void ProBoundsConstantArrayIndexCheck::registerMatchers(MatchFinder *Finder) {
@@ -92,7 +93,7 @@ void ProBoundsConstantArrayIndexCheck::check(
                   SourceRange(BaseRange.getEnd().getLocWithOffset(1),
                               IndexRange.getBegin().getLocWithOffset(-1)),
                   ", ")
-           << FixItHint::CreateReplacement(Matched->getEndLoc(), ")");
+           << FixItHint::CreateReplacement(Matched->getLocEnd(), ")");
 
       Optional<FixItHint> Insertion = Inserter->CreateIncludeInsertion(
           Result.SourceManager->getMainFileID(), GslHeader,

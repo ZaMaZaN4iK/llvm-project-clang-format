@@ -1,13 +1,14 @@
 //===--- TargetCXXABI.h - C++ ABI Target Configuration ----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Defines the TargetCXXABI class, which abstracts details of the
+/// \brief Defines the TargetCXXABI class, which abstracts details of the
 /// C++ ABI that we're targeting.
 ///
 //===----------------------------------------------------------------------===//
@@ -19,10 +20,10 @@
 
 namespace clang {
 
-/// The basic abstraction for the target C++ ABI.
+/// \brief The basic abstraction for the target C++ ABI.
 class TargetCXXABI {
 public:
-  /// The basic C++ ABI kind.
+  /// \brief The basic C++ ABI kind.
   enum Kind {
     /// The generic Itanium ABI is the standard ABI of most open-source
     /// and Unix-like platforms.  It is the primary ABI targeted by
@@ -103,12 +104,6 @@ public:
     /// of these details is necessarily final yet.
     WebAssembly,
 
-    /// The Fuchsia ABI is a modified version of the Itanium ABI.
-    ///
-    /// The relevant changes from the Itanium ABI are:
-    ///   - constructors and destructors return 'this', as in ARM.
-    Fuchsia,
-
     /// The Microsoft ABI is the ABI used by Microsoft Visual Studio (and
     /// compatible compilers).
     ///
@@ -136,10 +131,9 @@ public:
 
   Kind getKind() const { return TheKind; }
 
-  /// Does this ABI generally fall into the Itanium family of ABIs?
+  /// \brief Does this ABI generally fall into the Itanium family of ABIs?
   bool isItaniumFamily() const {
     switch (getKind()) {
-    case Fuchsia:
     case GenericAArch64:
     case GenericItanium:
     case GenericARM:
@@ -156,10 +150,9 @@ public:
     llvm_unreachable("bad ABI kind");
   }
 
-  /// Is this ABI an MSVC-compatible ABI?
+  /// \brief Is this ABI an MSVC-compatible ABI?
   bool isMicrosoft() const {
     switch (getKind()) {
-    case Fuchsia:
     case GenericAArch64:
     case GenericItanium:
     case GenericARM:
@@ -176,7 +169,7 @@ public:
     llvm_unreachable("bad ABI kind");
   }
 
-  /// Are member functions differently aligned?
+  /// \brief Are member functions differently aligned?
   ///
   /// Many Itanium-style C++ ABIs require member functions to be aligned, so
   /// that a pointer to such a function is guaranteed to have a zero in the
@@ -190,7 +183,6 @@ public:
     case WebAssembly:
       // WebAssembly doesn't require any special alignment for member functions.
       return false;
-    case Fuchsia:
     case GenericARM:
     case GenericAArch64:
     case GenericMIPS:
@@ -207,6 +199,13 @@ public:
     llvm_unreachable("bad ABI kind");
   }
 
+  /// \brief Is the default C++ member function calling convention
+  /// the same as the default calling convention?
+  bool isMemberFunctionCCDefault() const {
+    // Right now, this is always false for Microsoft.
+    return !isMicrosoft();
+  }
+
   /// Are arguments to a call destroyed left to right in the callee?
   /// This is a fundamental language change, since it implies that objects
   /// passed by value do *not* live to the end of the full expression.
@@ -218,25 +217,25 @@ public:
     return isMicrosoft();
   }
 
-  /// Does this ABI have different entrypoints for complete-object
+  /// \brief Does this ABI have different entrypoints for complete-object
   /// and base-subobject constructors?
   bool hasConstructorVariants() const {
     return isItaniumFamily();
   }
 
-  /// Does this ABI allow virtual bases to be primary base classes?
+  /// \brief Does this ABI allow virtual bases to be primary base classes?
   bool hasPrimaryVBases() const {
     return isItaniumFamily();
   }
 
-  /// Does this ABI use key functions?  If so, class data such as the
+  /// \brief Does this ABI use key functions?  If so, class data such as the
   /// vtable is emitted with strong linkage by the TU containing the key
   /// function.
   bool hasKeyFunctions() const {
     return isItaniumFamily();
   }
 
-  /// Can an out-of-line inline function serve as a key function?
+  /// \brief Can an out-of-line inline function serve as a key function?
   ///
   /// This flag is only useful in ABIs where type data (for example,
   /// vtables and type_info objects) are emitted only after processing
@@ -266,7 +265,6 @@ public:
   /// done on a generic Itanium platform.
   bool canKeyFunctionBeInline() const {
     switch (getKind()) {
-    case Fuchsia:
     case GenericARM:
     case iOS64:
     case WebAssembly:
@@ -287,18 +285,27 @@ public:
   /// padding of a base class?
   ///
   /// This decision cannot be changed without breaking platform ABI
-  /// compatibility. In ISO C++98, tail padding reuse was only permitted for
-  /// non-POD base classes, but that restriction was removed retroactively by
-  /// DR 43, and tail padding reuse is always permitted in all de facto C++
-  /// language modes. However, many platforms use a variant of the old C++98
-  /// rule for compatibility.
+  /// compatibility, and yet it is tied to language guarantees which
+  /// the committee has so far seen fit to strengthen no less than
+  /// three separate times:
+  ///   - originally, there were no restrictions at all;
+  ///   - C++98 declared that objects could not be allocated in the
+  ///     tail padding of a POD type;
+  ///   - C++03 extended the definition of POD to include classes
+  ///     containing member pointers; and
+  ///   - C++11 greatly broadened the definition of POD to include
+  ///     all trivial standard-layout classes.
+  /// Each of these changes technically took several existing
+  /// platforms and made them permanently non-conformant.
   enum TailPaddingUseRules {
     /// The tail-padding of a base class is always theoretically
-    /// available, even if it's POD.
+    /// available, even if it's POD.  This is not strictly conforming
+    /// in any language mode.
     AlwaysUseTailPadding,
 
     /// Only allocate objects in the tail padding of a base class if
     /// the base class is not POD according to the rules of C++ TR1.
+    /// This is non-strictly conforming in C++11 mode.
     UseTailPaddingUnlessPOD03,
 
     /// Only allocate objects in the tail padding of a base class if
@@ -319,7 +326,6 @@ public:
 
     // iOS on ARM64 and WebAssembly use the C++11 POD rules.  They do not honor
     // the Itanium exception about classes with over-large bitfields.
-    case Fuchsia:
     case iOS64:
     case WebAssembly:
     case WatchOS:

@@ -2,8 +2,11 @@
 Test thread creation after process attach.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -20,7 +23,6 @@ class CreateAfterAttachTestCase(TestBase):
     # Occasionally hangs on Windows, may be same as other issues.
     @skipIfWindows
     @skipIfiOSSimulator
-    @expectedFailureNetBSD
     def test_create_after_attach_with_popen(self):
         """Test thread creation after process attach."""
         self.build(dictionary=self.getBuildFlags(use_cpp11=False))
@@ -31,7 +33,6 @@ class CreateAfterAttachTestCase(TestBase):
     @skipIfRemote
     @skipIfWindows  # Windows doesn't have fork.
     @skipIfiOSSimulator
-    @expectedFailureNetBSD
     def test_create_after_attach_with_fork(self):
         """Test thread creation after process attach."""
         self.build(dictionary=self.getBuildFlags(use_cpp11=False))
@@ -48,7 +49,7 @@ class CreateAfterAttachTestCase(TestBase):
     def create_after_attach(self, use_fork):
         """Test thread creation after process attach."""
 
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Spawn a new process
         if use_fork:

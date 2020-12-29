@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,14 +13,9 @@
 
 // X* release() throw();
 
-// REQUIRES: c++98 || c++03 || c++11 || c++14
-
-#define _LIBCPP_DISABLE_DEPRECATION_WARNINGS
-
 #include <memory>
 #include <cassert>
 
-#include "test_macros.h"
 #include "../A.h"
 
 void
@@ -36,9 +32,7 @@ test()
     assert(A::count == 0);
 }
 
-int main(int, char**)
+int main()
 {
     test();
-
-  return 0;
 }

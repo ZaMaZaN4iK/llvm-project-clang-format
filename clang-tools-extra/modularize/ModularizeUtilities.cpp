@@ -1,8 +1,9 @@
 //===--- extra/modularize/ModularizeUtilities.cpp -------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -119,9 +120,8 @@ std::error_code ModularizeUtilities::doCoverageCheck(
   std::error_code EC;
   for (ModuleMapIndex = 0; ModuleMapIndex < ModuleMapCount; ++ModuleMapIndex) {
     std::unique_ptr<clang::ModuleMap> &ModMap = ModuleMaps[ModuleMapIndex];
-    auto Checker = CoverageChecker::createCoverageChecker(
-        InputFilePaths[ModuleMapIndex], IncludePaths, CommandLine,
-        ModMap.get());
+    CoverageChecker *Checker = CoverageChecker::createCoverageChecker(
+      InputFilePaths[ModuleMapIndex], IncludePaths, CommandLine, ModMap.get());
     std::error_code LocalEC = Checker->doChecks();
     if (LocalEC.value() > 0)
       EC = LocalEC;
@@ -258,15 +258,14 @@ std::error_code ModularizeUtilities::loadProblemHeaderList(
 std::error_code ModularizeUtilities::loadModuleMap(
     llvm::StringRef InputPath) {
   // Get file entry for module.modulemap file.
-  auto ModuleMapEntryOrErr =
+  const FileEntry *ModuleMapEntry =
     SourceMgr->getFileManager().getFile(InputPath);
 
   // return error if not found.
-  if (!ModuleMapEntryOrErr) {
+  if (!ModuleMapEntry) {
     llvm::errs() << "error: File \"" << InputPath << "\" not found.\n";
-    return ModuleMapEntryOrErr.getError();
+    return std::error_code(1, std::generic_category());
   }
-  const FileEntry *ModuleMapEntry = *ModuleMapEntryOrErr;
 
   // Because the module map parser uses a ForwardingDiagnosticConsumer,
   // which doesn't forward the BeginSourceFile call, we do it explicitly here.
@@ -277,12 +276,8 @@ std::error_code ModularizeUtilities::loadModuleMap(
   StringRef DirName(Dir->getName());
   if (llvm::sys::path::filename(DirName) == "Modules") {
     DirName = llvm::sys::path::parent_path(DirName);
-    if (DirName.endswith(".framework")) {
-      if (auto DirEntry = FileMgr->getDirectory(DirName))
-        Dir = *DirEntry;
-      else
-        Dir = nullptr;
-    }
+    if (DirName.endswith(".framework"))
+      Dir = FileMgr->getDirectory(DirName);
     // FIXME: This assert can fail if there's a race between the above check
     // and the removal of the directory.
     assert(Dir && "parent must exist");
@@ -403,15 +398,14 @@ bool ModularizeUtilities::collectUmbrellaHeaders(StringRef UmbrellaDirName,
   SmallString<256> Directory(UmbrellaDirName);
   // Walk the directory.
   std::error_code EC;
+  llvm::sys::fs::file_status Status;
   for (llvm::sys::fs::directory_iterator I(Directory.str(), EC), E; I != E;
     I.increment(EC)) {
     if (EC)
       return false;
     std::string File(I->path());
-    llvm::ErrorOr<llvm::sys::fs::basic_file_status> Status = I->status();
-    if (!Status)
-      return false;
-    llvm::sys::fs::file_type Type = Status->type();
+    I->status(Status);
+    llvm::sys::fs::file_type Type = Status.type();
     // If the file is a directory, ignore the name and recurse.
     if (Type == llvm::sys::fs::file_type::directory_file) {
       if (!collectUmbrellaHeaders(File, Dependents))

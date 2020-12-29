@@ -1,47 +1,56 @@
 //===-- PlatformAppleSimulator.h --------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_PlatformAppleSimulator_h_
 #define liblldb_PlatformAppleSimulator_h_
 
+// C Includes
+// C++ Includes
 #include <mutex>
 
-#include "Plugins/Platform/MacOSX/PlatformDarwin.h"
-#include "Plugins/Platform/MacOSX/objcxx/PlatformiOSSimulatorCoreSimulatorSupport.h"
-#include "lldb/Utility/FileSpec.h"
+// Other libraries and framework includes
+// Project includes
+#include "PlatformDarwin.h"
+#include "PlatformiOSSimulatorCoreSimulatorSupport.h"
+#include "lldb/Host/FileSpec.h"
 
 #include "llvm/ADT/Optional.h"
 
 class PlatformAppleSimulator : public PlatformDarwin {
 public:
+  //------------------------------------------------------------
   // Class Functions
+  //------------------------------------------------------------
   static void Initialize();
 
   static void Terminate();
 
+  //------------------------------------------------------------
   // Class Methods
+  //------------------------------------------------------------
   PlatformAppleSimulator();
 
   virtual ~PlatformAppleSimulator();
 
-  lldb_private::Status
+  lldb_private::Error
   LaunchProcess(lldb_private::ProcessLaunchInfo &launch_info) override;
 
   void GetStatus(lldb_private::Stream &strm) override;
 
-  lldb_private::Status ConnectRemote(lldb_private::Args &args) override;
+  lldb_private::Error ConnectRemote(lldb_private::Args &args) override;
 
-  lldb_private::Status DisconnectRemote() override;
+  lldb_private::Error DisconnectRemote() override;
 
   lldb::ProcessSP DebugProcess(lldb_private::ProcessLaunchInfo &launch_info,
                                lldb_private::Debugger &debugger,
                                lldb_private::Target *target,
-                               lldb_private::Status &error) override;
+                               lldb_private::Error &error) override;
 
 protected:
   std::mutex m_core_sim_path_mutex;

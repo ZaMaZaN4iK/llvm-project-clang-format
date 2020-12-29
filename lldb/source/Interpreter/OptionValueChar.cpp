@@ -1,16 +1,21 @@
 //===-- OptionValueChar.cpp -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Interpreter/OptionValueChar.h"
 
-#include "lldb/Interpreter/OptionArgParser.h"
-#include "lldb/Utility/Stream.h"
-#include "lldb/Utility/StringList.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/Stream.h"
+#include "lldb/Core/StringList.h"
+#include "lldb/Interpreter/Args.h"
 #include "llvm/ADT/STLExtras.h"
 
 using namespace lldb;
@@ -31,9 +36,9 @@ void OptionValueChar::DumpValue(const ExecutionContext *exe_ctx, Stream &strm,
   }
 }
 
-Status OptionValueChar::SetValueFromString(llvm::StringRef value,
-                                           VarSetOperationType op) {
-  Status error;
+Error OptionValueChar::SetValueFromString(llvm::StringRef value,
+                                          VarSetOperationType op) {
+  Error error;
   switch (op) {
   case eVarSetOperationClear:
     Clear();
@@ -42,7 +47,7 @@ Status OptionValueChar::SetValueFromString(llvm::StringRef value,
   case eVarSetOperationReplace:
   case eVarSetOperationAssign: {
     bool success = false;
-    char char_value = OptionArgParser::ToChar(value, '\0', &success);
+    char char_value = Args::StringToChar(value, '\0', &success);
     if (success) {
       m_current_value = char_value;
       m_value_was_set = true;

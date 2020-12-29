@@ -1,28 +1,33 @@
 //===-- PlatformDarwinKernel.h ----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_PlatformDarwinKernel_h_
 #define liblldb_PlatformDarwinKernel_h_
 
-#include "lldb/Utility/ConstString.h"
+#include "lldb/Core/ConstString.h"
 
 #if defined(__APPLE__) // This Plugin uses the Mac-specific
                        // source/Host/macosx/cfcpp utilities
 
-#include "lldb/Utility/FileSpec.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+#include "lldb/Host/FileSpec.h"
 
-#include "llvm/Support/FileSystem.h"
-
+// Project includes
 #include "PlatformDarwin.h"
 
 class PlatformDarwinKernel : public PlatformDarwin {
 public:
+  //------------------------------------------------------------
   // Class Functions
+  //------------------------------------------------------------
   static lldb::PlatformSP CreateInstance(bool force,
                                          const lldb_private::ArchSpec *arch);
 
@@ -36,24 +41,30 @@ public:
 
   static const char *GetDescriptionStatic();
 
+  //------------------------------------------------------------
   // Class Methods
+  //------------------------------------------------------------
   PlatformDarwinKernel(lldb_private::LazyBool is_ios_debug_session);
 
   virtual ~PlatformDarwinKernel();
 
+  //------------------------------------------------------------
   // lldb_private::PluginInterface functions
+  //------------------------------------------------------------
   lldb_private::ConstString GetPluginName() override {
     return GetPluginNameStatic();
   }
 
   uint32_t GetPluginVersion() override { return 1; }
 
+  //------------------------------------------------------------
   // lldb_private::Platform functions
+  //------------------------------------------------------------
   const char *GetDescription() override { return GetDescriptionStatic(); }
 
   void GetStatus(lldb_private::Stream &strm) override;
 
-  lldb_private::Status
+  lldb_private::Error
   GetSharedModule(const lldb_private::ModuleSpec &module_spec,
                   lldb_private::Process *process, lldb::ModuleSP &module_sp,
                   const lldb_private::FileSpecList *module_search_paths_ptr,
@@ -93,28 +104,27 @@ protected:
 
   void AddSDKSubdirsToSearchPaths(const std::string &dir);
 
-  static lldb_private::FileSystem::EnumerateDirectoryResult
-  FindKDKandSDKDirectoriesInDirectory(void *baton, llvm::sys::fs::file_type ft,
-                                      llvm::StringRef path);
+  static lldb_private::FileSpec::EnumerateDirectoryResult
+  FindKDKandSDKDirectoriesInDirectory(
+      void *baton, lldb_private::FileSpec::FileType file_type,
+      const lldb_private::FileSpec &file_spec);
 
   void SearchForKextsAndKernelsRecursively();
 
-  static lldb_private::FileSystem::EnumerateDirectoryResult
-  GetKernelsAndKextsInDirectoryWithRecursion(void *baton,
-                                             llvm::sys::fs::file_type ft,
-                                             llvm::StringRef path);
+  static lldb_private::FileSpec::EnumerateDirectoryResult
+  GetKernelsAndKextsInDirectoryWithRecursion(
+      void *baton, lldb_private::FileSpec::FileType file_type,
+      const lldb_private::FileSpec &file_spec);
 
-  static lldb_private::FileSystem::EnumerateDirectoryResult
-  GetKernelsAndKextsInDirectoryNoRecursion(void *baton,
-                                           llvm::sys::fs::file_type ft,
-                                           llvm::StringRef path);
+  static lldb_private::FileSpec::EnumerateDirectoryResult
+  GetKernelsAndKextsInDirectoryNoRecursion(
+      void *baton, lldb_private::FileSpec::FileType file_type,
+      const lldb_private::FileSpec &file_spec);
 
-  static lldb_private::FileSystem::EnumerateDirectoryResult
-  GetKernelsAndKextsInDirectoryHelper(void *baton, llvm::sys::fs::file_type ft,
-                                      llvm::StringRef path, bool recurse);
-
-  static std::vector<lldb_private::FileSpec>
-  SearchForExecutablesRecursively(const std::string &dir);
+  static lldb_private::FileSpec::EnumerateDirectoryResult
+  GetKernelsAndKextsInDirectoryHelper(
+      void *baton, lldb_private::FileSpec::FileType file_type,
+      const lldb_private::FileSpec &file_spec, bool recurse);
 
   static void AddKextToMap(PlatformDarwinKernel *thisp,
                            const lldb_private::FileSpec &file_spec);
@@ -128,13 +138,13 @@ protected:
   static bool
   KernelHasdSYMSibling(const lldb_private::FileSpec &kext_bundle_filepath);
 
-  lldb_private::Status
+  lldb_private::Error
   ExamineKextForMatchingUUID(const lldb_private::FileSpec &kext_bundle_path,
                              const lldb_private::UUID &uuid,
                              const lldb_private::ArchSpec &arch,
                              lldb::ModuleSP &exe_module_sp);
 
-  // Most of the ivars are assembled under FileSystem::EnumerateDirectory calls
+  // Most of the ivars are assembled under FileSpec::EnumerateDirectory calls
   // where the
   // function being called for each file/directory must be static.  We'll pass a
   // this pointer
@@ -190,7 +200,6 @@ public:
 // source/Host/macosx/cfcpp utilities.
 
 class PlatformDarwinKernel {
-public:
   static lldb_private::ConstString GetPluginNameStatic();
 };
 

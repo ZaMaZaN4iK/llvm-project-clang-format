@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,7 +23,6 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "incomplete_type_helper.h"
 
 template <class T>
 struct A
@@ -47,7 +47,7 @@ struct B
     }
 };
 
-int main(int, char**)
+int main()
 {
     {
         A<int> a;
@@ -56,12 +56,6 @@ int main(int, char**)
     {
         const A<int> a(0);
         assert(std::allocator_traits<A<int> >::select_on_container_copy_construction(a).id == 0);
-    }
-    {
-        typedef IncompleteHolder* VT;
-        typedef A<VT> Alloc;
-        Alloc a;
-        assert(std::allocator_traits<Alloc>::select_on_container_copy_construction(a).id == 0);
     }
 #if TEST_STD_VER >= 11
     {
@@ -73,6 +67,4 @@ int main(int, char**)
         assert(std::allocator_traits<B<int> >::select_on_container_copy_construction(b).id == 100);
     }
 #endif
-
-  return 0;
 }

@@ -1,13 +1,14 @@
 //===-- CoverageChecker.h - Module map coverage checker -*- C++ -*-------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===--------------------------------------------------------------------===//
 ///
 /// \file
-/// Definitions for CoverageChecker.
+/// \brief Definitions for CoverageChecker.
 ///
 //===--------------------------------------------------------------------===//
 
@@ -90,9 +91,10 @@ public:
   /// \param CommandLine Compile command line arguments.
   /// \param ModuleMap The module map to check.
   /// \returns Initialized CoverageChecker object.
-  static std::unique_ptr<CoverageChecker> createCoverageChecker(
-      llvm::StringRef ModuleMapPath, std::vector<std::string> &IncludePaths,
-      llvm::ArrayRef<std::string> CommandLine, clang::ModuleMap *ModuleMap);
+  static CoverageChecker *createCoverageChecker(
+    llvm::StringRef ModuleMapPath, std::vector<std::string> &IncludePaths,
+    llvm::ArrayRef<std::string> CommandLine,
+    clang::ModuleMap *ModuleMap);
 
   /// Do checks.
   /// Starting from the directory of the module.modulemap file,

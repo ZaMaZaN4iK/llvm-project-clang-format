@@ -1,5 +1,7 @@
+from __future__ import print_function
 
 
+import sys
 
 import gdbremote_testcase
 import lldbgdbserverutils
@@ -34,7 +36,6 @@ class TestGdbRemoteProcessInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.assertTrue(lldbgdbserverutils.process_is_running(pid, True))
 
     @debugserver_test
-    @skipIfDarwinEmbedded # <rdar://problem/34539270> lldb-server tests not updated to work on ios etc yet
     def test_qProcessInfo_returns_running_process_debugserver(self):
         self.init_debugserver_test()
         self.build()
@@ -52,7 +53,7 @@ class TestGdbRemoteProcessInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.add_process_info_collection_packets()
 
         # Run the stream
-        context = self.expect_gdbremote_sequence(timeout_seconds=self._DEFAULT_TIMEOUT)
+        context = self.expect_gdbremote_sequence(timeout_seconds=8)
         self.assertIsNotNone(context)
 
         # Gather process info response
@@ -66,7 +67,6 @@ class TestGdbRemoteProcessInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.assertEqual(reported_pid, procs["inferior"].pid)
 
     @debugserver_test
-    @skipIfDarwinEmbedded # <rdar://problem/34539270> lldb-server tests not updated to work on ios etc yet
     def test_attach_commandline_qProcessInfo_reports_correct_pid_debugserver(
             self):
         self.init_debugserver_test()
@@ -74,7 +74,6 @@ class TestGdbRemoteProcessInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.set_inferior_startup_attach()
         self.attach_commandline_qProcessInfo_reports_correct_pid()
 
-    @expectedFailureNetBSD
     @llgs_test
     def test_attach_commandline_qProcessInfo_reports_correct_pid_llgs(self):
         self.init_llgs_test()
@@ -100,7 +99,6 @@ class TestGdbRemoteProcessInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.assertTrue(endian in ["little", "big", "pdp"])
 
     @debugserver_test
-    @skipIfDarwinEmbedded # <rdar://problem/34539270> lldb-server tests not updated to work on ios etc yet
     def test_qProcessInfo_reports_valid_endian_debugserver(self):
         self.init_debugserver_test()
         self.build()
@@ -161,7 +159,6 @@ class TestGdbRemoteProcessInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
 
     @skipUnlessDarwin
     @debugserver_test
-    @skipIfDarwinEmbedded # <rdar://problem/34539270> lldb-server tests not updated to work on ios etc yet
     def test_qProcessInfo_contains_cputype_cpusubtype_debugserver_darwin(self):
         self.init_debugserver_test()
         self.build()
@@ -174,15 +171,15 @@ class TestGdbRemoteProcessInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.build()
         self.qProcessInfo_contains_keys(set(['cputype', 'cpusubtype']))
 
+    @skipUnlessPlatform(["linux"])
     @llgs_test
-    def test_qProcessInfo_contains_triple_ppid_llgs(self):
+    def test_qProcessInfo_contains_triple_llgs_linux(self):
         self.init_llgs_test()
         self.build()
-        self.qProcessInfo_contains_keys(set(['triple', 'parent-pid']))
+        self.qProcessInfo_contains_keys(set(['triple']))
 
     @skipUnlessDarwin
     @debugserver_test
-    @skipIfDarwinEmbedded # <rdar://problem/34539270> lldb-server tests not updated to work on ios etc yet
     def test_qProcessInfo_does_not_contain_triple_debugserver_darwin(self):
         self.init_debugserver_test()
         self.build()
@@ -201,9 +198,9 @@ class TestGdbRemoteProcessInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
         # for the remote Host and Process.
         self.qProcessInfo_does_not_contain_keys(set(['triple']))
 
-    @skipIfDarwin
+    @skipUnlessPlatform(["linux"])
     @llgs_test
-    def test_qProcessInfo_does_not_contain_cputype_cpusubtype_llgs(self):
+    def test_qProcessInfo_does_not_contain_cputype_cpusubtype_llgs_linux(self):
         self.init_llgs_test()
         self.build()
         self.qProcessInfo_does_not_contain_keys(set(['cputype', 'cpusubtype']))

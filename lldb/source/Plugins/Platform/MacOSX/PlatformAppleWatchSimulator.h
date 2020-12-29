@@ -1,19 +1,26 @@
 //===-- PlatformAppleWatchSimulator.h ---------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_PlatformAppleWatchSimulator_h_
 #define liblldb_PlatformAppleWatchSimulator_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "PlatformDarwin.h"
 
 class PlatformAppleWatchSimulator : public PlatformDarwin {
 public:
+  //------------------------------------------------------------
   // Class Functions
+  //------------------------------------------------------------
   static lldb::PlatformSP CreateInstance(bool force,
                                          const lldb_private::ArchSpec *arch);
 
@@ -25,20 +32,26 @@ public:
 
   static const char *GetDescriptionStatic();
 
+  //------------------------------------------------------------
   // Class Methods
+  //------------------------------------------------------------
   PlatformAppleWatchSimulator();
 
   virtual ~PlatformAppleWatchSimulator();
 
+  //------------------------------------------------------------
   // lldb_private::PluginInterface functions
+  //------------------------------------------------------------
   lldb_private::ConstString GetPluginName() override {
     return GetPluginNameStatic();
   }
 
   uint32_t GetPluginVersion() override { return 1; }
 
+  //------------------------------------------------------------
   // lldb_private::Platform functions
-  lldb_private::Status ResolveExecutable(
+  //------------------------------------------------------------
+  lldb_private::Error ResolveExecutable(
       const lldb_private::ModuleSpec &module_spec, lldb::ModuleSP &module_sp,
       const lldb_private::FileSpecList *module_search_paths_ptr) override;
 
@@ -46,12 +59,12 @@ public:
 
   void GetStatus(lldb_private::Stream &strm) override;
 
-  virtual lldb_private::Status
+  virtual lldb_private::Error
   GetSymbolFile(const lldb_private::FileSpec &platform_file,
                 const lldb_private::UUID *uuid_ptr,
                 lldb_private::FileSpec &local_file);
 
-  lldb_private::Status
+  lldb_private::Error
   GetSharedModule(const lldb_private::ModuleSpec &module_spec,
                   lldb_private::Process *process, lldb::ModuleSP &module_sp,
                   const lldb_private::FileSpecList *module_search_paths_ptr,

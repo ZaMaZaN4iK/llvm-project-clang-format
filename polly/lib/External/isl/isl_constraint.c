@@ -18,6 +18,7 @@
 #include <isl_local_space_private.h>
 #include <isl_val_private.h>
 #include <isl_vec_private.h>
+#include <isl/deprecated/constraint_int.h>
 
 #include <bset_to_bmap.c>
 #include <bset_from_bmap.c>
@@ -669,6 +670,71 @@ __isl_give isl_constraint *isl_constraint_set_coefficient_si(
 	return constraint;
 }
 
+/* Drop any constraint from "bset" that is identical to "constraint".
+ * In particular, this means that the local spaces of "bset" and
+ * "constraint" need to be the same.
+ *
+ * We manually set ISL_BASIC_SET_FINAL instead of calling
+ * isl_basic_set_finalize because this function is called by CLooG,
+ * which does not expect any variables to disappear.
+ */
+__isl_give isl_basic_set *isl_basic_set_drop_constraint(
+	__isl_take isl_basic_set *bset, __isl_take isl_constraint *constraint)
+{
+	int i;
+	unsigned n;
+	isl_int **row;
+	unsigned total;
+	isl_local_space *ls1;
+	int equal;
+	int equality;
+
+	if (!bset || !constraint)
+		goto error;
+
+	ls1 = isl_basic_set_get_local_space(bset);
+	equal = isl_local_space_is_equal(ls1, constraint->ls);
+	isl_local_space_free(ls1);
+	if (equal < 0)
+		goto error;
+	if (!equal) {
+		isl_constraint_free(constraint);
+		return bset;
+	}
+
+	bset = isl_basic_set_cow(bset);
+	if (!bset)
+		goto error;
+
+	equality = isl_constraint_is_equality(constraint);
+	if (equality) {
+		n = bset->n_eq;
+		row = bset->eq;
+	} else {
+		n = bset->n_ineq;
+		row = bset->ineq;
+	}
+
+	total = isl_constraint_dim(constraint, isl_dim_all);
+	for (i = 0; i < n; ++i) {
+		if (!isl_seq_eq(row[i], constraint->v->el, 1 + total))
+			continue;
+		if (equality && isl_basic_set_drop_equality(bset, i) < 0)
+			goto error;
+		if (!equality && isl_basic_set_drop_inequality(bset, i) < 0)
+			goto error;
+		break;
+	}
+			
+	isl_constraint_free(constraint);
+	ISL_F_SET(bset, ISL_BASIC_SET_FINAL);
+	return bset;
+error:
+	isl_constraint_free(constraint);
+	isl_basic_set_free(bset);
+	return NULL;
+}
+
 struct isl_constraint *isl_constraint_negate(struct isl_constraint *constraint)
 {
 	isl_ctx *ctx;
@@ -707,40 +773,12 @@ int isl_constraint_is_div_constraint(__isl_keep isl_constraint *constraint)
 		return 0;
 	n_div = isl_constraint_dim(constraint, isl_dim_div);
 	for (i = 0; i < n_div; ++i) {
-		isl_bool is_div;
-		is_div = isl_local_space_is_div_constraint(constraint->ls,
-							constraint->v->el, i);
-		if (is_div < 0 || is_div)
-			return is_div;
+		if (isl_local_space_is_div_constraint(constraint->ls,
+							constraint->v->el, i))
+			return 1;
 	}
 
 	return 0;
-}
-
-/* Is "constraint" an equality that corresponds to integer division "div"?
- *
- * That is, given an integer division of the form
- *
- *	a = floor((f + c)/m)
- *
- * is the equality of the form
- *
- *		-f + m d + c' = 0
- * ?
- * Note that the constant term is not checked explicitly, but given
- * that this is a valid equality constraint, the constant c' necessarily
- * has a value close to -c.
- */
-isl_bool isl_constraint_is_div_equality(__isl_keep isl_constraint *constraint,
-	unsigned div)
-{
-	isl_bool equality;
-
-	equality = isl_constraint_is_equality(constraint);
-	if (equality < 0 || !equality)
-		return equality;
-	return isl_local_space_is_div_equality(constraint->ls,
-						constraint->v->el, div);
 }
 
 /* We manually set ISL_BASIC_SET_FINAL instead of calling
@@ -787,8 +825,8 @@ error:
 	return NULL;
 }
 
-__isl_give isl_basic_set *isl_basic_set_from_constraint(
-	__isl_take isl_constraint *constraint)
+struct isl_basic_set *isl_basic_set_from_constraint(
+	struct isl_constraint *constraint)
 {
 	if (!constraint)
 		return NULL;
@@ -807,7 +845,7 @@ error:
  *
  * If so, and if c is not NULL, then return a copy of this equality in *c.
  */
-isl_bool isl_basic_map_has_defining_equality(
+int isl_basic_map_has_defining_equality(
 	__isl_keep isl_basic_map *bmap, enum isl_dim_type type, int pos,
 	__isl_give isl_constraint **c)
 {
@@ -816,12 +854,10 @@ isl_bool isl_basic_map_has_defining_equality(
 	unsigned total;
 
 	if (!bmap)
-		return isl_bool_error;
+		return -1;
 	offset = basic_map_offset(bmap, type);
 	total = isl_basic_map_total_dim(bmap);
-	if (pos >= isl_basic_map_dim(bmap, type))
-		isl_die(isl_basic_map_get_ctx(bmap), isl_error_invalid,
-			"invalid position", return isl_bool_error);
+	isl_assert(bmap->ctx, pos < isl_basic_map_dim(bmap, type), return -1);
 	for (i = 0; i < bmap->n_eq; ++i) {
 		if (isl_int_is_zero(bmap->eq[i][offset + pos]) ||
 		    isl_seq_first_non_zero(bmap->eq[i]+offset+pos+1,
@@ -830,9 +866,9 @@ isl_bool isl_basic_map_has_defining_equality(
 		if (c)
 			*c = isl_basic_map_constraint(isl_basic_map_copy(bmap),
 								&bmap->eq[i]);
-		return isl_bool_true;
+		return 1;
 	}
-	return isl_bool_false;
+	return 0;
 }
 
 /* Is the variable of "type" at position "pos" of "bset" defined
@@ -840,7 +876,7 @@ isl_bool isl_basic_map_has_defining_equality(
  *
  * If so, and if c is not NULL, then return a copy of this equality in *c.
  */
-isl_bool isl_basic_set_has_defining_equality(
+int isl_basic_set_has_defining_equality(
 	__isl_keep isl_basic_set *bset, enum isl_dim_type type, int pos,
 	__isl_give isl_constraint **c)
 {
@@ -848,7 +884,7 @@ isl_bool isl_basic_set_has_defining_equality(
 						    type, pos, c);
 }
 
-isl_bool isl_basic_set_has_defining_inequalities(
+int isl_basic_set_has_defining_inequalities(
 	struct isl_basic_set *bset, enum isl_dim_type type, int pos,
 	struct isl_constraint **lower,
 	struct isl_constraint **upper)
@@ -860,12 +896,10 @@ isl_bool isl_basic_set_has_defining_inequalities(
 	isl_int **lower_line, **upper_line;
 
 	if (!bset)
-		return isl_bool_error;
+		return -1;
 	offset = basic_set_offset(bset, type);
 	total = isl_basic_set_total_dim(bset);
-	if (pos >= isl_basic_set_dim(bset, type))
-		isl_die(isl_basic_set_get_ctx(bset), isl_error_invalid,
-			"invalid position", return isl_bool_error);
+	isl_assert(bset->ctx, pos < isl_basic_set_dim(bset, type), return -1);
 	isl_int_init(m);
 	for (i = 0; i < bset->n_ineq; ++i) {
 		if (isl_int_is_zero(bset->ineq[i][offset + pos]))
@@ -897,13 +931,13 @@ isl_bool isl_basic_set_has_defining_inequalities(
 			*upper = isl_basic_set_constraint(
 					isl_basic_set_copy(bset), upper_line);
 			isl_int_clear(m);
-			return isl_bool_true;
+			return 1;
 		}
 	}
 	*lower = NULL;
 	*upper = NULL;
 	isl_int_clear(m);
-	return isl_bool_false;
+	return 0;
 }
 
 /* Given two constraints "a" and "b" on the variable at position "abs_pos"
@@ -1248,7 +1282,7 @@ error:
 	isl_constraint_free(lower);
 	isl_constraint_free(upper);
 	isl_basic_set_free(context);
-	return isl_stat_error;
+	return -1;
 }
 
 __isl_give isl_aff *isl_constraint_get_bound(

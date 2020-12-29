@@ -1,8 +1,9 @@
 //===-- RISCVMCTargetDesc.h - RISCV Target Descriptions ---------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,17 +14,16 @@
 #ifndef LLVM_LIB_TARGET_RISCV_MCTARGETDESC_RISCVMCTARGETDESC_H
 #define LLVM_LIB_TARGET_RISCV_MCTARGETDESC_RISCVMCTARGETDESC_H
 
-#include "llvm/Config/config.h"
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Support/DataTypes.h"
-#include <memory>
+#include "llvm/Config/config.h"
 
 namespace llvm {
 class MCAsmBackend;
 class MCCodeEmitter;
 class MCContext;
 class MCInstrInfo;
-class MCObjectTargetWriter;
+class MCObjectWriter;
 class MCRegisterInfo;
 class MCSubtargetInfo;
 class StringRef;
@@ -32,16 +32,19 @@ class Triple;
 class raw_ostream;
 class raw_pwrite_stream;
 
+Target &getTheRISCV32Target();
+Target &getTheRISCV64Target();
+
 MCCodeEmitter *createRISCVMCCodeEmitter(const MCInstrInfo &MCII,
                                         const MCRegisterInfo &MRI,
                                         MCContext &Ctx);
 
-MCAsmBackend *createRISCVAsmBackend(const Target &T, const MCSubtargetInfo &STI,
-                                    const MCRegisterInfo &MRI,
+MCAsmBackend *createRISCVAsmBackend(const Target &T, const MCRegisterInfo &MRI,
+                                    const Triple &TT, StringRef CPU,
                                     const MCTargetOptions &Options);
 
-std::unique_ptr<MCObjectTargetWriter> createRISCVELFObjectWriter(uint8_t OSABI,
-                                                                 bool Is64Bit);
+MCObjectWriter *createRISCVELFObjectWriter(raw_pwrite_stream &OS, uint8_t OSABI,
+                                           bool Is64Bit);
 }
 
 // Defines symbolic names for RISC-V registers.
@@ -51,8 +54,5 @@ std::unique_ptr<MCObjectTargetWriter> createRISCVELFObjectWriter(uint8_t OSABI,
 // Defines symbolic names for RISC-V instructions.
 #define GET_INSTRINFO_ENUM
 #include "RISCVGenInstrInfo.inc"
-
-#define GET_SUBTARGETINFO_ENUM
-#include "RISCVGenSubtargetInfo.inc"
 
 #endif

@@ -1,8 +1,9 @@
 //=- NSErrorChecker.cpp - Coding conventions for uses of NSError -*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,7 +15,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
@@ -185,7 +186,8 @@ static void setFlag(ProgramStateRef state, SVal val, CheckerContext &C) {
 }
 
 static QualType parameterTypeFromSVal(SVal val, CheckerContext &C) {
-  const StackFrameContext * SFC = C.getStackFrame();
+  const StackFrameContext *
+    SFC = C.getLocationContext()->getCurrentStackFrame();
   if (Optional<loc::MemRegionVal> X = val.getAs<loc::MemRegionVal>()) {
     const MemRegion* R = X->getRegion();
     if (const VarRegion *VR = R->getAs<VarRegion>())
@@ -273,8 +275,7 @@ void NSOrCFErrorDerefChecker::checkEvent(ImplicitNullDerefEvent event) const {
       CFBT.reset(new CFErrorDerefBug(this));
     bug = CFBT.get();
   }
-  BR.emitReport(
-      std::make_unique<PathSensitiveBugReport>(*bug, os.str(), event.SinkNode));
+  BR.emitReport(llvm::make_unique<BugReport>(*bug, os.str(), event.SinkNode));
 }
 
 static bool IsNSError(QualType T, IdentifierInfo *II) {
@@ -308,30 +309,16 @@ static bool IsCFError(QualType T, IdentifierInfo *II) {
   return TT->getDecl()->getIdentifier() == II;
 }
 
-void ento::registerNSOrCFErrorDerefChecker(CheckerManager &mgr) {
-  mgr.registerChecker<NSOrCFErrorDerefChecker>();
-}
-
-bool ento::shouldRegisterNSOrCFErrorDerefChecker(const LangOptions &LO) {
-  return true;
-}
-
 void ento::registerNSErrorChecker(CheckerManager &mgr) {
   mgr.registerChecker<NSErrorMethodChecker>();
-  NSOrCFErrorDerefChecker *checker = mgr.getChecker<NSOrCFErrorDerefChecker>();
+  NSOrCFErrorDerefChecker *checker =
+      mgr.registerChecker<NSOrCFErrorDerefChecker>();
   checker->ShouldCheckNSError = true;
-}
-
-bool ento::shouldRegisterNSErrorChecker(const LangOptions &LO) {
-  return true;
 }
 
 void ento::registerCFErrorChecker(CheckerManager &mgr) {
   mgr.registerChecker<CFErrorFunctionChecker>();
-  NSOrCFErrorDerefChecker *checker = mgr.getChecker<NSOrCFErrorDerefChecker>();
+  NSOrCFErrorDerefChecker *checker =
+      mgr.registerChecker<NSOrCFErrorDerefChecker>();
   checker->ShouldCheckCFError = true;
-}
-
-bool ento::shouldRegisterCFErrorChecker(const LangOptions &LO) {
-  return true;
 }

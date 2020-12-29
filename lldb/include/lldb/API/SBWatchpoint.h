@@ -1,8 +1,9 @@
 //===-- SBWatchpoint.h ----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,12 +25,6 @@ public:
   ~SBWatchpoint();
 
   const lldb::SBWatchpoint &operator=(const lldb::SBWatchpoint &rhs);
-
-  explicit operator bool() const;
-
-  bool operator==(const SBWatchpoint &rhs) const;
-
-  bool operator!=(const SBWatchpoint &rhs) const;
 
   bool IsValid() const;
 
@@ -77,7 +72,7 @@ private:
   friend class SBTarget;
   friend class SBValue;
 
-  std::weak_ptr<lldb_private::Watchpoint> m_opaque_wp;
+  lldb::WatchpointSP m_opaque_sp;
 };
 
 } // namespace lldb

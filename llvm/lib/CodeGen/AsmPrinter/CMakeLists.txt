@@ -1,15 +1,15 @@
-add_llvm_component_library(LLVMAsmPrinter
-  AccelTable.cpp
+add_llvm_library(LLVMAsmPrinter
   AddressPool.cpp
   ARMException.cpp
   AsmPrinter.cpp
   AsmPrinterDwarf.cpp
   AsmPrinterInlineAsm.cpp
-  DbgEntityHistoryCalculator.cpp
+  DbgValueHistoryCalculator.cpp
   DebugHandlerBase.cpp
   DebugLocStream.cpp
   DIE.cpp
   DIEHash.cpp
+  DwarfAccelTable.cpp
   DwarfCFIException.cpp
   DwarfCompileUnit.cpp
   DwarfDebug.cpp
@@ -20,10 +20,8 @@ add_llvm_component_library(LLVMAsmPrinter
   EHStreamer.cpp
   ErlangGCPrinter.cpp
   OcamlGCPrinter.cpp
-  WinCFGuard.cpp
   WinException.cpp
   CodeViewDebug.cpp
-  WasmException.cpp
 
   DEPENDS
   intrinsics_gen

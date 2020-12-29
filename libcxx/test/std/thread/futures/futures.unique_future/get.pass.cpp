@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -61,7 +62,7 @@ void func6(std::promise<void> p)
     p.set_exception(std::make_exception_ptr('c'));
 }
 
-int main(int, char**)
+int main()
 {
     {
         typedef int T;
@@ -150,6 +151,4 @@ int main(int, char**)
         }
 #endif
     }
-
-  return 0;
 }

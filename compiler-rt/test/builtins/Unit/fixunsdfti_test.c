@@ -1,11 +1,9 @@
-// RUN: %clang_builtins %s %librt -o %t && %run %t
-// REQUIRES: librt_has_fixunsdfti
-// REQUIRES: int128
 //===-- fixunsdfti_test.c - Test __fixunsdfti -----------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -100,25 +98,25 @@ int main()
         return 1;
 #endif
 
-    if (test__fixunsdfti(0x1.FFFFFFFFFFFFFp+63, 0xFFFFFFFFFFFFF800ULL))
+    if (test__fixunsdfti(0x1.FFFFFFFFFFFFFp+63, 0xFFFFFFFFFFFFF800LL))
         return 1;
-    if (test__fixunsdfti(0x1.0000000000000p+63, 0x8000000000000000ULL))
+    if (test__fixunsdfti(0x1.0000000000000p+63, 0x8000000000000000LL))
         return 1;
-    if (test__fixunsdfti(0x1.FFFFFFFFFFFFFp+62, 0x7FFFFFFFFFFFFC00ULL))
+    if (test__fixunsdfti(0x1.FFFFFFFFFFFFFp+62, 0x7FFFFFFFFFFFFC00LL))
         return 1;
-    if (test__fixunsdfti(0x1.FFFFFFFFFFFFEp+62, 0x7FFFFFFFFFFFF800ULL))
+    if (test__fixunsdfti(0x1.FFFFFFFFFFFFEp+62, 0x7FFFFFFFFFFFF800LL))
         return 1;
 
-    if (test__fixunsdfti(0x1.FFFFFFFFFFFFFp+127, make_ti(0xFFFFFFFFFFFFF800ULL, 0)))
+    if (test__fixunsdfti(0x1.FFFFFFFFFFFFFp+127, make_ti(0xFFFFFFFFFFFFF800LL, 0)))
         return 1;
-    if (test__fixunsdfti(0x1.0000000000000p+127, make_ti(0x8000000000000000ULL, 0)))
+    if (test__fixunsdfti(0x1.0000000000000p+127, make_ti(0x8000000000000000LL, 0)))
         return 1;
-    if (test__fixunsdfti(0x1.FFFFFFFFFFFFFp+126, make_ti(0x7FFFFFFFFFFFFC00ULL, 0)))
+    if (test__fixunsdfti(0x1.FFFFFFFFFFFFFp+126, make_ti(0x7FFFFFFFFFFFFC00LL, 0)))
         return 1;
-    if (test__fixunsdfti(0x1.FFFFFFFFFFFFEp+126, make_ti(0x7FFFFFFFFFFFF800ULL, 0)))
+    if (test__fixunsdfti(0x1.FFFFFFFFFFFFEp+126, make_ti(0x7FFFFFFFFFFFF800LL, 0)))
         return 1;
-    if (test__fixunsdfti(0x1.0000000000000p+128, make_ti(0xFFFFFFFFFFFFFFFFULL,
-                                                         0xFFFFFFFFFFFFFFFFULL)))
+    if (test__fixunsdfti(0x1.0000000000000p+128, make_ti(0xFFFFFFFFFFFFFFFFLL,
+                                                         0xFFFFFFFFFFFFFFFFLL)))
         return 1;
 
 #if !TARGET_LIBGCC

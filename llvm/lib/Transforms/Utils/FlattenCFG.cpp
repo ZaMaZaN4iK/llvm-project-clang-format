@@ -1,8 +1,9 @@
-//===- FlatternCFG.cpp - Code to perform CFG flattening -------------------===//
+//===- FlatternCFG.cpp - Code to perform CFG flattening ---------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,41 +11,29 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Analysis/ValueTracking.h"
-#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/InstrTypes.h"
-#include "llvm/IR/Instruction.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/Value.h"
-#include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include <cassert>
-
 using namespace llvm;
 
 #define DEBUG_TYPE "flattencfg"
 
 namespace {
-
 class FlattenCFGOpt {
   AliasAnalysis *AA;
-
-  /// Use parallel-and or parallel-or to generate conditions for
+  /// \brief Use parallel-and or parallel-or to generate conditions for
   /// conditional branches.
   bool FlattenParallelAndOr(BasicBlock *BB, IRBuilder<> &Builder);
-
-  /// If \param BB is the merge block of an if-region, attempt to merge
+  /// \brief If \param BB is the merge block of an if-region, attempt to merge
   /// the if-region with an adjacent if-region upstream if two if-regions
   /// contain identical instructions.
   bool MergeIfRegion(BasicBlock *BB, IRBuilder<> &Builder);
-
-  /// Compare a pair of blocks: \p Block1 and \p Block2, which
+  /// \brief Compare a pair of blocks: \p Block1 and \p Block2, which
   /// are from two if-regions whose entry blocks are \p Head1 and \p
   /// Head2.  \returns true if \p Block1 and \p Block2 contain identical
   /// instructions, and have no memory reference alias with \p Head2.
@@ -54,11 +43,9 @@ class FlattenCFGOpt {
 
 public:
   FlattenCFGOpt(AliasAnalysis *AA) : AA(AA) {}
-
   bool run(BasicBlock *BB);
 };
-
-} // end anonymous namespace
+}
 
 /// If \param [in] BB has more than one predecessor that is a conditional
 /// branch, attempt to use parallel and/or for the branch condition. \returns
@@ -67,7 +54,7 @@ public:
 /// Before:
 ///   ......
 ///   %cmp10 = fcmp une float %tmp1, %tmp2
-///   br i1 %cmp10, label %if.then, label %lor.rhs
+///   br i1 %cmp1, label %if.then, label %lor.rhs
 ///
 /// lor.rhs:
 ///   ......
@@ -133,6 +120,7 @@ public:
 ///  In Case 1, \param BB (BB4) has an unconditional branch (BB3) as
 ///  its predecessor.  In Case 2, \param BB (BB3) only has conditional branches
 ///  as its predecessors.
+///
 bool FlattenCFGOpt::FlattenParallelAndOr(BasicBlock *BB, IRBuilder<> &Builder) {
   PHINode *PHI = dyn_cast<PHINode>(BB->begin());
   if (PHI)
@@ -231,7 +219,7 @@ bool FlattenCFGOpt::FlattenParallelAndOr(BasicBlock *BB, IRBuilder<> &Builder) {
   if (!FirstCondBlock || !LastCondBlock || (FirstCondBlock == LastCondBlock))
     return false;
 
-  Instruction *TBB = LastCondBlock->getTerminator();
+  TerminatorInst *TBB = LastCondBlock->getTerminator();
   BasicBlock *PS1 = TBB->getSuccessor(0);
   BasicBlock *PS2 = TBB->getSuccessor(1);
   BranchInst *PBI1 = dyn_cast<BranchInst>(PS1->getTerminator());
@@ -249,10 +237,10 @@ bool FlattenCFGOpt::FlattenParallelAndOr(BasicBlock *BB, IRBuilder<> &Builder) {
     // Do branch inversion.
     BasicBlock *CurrBlock = LastCondBlock;
     bool EverChanged = false;
-    for (; CurrBlock != FirstCondBlock;
-         CurrBlock = CurrBlock->getSinglePredecessor()) {
-      auto *BI = cast<BranchInst>(CurrBlock->getTerminator());
-      auto *CI = dyn_cast<CmpInst>(BI->getCondition());
+    for (;CurrBlock != FirstCondBlock;
+          CurrBlock = CurrBlock->getSinglePredecessor()) {
+      BranchInst *BI = dyn_cast<BranchInst>(CurrBlock->getTerminator());
+      CmpInst *CI = dyn_cast<CmpInst>(BI->getCondition());
       if (!CI)
         continue;
 
@@ -278,7 +266,7 @@ bool FlattenCFGOpt::FlattenParallelAndOr(BasicBlock *BB, IRBuilder<> &Builder) {
 
   // Do the transformation.
   BasicBlock *CB;
-  BranchInst *PBI = cast<BranchInst>(FirstCondBlock->getTerminator());
+  BranchInst *PBI = dyn_cast<BranchInst>(FirstCondBlock->getTerminator());
   bool Iteration = true;
   IRBuilder<>::InsertPointGuard Guard(Builder);
   Value *PC = PBI->getCondition();
@@ -311,7 +299,7 @@ bool FlattenCFGOpt::FlattenParallelAndOr(BasicBlock *BB, IRBuilder<> &Builder) {
     new UnreachableInst(CB->getContext(), CB);
   } while (Iteration);
 
-  LLVM_DEBUG(dbgs() << "Use parallel and/or in:\n" << *FirstCondBlock);
+  DEBUG(dbgs() << "Use parallel and/or in:\n" << *FirstCondBlock);
   return true;
 }
 
@@ -321,10 +309,11 @@ bool FlattenCFGOpt::FlattenParallelAndOr(BasicBlock *BB, IRBuilder<> &Builder) {
 //  in the 2nd if-region to compare.  \returns true if \param Block1 and \param
 /// Block2 have identical instructions and do not have memory reference alias
 /// with \param Head2.
+///
 bool FlattenCFGOpt::CompareIfRegionBlock(BasicBlock *Head1, BasicBlock *Head2,
                                          BasicBlock *Block1,
                                          BasicBlock *Block2) {
-  Instruction *PTI2 = Head2->getTerminator();
+  TerminatorInst *PTI2 = Head2->getTerminator();
   Instruction *PBI2 = &Head2->front();
 
   bool eq1 = (Block1 == Head1);
@@ -341,7 +330,7 @@ bool FlattenCFGOpt::CompareIfRegionBlock(BasicBlock *Head1, BasicBlock *Head2,
   BasicBlock::iterator iter2 = Block2->begin();
   BasicBlock::iterator end2 = Block2->getTerminator()->getIterator();
 
-  while (true) {
+  while (1) {
     if (iter1 == end1) {
       if (iter2 != end2)
         return false;
@@ -395,6 +384,7 @@ bool FlattenCFGOpt::CompareIfRegionBlock(BasicBlock *Head1, BasicBlock *Head2,
 /// To:
 /// if (a || b)
 ///   statement;
+///
 bool FlattenCFGOpt::MergeIfRegion(BasicBlock *BB, IRBuilder<> &Builder) {
   BasicBlock *IfTrue2, *IfFalse2;
   Value *IfCond2 = GetIfCondition(BB, IfTrue2, IfFalse2);
@@ -420,7 +410,7 @@ bool FlattenCFGOpt::MergeIfRegion(BasicBlock *BB, IRBuilder<> &Builder) {
   if ((IfTrue2 != SecondEntryBlock) && (IfFalse2 != SecondEntryBlock))
     return false;
 
-  Instruction *PTI2 = SecondEntryBlock->getTerminator();
+  TerminatorInst *PTI2 = SecondEntryBlock->getTerminator();
   Instruction *PBI2 = &SecondEntryBlock->front();
 
   if (!CompareIfRegionBlock(FirstEntryBlock, SecondEntryBlock, IfTrue1,
@@ -444,7 +434,7 @@ bool FlattenCFGOpt::MergeIfRegion(BasicBlock *BB, IRBuilder<> &Builder) {
   FirstEntryBlock->getInstList().pop_back();
   FirstEntryBlock->getInstList()
       .splice(FirstEntryBlock->end(), SecondEntryBlock->getInstList());
-  BranchInst *PBI = cast<BranchInst>(FirstEntryBlock->getTerminator());
+  BranchInst *PBI = dyn_cast<BranchInst>(FirstEntryBlock->getTerminator());
   Value *CC = PBI->getCondition();
   BasicBlock *SaveInsertBB = Builder.GetInsertBlock();
   BasicBlock::iterator SaveInsertPt = Builder.GetInsertPoint();
@@ -452,16 +442,6 @@ bool FlattenCFGOpt::MergeIfRegion(BasicBlock *BB, IRBuilder<> &Builder) {
   Value *NC = Builder.CreateOr(CInst1, CC);
   PBI->replaceUsesOfWith(CC, NC);
   Builder.SetInsertPoint(SaveInsertBB, SaveInsertPt);
-
-  // Handle PHI node to replace its predecessors to FirstEntryBlock.
-  for (BasicBlock *Succ : successors(PBI)) {
-    for (PHINode &Phi : Succ->phis()) {
-      for (unsigned i = 0, e = Phi.getNumIncomingValues(); i != e; ++i) {
-        if (Phi.getIncomingBlock(i) == SecondEntryBlock)
-          Phi.setIncomingBlock(i, FirstEntryBlock);
-      }
-    }
-  }
 
   // Remove IfTrue1
   if (IfTrue1 != FirstEntryBlock) {
@@ -478,7 +458,7 @@ bool FlattenCFGOpt::MergeIfRegion(BasicBlock *BB, IRBuilder<> &Builder) {
   // Remove \param SecondEntryBlock
   SecondEntryBlock->dropAllReferences();
   SecondEntryBlock->eraseFromParent();
-  LLVM_DEBUG(dbgs() << "If conditions merged into:\n" << *FirstEntryBlock);
+  DEBUG(dbgs() << "If conditions merged into:\n" << *FirstEntryBlock);
   return true;
 }
 
@@ -495,7 +475,8 @@ bool FlattenCFGOpt::run(BasicBlock *BB) {
 
 /// FlattenCFG - This function is used to flatten a CFG.  For
 /// example, it uses parallel-and and parallel-or mode to collapse
-/// if-conditions and merge if-regions with identical statements.
+//  if-conditions and merge if-regions with identical statements.
+///
 bool llvm::FlattenCFG(BasicBlock *BB, AliasAnalysis *AA) {
   return FlattenCFGOpt(AA).run(BB);
 }

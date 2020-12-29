@@ -1,17 +1,22 @@
 //===-- BreakpointID.cpp ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
 #include <stdio.h>
 
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Breakpoint/Breakpoint.h"
 #include "lldb/Breakpoint/BreakpointID.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/Stream.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -24,9 +29,10 @@ BreakpointID::~BreakpointID() = default;
 static llvm::StringRef g_range_specifiers[] = {"-", "to", "To", "TO"};
 
 // Tells whether or not STR is valid to use between two strings representing
-// breakpoint IDs, to indicate a range of breakpoint IDs.  This is broken out
-// into a separate function so that we can easily change or add to the format
-// for specifying ID ranges at a later date.
+// breakpoint IDs, to
+// indicate a range of breakpoint IDs.  This is broken out into a separate
+// function so that we can
+// easily change or add to the format for specifying ID ranges at a later date.
 
 bool BreakpointID::IsRangeIdentifier(llvm::StringRef str) {
   for (auto spec : g_range_specifiers) {
@@ -92,27 +98,18 @@ BreakpointID::ParseCanonicalReference(llvm::StringRef input) {
   return BreakpointID(bp_id, loc_id);
 }
 
-bool BreakpointID::StringIsBreakpointName(llvm::StringRef str, Status &error) {
+bool BreakpointID::StringIsBreakpointName(llvm::StringRef str, Error &error) {
   error.Clear();
   if (str.empty())
-  {
-    error.SetErrorStringWithFormat("Empty breakpoint names are not allowed");
     return false;
-  }
 
   // First character must be a letter or _
   if (!isalpha(str[0]) && str[0] != '_')
-  {
-    error.SetErrorStringWithFormat("Breakpoint names must start with a "
-                                   "character or underscore: %s",
-                                   str.str().c_str());
     return false;
-  }
 
   // Cannot contain ., -, or space.
   if (str.find_first_of(".- ") != llvm::StringRef::npos) {
-    error.SetErrorStringWithFormat("Breakpoint names cannot contain "
-                                   "'.' or '-': \"%s\"",
+    error.SetErrorStringWithFormat("invalid breakpoint name: \"%s\"",
                                    str.str().c_str());
     return false;
   }

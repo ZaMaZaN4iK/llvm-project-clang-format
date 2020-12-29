@@ -1,8 +1,9 @@
 //===--- StaticObjectExceptionCheck.cpp - clang-tidy-----------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,15 +19,14 @@ namespace tidy {
 namespace cert {
 
 void StaticObjectExceptionCheck::registerMatchers(MatchFinder *Finder) {
-  if ((!getLangOpts().CPlusPlus) || (!getLangOpts().CXXExceptions))
+  if (!getLangOpts().CPlusPlus)
     return;
 
   // Match any static or thread_local variable declaration that has an
   // initializer that can throw.
   Finder->addMatcher(
       varDecl(anyOf(hasThreadStorageDuration(), hasStaticStorageDuration()),
-              unless(anyOf(isConstexpr(), hasType(cxxRecordDecl(isLambda())),
-                           hasAncestor(functionDecl()))),
+              unless(hasAncestor(functionDecl())),
               anyOf(hasDescendant(cxxConstructExpr(hasDeclaration(
                         cxxConstructorDecl(unless(isNoThrow())).bind("func")))),
                     hasDescendant(cxxNewExpr(hasDeclaration(

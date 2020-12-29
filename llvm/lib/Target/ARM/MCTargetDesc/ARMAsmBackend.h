@@ -1,8 +1,9 @@
 //===-- ARMAsmBackend.h - ARM Assembler Backend -----------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,46 +19,42 @@
 namespace llvm {
 
 class ARMAsmBackend : public MCAsmBackend {
-  // The STI from the target triple the MCAsmBackend was instantiated with
-  // note that MCFragments may have a different local STI that should be
-  // used in preference.
-  const MCSubtargetInfo &STI;
+  const MCSubtargetInfo *STI;
   bool isThumbMode;    // Currently emitting Thumb code.
+  bool IsLittleEndian; // Big or little endian.
 public:
-  ARMAsmBackend(const Target &T, const MCSubtargetInfo &STI,
-                support::endianness Endian)
-      : MCAsmBackend(Endian), STI(STI),
-        isThumbMode(STI.getTargetTriple().isThumb()) {}
+  ARMAsmBackend(const Target &T, const Triple &TT, bool IsLittle)
+      : MCAsmBackend(), STI(ARM_MC::createARMMCSubtargetInfo(TT, "", "")),
+        isThumbMode(TT.getArchName().startswith("thumb")),
+        IsLittleEndian(IsLittle) {}
+
+  ~ARMAsmBackend() override { delete STI; }
 
   unsigned getNumFixupKinds() const override {
     return ARM::NumTargetFixupKinds;
   }
 
-  // FIXME: this should be calculated per fragment as the STI may be
-  // different.
-  bool hasNOP() const { return STI.getFeatureBits()[ARM::HasV6T2Ops]; }
-
-  Optional<MCFixupKind> getFixupKind(StringRef Name) const override;
+  bool hasNOP() const { return STI->getFeatureBits()[ARM::HasV6T2Ops]; }
 
   const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override;
 
-  bool shouldForceRelocation(const MCAssembler &Asm, const MCFixup &Fixup,
-                             const MCValue &Target) override;
+  /// processFixupValue - Target hook to process the literal value of a fixup
+  /// if necessary.
+  void processFixupValue(const MCAssembler &Asm, const MCAsmLayout &Layout,
+                         const MCFixup &Fixup, const MCFragment *DF,
+                         const MCValue &Target, uint64_t &Value,
+                         bool &IsResolved) override;
 
-  unsigned adjustFixupValue(const MCAssembler &Asm, const MCFixup &Fixup,
-                            const MCValue &Target, uint64_t Value,
-                            bool IsResolved, MCContext &Ctx,
-                            const MCSubtargetInfo *STI) const;
+  unsigned adjustFixupValue(const MCFixup &Fixup, uint64_t Value, bool IsPCRel,
+                            MCContext *Ctx, bool IsLittleEndian,
+                            bool IsResolved) const;
 
-  void applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
-                  const MCValue &Target, MutableArrayRef<char> Data,
-                  uint64_t Value, bool IsResolved,
-                  const MCSubtargetInfo *STI) const override;
+  void applyFixup(const MCFixup &Fixup, char *Data, unsigned DataSize,
+                  uint64_t Value, bool IsPCRel) const override;
 
-  unsigned getRelaxedOpcode(unsigned Op, const MCSubtargetInfo &STI) const;
+  unsigned getRelaxedOpcode(unsigned Op) const;
 
-  bool mayNeedRelaxation(const MCInst &Inst,
-                         const MCSubtargetInfo &STI) const override;
+  bool mayNeedRelaxation(const MCInst &Inst) const override;
 
   const char *reasonForFixupRelaxation(const MCFixup &Fixup,
                                        uint64_t Value) const;
@@ -69,13 +66,14 @@ public:
   void relaxInstruction(const MCInst &Inst, const MCSubtargetInfo &STI,
                         MCInst &Res) const override;
 
-  bool writeNopData(raw_ostream &OS, uint64_t Count) const override;
+  bool writeNopData(uint64_t Count, MCObjectWriter *OW) const override;
 
   void handleAssemblerFlag(MCAssemblerFlag Flag) override;
 
   unsigned getPointerSize() const { return 4; }
   bool isThumb() const { return isThumbMode; }
   void setIsThumb(bool it) { isThumbMode = it; }
+  bool isLittle() const { return IsLittleEndian; }
 };
 } // end namespace llvm
 

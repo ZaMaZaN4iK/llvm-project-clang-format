@@ -1,8 +1,9 @@
 //=====- CFLSummary.h - Abstract stratified sets implementation. --------=====//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -12,7 +13,7 @@
 /// Summary-based analysis, also known as bottom-up analysis, is a style of
 /// interprocedrual static analysis that tries to analyze the callees before the
 /// callers get analyzed. The key idea of summary-based analysis is to first
-/// process each function independently, outline its behavior in a condensed
+/// process each function indepedently, outline its behavior in a condensed
 /// summary, and then instantiate the summary at the callsite when the said
 /// function is called elsewhere. This is often in contrast to another style
 /// called top-down analysis, in which callers are always analyzed first before
@@ -37,7 +38,7 @@
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/CallSite.h"
 #include <bitset>
 
 namespace llvm {
@@ -195,13 +196,12 @@ struct AliasSummary {
   SmallVector<ExternalAttribute, 8> RetParamAttributes;
 };
 
-/// This is the result of instantiating InterfaceValue at a particular call
+/// This is the result of instantiating InterfaceValue at a particular callsite
 struct InstantiatedValue {
   Value *Val;
   unsigned DerefLevel;
 };
-Optional<InstantiatedValue> instantiateInterfaceValue(InterfaceValue IValue,
-                                                      CallBase &Call);
+Optional<InstantiatedValue> instantiateInterfaceValue(InterfaceValue, CallSite);
 
 inline bool operator==(InstantiatedValue LHS, InstantiatedValue RHS) {
   return LHS.Val == RHS.Val && LHS.DerefLevel == RHS.DerefLevel;
@@ -229,8 +229,8 @@ struct InstantiatedRelation {
   InstantiatedValue From, To;
   int64_t Offset;
 };
-Optional<InstantiatedRelation>
-instantiateExternalRelation(ExternalRelation ERelation, CallBase &Call);
+Optional<InstantiatedRelation> instantiateExternalRelation(ExternalRelation,
+                                                           CallSite);
 
 /// This is the result of instantiating ExternalAttribute at a particular
 /// callsite
@@ -238,8 +238,8 @@ struct InstantiatedAttr {
   InstantiatedValue IValue;
   AliasAttrs Attr;
 };
-Optional<InstantiatedAttr> instantiateExternalAttribute(ExternalAttribute EAttr,
-                                                        CallBase &Call);
+Optional<InstantiatedAttr> instantiateExternalAttribute(ExternalAttribute,
+                                                        CallSite);
 }
 
 template <> struct DenseMapInfo<cflaa::InstantiatedValue> {

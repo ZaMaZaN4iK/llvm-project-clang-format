@@ -1,8 +1,9 @@
 //===-------- IncludeInserter.cpp - clang-tidy ----------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,8 +25,7 @@ public:
                           bool IsAngled, CharSourceRange FileNameRange,
                           const FileEntry * /*IncludedFile*/,
                           StringRef /*SearchPath*/, StringRef /*RelativePath*/,
-                          const Module * /*ImportedModule*/,
-                          SrcMgr::CharacteristicKind /*FileType*/) override {
+                          const Module * /*ImportedModule*/) override {
     Inserter->AddInclude(FileNameRef, IsAngled, HashLocation,
                          IncludeToken.getEndLoc());
   }
@@ -42,7 +42,7 @@ IncludeInserter::IncludeInserter(const SourceManager &SourceMgr,
 IncludeInserter::~IncludeInserter() {}
 
 std::unique_ptr<PPCallbacks> IncludeInserter::CreatePPCallbacks() {
-  return std::make_unique<IncludeInserterCallback>(this);
+  return llvm::make_unique<IncludeInserterCallback>(this);
 }
 
 llvm::Optional<FixItHint>
@@ -58,7 +58,7 @@ IncludeInserter::CreateIncludeInsertion(FileID FileID, StringRef Header,
     // file.
     IncludeSorterByFile.insert(std::make_pair(
         FileID,
-        std::make_unique<IncludeSorter>(
+        llvm::make_unique<IncludeSorter>(
             &SourceMgr, &LangOpts, FileID,
             SourceMgr.getFilename(SourceMgr.getLocForStartOfFile(FileID)),
             Style)));
@@ -72,7 +72,7 @@ void IncludeInserter::AddInclude(StringRef FileName, bool IsAngled,
   FileID FileID = SourceMgr.getFileID(HashLocation);
   if (IncludeSorterByFile.find(FileID) == IncludeSorterByFile.end()) {
     IncludeSorterByFile.insert(std::make_pair(
-        FileID, std::make_unique<IncludeSorter>(
+        FileID, llvm::make_unique<IncludeSorter>(
                     &SourceMgr, &LangOpts, FileID,
                     SourceMgr.getFilename(HashLocation), Style)));
   }

@@ -1,8 +1,9 @@
 //=== CXXSelfAssignmentChecker.cpp -----------------------------*- C++ -*--===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,7 +18,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 
@@ -47,35 +48,15 @@ void CXXSelfAssignmentChecker::checkBeginFunction(CheckerContext &C) const {
   auto &State = C.getState();
   auto &SVB = C.getSValBuilder();
   auto ThisVal =
-      State->getSVal(SVB.getCXXThis(MD, LCtx->getStackFrame()));
+      State->getSVal(SVB.getCXXThis(MD, LCtx->getCurrentStackFrame()));
   auto Param = SVB.makeLoc(State->getRegion(MD->getParamDecl(0), LCtx));
   auto ParamVal = State->getSVal(Param);
-
-  ProgramStateRef SelfAssignState = State->bindLoc(Param, ThisVal, LCtx);
-  const NoteTag *SelfAssignTag =
-    C.getNoteTag([MD](BugReport &BR) -> std::string {
-        SmallString<256> Msg;
-        llvm::raw_svector_ostream Out(Msg);
-        Out << "Assuming " << MD->getParamDecl(0)->getName() << " == *this";
-        return Out.str();
-      });
-  C.addTransition(SelfAssignState, SelfAssignTag);
-
-  ProgramStateRef NonSelfAssignState = State->bindLoc(Param, ParamVal, LCtx);
-  const NoteTag *NonSelfAssignTag =
-    C.getNoteTag([MD](BugReport &BR) -> std::string {
-        SmallString<256> Msg;
-        llvm::raw_svector_ostream Out(Msg);
-        Out << "Assuming " << MD->getParamDecl(0)->getName() << " != *this";
-        return Out.str();
-      });
-  C.addTransition(NonSelfAssignState, NonSelfAssignTag);
+  ProgramStateRef SelfAssignState = State->bindLoc(Param, ThisVal);
+  C.addTransition(SelfAssignState);
+  ProgramStateRef NonSelfAssignState = State->bindLoc(Param, ParamVal);
+  C.addTransition(NonSelfAssignState);
 }
 
 void ento::registerCXXSelfAssignmentChecker(CheckerManager &Mgr) {
   Mgr.registerChecker<CXXSelfAssignmentChecker>();
-}
-
-bool ento::shouldRegisterCXXSelfAssignmentChecker(const LangOptions &LO) {
-  return true;
 }

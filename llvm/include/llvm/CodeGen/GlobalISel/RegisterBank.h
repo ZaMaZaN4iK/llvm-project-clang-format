@@ -1,8 +1,9 @@
 //==-- llvm/CodeGen/GlobalISel/RegisterBank.h - Register Bank ----*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -41,7 +42,7 @@ private:
 
 public:
   RegisterBank(unsigned ID, const char *Name, unsigned Size,
-               const uint32_t *CoveredClasses, unsigned NumRegClasses);
+               const uint32_t *ContainedRegClasses);
 
   /// Get the identifier of this register bank.
   unsigned getID() const { return ID; }

@@ -4,5 +4,4 @@
 ; CHECK: ---
 ; CHECK-NEXT: GlobalValueMap:
 ; CHECK-NEXT: TypeIdMap:
-; CHECK-NEXT: WithGlobalValueDeadStripping: false
 ; CHECK-NEXT: ...

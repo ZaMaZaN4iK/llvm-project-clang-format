@@ -1,24 +1,22 @@
 //===-- Platform.h ----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef lldb_Platform_h_
 #define lldb_Platform_h_
 
-#include "lldb/Host/Config.h"
-
 #if defined(_WIN32)
 
+#include "lldb/Host/HostGetOpt.h"
 #include <io.h>
 #if defined(_MSC_VER)
+#include <eh.h>
 #include <signal.h>
-#endif
-#if HAVE_SYS_TYPES_H
-#include <sys/types.h>
 #endif
 #include "lldb/Host/windows/windows.h"
 #include <inttypes.h>
@@ -64,6 +62,7 @@ struct timeval {
   long tv_usec;
 };
 typedef long pid_t;
+#define snprintf _snprintf
 #define PATH_MAX MAX_PATH
 #endif
 
@@ -76,6 +75,7 @@ extern int tcsetattr(int fd, int optional_actions,
 extern int tcgetattr(int fildes, struct termios *termios_p);
 
 #else
+#include "lldb/Host/HostGetOpt.h"
 #include <inttypes.h>
 
 #include <libgen.h>

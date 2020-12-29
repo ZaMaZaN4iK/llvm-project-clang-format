@@ -1,8 +1,9 @@
 //===-- llvm/Analysis/Lint.h - LLVM IR Lint ---------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -25,12 +26,12 @@ class FunctionPass;
 class Module;
 class Function;
 
-/// Create a lint pass.
+/// @brief Create a lint pass.
 ///
 /// Check a module or function.
 FunctionPass *createLintPass();
 
-/// Check a module.
+/// @brief Check a module.
 ///
 /// This should only be used for debugging, because it plays games with
 /// PassManagers and stuff.

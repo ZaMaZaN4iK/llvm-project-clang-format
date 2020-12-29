@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,9 +16,9 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "pointer_comparison_test_helper.h"
+#include "pointer_comparison_test_helper.hpp"
 
-int main(int, char**)
+int main()
 {
     typedef std::greater<int> F;
     const F f = F();
@@ -49,6 +50,4 @@ int main(int, char**)
     constexpr bool bar = std::greater<> () (36.0, 36);
     static_assert ( !bar, "" );
 #endif
-
-  return 0;
 }

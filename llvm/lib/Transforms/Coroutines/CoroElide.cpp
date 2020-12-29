@@ -1,8 +1,9 @@
 //===- CoroElide.cpp - Coroutine Frame Allocation Elision Pass ------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 // This pass replaces dynamic allocation of coroutine frame with alloca and
@@ -13,9 +14,7 @@
 #include "CoroInternal.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/InstructionSimplify.h"
-#include "llvm/IR/Dominators.h"
 #include "llvm/IR/InstIterator.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/ErrorHandling.h"
 
@@ -24,7 +23,7 @@ using namespace llvm;
 #define DEBUG_TYPE "coro-elide"
 
 namespace {
-// Created on demand if the coro-elide pass has work to do.
+// Created on demand if CoroElide pass has work to do.
 struct Lowerer : coro::LowererBase {
   SmallVector<CoroIdInst *, 4> CoroIds;
   SmallVector<CoroBeginInst *, 1> CoroBegins;
@@ -36,8 +35,8 @@ struct Lowerer : coro::LowererBase {
   Lowerer(Module &M) : LowererBase(M) {}
 
   void elideHeapAllocations(Function *F, Type *FrameTy, AAResults &AA);
-  bool shouldElide(Function *F, DominatorTree &DT) const;
-  bool processCoroId(CoroIdInst *, AAResults &AA, DominatorTree &DT);
+  bool shouldElide() const;
+  bool processCoroId(CoroIdInst *, AAResults &AA);
 };
 } // end anonymous namespace
 
@@ -78,6 +77,7 @@ static bool operandReferences(CallInst *CI, AllocaInst *Frame, AAResults &AA) {
 // call implies that the function does not references anything on the stack.
 static void removeTailCallAttribute(AllocaInst *Frame, AAResults &AA) {
   Function &F = *Frame->getFunction();
+  MemoryLocation Mem(Frame);
   for (Instruction &I : instructions(F))
     if (auto *Call = dyn_cast<CallInst>(&I))
       if (Call->isTailCall() && operandReferences(Call, Frame, AA)) {
@@ -92,7 +92,7 @@ static void removeTailCallAttribute(AllocaInst *Frame, AAResults &AA) {
 
 // Given a resume function @f.resume(%f.frame* %frame), returns %f.frame type.
 static Type *getFrameType(Function *Resume) {
-  auto *ArgType = Resume->arg_begin()->getType();
+  auto *ArgType = Resume->getArgumentList().front().getType();
   return cast<PointerType>(ArgType)->getElementType();
 }
 
@@ -127,8 +127,7 @@ void Lowerer::elideHeapAllocations(Function *F, Type *FrameTy, AAResults &AA) {
   // is spilled into the coroutine frame and recreate the alignment information
   // here. Possibly we will need to do a mini SROA here and break the coroutine
   // frame into individual AllocaInst recreating the original alignment.
-  const DataLayout &DL = F->getParent()->getDataLayout();
-  auto *Frame = new AllocaInst(FrameTy, DL.getAllocaAddrSpace(), "", InsertPt);
+  auto *Frame = new AllocaInst(FrameTy, "", InsertPt);
   auto *FrameVoidPtr =
       new BitCastInst(Frame, Type::getInt8PtrTy(C), "vFrame", InsertPt);
 
@@ -142,54 +141,33 @@ void Lowerer::elideHeapAllocations(Function *F, Type *FrameTy, AAResults &AA) {
   removeTailCallAttribute(Frame, AA);
 }
 
-bool Lowerer::shouldElide(Function *F, DominatorTree &DT) const {
+bool Lowerer::shouldElide() const {
   // If no CoroAllocs, we cannot suppress allocation, so elision is not
   // possible.
   if (CoroAllocs.empty())
     return false;
 
   // Check that for every coro.begin there is a coro.destroy directly
-  // referencing the SSA value of that coro.begin along a non-exceptional path.
-  // If the value escaped, then coro.destroy would have been referencing a
-  // memory location storing that value and not the virtual register.
+  // referencing the SSA value of that coro.begin. If the value escaped, then
+  // coro.destroy would have been referencing a memory location storing that
+  // value and not the virtual register.
 
-  // First gather all of the non-exceptional terminators for the function.
-  SmallPtrSet<Instruction *, 8> Terminators;
-  for (BasicBlock &B : *F) {
-    auto *TI = B.getTerminator();
-    if (TI->getNumSuccessors() == 0 && !TI->isExceptionalTerminator() &&
-        !isa<UnreachableInst>(TI))
-      Terminators.insert(TI);
-  }
-
-  // Filter out the coro.destroy that lie along exceptional paths.
-  SmallPtrSet<CoroSubFnInst *, 4> DAs;
-  for (CoroSubFnInst *DA : DestroyAddr) {
-    for (Instruction *TI : Terminators) {
-      if (DT.dominates(DA, TI)) {
-        DAs.insert(DA);
-        break;
-      }
-    }
-  }
-
-  // Find all the coro.begin referenced by coro.destroy along happy paths.
   SmallPtrSet<CoroBeginInst *, 8> ReferencedCoroBegins;
-  for (CoroSubFnInst *DA : DAs) {
+
+  for (CoroSubFnInst *DA : DestroyAddr) {
     if (auto *CB = dyn_cast<CoroBeginInst>(DA->getFrame()))
       ReferencedCoroBegins.insert(CB);
     else
       return false;
   }
 
-  // If size of the set is the same as total number of coro.begin, that means we
-  // found a coro.free or coro.destroy referencing each coro.begin, so we can
+  // If size of the set is the same as total number of CoroBegins, means we
+  // found a coro.free or coro.destroy mentioning a coro.begin and we can
   // perform heap elision.
   return ReferencedCoroBegins.size() == CoroBegins.size();
 }
 
-bool Lowerer::processCoroId(CoroIdInst *CoroId, AAResults &AA,
-                            DominatorTree &DT) {
+bool Lowerer::processCoroId(CoroIdInst *CoroId, AAResults &AA) {
   CoroBegins.clear();
   CoroAllocs.clear();
   CoroFrees.clear();
@@ -235,7 +213,7 @@ bool Lowerer::processCoroId(CoroIdInst *CoroId, AAResults &AA,
 
   replaceWithConstant(ResumeAddrConstant, ResumeAddr);
 
-  bool ShouldElide = shouldElide(CoroId->getFunction(), DT);
+  bool ShouldElide = shouldElide();
 
   auto *DestroyAddrConstant = ConstantExpr::getExtractValue(
       Resumers,
@@ -277,17 +255,15 @@ static bool replaceDevirtTrigger(Function &F) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct CoroElideLegacy : FunctionPass {
+struct CoroElide : FunctionPass {
   static char ID;
-  CoroElideLegacy() : FunctionPass(ID) {
-    initializeCoroElideLegacyPass(*PassRegistry::getPassRegistry());
-  }
+  CoroElide() : FunctionPass(ID) {}
 
   std::unique_ptr<Lowerer> L;
 
   bool doInitialization(Module &M) override {
     if (coro::declaresIntrinsics(M, {"llvm.coro.id"}))
-      L = std::make_unique<Lowerer>(M);
+      L = llvm::make_unique<Lowerer>(M);
     return false;
   }
 
@@ -315,30 +291,27 @@ struct CoroElideLegacy : FunctionPass {
       return Changed;
 
     AAResults &AA = getAnalysis<AAResultsWrapperPass>().getAAResults();
-    DominatorTree &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
 
     for (auto *CII : L->CoroIds)
-      Changed |= L->processCoroId(CII, AA, DT);
+      Changed |= L->processCoroId(CII, AA);
 
     return Changed;
   }
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<AAResultsWrapperPass>();
-    AU.addRequired<DominatorTreeWrapperPass>();
   }
-  StringRef getPassName() const override { return "Coroutine Elision"; }
 };
 }
 
-char CoroElideLegacy::ID = 0;
+char CoroElide::ID = 0;
 INITIALIZE_PASS_BEGIN(
-    CoroElideLegacy, "coro-elide",
+    CoroElide, "coro-elide",
     "Coroutine frame allocation elision and indirect calls replacement", false,
     false)
 INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
 INITIALIZE_PASS_END(
-    CoroElideLegacy, "coro-elide",
+    CoroElide, "coro-elide",
     "Coroutine frame allocation elision and indirect calls replacement", false,
     false)
 
-Pass *llvm::createCoroElideLegacyPass() { return new CoroElideLegacy(); }
+Pass *llvm::createCoroElidePass() { return new CoroElide(); }

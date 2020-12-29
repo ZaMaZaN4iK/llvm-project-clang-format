@@ -1,8 +1,9 @@
 //===- SourceMgr.h - Manager for Source Buffers & Diagnostics ---*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,25 +17,18 @@
 #define LLVM_SUPPORT_SOURCEMGR_H
 
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/None.h"
-#include "llvm/ADT/PointerUnion.h"
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SMLoc.h"
-#include <algorithm>
-#include <cassert>
-#include <memory>
 #include <string>
-#include <utility>
-#include <vector>
 
 namespace llvm {
-
-class raw_ostream;
-class SMDiagnostic;
-class SMFixIt;
+  class SourceMgr;
+  class SMDiagnostic;
+  class SMFixIt;
+  class Twine;
+  class raw_ostream;
 
 /// This owns the files read by a parser, handles include stacks,
 /// and handles diagnostic wrangling.
@@ -43,52 +37,20 @@ public:
   enum DiagKind {
     DK_Error,
     DK_Warning,
-    DK_Remark,
-    DK_Note,
+    DK_Note
   };
 
   /// Clients that want to handle their own diagnostics in a custom way can
   /// register a function pointer+context as a diagnostic handler.
   /// It gets called each time PrintMessage is invoked.
-  using DiagHandlerTy = void (*)(const SMDiagnostic &, void *Context);
-
+  typedef void (*DiagHandlerTy)(const SMDiagnostic &, void *Context);
 private:
   struct SrcBuffer {
     /// The memory buffer for the file.
     std::unique_ptr<MemoryBuffer> Buffer;
 
-    /// Helper type for OffsetCache below: since we're storing many offsets
-    /// into relatively small files (often smaller than 2^8 or 2^16 bytes),
-    /// we select the offset vector element type dynamically based on the
-    /// size of Buffer.
-    using VariableSizeOffsets = PointerUnion<std::vector<uint8_t> *,
-                                             std::vector<uint16_t> *,
-                                             std::vector<uint32_t> *,
-                                             std::vector<uint64_t> *>;
-
-    /// Vector of offsets into Buffer at which there are line-endings
-    /// (lazily populated). Once populated, the '\n' that marks the end of
-    /// line number N from [1..] is at Buffer[OffsetCache[N-1]]. Since
-    /// these offsets are in sorted (ascending) order, they can be
-    /// binary-searched for the first one after any given offset (eg. an
-    /// offset corresponding to a particular SMLoc).
-    mutable VariableSizeOffsets OffsetCache;
-
-    /// Populate \c OffsetCache and look up a given \p Ptr in it, assuming
-    /// it points somewhere into \c Buffer. The static type parameter \p T
-    /// must be an unsigned integer type from uint{8,16,32,64}_t large
-    /// enough to store offsets inside \c Buffer.
-    template<typename T>
-    unsigned getLineNumber(const char *Ptr) const;
-
     /// This is the location of the parent include, or null if at the top level.
     SMLoc IncludeLoc;
-
-    SrcBuffer() = default;
-    SrcBuffer(SrcBuffer &&);
-    SrcBuffer(const SrcBuffer &) = delete;
-    SrcBuffer &operator=(const SrcBuffer &) = delete;
-    ~SrcBuffer();
   };
 
   /// This is all of the buffers that we are reading from.
@@ -97,18 +59,21 @@ private:
   // This is the list of directories we should search for include files in.
   std::vector<std::string> IncludeDirectories;
 
-  DiagHandlerTy DiagHandler = nullptr;
-  void *DiagContext = nullptr;
+  /// This is a cache for line number queries, its implementation is really
+  /// private to SourceMgr.cpp.
+  mutable void *LineNoCache;
+
+  DiagHandlerTy DiagHandler;
+  void *DiagContext;
 
   bool isValidBufferID(unsigned i) const { return i && i <= Buffers.size(); }
 
+  SourceMgr(const SourceMgr&) = delete;
+  void operator=(const SourceMgr&) = delete;
 public:
-  SourceMgr() = default;
-  SourceMgr(const SourceMgr &) = delete;
-  SourceMgr &operator=(const SourceMgr &) = delete;
-  SourceMgr(SourceMgr &&) = default;
-  SourceMgr &operator=(SourceMgr &&) = default;
-  ~SourceMgr() = default;
+  SourceMgr()
+    : LineNoCache(nullptr), DiagHandler(nullptr), DiagContext(nullptr) {}
+  ~SourceMgr();
 
   void setIncludeDirs(const std::vector<std::string> &Dirs) {
     IncludeDirectories = Dirs;
@@ -225,6 +190,7 @@ public:
   void PrintIncludeStack(SMLoc IncludeLoc, raw_ostream &OS) const;
 };
 
+
 /// Represents a single fixit, a replacement of one range of text with another.
 class SMFixIt {
   SMRange Range;
@@ -256,31 +222,33 @@ public:
   }
 };
 
+
 /// Instances of this class encapsulate one diagnostic report, allowing
 /// printing to a raw_ostream as a caret diagnostic.
 class SMDiagnostic {
-  const SourceMgr *SM = nullptr;
+  const SourceMgr *SM;
   SMLoc Loc;
   std::string Filename;
-  int LineNo = 0;
-  int ColumnNo = 0;
-  SourceMgr::DiagKind Kind = SourceMgr::DK_Error;
+  int LineNo, ColumnNo;
+  SourceMgr::DiagKind Kind;
   std::string Message, LineContents;
-  std::vector<std::pair<unsigned, unsigned>> Ranges;
+  std::vector<std::pair<unsigned, unsigned> > Ranges;
   SmallVector<SMFixIt, 4> FixIts;
 
 public:
   // Null diagnostic.
-  SMDiagnostic() = default;
+  SMDiagnostic()
+    : SM(nullptr), LineNo(0), ColumnNo(0), Kind(SourceMgr::DK_Error) {}
   // Diagnostic with no location (e.g. file not found, command line arg error).
   SMDiagnostic(StringRef filename, SourceMgr::DiagKind Knd, StringRef Msg)
-    : Filename(filename), LineNo(-1), ColumnNo(-1), Kind(Knd), Message(Msg) {}
+    : SM(nullptr), Filename(filename), LineNo(-1), ColumnNo(-1), Kind(Knd),
+      Message(Msg) {}
 
   // Diagnostic with a location.
   SMDiagnostic(const SourceMgr &sm, SMLoc L, StringRef FN,
                int Line, int Col, SourceMgr::DiagKind Kind,
                StringRef Msg, StringRef LineStr,
-               ArrayRef<std::pair<unsigned,unsigned>> Ranges,
+               ArrayRef<std::pair<unsigned,unsigned> > Ranges,
                ArrayRef<SMFixIt> FixIts = None);
 
   const SourceMgr *getSourceMgr() const { return SM; }
@@ -291,7 +259,9 @@ public:
   SourceMgr::DiagKind getKind() const { return Kind; }
   StringRef getMessage() const { return Message; }
   StringRef getLineContents() const { return LineContents; }
-  ArrayRef<std::pair<unsigned, unsigned>> getRanges() const { return Ranges; }
+  ArrayRef<std::pair<unsigned, unsigned> > getRanges() const {
+    return Ranges;
+  }
 
   void addFixIt(const SMFixIt &Hint) {
     FixIts.push_back(Hint);
@@ -305,6 +275,6 @@ public:
              bool ShowKindLabel = true) const;
 };
 
-} // end namespace llvm
+}  // end llvm namespace
 
-#endif // LLVM_SUPPORT_SOURCEMGR_H
+#endif

@@ -5,6 +5,9 @@ Testlldb Python SBFrame APIs IsInlined() and GetFunctionName().
 from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -29,7 +32,7 @@ class InlinedFrameAPITestCase(TestBase):
     def test_stop_at_outer_inline(self):
         """Exercise SBFrame.IsInlined() and SBFrame.GetFunctionName()."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)

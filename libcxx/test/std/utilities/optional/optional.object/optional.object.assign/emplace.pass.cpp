@@ -1,15 +1,16 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
 // <optional>
 
-// template <class... Args> T& optional<T>::emplace(Args&&... args);
+// template <class... Args> void optional<T>::emplace(Args&&... args);
 
 #include <optional>
 #include <type_traits>
@@ -17,7 +18,7 @@
 #include <memory>
 
 #include "test_macros.h"
-#include "archetypes.h"
+#include "archetypes.hpp"
 
 using std::optional;
 
@@ -50,35 +51,27 @@ void test_one_arg() {
     using Opt = std::optional<T>;
     {
         Opt opt;
-        auto & v = opt.emplace();
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace();
         assert(static_cast<bool>(opt) == true);
         assert(*opt == T(0));
-        assert(&v == &*opt);
     }
     {
         Opt opt;
-        auto & v = opt.emplace(1);
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace(1);
         assert(static_cast<bool>(opt) == true);
         assert(*opt == T(1));
-        assert(&v == &*opt);
     }
     {
         Opt opt(2);
-        auto & v = opt.emplace();
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace();
         assert(static_cast<bool>(opt) == true);
         assert(*opt == T(0));
-        assert(&v == &*opt);
     }
     {
         Opt opt(2);
-        auto & v = opt.emplace(1);
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace(1);
         assert(static_cast<bool>(opt) == true);
         assert(*opt == T(1));
-        assert(&v == &*opt);
     }
 }
 
@@ -90,26 +83,20 @@ void test_multi_arg()
     using Opt = std::optional<T>;
     {
         Opt opt;
-        auto &v = opt.emplace(101, 41);
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace(101, 41);
         assert(static_cast<bool>(opt) == true);
-        assert(   v == T(101, 41));
         assert(*opt == T(101, 41));
     }
     {
         Opt opt;
-        auto &v = opt.emplace({1, 2, 3, 4});
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace({1, 2, 3, 4});
         assert(static_cast<bool>(opt) == true);
-        assert(  v == T(4)); // T sets its value to the size of the init list
-        assert(*opt == T(4));
+        assert(*opt == T(4)); // T sets its value to the size of the init list
     }
     {
         Opt opt;
-        auto &v = opt.emplace({1, 2, 3, 4, 5}, 6);
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace({1, 2, 3, 4, 5}, 6);
         assert(static_cast<bool>(opt) == true);
-        assert(  v == T(5)); // T sets its value to the size of the init list
         assert(*opt == T(5)); // T sets its value to the size of the init list
     }
 }
@@ -122,93 +109,79 @@ void test_on_test_type() {
     assert(T::alive == 0);
     {
         T::reset_constructors();
-        auto &v = opt.emplace();
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace();
         assert(T::alive == 1);
         assert(T::constructed == 1);
         assert(T::default_constructed == 1);
         assert(T::destroyed == 0);
         assert(static_cast<bool>(opt) == true);
         assert(*opt == T());
-        assert(&v == &*opt);
     }
     {
         T::reset_constructors();
-        auto &v = opt.emplace();
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace();
         assert(T::alive == 1);
         assert(T::constructed == 1);
         assert(T::default_constructed == 1);
         assert(T::destroyed == 1);
         assert(static_cast<bool>(opt) == true);
         assert(*opt == T());
-        assert(&v == &*opt);
     }
     {
         T::reset_constructors();
-        auto &v = opt.emplace(101);
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace(101);
         assert(T::alive == 1);
         assert(T::constructed == 1);
         assert(T::value_constructed == 1);
         assert(T::destroyed == 1);
         assert(static_cast<bool>(opt) == true);
         assert(*opt == T(101));
-        assert(&v == &*opt);
     }
     {
         T::reset_constructors();
-        auto &v = opt.emplace(-10, 99);
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace(-10, 99);
         assert(T::alive == 1);
         assert(T::constructed == 1);
         assert(T::value_constructed == 1);
         assert(T::destroyed == 1);
         assert(static_cast<bool>(opt) == true);
         assert(*opt == T(-10, 99));
-        assert(&v == &*opt);
     }
     {
         T::reset_constructors();
-        auto &v = opt.emplace(-10, 99);
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace(-10, 99);
         assert(T::alive == 1);
         assert(T::constructed == 1);
         assert(T::value_constructed == 1);
         assert(T::destroyed == 1);
         assert(static_cast<bool>(opt) == true);
         assert(*opt == T(-10, 99));
-        assert(&v == &*opt);
     }
     {
         T::reset_constructors();
-        auto &v = opt.emplace({-10, 99, 42, 1});
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace({-10, 99, 42, 1});
         assert(T::alive == 1);
         assert(T::constructed == 1);
         assert(T::value_constructed == 1);
         assert(T::destroyed == 1);
         assert(static_cast<bool>(opt) == true);
         assert(*opt == T(4)); // size of the initializer list
-        assert(&v == &*opt);
     }
     {
         T::reset_constructors();
-        auto &v = opt.emplace({-10, 99, 42, 1}, 42);
-        static_assert( std::is_same_v<T&, decltype(v)>, "" );
+        opt.emplace({-10, 99, 42, 1}, 42);
         assert(T::alive == 1);
         assert(T::constructed == 1);
         assert(T::value_constructed == 1);
         assert(T::destroyed == 1);
         assert(static_cast<bool>(opt) == true);
         assert(*opt == T(4)); // size of the initializer list
-        assert(&v == &*opt);
     }
 }
 
 
 
-int main(int, char**)
+int main()
 {
     {
         test_on_test_type<TestTypes::TestType>();
@@ -237,10 +210,8 @@ int main(int, char**)
     }
     {
         optional<const int> opt;
-        auto &v = opt.emplace(42);
-        static_assert( std::is_same_v<const int&, decltype(v)>, "" );
+        opt.emplace(42);
         assert(*opt == 42);
-        assert(   v == 42);
         opt.emplace();
         assert(*opt == 0);
     }
@@ -253,9 +224,7 @@ int main(int, char**)
         {
             assert(static_cast<bool>(opt) == true);
             assert(Y::dtor_called == false);
-            auto &v = opt.emplace(1);
-            static_assert( std::is_same_v<Y&, decltype(v)>, "" );
-            assert(false);
+            opt.emplace(1);
         }
         catch (int i)
         {
@@ -265,6 +234,4 @@ int main(int, char**)
         }
     }
 #endif
-
-  return 0;
 }

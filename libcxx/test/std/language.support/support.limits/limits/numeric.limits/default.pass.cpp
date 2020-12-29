@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,8 +15,6 @@
 #include <limits>
 #include <cassert>
 
-#include "test_macros.h"
-
 struct A
 {
     A(int i = 0) : data_(i) {}
@@ -24,7 +23,7 @@ struct A
 
 bool operator == (const A& x, const A& y) {return x.data_ == y.data_;}
 
-int main(int, char**)
+int main()
 {
     static_assert(std::numeric_limits<A>::is_specialized == false,
                  "std::numeric_limits<A>::is_specialized == false");
@@ -81,6 +80,4 @@ int main(int, char**)
                  "std::numeric_limits<A>::tinyness_before == false");
     static_assert(std::numeric_limits<A>::round_style == std::round_toward_zero,
                  "std::numeric_limits<A>::round_style == std::round_toward_zero");
-
-  return 0;
 }

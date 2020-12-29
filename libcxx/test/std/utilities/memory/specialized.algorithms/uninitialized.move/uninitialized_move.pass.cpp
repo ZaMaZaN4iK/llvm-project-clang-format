@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -87,7 +88,7 @@ void test_counted()
     Counted* p = (Counted*)pool;
     auto ret = std::uninitialized_move(It(values), It(values + 1), FIt(p));
     assert(ret == FIt(p +1));
-    assert(Counted::constructed == 1);
+    assert(Counted::constructed = 1);
     assert(Counted::count == 1);
     assert(p[0].value == 1);
     assert(values[0] == 0);
@@ -107,9 +108,7 @@ void test_counted()
     assert(Counted::count == 0);
 }
 
-int main(int, char**) {
+int main() {
     test_counted();
     test_ctor_throws();
-
-  return 0;
 }

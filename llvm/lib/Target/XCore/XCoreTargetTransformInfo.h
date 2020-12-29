@@ -1,8 +1,9 @@
 //===-- XCoreTargetTransformInfo.h - XCore specific TTI ---------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -20,7 +21,7 @@
 #include "XCoreTargetMachine.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/BasicTTIImpl.h"
-#include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/Target/TargetLowering.h"
 
 namespace llvm {
 
@@ -40,8 +41,7 @@ public:
       : BaseT(TM, F.getParent()->getDataLayout()), ST(TM->getSubtargetImpl()),
         TLI(ST->getTargetLowering()) {}
 
-  unsigned getNumberOfRegisters(unsigned ClassID) const {
-    bool Vector = (ClassID == 1);
+  unsigned getNumberOfRegisters(bool Vector) {
     if (Vector) {
       return 0;
     }

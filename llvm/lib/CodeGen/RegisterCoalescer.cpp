@@ -1,8 +1,9 @@
-//===- RegisterCoalescer.cpp - Generic Register Coalescing Interface ------===//
+//===- RegisterCoalescer.cpp - Generic Register Coalescing Interface -------==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,51 +14,31 @@
 //===----------------------------------------------------------------------===//
 
 #include "RegisterCoalescer.h"
-#include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/BitVector.h"
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/CodeGen/LiveInterval.h"
-#include "llvm/CodeGen/LiveIntervals.h"
+#include "llvm/CodeGen/LiveIntervalAnalysis.h"
 #include "llvm/CodeGen/LiveRangeEdit.h"
-#include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineLoopInfo.h"
-#include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/RegisterClassInfo.h"
-#include "llvm/CodeGen/SlotIndexes.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/CodeGen/TargetOpcodes.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/IR/DebugLoc.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/MC/LaneBitmask.h"
-#include "llvm/MC/MCInstrDesc.h"
-#include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/CodeGen/VirtRegMap.h"
+#include "llvm/IR/Value.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include <algorithm>
-#include <cassert>
-#include <iterator>
-#include <limits>
-#include <tuple>
-#include <utility>
-#include <vector>
-
+#include <cmath>
 using namespace llvm;
 
 #define DEBUG_TYPE "regalloc"
@@ -70,11 +51,11 @@ STATISTIC(NumReMats   , "Number of instructions re-materialized");
 STATISTIC(NumInflated , "Number of register classes inflated");
 STATISTIC(NumLaneConflicts, "Number of dead lane conflicts tested");
 STATISTIC(NumLaneResolves,  "Number of dead lane conflicts resolved");
-STATISTIC(NumShrinkToUses,  "Number of shrinkToUses called");
 
-static cl::opt<bool> EnableJoining("join-liveintervals",
-                                   cl::desc("Coalesce copies (default=true)"),
-                                   cl::init(true), cl::Hidden);
+static cl::opt<bool>
+EnableJoining("join-liveintervals",
+              cl::desc("Coalesce copies (default=true)"),
+              cl::init(true));
 
 static cl::opt<bool> UseTerminalRule("terminal-rule",
                                      cl::desc("Apply the terminal rule"),
@@ -96,54 +77,18 @@ VerifyCoalescing("verify-coalescing",
          cl::desc("Verify machine instrs before and after register coalescing"),
          cl::Hidden);
 
-static cl::opt<unsigned> LateRematUpdateThreshold(
-    "late-remat-update-threshold", cl::Hidden,
-    cl::desc("During rematerialization for a copy, if the def instruction has "
-             "many other copy uses to be rematerialized, delay the multiple "
-             "separate live interval update work and do them all at once after "
-             "all those rematerialization are done. It will save a lot of "
-             "repeated work. "),
-    cl::init(100));
-
-static cl::opt<unsigned> LargeIntervalSizeThreshold(
-    "large-interval-size-threshold", cl::Hidden,
-    cl::desc("If the valnos size of an interval is larger than the threshold, "
-             "it is regarded as a large interval. "),
-    cl::init(100));
-
-static cl::opt<unsigned> LargeIntervalFreqThreshold(
-    "large-interval-freq-threshold", cl::Hidden,
-    cl::desc("For a large interval, if it is coalesed with other live "
-             "intervals many times more than the threshold, stop its "
-             "coalescing to control the compile time. "),
-    cl::init(100));
-
 namespace {
-
-  class JoinVals;
-
   class RegisterCoalescer : public MachineFunctionPass,
                             private LiveRangeEdit::Delegate {
-    MachineFunction* MF = nullptr;
-    MachineRegisterInfo* MRI = nullptr;
-    const TargetRegisterInfo* TRI = nullptr;
-    const TargetInstrInfo* TII = nullptr;
-    LiveIntervals *LIS = nullptr;
-    const MachineLoopInfo* Loops = nullptr;
-    AliasAnalysis *AA = nullptr;
+    MachineFunction* MF;
+    MachineRegisterInfo* MRI;
+    const TargetMachine* TM;
+    const TargetRegisterInfo* TRI;
+    const TargetInstrInfo* TII;
+    LiveIntervals *LIS;
+    const MachineLoopInfo* Loops;
+    AliasAnalysis *AA;
     RegisterClassInfo RegClassInfo;
-
-    /// Debug variable location tracking -- for each VReg, maintain an
-    /// ordered-by-slot-index set of DBG_VALUEs, to help quick
-    /// identification of whether coalescing may change location validity.
-    using DbgValueLoc = std::pair<SlotIndex, MachineInstr*>;
-    DenseMap<unsigned, std::vector<DbgValueLoc>> DbgVRegToValues;
-
-    /// VRegs may be repeatedly coalesced, and have many DBG_VALUEs attached.
-    /// To avoid repeatedly merging sets of DbgValueLocs, instead record
-    /// which vregs have been coalesced, and where to. This map is from
-    /// vreg => {set of vregs merged in}.
-    DenseMap<unsigned, SmallVector<unsigned, 4>> DbgMergedVRegNums;
 
     /// A LaneMask to remember on which subregister live ranges we need to call
     /// shrinkToUses() later.
@@ -151,15 +96,15 @@ namespace {
 
     /// True if the main range of the currently coalesced intervals should be
     /// checked for smaller live intervals.
-    bool ShrinkMainRange = false;
+    bool ShrinkMainRange;
 
-    /// True if the coalescer should aggressively coalesce global copies
+    /// \brief True if the coalescer should aggressively coalesce global copies
     /// in favor of keeping local copies.
-    bool JoinGlobalCopies = false;
+    bool JoinGlobalCopies;
 
-    /// True if the coalescer should aggressively coalesce fall-thru
+    /// \brief True if the coalescer should aggressively coalesce fall-thru
     /// blocks exclusively containing copies.
-    bool JoinSplitEdges = false;
+    bool JoinSplitEdges;
 
     /// Copy instructions yet to be coalesced.
     SmallVector<MachineInstr*, 8> WorkList;
@@ -174,15 +119,6 @@ namespace {
 
     /// Virtual registers to be considered for register class inflation.
     SmallVector<unsigned, 8> InflateRegs;
-
-    /// The collection of live intervals which should have been updated
-    /// immediately after rematerialiation but delayed until
-    /// lateLiveIntervalUpdate is called.
-    DenseSet<unsigned> ToBeUpdated;
-
-    /// Record how many times the large live interval with many valnos
-    /// has been tried to join with other live interval.
-    DenseMap<unsigned, unsigned long> LargeLIVisitCounter;
 
     /// Recursively eliminate dead defs in DeadDefs.
     void eliminateDeadDefs();
@@ -204,19 +140,12 @@ namespace {
     /// was made.
     bool copyCoalesceWorkList(MutableArrayRef<MachineInstr*> CurrList);
 
-    /// If one def has many copy like uses, and those copy uses are all
-    /// rematerialized, the live interval update needed for those
-    /// rematerializations will be delayed and done all at once instead
-    /// of being done multiple times. This is to save compile cost because
-    /// live interval update is costly.
-    void lateLiveIntervalUpdate();
-
     /// Attempt to join intervals corresponding to SrcReg/DstReg, which are the
     /// src/dst of the copy instruction CopyMI.  This returns true if the copy
     /// was successfully coalesced away. If it is not currently possible to
     /// coalesce this interval, but it may be possible if other things get
     /// coalesced, then it returns true by reference in 'Again'.
-    bool joinCopy(MachineInstr *CopyMI, bool &Again);
+    bool joinCopy(MachineInstr *TheCopy, bool &Again);
 
     /// Attempt to join these two intervals.  On failure, this
     /// returns false.  The output "SrcInt" will not have been modified, so we
@@ -225,11 +154,6 @@ namespace {
 
     /// Attempt joining two virtual registers. Return true on success.
     bool joinVirtRegs(CoalescerPair &CP);
-
-    /// If a live interval has many valnos and is coalesced with other
-    /// live intervals many times, we regard such live interval as having
-    /// high compile time cost.
-    bool isHighCostLiveInterval(LiveInterval &LI);
 
     /// Attempt joining with a reserved physreg.
     bool joinReservedPhysReg(CoalescerPair &CP);
@@ -240,8 +164,7 @@ namespace {
     /// @p ToMerge will occupy in the coalescer register. @p LI has its subrange
     /// lanemasks already adjusted to the coalesced register.
     void mergeSubRangeInto(LiveInterval &LI, const LiveRange &ToMerge,
-                           LaneBitmask LaneMask, CoalescerPair &CP,
-                           unsigned DstIdx);
+                           LaneBitmask LaneMask, CoalescerPair &CP);
 
     /// Join the liveranges of two subregisters. Joins @p RRange into
     /// @p LRange, @p RRange may be invalid afterwards.
@@ -263,15 +186,8 @@ namespace {
     /// If the source value number is defined by a commutable instruction and
     /// its other operand is coalesced to the copy dest register, see if we
     /// can transform the copy into a noop by commuting the definition.
-    /// This returns a pair of two flags:
-    /// - the first element is true if an interval was modified,
-    /// - the second element is true if the destination interval needs
-    ///   to be shrunk after deleting the copy.
-    std::pair<bool,bool> removeCopyByCommutingDef(const CoalescerPair &CP,
-                                                  MachineInstr *CopyMI);
-
-    /// We found a copy which can be moved to its less frequent predecessor.
-    bool removePartialRedundancy(const CoalescerPair &CP, MachineInstr &CopyMI);
+    /// This returns true if an interval was modified.
+    bool removeCopyByCommutingDef(const CoalescerPair &CP,MachineInstr *CopyMI);
 
     /// If the source of a copy is defined by a
     /// trivial computation, replace the copy by rematerialize the definition.
@@ -291,17 +207,15 @@ namespace {
     /// flag.
     /// This can happen when undef uses were previously concealed by a copy
     /// which we coalesced. Example:
-    ///    %0:sub0<def,read-undef> = ...
-    ///    %1 = COPY %0           <-- Coalescing COPY reveals undef
-    ///       = use %1:sub1       <-- hidden undef use
+    ///    %vreg0:sub0<def,read-undef> = ...
+    ///    %vreg1 = COPY %vreg0       <-- Coalescing COPY reveals undef
+    ///           = use %vreg1:sub1   <-- hidden undef use
     void addUndefFlag(const LiveInterval &Int, SlotIndex UseIdx,
                       MachineOperand &MO, unsigned SubRegIdx);
 
-    /// Handle copies of undef values. If the undef value is an incoming
-    /// PHI value, it will convert @p CopyMI to an IMPLICIT_DEF.
-    /// Returns nullptr if @p CopyMI was not in any way eliminable. Otherwise,
-    /// it returns @p CopyMI (which could be an IMPLICIT_DEF at this point).
-    MachineInstr *eliminateUndefCopy(MachineInstr *CopyMI);
+    /// Handle copies of undef values.
+    /// Returns true if @p CopyMI was a copy of an undef value and eliminated.
+    bool eliminateUndefCopy(MachineInstr *CopyMI);
 
     /// Check whether or not we should apply the terminal rule on the
     /// destination (Dst) of \p Copy.
@@ -322,7 +236,6 @@ namespace {
     /// mentioned method returns true.
     void shrinkToUses(LiveInterval *LI,
                       SmallVectorImpl<MachineInstr * > *Dead = nullptr) {
-      NumShrinkToUses++;
       if (LIS->shrinkToUses(LI, Dead)) {
         /// Check whether or not \p LI is composed by multiple connected
         /// components and if that is the case, fix that.
@@ -331,32 +244,8 @@ namespace {
       }
     }
 
-    /// Wrapper Method to do all the necessary work when an Instruction is
-    /// deleted.
-    /// Optimizations should use this to make sure that deleted instructions
-    /// are always accounted for.
-    void deleteInstr(MachineInstr* MI) {
-      ErasedInstrs.insert(MI);
-      LIS->RemoveMachineInstrFromMaps(*MI);
-      MI->eraseFromParent();
-    }
-
-    /// Walk over function and initialize the DbgVRegToValues map.
-    void buildVRegToDbgValueMap(MachineFunction &MF);
-
-    /// Test whether, after merging, any DBG_VALUEs would refer to a
-    /// different value number than before merging, and whether this can
-    /// be resolved. If not, mark the DBG_VALUE as being undef.
-    void checkMergingChangesDbgValues(CoalescerPair &CP, LiveRange &LHS,
-                                      JoinVals &LHSVals, LiveRange &RHS,
-                                      JoinVals &RHSVals);
-
-    void checkMergingChangesDbgValuesImpl(unsigned Reg, LiveRange &OtherRange,
-                                          LiveRange &RegRange, JoinVals &Vals2);
-
   public:
     static char ID; ///< Class identification, replacement for typeinfo
-
     RegisterCoalescer() : MachineFunctionPass(ID) {
       initializeRegisterCoalescerPass(*PassRegistry::getPassRegistry());
     }
@@ -371,10 +260,7 @@ namespace {
     /// Implement the dump method.
     void print(raw_ostream &O, const Module* = nullptr) const override;
   };
-
 } // end anonymous namespace
-
-char RegisterCoalescer::ID = 0;
 
 char &llvm::RegisterCoalescerID = RegisterCoalescer::ID;
 
@@ -387,10 +273,11 @@ INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
 INITIALIZE_PASS_END(RegisterCoalescer, "simple-register-coalescing",
                     "Simple Register Coalescing", false, false)
 
-LLVM_NODISCARD static bool isMoveInstr(const TargetRegisterInfo &tri,
-                                       const MachineInstr *MI, unsigned &Src,
-                                       unsigned &Dst, unsigned &SrcSub,
-                                       unsigned &DstSub) {
+char RegisterCoalescer::ID = 0;
+
+static bool isMoveInstr(const TargetRegisterInfo &tri, const MachineInstr *MI,
+                        unsigned &Src, unsigned &Dst,
+                        unsigned &SrcSub, unsigned &DstSub) {
   if (MI->isCopy()) {
     Dst = MI->getOperand(0).getReg();
     DstSub = MI->getOperand(0).getSubReg();
@@ -435,17 +322,17 @@ bool CoalescerPair::setRegisters(const MachineInstr *MI) {
   Partial = SrcSub || DstSub;
 
   // If one register is a physreg, it must be Dst.
-  if (Register::isPhysicalRegister(Src)) {
-    if (Register::isPhysicalRegister(Dst))
+  if (TargetRegisterInfo::isPhysicalRegister(Src)) {
+    if (TargetRegisterInfo::isPhysicalRegister(Dst))
       return false;
     std::swap(Src, Dst);
     std::swap(SrcSub, DstSub);
     Flipped = true;
   }
 
-  const MachineRegisterInfo &MRI = MI->getMF()->getRegInfo();
+  const MachineRegisterInfo &MRI = MI->getParent()->getParent()->getRegInfo();
 
-  if (Register::isPhysicalRegister(Dst)) {
+  if (TargetRegisterInfo::isPhysicalRegister(Dst)) {
     // Eliminate DstSub on a physreg.
     if (DstSub) {
       Dst = TRI.getSubReg(Dst, DstSub);
@@ -503,8 +390,8 @@ bool CoalescerPair::setRegisters(const MachineInstr *MI) {
     CrossClass = NewRC != DstRC || NewRC != SrcRC;
   }
   // Check our invariants
-  assert(Register::isVirtualRegister(Src) && "Src must be virtual");
-  assert(!(Register::isPhysicalRegister(Dst) && DstSub) &&
+  assert(TargetRegisterInfo::isVirtualRegister(Src) && "Src must be virtual");
+  assert(!(TargetRegisterInfo::isPhysicalRegister(Dst) && DstSub) &&
          "Cannot have a physical SubIdx");
   SrcReg = Src;
   DstReg = Dst;
@@ -512,7 +399,7 @@ bool CoalescerPair::setRegisters(const MachineInstr *MI) {
 }
 
 bool CoalescerPair::flip() {
-  if (Register::isPhysicalRegister(DstReg))
+  if (TargetRegisterInfo::isPhysicalRegister(DstReg))
     return false;
   std::swap(SrcReg, DstReg);
   std::swap(SrcIdx, DstIdx);
@@ -536,8 +423,8 @@ bool CoalescerPair::isCoalescable(const MachineInstr *MI) const {
   }
 
   // Now check that Dst matches DstReg.
-  if (Register::isPhysicalRegister(DstReg)) {
-    if (!Register::isPhysicalRegister(Dst))
+  if (TargetRegisterInfo::isPhysicalRegister(DstReg)) {
+    if (!TargetRegisterInfo::isPhysicalRegister(Dst))
       return false;
     assert(!DstIdx && !SrcIdx && "Inconsistent CoalescerPair state.");
     // DstSub could be set for a physreg from INSERT_SUBREG.
@@ -649,7 +536,7 @@ bool RegisterCoalescer::adjustCopiesBackFrom(const CoalescerPair &CP,
   // in IntB, we can merge them.
   if (ValS+1 != BS) return false;
 
-  LLVM_DEBUG(dbgs() << "Extending: " << printReg(IntB.reg, TRI));
+  DEBUG(dbgs() << "Extending: " << PrintReg(IntB.reg, TRI));
 
   SlotIndex FillerStart = ValS->end, FillerEnd = BS->start;
   // We are about to delete CopyMI, so need to remove it as the 'instruction
@@ -668,13 +555,6 @@ bool RegisterCoalescer::adjustCopiesBackFrom(const CoalescerPair &CP,
 
   // Do the same for the subregister segments.
   for (LiveInterval::SubRange &S : IntB.subranges()) {
-    // Check for SubRange Segments of the form [1234r,1234d:0) which can be
-    // removed to prevent creating bogus SubRange Segments.
-    LiveInterval::iterator SS = S.FindSegmentContaining(CopyIdx);
-    if (SS != S.end() && SlotIndex::isSameInstr(SS->start, SS->end)) {
-      S.removeSegment(*SS, true);
-      continue;
-    }
     VNInfo *SubBValNo = S.getVNInfoAt(CopyIdx);
     S.addSegment(LiveInterval::Segment(FillerStart, FillerEnd, SubBValNo));
     VNInfo *SubValSNo = S.getVNInfoAt(AValNo->def.getPrevSlot());
@@ -682,7 +562,7 @@ bool RegisterCoalescer::adjustCopiesBackFrom(const CoalescerPair &CP,
       S.MergeValueNumberInto(SubBValNo, SubValSNo);
   }
 
-  LLVM_DEBUG(dbgs() << "   result = " << IntB << '\n');
+  DEBUG(dbgs() << "   result = " << IntB << '\n');
 
   // If the source instruction was killing the source register before the
   // merge, unset the isKill marker given the live range has been extended.
@@ -691,21 +571,11 @@ bool RegisterCoalescer::adjustCopiesBackFrom(const CoalescerPair &CP,
     ValSEndInst->getOperand(UIdx).setIsKill(false);
   }
 
-  // Rewrite the copy.
+  // Rewrite the copy. If the copy instruction was killing the destination
+  // register before the merge, find the last use and trim the live range. That
+  // will also add the isKill marker.
   CopyMI->substituteRegister(IntA.reg, IntB.reg, 0, *TRI);
-  // If the copy instruction was killing the destination register or any
-  // subrange before the merge trim the live range.
-  bool RecomputeLiveRange = AS->end == CopyIdx;
-  if (!RecomputeLiveRange) {
-    for (LiveInterval::SubRange &S : IntA.subranges()) {
-      LiveInterval::iterator SS = S.FindSegmentContaining(CopyUseIdx);
-      if (SS != S.end() && SS->end == CopyIdx) {
-        RecomputeLiveRange = true;
-        break;
-      }
-    }
-  }
-  if (RecomputeLiveRange)
+  if (AS->end == CopyIdx)
     shrinkToUses(&IntA);
 
   ++numExtends;
@@ -723,7 +593,8 @@ bool RegisterCoalescer::hasOtherReachingDefs(LiveInterval &IntA,
 
   for (LiveRange::Segment &ASeg : IntA.segments) {
     if (ASeg.valno != AValNo) continue;
-    LiveInterval::iterator BI = llvm::upper_bound(IntB, ASeg.start);
+    LiveInterval::iterator BI =
+      std::upper_bound(IntB.begin(), IntB.end(), ASeg.start);
     if (BI != IntB.begin())
       --BI;
     for (; BI != IntB.end() && ASeg.end >= BI->start; ++BI) {
@@ -738,34 +609,20 @@ bool RegisterCoalescer::hasOtherReachingDefs(LiveInterval &IntA,
   return false;
 }
 
-/// Copy segments with value number @p SrcValNo from liverange @p Src to live
+/// Copy segements with value number @p SrcValNo from liverange @p Src to live
 /// range @Dst and use value number @p DstValNo there.
-static std::pair<bool,bool>
-addSegmentsWithValNo(LiveRange &Dst, VNInfo *DstValNo, const LiveRange &Src,
-                     const VNInfo *SrcValNo) {
-  bool Changed = false;
-  bool MergedWithDead = false;
+static void addSegmentsWithValNo(LiveRange &Dst, VNInfo *DstValNo,
+                                 const LiveRange &Src, const VNInfo *SrcValNo)
+{
   for (const LiveRange::Segment &S : Src.segments) {
     if (S.valno != SrcValNo)
       continue;
-    // This is adding a segment from Src that ends in a copy that is about
-    // to be removed. This segment is going to be merged with a pre-existing
-    // segment in Dst. This works, except in cases when the corresponding
-    // segment in Dst is dead. For example: adding [192r,208r:1) from Src
-    // to [208r,208d:1) in Dst would create [192r,208d:1) in Dst.
-    // Recognized such cases, so that the segments can be shrunk.
-    LiveRange::Segment Added = LiveRange::Segment(S.start, S.end, DstValNo);
-    LiveRange::Segment &Merged = *Dst.addSegment(Added);
-    if (Merged.end.isDead())
-      MergedWithDead = true;
-    Changed = true;
+    Dst.addSegment(LiveRange::Segment(S.start, S.end, DstValNo));
   }
-  return std::make_pair(Changed, MergedWithDead);
 }
 
-std::pair<bool,bool>
-RegisterCoalescer::removeCopyByCommutingDef(const CoalescerPair &CP,
-                                            MachineInstr *CopyMI) {
+bool RegisterCoalescer::removeCopyByCommutingDef(const CoalescerPair &CP,
+                                                 MachineInstr *CopyMI) {
   assert(!CP.isPhys());
 
   LiveInterval &IntA =
@@ -779,7 +636,7 @@ RegisterCoalescer::removeCopyByCommutingDef(const CoalescerPair &CP,
   // its other operand is coalesced to the copy dest register, see if we can
   // transform the copy into a noop by commuting the definition. For example,
   //
-  //  A3 = op A2 killed B0
+  //  A3 = op A2 B0<kill>
   //    ...
   //  B1 = A3      <- this copy
   //    ...
@@ -787,7 +644,7 @@ RegisterCoalescer::removeCopyByCommutingDef(const CoalescerPair &CP,
   //
   // ==>
   //
-  //  B2 = op B0 killed A2
+  //  B2 = op B0 A2<kill>
   //    ...
   //  B1 = B2      <- now an identity copy
   //    ...
@@ -803,19 +660,19 @@ RegisterCoalescer::removeCopyByCommutingDef(const CoalescerPair &CP,
   VNInfo *AValNo = IntA.getVNInfoAt(CopyIdx.getRegSlot(true));
   assert(AValNo && !AValNo->isUnused() && "COPY source not live");
   if (AValNo->isPHIDef())
-    return { false, false };
+    return false;
   MachineInstr *DefMI = LIS->getInstructionFromIndex(AValNo->def);
   if (!DefMI)
-    return { false, false };
+    return false;
   if (!DefMI->isCommutable())
-    return { false, false };
+    return false;
   // If DefMI is a two-address instruction then commuting it will change the
   // destination register.
   int DefIdx = DefMI->findRegisterDefOperandIdx(IntA.reg);
   assert(DefIdx != -1);
   unsigned UseOpIdx;
   if (!DefMI->isRegTiedToUseOperand(DefIdx, &UseOpIdx))
-    return { false, false };
+    return false;
 
   // FIXME: The code below tries to commute 'UseOpIdx' operand with some other
   // commutable operand which is expressed by 'CommuteAnyOperandIndex'value
@@ -828,17 +685,17 @@ RegisterCoalescer::removeCopyByCommutingDef(const CoalescerPair &CP,
   // op#2<->op#3) of commute transformation should be considered/tried here.
   unsigned NewDstIdx = TargetInstrInfo::CommuteAnyOperandIndex;
   if (!TII->findCommutedOpIndices(*DefMI, UseOpIdx, NewDstIdx))
-    return { false, false };
+    return false;
 
   MachineOperand &NewDstMO = DefMI->getOperand(NewDstIdx);
-  Register NewReg = NewDstMO.getReg();
+  unsigned NewReg = NewDstMO.getReg();
   if (NewReg != IntB.reg || !IntB.Query(AValNo->def).isKill())
-    return { false, false };
+    return false;
 
   // Make sure there are no other definitions of IntB that would reach the
   // uses which the new definition can reach.
   if (hasOtherReachingDefs(IntA, IntB, AValNo, BValNo))
-    return { false, false };
+    return false;
 
   // If some of the uses of IntA.reg is already coalesced away, return false.
   // It's not possible to determine whether it's safe to perform the coalescing.
@@ -851,11 +708,11 @@ RegisterCoalescer::removeCopyByCommutingDef(const CoalescerPair &CP,
       continue;
     // If this use is tied to a def, we can't rewrite the register.
     if (UseMI->isRegTiedToDefOperand(OpNo))
-      return { false, false };
+      return false;
   }
 
-  LLVM_DEBUG(dbgs() << "\tremoveCopyByCommutingDef: " << AValNo->def << '\t'
-                    << *DefMI);
+  DEBUG(dbgs() << "\tremoveCopyByCommutingDef: " << AValNo->def << '\t'
+               << *DefMI);
 
   // At this point we have decided that it is legal to do this
   // transformation.  Start by commuting the instruction.
@@ -863,11 +720,11 @@ RegisterCoalescer::removeCopyByCommutingDef(const CoalescerPair &CP,
   MachineInstr *NewMI =
       TII->commuteInstruction(*DefMI, false, UseOpIdx, NewDstIdx);
   if (!NewMI)
-    return { false, false };
-  if (Register::isVirtualRegister(IntA.reg) &&
-      Register::isVirtualRegister(IntB.reg) &&
+    return false;
+  if (TargetRegisterInfo::isVirtualRegister(IntA.reg) &&
+      TargetRegisterInfo::isVirtualRegister(IntB.reg) &&
       !MRI->constrainRegClass(IntB.reg, MRI->getRegClass(IntA.reg)))
-    return { false, false };
+    return false;
   if (NewMI != DefMI) {
     LIS->ReplaceMachineInstrInMaps(*DefMI, *NewMI);
     MachineBasicBlock::iterator Pos = DefMI;
@@ -880,7 +737,7 @@ RegisterCoalescer::removeCopyByCommutingDef(const CoalescerPair &CP,
   // ...
   // B = A
   // ...
-  // C = killed A
+  // C = A<kill>
   // ...
   //   = B
 
@@ -906,7 +763,7 @@ RegisterCoalescer::removeCopyByCommutingDef(const CoalescerPair &CP,
       continue;
     // Kill flags are no longer accurate. They are recomputed after RA.
     UseMO.setIsKill(false);
-    if (Register::isPhysicalRegister(NewReg))
+    if (TargetRegisterInfo::isPhysicalRegister(NewReg))
       UseMO.substPhysReg(NewReg, *TRI);
     else
       UseMO.setReg(NewReg);
@@ -924,7 +781,7 @@ RegisterCoalescer::removeCopyByCommutingDef(const CoalescerPair &CP,
     VNInfo *DVNI = IntB.getVNInfoAt(DefIdx);
     if (!DVNI)
       continue;
-    LLVM_DEBUG(dbgs() << "\t\tnoop: " << DefIdx << '\t' << *UseMI);
+    DEBUG(dbgs() << "\t\tnoop: " << DefIdx << '\t' << *UseMI);
     assert(DVNI->def == DefIdx);
     BValNo = IntB.MergeValueNumberInto(DVNI, BValNo);
     for (LiveInterval::SubRange &S : IntB.subranges()) {
@@ -936,288 +793,78 @@ RegisterCoalescer::removeCopyByCommutingDef(const CoalescerPair &CP,
       S.MergeValueNumberInto(SubDVNI, SubBValNo);
     }
 
-    deleteInstr(UseMI);
+    ErasedInstrs.insert(UseMI);
+    LIS->RemoveMachineInstrFromMaps(*UseMI);
+    UseMI->eraseFromParent();
   }
 
   // Extend BValNo by merging in IntA live segments of AValNo. Val# definition
   // is updated.
-  bool ShrinkB = false;
   BumpPtrAllocator &Allocator = LIS->getVNInfoAllocator();
-  if (IntA.hasSubRanges() || IntB.hasSubRanges()) {
+  if (IntB.hasSubRanges()) {
     if (!IntA.hasSubRanges()) {
       LaneBitmask Mask = MRI->getMaxLaneMaskForVReg(IntA.reg);
       IntA.createSubRangeFrom(Allocator, Mask, IntA);
-    } else if (!IntB.hasSubRanges()) {
-      LaneBitmask Mask = MRI->getMaxLaneMaskForVReg(IntB.reg);
-      IntB.createSubRangeFrom(Allocator, Mask, IntB);
     }
     SlotIndex AIdx = CopyIdx.getRegSlot(true);
-    LaneBitmask MaskA;
-    const SlotIndexes &Indexes = *LIS->getSlotIndexes();
     for (LiveInterval::SubRange &SA : IntA.subranges()) {
       VNInfo *ASubValNo = SA.getVNInfoAt(AIdx);
-      // Even if we are dealing with a full copy, some lanes can
-      // still be undefined.
-      // E.g.,
-      // undef A.subLow = ...
-      // B = COPY A <== A.subHigh is undefined here and does
-      //                not have a value number.
-      if (!ASubValNo)
-        continue;
-      MaskA |= SA.LaneMask;
+      assert(ASubValNo != nullptr);
 
-      IntB.refineSubRanges(
-          Allocator, SA.LaneMask,
-          [&Allocator, &SA, CopyIdx, ASubValNo,
-           &ShrinkB](LiveInterval::SubRange &SR) {
-            VNInfo *BSubValNo = SR.empty() ? SR.getNextValue(CopyIdx, Allocator)
-                                           : SR.getVNInfoAt(CopyIdx);
-            assert(BSubValNo != nullptr);
-            auto P = addSegmentsWithValNo(SR, BSubValNo, SA, ASubValNo);
-            ShrinkB |= P.second;
-            if (P.first)
-              BSubValNo->def = ASubValNo->def;
-          },
-          Indexes, *TRI);
-    }
-    // Go over all subranges of IntB that have not been covered by IntA,
-    // and delete the segments starting at CopyIdx. This can happen if
-    // IntA has undef lanes that are defined in IntB.
-    for (LiveInterval::SubRange &SB : IntB.subranges()) {
-      if ((SB.LaneMask & MaskA).any())
-        continue;
-      if (LiveRange::Segment *S = SB.getSegmentContaining(CopyIdx))
-        if (S->start.getBaseIndex() == CopyIdx.getBaseIndex())
-          SB.removeSegment(*S, true);
+      LaneBitmask AMask = SA.LaneMask;
+      for (LiveInterval::SubRange &SB : IntB.subranges()) {
+        LaneBitmask BMask = SB.LaneMask;
+        LaneBitmask Common = BMask & AMask;
+        if (Common.none())
+          continue;
+
+        DEBUG( dbgs() << "\t\tCopy_Merge " << PrintLaneMask(BMask)
+                      << " into " << PrintLaneMask(Common) << '\n');
+        LaneBitmask BRest = BMask & ~AMask;
+        LiveInterval::SubRange *CommonRange;
+        if (BRest.any()) {
+          SB.LaneMask = BRest;
+          DEBUG(dbgs() << "\t\tReduce Lane to " << PrintLaneMask(BRest)
+                       << '\n');
+          // Duplicate SubRange for newly merged common stuff.
+          CommonRange = IntB.createSubRangeFrom(Allocator, Common, SB);
+        } else {
+          // We van reuse the L SubRange.
+          SB.LaneMask = Common;
+          CommonRange = &SB;
+        }
+        LiveRange RangeCopy(SB, Allocator);
+
+        VNInfo *BSubValNo = CommonRange->getVNInfoAt(CopyIdx);
+        assert(BSubValNo->def == CopyIdx);
+        BSubValNo->def = ASubValNo->def;
+        addSegmentsWithValNo(*CommonRange, BSubValNo, SA, ASubValNo);
+        AMask &= ~BMask;
+      }
+      if (AMask.any()) {
+        DEBUG(dbgs() << "\t\tNew Lane " << PrintLaneMask(AMask) << '\n');
+        LiveRange *NewRange = IntB.createSubRange(Allocator, AMask);
+        VNInfo *BSubValNo = NewRange->getNextValue(CopyIdx, Allocator);
+        addSegmentsWithValNo(*NewRange, BSubValNo, SA, ASubValNo);
+      }
     }
   }
 
   BValNo->def = AValNo->def;
-  auto P = addSegmentsWithValNo(IntB, BValNo, IntA, AValNo);
-  ShrinkB |= P.second;
-  LLVM_DEBUG(dbgs() << "\t\textended: " << IntB << '\n');
+  addSegmentsWithValNo(IntB, BValNo, IntA, AValNo);
+  DEBUG(dbgs() << "\t\textended: " << IntB << '\n');
 
   LIS->removeVRegDefAt(IntA, AValNo->def);
 
-  LLVM_DEBUG(dbgs() << "\t\ttrimmed:  " << IntA << '\n');
+  DEBUG(dbgs() << "\t\ttrimmed:  " << IntA << '\n');
   ++numCommutes;
-  return { true, ShrinkB };
-}
-
-/// For copy B = A in BB2, if A is defined by A = B in BB0 which is a
-/// predecessor of BB2, and if B is not redefined on the way from A = B
-/// in BB0 to B = A in BB2, B = A in BB2 is partially redundant if the
-/// execution goes through the path from BB0 to BB2. We may move B = A
-/// to the predecessor without such reversed copy.
-/// So we will transform the program from:
-///   BB0:
-///      A = B;    BB1:
-///       ...         ...
-///     /     \      /
-///             BB2:
-///               ...
-///               B = A;
-///
-/// to:
-///
-///   BB0:         BB1:
-///      A = B;        ...
-///       ...          B = A;
-///     /     \       /
-///             BB2:
-///               ...
-///
-/// A special case is when BB0 and BB2 are the same BB which is the only
-/// BB in a loop:
-///   BB1:
-///        ...
-///   BB0/BB2:  ----
-///        B = A;   |
-///        ...      |
-///        A = B;   |
-///          |-------
-///          |
-/// We may hoist B = A from BB0/BB2 to BB1.
-///
-/// The major preconditions for correctness to remove such partial
-/// redundancy include:
-/// 1. A in B = A in BB2 is defined by a PHI in BB2, and one operand of
-///    the PHI is defined by the reversed copy A = B in BB0.
-/// 2. No B is referenced from the start of BB2 to B = A.
-/// 3. No B is defined from A = B to the end of BB0.
-/// 4. BB1 has only one successor.
-///
-/// 2 and 4 implicitly ensure B is not live at the end of BB1.
-/// 4 guarantees BB2 is hotter than BB1, so we can only move a copy to a
-/// colder place, which not only prevent endless loop, but also make sure
-/// the movement of copy is beneficial.
-bool RegisterCoalescer::removePartialRedundancy(const CoalescerPair &CP,
-                                                MachineInstr &CopyMI) {
-  assert(!CP.isPhys());
-  if (!CopyMI.isFullCopy())
-    return false;
-
-  MachineBasicBlock &MBB = *CopyMI.getParent();
-  if (MBB.isEHPad())
-    return false;
-
-  if (MBB.pred_size() != 2)
-    return false;
-
-  LiveInterval &IntA =
-      LIS->getInterval(CP.isFlipped() ? CP.getDstReg() : CP.getSrcReg());
-  LiveInterval &IntB =
-      LIS->getInterval(CP.isFlipped() ? CP.getSrcReg() : CP.getDstReg());
-
-  // A is defined by PHI at the entry of MBB.
-  SlotIndex CopyIdx = LIS->getInstructionIndex(CopyMI).getRegSlot(true);
-  VNInfo *AValNo = IntA.getVNInfoAt(CopyIdx);
-  assert(AValNo && !AValNo->isUnused() && "COPY source not live");
-  if (!AValNo->isPHIDef())
-    return false;
-
-  // No B is referenced before CopyMI in MBB.
-  if (IntB.overlaps(LIS->getMBBStartIdx(&MBB), CopyIdx))
-    return false;
-
-  // MBB has two predecessors: one contains A = B so no copy will be inserted
-  // for it. The other one will have a copy moved from MBB.
-  bool FoundReverseCopy = false;
-  MachineBasicBlock *CopyLeftBB = nullptr;
-  for (MachineBasicBlock *Pred : MBB.predecessors()) {
-    VNInfo *PVal = IntA.getVNInfoBefore(LIS->getMBBEndIdx(Pred));
-    MachineInstr *DefMI = LIS->getInstructionFromIndex(PVal->def);
-    if (!DefMI || !DefMI->isFullCopy()) {
-      CopyLeftBB = Pred;
-      continue;
-    }
-    // Check DefMI is a reverse copy and it is in BB Pred.
-    if (DefMI->getOperand(0).getReg() != IntA.reg ||
-        DefMI->getOperand(1).getReg() != IntB.reg ||
-        DefMI->getParent() != Pred) {
-      CopyLeftBB = Pred;
-      continue;
-    }
-    // If there is any other def of B after DefMI and before the end of Pred,
-    // we need to keep the copy of B = A at the end of Pred if we remove
-    // B = A from MBB.
-    bool ValB_Changed = false;
-    for (auto VNI : IntB.valnos) {
-      if (VNI->isUnused())
-        continue;
-      if (PVal->def < VNI->def && VNI->def < LIS->getMBBEndIdx(Pred)) {
-        ValB_Changed = true;
-        break;
-      }
-    }
-    if (ValB_Changed) {
-      CopyLeftBB = Pred;
-      continue;
-    }
-    FoundReverseCopy = true;
-  }
-
-  // If no reverse copy is found in predecessors, nothing to do.
-  if (!FoundReverseCopy)
-    return false;
-
-  // If CopyLeftBB is nullptr, it means every predecessor of MBB contains
-  // reverse copy, CopyMI can be removed trivially if only IntA/IntB is updated.
-  // If CopyLeftBB is not nullptr, move CopyMI from MBB to CopyLeftBB and
-  // update IntA/IntB.
-  //
-  // If CopyLeftBB is not nullptr, ensure CopyLeftBB has a single succ so
-  // MBB is hotter than CopyLeftBB.
-  if (CopyLeftBB && CopyLeftBB->succ_size() > 1)
-    return false;
-
-  // Now (almost sure it's) ok to move copy.
-  if (CopyLeftBB) {
-    // Position in CopyLeftBB where we should insert new copy.
-    auto InsPos = CopyLeftBB->getFirstTerminator();
-
-    // Make sure that B isn't referenced in the terminators (if any) at the end
-    // of the predecessor since we're about to insert a new definition of B
-    // before them.
-    if (InsPos != CopyLeftBB->end()) {
-      SlotIndex InsPosIdx = LIS->getInstructionIndex(*InsPos).getRegSlot(true);
-      if (IntB.overlaps(InsPosIdx, LIS->getMBBEndIdx(CopyLeftBB)))
-        return false;
-    }
-
-    LLVM_DEBUG(dbgs() << "\tremovePartialRedundancy: Move the copy to "
-                      << printMBBReference(*CopyLeftBB) << '\t' << CopyMI);
-
-    // Insert new copy to CopyLeftBB.
-    MachineInstr *NewCopyMI = BuildMI(*CopyLeftBB, InsPos, CopyMI.getDebugLoc(),
-                                      TII->get(TargetOpcode::COPY), IntB.reg)
-                                  .addReg(IntA.reg);
-    SlotIndex NewCopyIdx =
-        LIS->InsertMachineInstrInMaps(*NewCopyMI).getRegSlot();
-    IntB.createDeadDef(NewCopyIdx, LIS->getVNInfoAllocator());
-    for (LiveInterval::SubRange &SR : IntB.subranges())
-      SR.createDeadDef(NewCopyIdx, LIS->getVNInfoAllocator());
-
-    // If the newly created Instruction has an address of an instruction that was
-    // deleted before (object recycled by the allocator) it needs to be removed from
-    // the deleted list.
-    ErasedInstrs.erase(NewCopyMI);
-  } else {
-    LLVM_DEBUG(dbgs() << "\tremovePartialRedundancy: Remove the copy from "
-                      << printMBBReference(MBB) << '\t' << CopyMI);
-  }
-
-  // Remove CopyMI.
-  // Note: This is fine to remove the copy before updating the live-ranges.
-  // While updating the live-ranges, we only look at slot indices and
-  // never go back to the instruction.
-  // Mark instructions as deleted.
-  deleteInstr(&CopyMI);
-
-  // Update the liveness.
-  SmallVector<SlotIndex, 8> EndPoints;
-  VNInfo *BValNo = IntB.Query(CopyIdx).valueOutOrDead();
-  LIS->pruneValue(*static_cast<LiveRange *>(&IntB), CopyIdx.getRegSlot(),
-                  &EndPoints);
-  BValNo->markUnused();
-  // Extend IntB to the EndPoints of its original live interval.
-  LIS->extendToIndices(IntB, EndPoints);
-
-  // Now, do the same for its subranges.
-  for (LiveInterval::SubRange &SR : IntB.subranges()) {
-    EndPoints.clear();
-    VNInfo *BValNo = SR.Query(CopyIdx).valueOutOrDead();
-    assert(BValNo && "All sublanes should be live");
-    LIS->pruneValue(SR, CopyIdx.getRegSlot(), &EndPoints);
-    BValNo->markUnused();
-    // We can have a situation where the result of the original copy is live,
-    // but is immediately dead in this subrange, e.g. [336r,336d:0). That makes
-    // the copy appear as an endpoint from pruneValue(), but we don't want it
-    // to because the copy has been removed.  We can go ahead and remove that
-    // endpoint; there is no other situation here that there could be a use at
-    // the same place as we know that the copy is a full copy.
-    for (unsigned I = 0; I != EndPoints.size(); ) {
-      if (SlotIndex::isSameInstr(EndPoints[I], CopyIdx)) {
-        EndPoints[I] = EndPoints.back();
-        EndPoints.pop_back();
-        continue;
-      }
-      ++I;
-    }
-    LIS->extendToIndices(SR, EndPoints);
-  }
-  // If any dead defs were extended, truncate them.
-  shrinkToUses(&IntB);
-
-  // Finally, update the live-range of IntA.
-  shrinkToUses(&IntA);
   return true;
 }
 
 /// Returns true if @p MI defines the full vreg @p Reg, as opposed to just
 /// defining a subregister.
 static bool definesFullReg(const MachineInstr &MI, unsigned Reg) {
-  assert(!Register::isPhysicalRegister(Reg) &&
+  assert(!TargetRegisterInfo::isPhysicalRegister(Reg) &&
          "This code cannot handle physreg aliasing");
   for (const MachineOperand &Op : MI.operands()) {
     if (!Op.isReg() || !Op.isDef() || Op.getReg() != Reg)
@@ -1238,14 +885,13 @@ bool RegisterCoalescer::reMaterializeTrivialDef(const CoalescerPair &CP,
   unsigned SrcIdx = CP.isFlipped() ? CP.getDstIdx() : CP.getSrcIdx();
   unsigned DstReg = CP.isFlipped() ? CP.getSrcReg() : CP.getDstReg();
   unsigned DstIdx = CP.isFlipped() ? CP.getSrcIdx() : CP.getDstIdx();
-  if (Register::isPhysicalRegister(SrcReg))
+  if (TargetRegisterInfo::isPhysicalRegister(SrcReg))
     return false;
 
   LiveInterval &SrcInt = LIS->getInterval(SrcReg);
   SlotIndex CopyIdx = LIS->getInstructionIndex(*CopyMI);
   VNInfo *ValNo = SrcInt.Query(CopyIdx).valueIn();
-  if (!ValNo)
-    return false;
+  assert(ValNo && "CopyMI input register not live");
   if (ValNo->isPHIDef() || ValNo->isUnused())
     return false;
   MachineInstr *DefMI = LIS->getInstructionFromIndex(ValNo->def);
@@ -1269,7 +915,7 @@ bool RegisterCoalescer::reMaterializeTrivialDef(const CoalescerPair &CP,
     return false;
   // Only support subregister destinations when the def is read-undef.
   MachineOperand &DstOperand = CopyMI->getOperand(0);
-  Register CopyDstReg = DstOperand.getReg();
+  unsigned CopyDstReg = DstOperand.getReg();
   if (DstOperand.getSubReg() && !DstOperand.isUndef())
     return false;
 
@@ -1283,7 +929,7 @@ bool RegisterCoalescer::reMaterializeTrivialDef(const CoalescerPair &CP,
 
   const TargetRegisterClass *DefRC = TII->getRegClass(MCID, 0, TRI, *MF);
   if (!DefMI->isImplicitDef()) {
-    if (Register::isPhysicalRegister(DstReg)) {
+    if (TargetRegisterInfo::isPhysicalRegister(DstReg)) {
       unsigned NewDstReg = DstReg;
 
       unsigned NewDstIdx = TRI->composeSubRegIndices(CP.getSrcIdx(),
@@ -1298,7 +944,7 @@ bool RegisterCoalescer::reMaterializeTrivialDef(const CoalescerPair &CP,
     } else {
       // Theoretically, some stack frame reference could exist. Just make sure
       // it hasn't actually happened.
-      assert(Register::isVirtualRegister(DstReg) &&
+      assert(TargetRegisterInfo::isVirtualRegister(DstReg) &&
              "Only expect to deal with virtual or physical registers");
     }
   }
@@ -1312,10 +958,10 @@ bool RegisterCoalescer::reMaterializeTrivialDef(const CoalescerPair &CP,
   NewMI.setDebugLoc(DL);
 
   // In a situation like the following:
-  //     %0:subreg = instr              ; DefMI, subreg = DstIdx
-  //     %1        = copy %0:subreg ; CopyMI, SrcIdx = 0
-  // instead of widening %1 to the register class of %0 simply do:
-  //     %1 = instr
+  //     %vreg0:subreg = instr              ; DefMI, subreg = DstIdx
+  //     %vreg1        = copy %vreg0:subreg ; CopyMI, SrcIdx = 0
+  // instead of widening %vreg1 to the register class of %vreg0 simply do:
+  //     %vreg1 = instr
   const TargetRegisterClass *NewRC = CP.getNewRC();
   if (DstIdx != 0) {
     MachineOperand &DefMO = NewMI.getOperand(0);
@@ -1344,9 +990,9 @@ bool RegisterCoalescer::reMaterializeTrivialDef(const CoalescerPair &CP,
        I != E; ++I) {
     MachineOperand &MO = CopyMI->getOperand(I);
     if (MO.isReg()) {
-      assert(MO.isImplicit() && "No explicit operands after implicit operands.");
+      assert(MO.isImplicit() && "No explicit operands after implict operands.");
       // Discard VReg implicit defs.
-      if (Register::isPhysicalRegister(MO.getReg()))
+      if (TargetRegisterInfo::isPhysicalRegister(MO.getReg()))
         ImplicitOps.push_back(MO);
     }
   }
@@ -1365,12 +1011,12 @@ bool RegisterCoalescer::reMaterializeTrivialDef(const CoalescerPair &CP,
     MachineOperand &MO = NewMI.getOperand(i);
     if (MO.isReg() && MO.isDef()) {
       assert(MO.isImplicit() && MO.isDead() &&
-             Register::isPhysicalRegister(MO.getReg()));
+             TargetRegisterInfo::isPhysicalRegister(MO.getReg()));
       NewMIImplDefs.push_back(MO.getReg());
     }
   }
 
-  if (Register::isVirtualRegister(DstReg)) {
+  if (TargetRegisterInfo::isVirtualRegister(DstReg)) {
     unsigned NewIdx = NewMI.getOperand(0).getSubReg();
 
     if (DefRC != nullptr) {
@@ -1390,22 +1036,17 @@ bool RegisterCoalescer::reMaterializeTrivialDef(const CoalescerPair &CP,
     // Update machine operands and add flags.
     updateRegDefsUses(DstReg, DstReg, DstIdx);
     NewMI.getOperand(0).setSubReg(NewIdx);
-    // updateRegDefUses can add an "undef" flag to the definition, since
-    // it will replace DstReg with DstReg.DstIdx. If NewIdx is 0, make
-    // sure that "undef" is not set.
-    if (NewIdx == 0)
-      NewMI.getOperand(0).setIsUndef(false);
     // Add dead subregister definitions if we are defining the whole register
     // but only part of it is live.
     // This could happen if the rematerialization instruction is rematerializing
     // more than actually is used in the register.
     // An example would be:
-    // %1 = LOAD CONSTANTS 5, 8 ; Loading both 5 and 8 in different subregs
+    // vreg1 = LOAD CONSTANTS 5, 8 ; Loading both 5 and 8 in different subregs
     // ; Copying only part of the register here, but the rest is undef.
-    // %2:sub_16bit<def, read-undef> = COPY %1:sub_16bit
+    // vreg2:sub_16bit<def, read-undef> = COPY vreg1:sub_16bit
     // ==>
     // ; Materialize all the constants but only using one
-    // %2 = LOAD_CONSTANTS 5, 8
+    // vreg2 = LOAD_CONSTANTS 5, 8
     //
     // at this point for the part that wasn't defined before we could have
     // subranges missing the definition.
@@ -1425,39 +1066,10 @@ bool RegisterCoalescer::reMaterializeTrivialDef(const CoalescerPair &CP,
         SR->createDeadDef(DefIndex, Alloc);
       }
     }
-
-    // Make sure that the subrange for resultant undef is removed
-    // For example:
-    //   %1:sub1<def,read-undef> = LOAD CONSTANT 1
-    //   %2 = COPY %1
-    // ==>
-    //   %2:sub1<def, read-undef> = LOAD CONSTANT 1
-    //     ; Correct but need to remove the subrange for %2:sub0
-    //     ; as it is now undef
-    if (NewIdx != 0 && DstInt.hasSubRanges()) {
-      // The affected subregister segments can be removed.
-      SlotIndex CurrIdx = LIS->getInstructionIndex(NewMI);
-      LaneBitmask DstMask = TRI->getSubRegIndexLaneMask(NewIdx);
-      bool UpdatedSubRanges = false;
-      for (LiveInterval::SubRange &SR : DstInt.subranges()) {
-        if ((SR.LaneMask & DstMask).none()) {
-          LLVM_DEBUG(dbgs()
-                     << "Removing undefined SubRange "
-                     << PrintLaneMask(SR.LaneMask) << " : " << SR << "\n");
-          // VNI is in ValNo - remove any segments in this SubRange that have this ValNo
-          if (VNInfo *RmValNo = SR.getVNInfoAt(CurrIdx.getRegSlot())) {
-            SR.removeValNo(RmValNo);
-            UpdatedSubRanges = true;
-          }
-        }
-      }
-      if (UpdatedSubRanges)
-        DstInt.removeEmptySubRanges();
-    }
   } else if (NewMI.getOperand(0).getReg() != CopyDstReg) {
     // The New instruction may be defining a sub-register of what's actually
     // been asked for. If so it must implicitly define the whole thing.
-    assert(Register::isPhysicalRegister(DstReg) &&
+    assert(TargetRegisterInfo::isPhysicalRegister(DstReg) &&
            "Only expect virtual or physical registers in remat");
     NewMI.getOperand(0).setIsDead(true);
     NewMI.addOperand(MachineOperand::CreateReg(
@@ -1467,15 +1079,15 @@ bool RegisterCoalescer::reMaterializeTrivialDef(const CoalescerPair &CP,
     // Otherwise, variables that live through may miss some
     // interferences, thus creating invalid allocation.
     // E.g., i386 code:
-    // %1 = somedef ; %1 GR8
-    // %2 = remat ; %2 GR32
-    // CL = COPY %2.sub_8bit
-    // = somedef %1 ; %1 GR8
+    // vreg1 = somedef ; vreg1 GR8
+    // vreg2 = remat ; vreg2 GR32
+    // CL = COPY vreg2.sub_8bit
+    // = somedef vreg1 ; vreg1 GR8
     // =>
-    // %1 = somedef ; %1 GR8
-    // dead ECX = remat ; implicit-def CL
-    // = somedef %1 ; %1 GR8
-    // %1 will see the interferences with CL but not with CH since
+    // vreg1 = somedef ; vreg1 GR8
+    // ECX<def, dead> = remat ; CL<imp-def>
+    // = somedef vreg1 ; vreg1 GR8
+    // vreg1 will see the inteferences with CL but not with CH since
     // no live-ranges would have been created for ECX.
     // Fix that!
     SlotIndex NewMIIdx = LIS->getInstructionIndex(NewMI);
@@ -1500,61 +1112,41 @@ bool RegisterCoalescer::reMaterializeTrivialDef(const CoalescerPair &CP,
         LR->createDeadDef(NewMIIdx.getRegSlot(), LIS->getVNInfoAllocator());
   }
 
-  LLVM_DEBUG(dbgs() << "Remat: " << NewMI);
+  DEBUG(dbgs() << "Remat: " << NewMI);
   ++NumReMats;
 
-  // If the virtual SrcReg is completely eliminated, update all DBG_VALUEs
-  // to describe DstReg instead.
-  if (MRI->use_nodbg_empty(SrcReg)) {
+  // The source interval can become smaller because we removed a use.
+  shrinkToUses(&SrcInt, &DeadDefs);
+  if (!DeadDefs.empty()) {
+    // If the virtual SrcReg is completely eliminated, update all DBG_VALUEs
+    // to describe DstReg instead.
     for (MachineOperand &UseMO : MRI->use_operands(SrcReg)) {
       MachineInstr *UseMI = UseMO.getParent();
       if (UseMI->isDebugValue()) {
-        if (Register::isPhysicalRegister(DstReg))
-          UseMO.substPhysReg(DstReg, *TRI);
-        else
-          UseMO.setReg(DstReg);
-        // Move the debug value directly after the def of the rematerialized
-        // value in DstReg.
-        MBB->splice(std::next(NewMI.getIterator()), UseMI->getParent(), UseMI);
-        LLVM_DEBUG(dbgs() << "\t\tupdated: " << *UseMI);
+        UseMO.setReg(DstReg);
+        DEBUG(dbgs() << "\t\tupdated: " << *UseMI);
       }
     }
+    eliminateDeadDefs();
   }
 
-  if (ToBeUpdated.count(SrcReg))
-    return true;
-
-  unsigned NumCopyUses = 0;
-  for (MachineOperand &UseMO : MRI->use_nodbg_operands(SrcReg)) {
-    if (UseMO.getParent()->isCopyLike())
-      NumCopyUses++;
-  }
-  if (NumCopyUses < LateRematUpdateThreshold) {
-    // The source interval can become smaller because we removed a use.
-    shrinkToUses(&SrcInt, &DeadDefs);
-    if (!DeadDefs.empty())
-      eliminateDeadDefs();
-  } else {
-    ToBeUpdated.insert(SrcReg);
-  }
   return true;
 }
 
-MachineInstr *RegisterCoalescer::eliminateUndefCopy(MachineInstr *CopyMI) {
-  // ProcessImplicitDefs may leave some copies of <undef> values, it only
-  // removes local variables. When we have a copy like:
+bool RegisterCoalescer::eliminateUndefCopy(MachineInstr *CopyMI) {
+  // ProcessImpicitDefs may leave some copies of <undef> values, it only removes
+  // local variables. When we have a copy like:
   //
-  //   %1 = COPY undef %2
+  //   %vreg1 = COPY %vreg2<undef>
   //
-  // We delete the copy and remove the corresponding value number from %1.
+  // We delete the copy and remove the corresponding value number from %vreg1.
   // Any uses of that value number are marked as <undef>.
 
   // Note that we do not query CoalescerPair here but redo isMoveInstr as the
   // CoalescerPair may have a new register class with adjusted subreg indices
   // at this point.
   unsigned SrcReg, DstReg, SrcSubIdx, DstSubIdx;
-  if(!isMoveInstr(*TRI, CopyMI, SrcReg, DstReg, SrcSubIdx, DstSubIdx))
-    return nullptr;
+  isMoveInstr(*TRI, CopyMI, SrcReg, DstReg, SrcSubIdx, DstSubIdx);
 
   SlotIndex Idx = LIS->getInstructionIndex(*CopyMI);
   const LiveInterval &SrcLI = LIS->getInterval(SrcReg);
@@ -1565,34 +1157,16 @@ MachineInstr *RegisterCoalescer::eliminateUndefCopy(MachineInstr *CopyMI) {
       if ((SR.LaneMask & SrcMask).none())
         continue;
       if (SR.liveAt(Idx))
-        return nullptr;
+        return false;
     }
   } else if (SrcLI.liveAt(Idx))
-    return nullptr;
+    return false;
 
-  // If the undef copy defines a live-out value (i.e. an input to a PHI def),
-  // then replace it with an IMPLICIT_DEF.
-  LiveInterval &DstLI = LIS->getInterval(DstReg);
-  SlotIndex RegIndex = Idx.getRegSlot();
-  LiveRange::Segment *Seg = DstLI.getSegmentContaining(RegIndex);
-  assert(Seg != nullptr && "No segment for defining instruction");
-  if (VNInfo *V = DstLI.getVNInfoAt(Seg->end)) {
-    if (V->isPHIDef()) {
-      CopyMI->setDesc(TII->get(TargetOpcode::IMPLICIT_DEF));
-      for (unsigned i = CopyMI->getNumOperands(); i != 0; --i) {
-        MachineOperand &MO = CopyMI->getOperand(i-1);
-        if (MO.isReg() && MO.isUse())
-          CopyMI->RemoveOperand(i-1);
-      }
-      LLVM_DEBUG(dbgs() << "\tReplaced copy of <undef> value with an "
-                           "implicit def\n");
-      return CopyMI;
-    }
-  }
+  DEBUG(dbgs() << "\tEliminating copy of <undef> value\n");
 
   // Remove any DstReg segments starting at the instruction.
-  LLVM_DEBUG(dbgs() << "\tEliminating copy of <undef> value\n");
-
+  LiveInterval &DstLI = LIS->getInterval(DstReg);
+  SlotIndex RegIndex = Idx.getRegSlot();
   // Remove value or merge with previous one in case of a subregister def.
   if (VNInfo *PrevVNI = DstLI.getVNInfoAt(Idx)) {
     VNInfo *VNI = DstLI.getVNInfoAt(RegIndex);
@@ -1635,7 +1209,7 @@ MachineInstr *RegisterCoalescer::eliminateUndefCopy(MachineInstr *CopyMI) {
     if (isLive)
       continue;
     MO.setIsUndef(true);
-    LLVM_DEBUG(dbgs() << "\tnew undef: " << UseIdx << '\t' << MI);
+    DEBUG(dbgs() << "\tnew undef: " << UseIdx << '\t' << MI);
   }
 
   // A def of a subregister may be a use of the other subregisters, so
@@ -1648,7 +1222,7 @@ MachineInstr *RegisterCoalescer::eliminateUndefCopy(MachineInstr *CopyMI) {
       MO.setIsUndef(true);
   LIS->shrinkToUses(&DstLI);
 
-  return CopyMI;
+  return true;
 }
 
 void RegisterCoalescer::addUndefFlag(const LiveInterval &Int, SlotIndex UseIdx,
@@ -1677,9 +1251,10 @@ void RegisterCoalescer::addUndefFlag(const LiveInterval &Int, SlotIndex UseIdx,
   }
 }
 
-void RegisterCoalescer::updateRegDefsUses(unsigned SrcReg, unsigned DstReg,
+void RegisterCoalescer::updateRegDefsUses(unsigned SrcReg,
+                                          unsigned DstReg,
                                           unsigned SubIdx) {
-  bool DstIsPhys = Register::isPhysicalRegister(DstReg);
+  bool DstIsPhys = TargetRegisterInfo::isPhysicalRegister(DstReg);
   LiveInterval *DstInt = DstIsPhys ? nullptr : &LIS->getInterval(DstReg);
 
   if (DstInt && DstInt->hasSubRanges() && DstReg != SrcReg) {
@@ -1715,7 +1290,7 @@ void RegisterCoalescer::updateRegDefsUses(unsigned SrcReg, unsigned DstReg,
 
     // If SrcReg wasn't read, it may still be the case that DstReg is live-in
     // because SrcReg is a sub-register.
-    if (DstInt && !Reads && SubIdx && !UseMI->isDebugValue())
+    if (DstInt && !Reads && SubIdx)
       Reads = DstInt->liveAt(LIS->getInstructionIndex(*UseMI));
 
     // Replace SrcReg with DstReg in all UseMI operands.
@@ -1733,15 +1308,8 @@ void RegisterCoalescer::updateRegDefsUses(unsigned SrcReg, unsigned DstReg,
       if (SubIdx != 0 && MO.isUse() && MRI->shouldTrackSubRegLiveness(DstReg)) {
         if (!DstInt->hasSubRanges()) {
           BumpPtrAllocator &Allocator = LIS->getVNInfoAllocator();
-          LaneBitmask FullMask = MRI->getMaxLaneMaskForVReg(DstInt->reg);
-          LaneBitmask UsedLanes = TRI->getSubRegIndexLaneMask(SubIdx);
-          LaneBitmask UnusedLanes = FullMask & ~UsedLanes;
-          DstInt->createSubRangeFrom(Allocator, UsedLanes, *DstInt);
-          // The unused lanes are just empty live-ranges at this point.
-          // It is the caller responsibility to set the proper
-          // dead segments if there is an actual dead def of the
-          // unused lanes. This may happen with rematerialization.
-          DstInt->createSubRange(Allocator, UnusedLanes);
+          LaneBitmask Mask = MRI->getMaxLaneMaskForVReg(DstInt->reg);
+          DstInt->createSubRangeFrom(Allocator, Mask, *DstInt);
         }
         SlotIndex MIIdx = UseMI->isDebugValue()
                               ? LIS->getSlotIndexes()->getIndexBefore(*UseMI)
@@ -1756,12 +1324,12 @@ void RegisterCoalescer::updateRegDefsUses(unsigned SrcReg, unsigned DstReg,
         MO.substVirtReg(DstReg, SubIdx, *TRI);
     }
 
-    LLVM_DEBUG({
-      dbgs() << "\t\tupdated: ";
-      if (!UseMI->isDebugValue())
-        dbgs() << LIS->getInstructionIndex(*UseMI) << "\t";
-      dbgs() << *UseMI;
-    });
+    DEBUG({
+        dbgs() << "\t\tupdated: ";
+        if (!UseMI->isDebugValue())
+          dbgs() << LIS->getInstructionIndex(*UseMI) << "\t";
+        dbgs() << *UseMI;
+      });
   }
 }
 
@@ -1770,7 +1338,7 @@ bool RegisterCoalescer::canJoinPhys(const CoalescerPair &CP) {
   // reserved register. This doesn't increase register pressure, so it is
   // always beneficial.
   if (!MRI->isReserved(CP.getDstReg())) {
-    LLVM_DEBUG(dbgs() << "\tCan only merge into reserved registers.\n");
+    DEBUG(dbgs() << "\tCan only merge into reserved registers.\n");
     return false;
   }
 
@@ -1778,18 +1346,18 @@ bool RegisterCoalescer::canJoinPhys(const CoalescerPair &CP) {
   if (JoinVInt.containsOneValue())
     return true;
 
-  LLVM_DEBUG(
-      dbgs() << "\tCannot join complex intervals into reserved register.\n");
+  DEBUG(dbgs() << "\tCannot join complex intervals into reserved register.\n");
   return false;
 }
 
 bool RegisterCoalescer::joinCopy(MachineInstr *CopyMI, bool &Again) {
+
   Again = false;
-  LLVM_DEBUG(dbgs() << LIS->getInstructionIndex(*CopyMI) << '\t' << *CopyMI);
+  DEBUG(dbgs() << LIS->getInstructionIndex(*CopyMI) << '\t' << *CopyMI);
 
   CoalescerPair CP(*TRI);
   if (!CP.setRegisters(CopyMI)) {
-    LLVM_DEBUG(dbgs() << "\tNot coalescable.\n");
+    DEBUG(dbgs() << "\tNot coalescable.\n");
     return false;
   }
 
@@ -1803,8 +1371,8 @@ bool RegisterCoalescer::joinCopy(MachineInstr *CopyMI, bool &Again) {
       std::swap(SrcRC, DstRC);
     }
     if (!TRI->shouldCoalesce(CopyMI, SrcRC, SrcIdx, DstRC, DstIdx,
-                             CP.getNewRC(), *LIS)) {
-      LLVM_DEBUG(dbgs() << "\tSubtarget bailed on coalescing.\n");
+                            CP.getNewRC())) {
+      DEBUG(dbgs() << "\tSubtarget bailed on coalescing.\n");
       return false;
     }
   }
@@ -1813,21 +1381,17 @@ bool RegisterCoalescer::joinCopy(MachineInstr *CopyMI, bool &Again) {
   // sometimes dead copies slip through, and we can't generate invalid live
   // ranges.
   if (!CP.isPhys() && CopyMI->allDefsAreDead()) {
-    LLVM_DEBUG(dbgs() << "\tCopy is dead.\n");
+    DEBUG(dbgs() << "\tCopy is dead.\n");
     DeadDefs.push_back(CopyMI);
     eliminateDeadDefs();
     return true;
   }
 
   // Eliminate undefs.
-  if (!CP.isPhys()) {
-    // If this is an IMPLICIT_DEF, leave it alone, but don't try to coalesce.
-    if (MachineInstr *UndefMI = eliminateUndefCopy(CopyMI)) {
-      if (UndefMI->isImplicitDef())
-        return false;
-      deleteInstr(CopyMI);
-      return false;  // Not coalescable.
-    }
+  if (!CP.isPhys() && eliminateUndefCopy(CopyMI)) {
+    LIS->RemoveMachineInstrFromMaps(*CopyMI);
+    CopyMI->eraseFromParent();
+    return false;  // Not coalescable.
   }
 
   // Coalesced copies are normally removed immediately, but transformations
@@ -1835,7 +1399,7 @@ bool RegisterCoalescer::joinCopy(MachineInstr *CopyMI, bool &Again) {
   // When that happens, just join the values and remove the copy.
   if (CP.getSrcReg() == CP.getDstReg()) {
     LiveInterval &LI = LIS->getInterval(CP.getSrcReg());
-    LLVM_DEBUG(dbgs() << "\tCopy already coalesced: " << LI << '\n');
+    DEBUG(dbgs() << "\tCopy already coalesced: " << LI << '\n');
     const SlotIndex CopyIdx = LIS->getInstructionIndex(*CopyMI);
     LiveQueryResult LRQ = LI.Query(CopyIdx);
     if (VNInfo *DefVNI = LRQ.valueDefined()) {
@@ -1852,17 +1416,18 @@ bool RegisterCoalescer::joinCopy(MachineInstr *CopyMI, bool &Again) {
           S.MergeValueNumberInto(SDefVNI, SReadVNI);
         }
       }
-      LLVM_DEBUG(dbgs() << "\tMerged values:          " << LI << '\n');
+      DEBUG(dbgs() << "\tMerged values:          " << LI << '\n');
     }
-    deleteInstr(CopyMI);
+    LIS->RemoveMachineInstrFromMaps(*CopyMI);
+    CopyMI->eraseFromParent();
     return true;
   }
 
   // Enforce policies.
   if (CP.isPhys()) {
-    LLVM_DEBUG(dbgs() << "\tConsidering merging "
-                      << printReg(CP.getSrcReg(), TRI) << " with "
-                      << printReg(CP.getDstReg(), TRI, CP.getSrcIdx()) << '\n');
+    DEBUG(dbgs() << "\tConsidering merging " << PrintReg(CP.getSrcReg(), TRI)
+                 << " with " << PrintReg(CP.getDstReg(), TRI, CP.getSrcIdx())
+                 << '\n');
     if (!canJoinPhys(CP)) {
       // Before giving up coalescing, if definition of source is defined by
       // trivial computation, try rematerializing it.
@@ -1879,17 +1444,17 @@ bool RegisterCoalescer::joinCopy(MachineInstr *CopyMI, bool &Again) {
                            LIS->getInterval(CP.getDstReg()).size())
       CP.flip();
 
-    LLVM_DEBUG({
+    DEBUG({
       dbgs() << "\tConsidering merging to "
              << TRI->getRegClassName(CP.getNewRC()) << " with ";
       if (CP.getDstIdx() && CP.getSrcIdx())
-        dbgs() << printReg(CP.getDstReg()) << " in "
+        dbgs() << PrintReg(CP.getDstReg()) << " in "
                << TRI->getSubRegIndexName(CP.getDstIdx()) << " and "
-               << printReg(CP.getSrcReg()) << " in "
+               << PrintReg(CP.getSrcReg()) << " in "
                << TRI->getSubRegIndexName(CP.getSrcIdx()) << '\n';
       else
-        dbgs() << printReg(CP.getSrcReg(), TRI) << " in "
-               << printReg(CP.getDstReg(), TRI, CP.getSrcIdx()) << '\n';
+        dbgs() << PrintReg(CP.getSrcReg(), TRI) << " in "
+               << PrintReg(CP.getDstReg(), TRI, CP.getSrcIdx()) << '\n';
     });
   }
 
@@ -1912,31 +1477,17 @@ bool RegisterCoalescer::joinCopy(MachineInstr *CopyMI, bool &Again) {
     // If we can eliminate the copy without merging the live segments, do so
     // now.
     if (!CP.isPartial() && !CP.isPhys()) {
-      bool Changed = adjustCopiesBackFrom(CP, CopyMI);
-      bool Shrink = false;
-      if (!Changed)
-        std::tie(Changed, Shrink) = removeCopyByCommutingDef(CP, CopyMI);
-      if (Changed) {
-        deleteInstr(CopyMI);
-        if (Shrink) {
-          unsigned DstReg = CP.isFlipped() ? CP.getSrcReg() : CP.getDstReg();
-          LiveInterval &DstLI = LIS->getInterval(DstReg);
-          shrinkToUses(&DstLI);
-          LLVM_DEBUG(dbgs() << "\t\tshrunk:   " << DstLI << '\n');
-        }
-        LLVM_DEBUG(dbgs() << "\tTrivial!\n");
+      if (adjustCopiesBackFrom(CP, CopyMI) ||
+          removeCopyByCommutingDef(CP, CopyMI)) {
+        LIS->RemoveMachineInstrFromMaps(*CopyMI);
+        CopyMI->eraseFromParent();
+        DEBUG(dbgs() << "\tTrivial!\n");
         return true;
       }
     }
 
-    // Try and see if we can partially eliminate the copy by moving the copy to
-    // its predecessor.
-    if (!CP.isPartial() && !CP.isPhys())
-      if (removePartialRedundancy(CP, *CopyMI))
-        return true;
-
     // Otherwise, we are unable to join the intervals.
-    LLVM_DEBUG(dbgs() << "\tInterference!\n");
+    DEBUG(dbgs() << "\tInterference!\n");
     Again = true;  // May be possible to coalesce later.
     return false;
   }
@@ -1970,19 +1521,12 @@ bool RegisterCoalescer::joinCopy(MachineInstr *CopyMI, bool &Again) {
     for (LiveInterval::SubRange &S : LI.subranges()) {
       if ((S.LaneMask & ShrinkMask).none())
         continue;
-      LLVM_DEBUG(dbgs() << "Shrink LaneUses (Lane " << PrintLaneMask(S.LaneMask)
-                        << ")\n");
+      DEBUG(dbgs() << "Shrink LaneUses (Lane " << PrintLaneMask(S.LaneMask)
+                   << ")\n");
       LIS->shrinkToUses(S, LI.reg);
     }
     LI.removeEmptySubRanges();
   }
-
-  // CP.getSrcReg()'s live interval has been merged into CP.getDstReg's live
-  // interval. Since CP.getSrcReg() is in ToBeUpdated set and its live interval
-  // is not up-to-date, need to update the merged live interval here.
-  if (ToBeUpdated.count(CP.getSrcReg()))
-    ShrinkMainRange = true;
-
   if (ShrinkMainRange) {
     LiveInterval &LI = LIS->getInterval(CP.getDstReg());
     shrinkToUses(&LI);
@@ -1995,12 +1539,12 @@ bool RegisterCoalescer::joinCopy(MachineInstr *CopyMI, bool &Again) {
   // Update regalloc hint.
   TRI->updateRegAllocHint(CP.getSrcReg(), CP.getDstReg(), *MF);
 
-  LLVM_DEBUG({
-    dbgs() << "\tSuccess: " << printReg(CP.getSrcReg(), TRI, CP.getSrcIdx())
-           << " -> " << printReg(CP.getDstReg(), TRI, CP.getDstIdx()) << '\n';
+  DEBUG({
+    dbgs() << "\tSuccess: " << PrintReg(CP.getSrcReg(), TRI, CP.getSrcIdx())
+           << " -> " << PrintReg(CP.getDstReg(), TRI, CP.getDstIdx()) << '\n';
     dbgs() << "\tResult = ";
     if (CP.isPhys())
-      dbgs() << printReg(CP.getDstReg(), TRI);
+      dbgs() << PrintReg(CP.getDstReg(), TRI);
     else
       dbgs() << LIS->getInterval(CP.getDstReg());
     dbgs() << '\n';
@@ -2016,7 +1560,7 @@ bool RegisterCoalescer::joinReservedPhysReg(CoalescerPair &CP) {
   assert(CP.isPhys() && "Must be a physreg copy");
   assert(MRI->isReserved(DstReg) && "Not a reserved register");
   LiveInterval &RHS = LIS->getInterval(SrcReg);
-  LLVM_DEBUG(dbgs() << "\t\tRHS = " << RHS << '\n');
+  DEBUG(dbgs() << "\t\tRHS = " << RHS << '\n');
 
   assert(RHS.containsOneValue() && "Invalid join with reserved register");
 
@@ -2035,18 +1579,9 @@ bool RegisterCoalescer::joinReservedPhysReg(CoalescerPair &CP) {
           return false;
       }
       if (RHS.overlaps(LIS->getRegUnit(*UI))) {
-        LLVM_DEBUG(dbgs() << "\t\tInterference: " << printRegUnit(*UI, TRI)
-                          << '\n');
+        DEBUG(dbgs() << "\t\tInterference: " << PrintRegUnit(*UI, TRI) << '\n');
         return false;
       }
-    }
-
-    // We must also check for overlaps with regmask clobbers.
-    BitVector RegMaskUsable;
-    if (LIS->checkRegMaskInterference(RHS, RegMaskUsable) &&
-        !RegMaskUsable.test(DstReg)) {
-      LLVM_DEBUG(dbgs() << "\t\tRegMask interference\n");
-      return false;
     }
   }
 
@@ -2059,28 +1594,28 @@ bool RegisterCoalescer::joinReservedPhysReg(CoalescerPair &CP) {
   MachineInstr *CopyMI;
   if (CP.isFlipped()) {
     // Physreg is copied into vreg
-    //   %y = COPY %physreg_x
-    //   ...  //< no other def of %physreg_x here
-    //   use %y
+    //   %vregY = COPY %X
+    //   ...  //< no other def of %X here
+    //   use %vregY
     // =>
     //   ...
-    //   use %physreg_x
+    //   use %X
     CopyMI = MRI->getVRegDef(SrcReg);
   } else {
     // VReg is copied into physreg:
-    //   %y = def
-    //   ... //< no other def or use of %physreg_x here
-    //   %physreg_x = COPY %y
+    //   %vregX = def
+    //   ... //< no other def or use of %Y here
+    //   %Y = COPY %vregX
     // =>
-    //   %physreg_x = def
+    //   %Y = def
     //   ...
     if (!MRI->hasOneNonDBGUse(SrcReg)) {
-      LLVM_DEBUG(dbgs() << "\t\tMultiple vreg uses!\n");
+      DEBUG(dbgs() << "\t\tMultiple vreg uses!\n");
       return false;
     }
 
     if (!LIS->intervalIsInOneMBB(RHS)) {
-      LLVM_DEBUG(dbgs() << "\t\tComplex control flow!\n");
+      DEBUG(dbgs() << "\t\tComplex control flow!\n");
       return false;
     }
 
@@ -2091,23 +1626,31 @@ bool RegisterCoalescer::joinReservedPhysReg(CoalescerPair &CP) {
 
     if (!MRI->isConstantPhysReg(DstReg)) {
       // We checked above that there are no interfering defs of the physical
-      // register. However, for this case, where we intend to move up the def of
+      // register. However, for this case, where we intent to move up the def of
       // the physical register, we also need to check for interfering uses.
       SlotIndexes *Indexes = LIS->getSlotIndexes();
       for (SlotIndex SI = Indexes->getNextNonNullIndex(DestRegIdx);
            SI != CopyRegIdx; SI = Indexes->getNextNonNullIndex(SI)) {
         MachineInstr *MI = LIS->getInstructionFromIndex(SI);
         if (MI->readsRegister(DstReg, TRI)) {
-          LLVM_DEBUG(dbgs() << "\t\tInterference (read): " << *MI);
+          DEBUG(dbgs() << "\t\tInterference (read): " << *MI);
           return false;
+        }
+
+        // We must also check for clobbers caused by regmasks.
+        for (const auto &MO : MI->operands()) {
+          if (MO.isRegMask() && MO.clobbersPhysReg(DstReg)) {
+            DEBUG(dbgs() << "\t\tInterference (regmask clobber): " << *MI);
+            return false;
+          }
         }
       }
     }
 
     // We're going to remove the copy which defines a physical reserved
     // register, so remove its valno, etc.
-    LLVM_DEBUG(dbgs() << "\t\tRemoving phys reg def of "
-                      << printReg(DstReg, TRI) << " at " << CopyRegIdx << "\n");
+    DEBUG(dbgs() << "\t\tRemoving phys reg def of " << PrintReg(DstReg, TRI)
+          << " at " << CopyRegIdx << "\n");
 
     LIS->removePhysRegDefAt(DstReg, CopyRegIdx);
     // Create a new dead def at the new def location.
@@ -2117,7 +1660,8 @@ bool RegisterCoalescer::joinReservedPhysReg(CoalescerPair &CP) {
     }
   }
 
-  deleteInstr(CopyMI);
+  LIS->RemoveMachineInstrFromMaps(*CopyMI);
+  CopyMI->eraseFromParent();
 
   // We don't track kills for reserved registers.
   MRI->clearKillFlags(CP.getSrcReg());
@@ -2167,7 +1711,7 @@ bool RegisterCoalescer::joinReservedPhysReg(CoalescerPair &CP) {
 //
 //      %dst:ssub0<def,read-undef> = FOO
 //      %src = BAR
-//      %dst:ssub1 = COPY %src
+//      %dst:ssub1<def> = COPY %src
 //
 //    The live range of %src overlaps the %dst value defined by FOO, but
 //    merging %src into %dst:ssub1 is only going to clobber the ssub1 lane
@@ -2182,15 +1726,14 @@ bool RegisterCoalescer::joinReservedPhysReg(CoalescerPair &CP) {
 //    is live, but never read. This can happen because we don't compute
 //    individual live ranges per lane.
 //
-//      %dst = FOO
+//      %dst<def> = FOO
 //      %src = BAR
-//      %dst:ssub1 = COPY %src
+//      %dst:ssub1<def> = COPY %src
 //
 //    This kind of interference is only resolved locally. If the clobbered
 //    lane value escapes the block, the join is aborted.
 
 namespace {
-
 /// Track information about values in a single virtual register about to be
 /// joined. Objects of this class are always created in pairs - one for each
 /// side of the CoalescerPair (or one for each lane of a side of the coalescer
@@ -2198,7 +1741,6 @@ namespace {
 class JoinVals {
   /// Live range we work on.
   LiveRange &LR;
-
   /// (Main) register we work on.
   const unsigned Reg;
 
@@ -2206,7 +1748,6 @@ class JoinVals {
   /// subregister SubIdx in the coalesced register. Either CP.DstIdx or
   /// CP.SrcIdx.
   const unsigned SubIdx;
-
   /// The LaneMask that this liverange will occupy the coalesced register. May
   /// be smaller than the lanemask produced by SubIdx when merging subranges.
   const LaneBitmask LaneMask;
@@ -2214,7 +1755,6 @@ class JoinVals {
   /// This is true when joining sub register ranges, false when joining main
   /// ranges.
   const bool SubRangeJoin;
-
   /// Whether the current LiveInterval tracks subregister liveness.
   const bool TrackSubRegLiveness;
 
@@ -2230,7 +1770,6 @@ class JoinVals {
   /// NewVNInfo. This is suitable for passing to LiveInterval::join().
   SmallVector<int, 8> Assignments;
 
-  public:
   /// Conflict resolution for overlapping values.
   enum ConflictResolution {
     /// No overlap, simply keep this value.
@@ -2259,12 +1798,11 @@ class JoinVals {
     CR_Impossible
   };
 
-  private:
   /// Per-value info for LI. The lane bit masks are all relative to the final
   /// joined register, so they can be compared directly between SrcReg and
   /// DstReg.
   struct Val {
-    ConflictResolution Resolution = CR_Keep;
+    ConflictResolution Resolution;
 
     /// Lanes written by this def, 0 for unanalyzed values.
     LaneBitmask WriteLanes;
@@ -2274,10 +1812,10 @@ class JoinVals {
     LaneBitmask ValidLanes;
 
     /// Value in LI being redefined by this def.
-    VNInfo *RedefVNI = nullptr;
+    VNInfo *RedefVNI;
 
     /// Value in the other live range that overlaps this def, if any.
-    VNInfo *OtherVNI = nullptr;
+    VNInfo *OtherVNI;
 
     /// Is this value an IMPLICIT_DEF that can be erased?
     ///
@@ -2290,23 +1828,18 @@ class JoinVals {
     /// ProcessImplicitDefs can very rarely create IMPLICIT_DEF values with
     /// longer live ranges. Such IMPLICIT_DEF values should be treated like
     /// normal values.
-    bool ErasableImplicitDef = false;
+    bool ErasableImplicitDef;
 
     /// True when the live range of this value will be pruned because of an
     /// overlapping CR_Replace value in the other live range.
-    bool Pruned = false;
+    bool Pruned;
 
     /// True once Pruned above has been computed.
-    bool PrunedComputed = false;
+    bool PrunedComputed;
 
-    /// True if this value is determined to be identical to OtherVNI
-    /// (in valuesIdentical). This is used with CR_Erase where the erased
-    /// copy is redundant, i.e. the source value is already the same as
-    /// the destination. In such cases the subranges need to be updated
-    /// properly. See comment at pruneSubRegValues for more info.
-    bool Identical = false;
-
-    Val() = default;
+    Val() : Resolution(CR_Keep), WriteLanes(), ValidLanes(),
+            RedefVNI(nullptr), OtherVNI(nullptr), ErasableImplicitDef(false),
+            Pruned(false), PrunedComputed(false) {}
 
     bool isAnalyzed() const { return WriteLanes.any(); }
   };
@@ -2322,7 +1855,7 @@ class JoinVals {
   /// Find the ultimate value that VNI was copied from.
   std::pair<const VNInfo*,unsigned> followCopyChain(const VNInfo *VNI) const;
 
-  bool valuesIdentical(VNInfo *Value0, VNInfo *Value1, const JoinVals &Other) const;
+  bool valuesIdentical(VNInfo *Val0, VNInfo *Val1, const JoinVals &Other) const;
 
   /// Analyze ValNo in this live range, and set all fields of Vals[ValNo].
   /// Return a conflict resolution when possible, but leave the hard cases as
@@ -2353,9 +1886,8 @@ class JoinVals {
   /// entry to TaintedVals.
   ///
   /// Returns false if the tainted lanes extend beyond the basic block.
-  bool
-  taintExtent(unsigned ValNo, LaneBitmask TaintedLanes, JoinVals &Other,
-              SmallVectorImpl<std::pair<SlotIndex, LaneBitmask>> &TaintExtent);
+  bool taintExtent(unsigned, LaneBitmask, JoinVals&,
+                   SmallVectorImpl<std::pair<SlotIndex, LaneBitmask> >&);
 
   /// Return true if MI uses any of the given Lanes from Reg.
   /// This does not include partial redefinitions of Reg.
@@ -2377,7 +1909,8 @@ public:
     : LR(LR), Reg(Reg), SubIdx(SubIdx), LaneMask(LaneMask),
       SubRangeJoin(SubRangeJoin), TrackSubRegLiveness(TrackSubRegLiveness),
       NewVNInfo(newVNInfo), CP(cp), LIS(lis), Indexes(LIS->getSlotIndexes()),
-      TRI(TRI), Assignments(LR.getNumValNums(), -1), Vals(LR.getNumValNums()) {}
+      TRI(TRI), Assignments(LR.getNumValNums(), -1), Vals(LR.getNumValNums())
+  {}
 
   /// Analyze defs in LR and compute a value mapping in NewVNInfo.
   /// Returns false if any conflicts were impossible to resolve.
@@ -2420,13 +1953,7 @@ public:
 
   /// Get the value assignments suitable for passing to LiveInterval::join.
   const int *getAssignments() const { return Assignments.data(); }
-
-  /// Get the conflict resolution for a value number.
-  ConflictResolution getResolution(unsigned Num) const {
-    return Vals[Num].Resolution;
-  }
 };
-
 } // end anonymous namespace
 
 LaneBitmask JoinVals::computeWriteLanes(const MachineInstr *DefMI, bool &Redef)
@@ -2445,17 +1972,17 @@ LaneBitmask JoinVals::computeWriteLanes(const MachineInstr *DefMI, bool &Redef)
 
 std::pair<const VNInfo*, unsigned> JoinVals::followCopyChain(
     const VNInfo *VNI) const {
-  unsigned TrackReg = Reg;
+  unsigned Reg = this->Reg;
 
   while (!VNI->isPHIDef()) {
     SlotIndex Def = VNI->def;
     MachineInstr *MI = Indexes->getInstructionFromIndex(Def);
     assert(MI && "No defining instruction");
     if (!MI->isFullCopy())
-      return std::make_pair(VNI, TrackReg);
-    Register SrcReg = MI->getOperand(1).getReg();
-    if (!Register::isVirtualRegister(SrcReg))
-      return std::make_pair(VNI, TrackReg);
+      return std::make_pair(VNI, Reg);
+    unsigned SrcReg = MI->getOperand(1).getReg();
+    if (!TargetRegisterInfo::isVirtualRegister(SrcReg))
+      return std::make_pair(VNI, Reg);
 
     const LiveInterval &LI = LIS->getInterval(SrcReg);
     const VNInfo *ValueIn;
@@ -2464,8 +1991,7 @@ std::pair<const VNInfo*, unsigned> JoinVals::followCopyChain(
       LiveQueryResult LRQ = LI.Query(Def);
       ValueIn = LRQ.valueIn();
     } else {
-      // Query subranges. Ensure that all matching ones take us to the same def
-      // (allowing some of them to be undef).
+      // Query subranges. Pick the first matching one.
       ValueIn = nullptr;
       for (const LiveInterval::SubRange &S : LI.subranges()) {
         // Transform lanemask to a mask in the joined live interval.
@@ -2473,27 +1999,16 @@ std::pair<const VNInfo*, unsigned> JoinVals::followCopyChain(
         if ((SMask & LaneMask).none())
           continue;
         LiveQueryResult LRQ = S.Query(Def);
-        if (!ValueIn) {
-          ValueIn = LRQ.valueIn();
-          continue;
-        }
-        if (LRQ.valueIn() && ValueIn != LRQ.valueIn())
-          return std::make_pair(VNI, TrackReg);
+        ValueIn = LRQ.valueIn();
+        break;
       }
     }
-    if (ValueIn == nullptr) {
-      // Reaching an undefined value is legitimate, for example:
-      //
-      // 1   undef %0.sub1 = ...  ;; %0.sub0 == undef
-      // 2   %1 = COPY %0         ;; %1 is defined here.
-      // 3   %0 = COPY %1         ;; Now %0.sub0 has a definition,
-      //                          ;; but it's equivalent to "undef".
-      return std::make_pair(nullptr, SrcReg);
-    }
+    if (ValueIn == nullptr)
+      break;
     VNI = ValueIn;
-    TrackReg = SrcReg;
+    Reg = SrcReg;
   }
-  return std::make_pair(VNI, TrackReg);
+  return std::make_pair(VNI, Reg);
 }
 
 bool JoinVals::valuesIdentical(VNInfo *Value0, VNInfo *Value1,
@@ -2501,17 +2016,12 @@ bool JoinVals::valuesIdentical(VNInfo *Value0, VNInfo *Value1,
   const VNInfo *Orig0;
   unsigned Reg0;
   std::tie(Orig0, Reg0) = followCopyChain(Value0);
-  if (Orig0 == Value1 && Reg0 == Other.Reg)
+  if (Orig0 == Value1)
     return true;
 
   const VNInfo *Orig1;
   unsigned Reg1;
   std::tie(Orig1, Reg1) = Other.followCopyChain(Value1);
-  // If both values are undefined, and the source registers are the same
-  // register, the values are identical. Filter out cases where only one
-  // value is defined.
-  if (Orig0 == nullptr || Orig1 == nullptr)
-    return Orig0 == Orig1 && Reg0 == Reg1;
 
   // The values are equal if they are defined at the same place and use the
   // same register. Note that we cannot compare VNInfos directly as some of
@@ -2534,7 +2044,7 @@ JoinVals::analyzeValue(unsigned ValNo, JoinVals &Other) {
   const MachineInstr *DefMI = nullptr;
   if (VNI->isPHIDef()) {
     // Conservatively assume that all lanes in a PHI are valid.
-    LaneBitmask Lanes = SubRangeJoin ? LaneBitmask::getLane(0)
+    LaneBitmask Lanes = SubRangeJoin ? LaneBitmask(1)
                                      : TRI->getSubRegIndexLaneMask(SubIdx);
     V.ValidLanes = V.WriteLanes = Lanes;
   } else {
@@ -2542,7 +2052,7 @@ JoinVals::analyzeValue(unsigned ValNo, JoinVals &Other) {
     assert(DefMI != nullptr);
     if (SubRangeJoin) {
       // We don't care about the lanes when joining subregister ranges.
-      V.WriteLanes = V.ValidLanes = LaneBitmask::getLane(0);
+      V.WriteLanes = V.ValidLanes = LaneBitmask(1);
       if (DefMI->isImplicitDef()) {
         V.ValidLanes = LaneBitmask::getNone();
         V.ErasableImplicitDef = true;
@@ -2558,7 +2068,7 @@ JoinVals::analyzeValue(unsigned ValNo, JoinVals &Other) {
       //
       // This adds ssub1 to the set of valid lanes in %src:
       //
-      //   %src:ssub1 = FOO
+      //   %src:ssub1<def> = FOO
       //
       // This leaves only ssub1 valid, making any other lanes undef:
       //
@@ -2581,10 +2091,8 @@ JoinVals::analyzeValue(unsigned ValNo, JoinVals &Other) {
         // We normally expect IMPLICIT_DEF values to be live only until the end
         // of their block. If the value is really live longer and gets pruned in
         // another block, this flag is cleared again.
-        //
-        // Clearing the valid lanes is deferred until it is sure this can be
-        // erased.
         V.ErasableImplicitDef = true;
+        V.ValidLanes &= ~V.WriteLanes;
       }
     }
   }
@@ -2639,25 +2147,19 @@ JoinVals::analyzeValue(unsigned ValNo, JoinVals &Other) {
   Other.computeAssignment(V.OtherVNI->id, *this);
   Val &OtherV = Other.Vals[V.OtherVNI->id];
 
-  if (OtherV.ErasableImplicitDef) {
-    // Check if OtherV is an IMPLICIT_DEF that extends beyond its basic block.
-    // This shouldn't normally happen, but ProcessImplicitDefs can leave such
-    // IMPLICIT_DEF instructions behind, and there is nothing wrong with it
-    // technically.
-    //
-    // When it happens, treat that IMPLICIT_DEF as a normal value, and don't try
-    // to erase the IMPLICIT_DEF instruction.
-    if (DefMI &&
-        DefMI->getParent() != Indexes->getMBBFromIndex(V.OtherVNI->def)) {
-      LLVM_DEBUG(dbgs() << "IMPLICIT_DEF defined at " << V.OtherVNI->def
-                 << " extends into "
-                 << printMBBReference(*DefMI->getParent())
+  // Check if OtherV is an IMPLICIT_DEF that extends beyond its basic block.
+  // This shouldn't normally happen, but ProcessImplicitDefs can leave such
+  // IMPLICIT_DEF instructions behind, and there is nothing wrong with it
+  // technically.
+  //
+  // When it happens, treat that IMPLICIT_DEF as a normal value, and don't try
+  // to erase the IMPLICIT_DEF instruction.
+  if (OtherV.ErasableImplicitDef && DefMI &&
+      DefMI->getParent() != Indexes->getMBBFromIndex(V.OtherVNI->def)) {
+    DEBUG(dbgs() << "IMPLICIT_DEF defined at " << V.OtherVNI->def
+                 << " extends into BB#" << DefMI->getParent()->getNumber()
                  << ", keeping it.\n");
-      OtherV.ErasableImplicitDef = false;
-    } else {
-      // We deferred clearing these lanes in case we needed to save them
-      OtherV.ValidLanes &= ~OtherV.WriteLanes;
-    }
+    OtherV.ErasableImplicitDef = false;
   }
 
   // Allow overlapping PHI values. Any real interference would show up in a
@@ -2694,17 +2196,9 @@ JoinVals::analyzeValue(unsigned ValNo, JoinVals &Other) {
   //   %other = COPY %ext
   //   %this  = COPY %ext <-- Erase this copy
   //
-  if (DefMI->isFullCopy() && !CP.isPartial() &&
-      valuesIdentical(VNI, V.OtherVNI, Other)) {
-    V.Identical = true;
+  if (DefMI->isFullCopy() && !CP.isPartial()
+      && valuesIdentical(VNI, V.OtherVNI, Other))
     return CR_Erase;
-  }
-
-  // The remaining checks apply to the lanes, which aren't tracked here.  This
-  // was already decided to be OK via the following CR_Replace condition.
-  // CR_Replace.
-  if (SubRangeJoin)
-    return CR_Replace;
 
   // If the lanes written by this instruction were all undef in OtherVNI, it is
   // still safe to join the live ranges. This can't be done with a simple value
@@ -2712,9 +2206,9 @@ JoinVals::analyzeValue(unsigned ValNo, JoinVals &Other) {
   //
   //   1 %dst:ssub0 = FOO                <-- OtherVNI
   //   2 %src = BAR                      <-- VNI
-  //   3 %dst:ssub1 = COPY killed %src    <-- Eliminate this copy.
-  //   4 BAZ killed %dst
-  //   5 QUUX killed %src
+  //   3 %dst:ssub1 = COPY %src<kill>    <-- Eliminate this copy.
+  //   4 BAZ %dst<kill>
+  //   5 QUUX %src<kill>
   //
   // Here OtherVNI will map to itself in [1;2), but to VNI in [2;5). CR_Replace
   // handles this complex value mapping.
@@ -2724,7 +2218,7 @@ JoinVals::analyzeValue(unsigned ValNo, JoinVals &Other) {
   // If the other live range is killed by DefMI and the live ranges are still
   // overlapping, it must be because we're looking at an early clobber def:
   //
-  //   %dst<def,early-clobber> = ASM killed %src
+  //   %dst<def,early-clobber> = ASM %src<kill>
   //
   // In this case, it is illegal to merge the two live ranges since the early
   // clobber def would clobber %src before it was read.
@@ -2774,11 +2268,11 @@ void JoinVals::computeAssignment(unsigned ValNo, JoinVals &Other) {
     assert(V.OtherVNI && "OtherVNI not assigned, can't merge.");
     assert(Other.Vals[V.OtherVNI->id].isAnalyzed() && "Missing recursion");
     Assignments[ValNo] = Other.Assignments[V.OtherVNI->id];
-    LLVM_DEBUG(dbgs() << "\t\tmerge " << printReg(Reg) << ':' << ValNo << '@'
-                      << LR.getValNumInfo(ValNo)->def << " into "
-                      << printReg(Other.Reg) << ':' << V.OtherVNI->id << '@'
-                      << V.OtherVNI->def << " --> @"
-                      << NewVNInfo[Assignments[ValNo]]->def << '\n');
+    DEBUG(dbgs() << "\t\tmerge " << PrintReg(Reg) << ':' << ValNo << '@'
+                 << LR.getValNumInfo(ValNo)->def << " into "
+                 << PrintReg(Other.Reg) << ':' << V.OtherVNI->id << '@'
+                 << V.OtherVNI->def << " --> @"
+                 << NewVNInfo[Assignments[ValNo]]->def << '\n');
     break;
   case CR_Replace:
   case CR_Unresolved: {
@@ -2787,18 +2281,8 @@ void JoinVals::computeAssignment(unsigned ValNo, JoinVals &Other) {
     Val &OtherV = Other.Vals[V.OtherVNI->id];
     // We cannot erase an IMPLICIT_DEF if we don't have valid values for all
     // its lanes.
-    if (OtherV.ErasableImplicitDef &&
-        TrackSubRegLiveness &&
-        (OtherV.WriteLanes & ~V.ValidLanes).any()) {
-      LLVM_DEBUG(dbgs() << "Cannot erase implicit_def with missing values\n");
-
+    if ((OtherV.WriteLanes & ~V.ValidLanes).any() && TrackSubRegLiveness)
       OtherV.ErasableImplicitDef = false;
-      // The valid lanes written by the implicit_def were speculatively cleared
-      // before, so make this more conservative. It may be better to track this,
-      // I haven't found a testcase where it matters.
-      OtherV.ValidLanes = LaneBitmask::getAll();
-    }
-
     OtherV.Pruned = true;
     LLVM_FALLTHROUGH;
   }
@@ -2814,8 +2298,8 @@ bool JoinVals::mapValues(JoinVals &Other) {
   for (unsigned i = 0, e = LR.getNumValNums(); i != e; ++i) {
     computeAssignment(i, Other);
     if (Vals[i].Resolution == CR_Impossible) {
-      LLVM_DEBUG(dbgs() << "\t\tinterference at " << printReg(Reg) << ':' << i
-                        << '@' << LR.getValNumInfo(i)->def << '\n');
+      DEBUG(dbgs() << "\t\tinterference at " << PrintReg(Reg) << ':' << i
+                   << '@' << LR.getValNumInfo(i)->def << '\n');
       return false;
     }
   }
@@ -2824,7 +2308,7 @@ bool JoinVals::mapValues(JoinVals &Other) {
 
 bool JoinVals::
 taintExtent(unsigned ValNo, LaneBitmask TaintedLanes, JoinVals &Other,
-            SmallVectorImpl<std::pair<SlotIndex, LaneBitmask>> &TaintExtent) {
+            SmallVectorImpl<std::pair<SlotIndex, LaneBitmask> > &TaintExtent) {
   VNInfo *VNI = LR.getValNumInfo(ValNo);
   MachineBasicBlock *MBB = Indexes->getMBBFromIndex(VNI->def);
   SlotIndex MBBEnd = Indexes->getMBBEndIdx(MBB);
@@ -2837,13 +2321,13 @@ taintExtent(unsigned ValNo, LaneBitmask TaintedLanes, JoinVals &Other,
     // lanes escape the block.
     SlotIndex End = OtherI->end;
     if (End >= MBBEnd) {
-      LLVM_DEBUG(dbgs() << "\t\ttaints global " << printReg(Other.Reg) << ':'
-                        << OtherI->valno->id << '@' << OtherI->start << '\n');
+      DEBUG(dbgs() << "\t\ttaints global " << PrintReg(Other.Reg) << ':'
+                   << OtherI->valno->id << '@' << OtherI->start << '\n');
       return false;
     }
-    LLVM_DEBUG(dbgs() << "\t\ttaints local " << printReg(Other.Reg) << ':'
-                      << OtherI->valno->id << '@' << OtherI->start << " to "
-                      << End << '\n');
+    DEBUG(dbgs() << "\t\ttaints local " << PrintReg(Other.Reg) << ':'
+                 << OtherI->valno->id << '@' << OtherI->start
+                 << " to " << End << '\n');
     // A dead def is not a problem.
     if (End.isDead())
       break;
@@ -2864,7 +2348,7 @@ taintExtent(unsigned ValNo, LaneBitmask TaintedLanes, JoinVals &Other,
 
 bool JoinVals::usesLanes(const MachineInstr &MI, unsigned Reg, unsigned SubIdx,
                          LaneBitmask Lanes) const {
-  if (MI.isDebugInstr())
+  if (MI.isDebugValue())
     return false;
   for (const MachineOperand &MO : MI.operands()) {
     if (!MO.isReg() || MO.isDef() || MO.getReg() != Reg)
@@ -2881,11 +2365,11 @@ bool JoinVals::usesLanes(const MachineInstr &MI, unsigned Reg, unsigned SubIdx,
 bool JoinVals::resolveConflicts(JoinVals &Other) {
   for (unsigned i = 0, e = LR.getNumValNums(); i != e; ++i) {
     Val &V = Vals[i];
-    assert(V.Resolution != CR_Impossible && "Unresolvable conflict");
+    assert (V.Resolution != CR_Impossible && "Unresolvable conflict");
     if (V.Resolution != CR_Unresolved)
       continue;
-    LLVM_DEBUG(dbgs() << "\t\tconflict at " << printReg(Reg) << ':' << i << '@'
-                      << LR.getValNumInfo(i)->def << '\n');
+    DEBUG(dbgs() << "\t\tconflict at " << PrintReg(Reg) << ':' << i
+                 << '@' << LR.getValNumInfo(i)->def << '\n');
     if (SubRangeJoin)
       return false;
 
@@ -2919,10 +2403,10 @@ bool JoinVals::resolveConflicts(JoinVals &Other) {
       Indexes->getInstructionFromIndex(TaintExtent.front().first);
     assert(LastMI && "Range must end at a proper instruction");
     unsigned TaintNum = 0;
-    while (true) {
+    for (;;) {
       assert(MI != MBB->end() && "Bad LastMI");
       if (usesLanes(*MI, Other.Reg, Other.SubIdx, TaintedLanes)) {
-        LLVM_DEBUG(dbgs() << "\t\ttainted lanes used by: " << *MI);
+        DEBUG(dbgs() << "\t\ttainted lanes used by: " << *MI);
         return false;
       }
       // LastMI is the last instruction to use the current value.
@@ -2979,13 +2463,13 @@ void JoinVals::pruneValues(JoinVals &Other,
       if (!Def.isBlock()) {
         if (changeInstrs) {
           // Remove <def,read-undef> flags. This def is now a partial redef.
-          // Also remove dead flags since the joined live range will
+          // Also remove <def,dead> flags since the joined live range will
           // continue past this instruction.
           for (MachineOperand &MO :
                Indexes->getInstructionFromIndex(Def)->operands()) {
             if (MO.isReg() && MO.isDef() && MO.getReg() == Reg) {
-              if (MO.getSubReg() != 0 && MO.isUndef() && !EraseImpDef)
-                MO.setIsUndef(false);
+              if (MO.getSubReg() != 0)
+                MO.setIsUndef(EraseImpDef);
               MO.setIsDead(false);
             }
           }
@@ -2995,8 +2479,8 @@ void JoinVals::pruneValues(JoinVals &Other,
         if (!EraseImpDef)
           EndPoints.push_back(Def);
       }
-      LLVM_DEBUG(dbgs() << "\t\tpruned " << printReg(Other.Reg) << " at " << Def
-                        << ": " << Other.LR << '\n');
+      DEBUG(dbgs() << "\t\tpruned " << PrintReg(Other.Reg) << " at " << Def
+                   << ": " << Other.LR << '\n');
       break;
     }
     case CR_Erase:
@@ -3007,8 +2491,8 @@ void JoinVals::pruneValues(JoinVals &Other,
         // computeAssignment(), the value that was originally copied could have
         // been replaced.
         LIS->pruneValue(LR, Def, &EndPoints);
-        LLVM_DEBUG(dbgs() << "\t\tpruned all of " << printReg(Reg) << " at "
-                          << Def << ": " << LR << '\n');
+        DEBUG(dbgs() << "\t\tpruned all of " << PrintReg(Reg) << " at "
+                     << Def << ": " << LR << '\n');
       }
       break;
     case CR_Unresolved:
@@ -3018,96 +2502,35 @@ void JoinVals::pruneValues(JoinVals &Other,
   }
 }
 
-/// Consider the following situation when coalescing the copy between
-/// %31 and %45 at 800. (The vertical lines represent live range segments.)
-///
-///                              Main range         Subrange 0004 (sub2)
-///                              %31    %45           %31    %45
-///  544    %45 = COPY %28               +                    +
-///                                      | v1                 | v1
-///  560B bb.1:                          +                    +
-///  624        = %45.sub2               | v2                 | v2
-///  800    %31 = COPY %45        +      +             +      +
-///                               | v0                 | v0
-///  816    %31.sub1 = ...        +                    |
-///  880    %30 = COPY %31        | v1                 +
-///  928    %45 = COPY %30        |      +                    +
-///                               |      | v0                 | v0  <--+
-///  992B   ; backedge -> bb.1    |      +                    +        |
-/// 1040        = %31.sub0        +                                    |
-///                                                 This value must remain
-///                                                 live-out!
-///
-/// Assuming that %31 is coalesced into %45, the copy at 928 becomes
-/// redundant, since it copies the value from %45 back into it. The
-/// conflict resolution for the main range determines that %45.v0 is
-/// to be erased, which is ok since %31.v1 is identical to it.
-/// The problem happens with the subrange for sub2: it has to be live
-/// on exit from the block, but since 928 was actually a point of
-/// definition of %45.sub2, %45.sub2 was not live immediately prior
-/// to that definition. As a result, when 928 was erased, the value v0
-/// for %45.sub2 was pruned in pruneSubRegValues. Consequently, an
-/// IMPLICIT_DEF was inserted as a "backedge" definition for %45.sub2,
-/// providing an incorrect value to the use at 624.
-///
-/// Since the main-range values %31.v1 and %45.v0 were proved to be
-/// identical, the corresponding values in subranges must also be the
-/// same. A redundant copy is removed because it's not needed, and not
-/// because it copied an undefined value, so any liveness that originated
-/// from that copy cannot disappear. When pruning a value that started
-/// at the removed copy, the corresponding identical value must be
-/// extended to replace it.
 void JoinVals::pruneSubRegValues(LiveInterval &LI, LaneBitmask &ShrinkMask) {
   // Look for values being erased.
   bool DidPrune = false;
   for (unsigned i = 0, e = LR.getNumValNums(); i != e; ++i) {
-    Val &V = Vals[i];
-    // We should trigger in all cases in which eraseInstrs() does something.
-    // match what eraseInstrs() is doing, print a message so
-    if (V.Resolution != CR_Erase &&
-        (V.Resolution != CR_Keep || !V.ErasableImplicitDef || !V.Pruned))
+    if (Vals[i].Resolution != CR_Erase)
       continue;
 
     // Check subranges at the point where the copy will be removed.
     SlotIndex Def = LR.getValNumInfo(i)->def;
-    SlotIndex OtherDef;
-    if (V.Identical)
-      OtherDef = V.OtherVNI->def;
-
-    // Print message so mismatches with eraseInstrs() can be diagnosed.
-    LLVM_DEBUG(dbgs() << "\t\tExpecting instruction removal at " << Def
-                      << '\n');
     for (LiveInterval::SubRange &S : LI.subranges()) {
       LiveQueryResult Q = S.Query(Def);
 
       // If a subrange starts at the copy then an undefined value has been
       // copied and we must remove that subrange value as well.
       VNInfo *ValueOut = Q.valueOutOrDead();
-      if (ValueOut != nullptr && (Q.valueIn() == nullptr ||
-                                  (V.Identical && V.Resolution == CR_Erase &&
-                                   ValueOut->def == Def))) {
-        LLVM_DEBUG(dbgs() << "\t\tPrune sublane " << PrintLaneMask(S.LaneMask)
-                          << " at " << Def << "\n");
-        SmallVector<SlotIndex,8> EndPoints;
-        LIS->pruneValue(S, Def, &EndPoints);
+      if (ValueOut != nullptr && Q.valueIn() == nullptr) {
+        DEBUG(dbgs() << "\t\tPrune sublane " << PrintLaneMask(S.LaneMask)
+                     << " at " << Def << "\n");
+        LIS->pruneValue(S, Def, nullptr);
         DidPrune = true;
         // Mark value number as unused.
         ValueOut->markUnused();
-
-        if (V.Identical && S.Query(OtherDef).valueOutOrDead()) {
-          // If V is identical to V.OtherVNI (and S was live at OtherDef),
-          // then we can't simply prune V from S. V needs to be replaced
-          // with V.OtherVNI.
-          LIS->extendToIndices(S, EndPoints);
-        }
         continue;
       }
       // If a subrange ends at the copy, then a value was copied but only
       // partially used later. Shrink the subregister range appropriately.
       if (Q.valueIn() != nullptr && Q.valueOut() == nullptr) {
-        LLVM_DEBUG(dbgs() << "\t\tDead uses at sublane "
-                          << PrintLaneMask(S.LaneMask) << " at " << Def
-                          << "\n");
+        DEBUG(dbgs() << "\t\tDead uses at sublane " << PrintLaneMask(S.LaneMask)
+                     << " at " << Def << "\n");
         ShrinkMask |= S.LaneMask;
       }
     }
@@ -3157,8 +2580,7 @@ void JoinVals::eraseInstrs(SmallPtrSetImpl<MachineInstr*> &ErasedInstrs,
                            LiveInterval *LI) {
   for (unsigned i = 0, e = LR.getNumValNums(); i != e; ++i) {
     // Get the def location before markUnused() below invalidates it.
-    VNInfo *VNI = LR.getValNumInfo(i);
-    SlotIndex Def = VNI->def;
+    SlotIndex Def = LR.getValNumInfo(i)->def;
     switch (Vals[i].Resolution) {
     case CR_Keep: {
       // If an IMPLICIT_DEF value is pruned, it doesn't serve a purpose any
@@ -3174,6 +2596,8 @@ void JoinVals::eraseInstrs(SmallPtrSetImpl<MachineInstr*> &ErasedInstrs,
       // In such cases, removing this def from the main range must be
       // complemented by extending the main range to account for the liveness
       // of the other subrange.
+      VNInfo *VNI = LR.getValNumInfo(i);
+      SlotIndex Def = VNI->def;
       // The new end point of the main range segment to be extended.
       SlotIndex NewEnd;
       if (LI != nullptr) {
@@ -3218,7 +2642,7 @@ void JoinVals::eraseInstrs(SmallPtrSetImpl<MachineInstr*> &ErasedInstrs,
             std::prev(S)->end = NewEnd;
         }
       }
-      LLVM_DEBUG({
+      DEBUG({
         dbgs() << "\t\tremoved " << i << '@' << Def << ": " << LR << '\n';
         if (LI != nullptr)
           dbgs() << "\t\t  LHS = " << *LI << '\n';
@@ -3230,13 +2654,13 @@ void JoinVals::eraseInstrs(SmallPtrSetImpl<MachineInstr*> &ErasedInstrs,
       MachineInstr *MI = Indexes->getInstructionFromIndex(Def);
       assert(MI && "No instruction to erase");
       if (MI->isCopy()) {
-        Register Reg = MI->getOperand(1).getReg();
-        if (Register::isVirtualRegister(Reg) && Reg != CP.getSrcReg() &&
-            Reg != CP.getDstReg())
+        unsigned Reg = MI->getOperand(1).getReg();
+        if (TargetRegisterInfo::isVirtualRegister(Reg) &&
+            Reg != CP.getSrcReg() && Reg != CP.getDstReg())
           ShrinkRegs.push_back(Reg);
       }
       ErasedInstrs.insert(MI);
-      LLVM_DEBUG(dbgs() << "\t\terased:\t" << Def << '\t' << *MI);
+      DEBUG(dbgs() << "\t\terased:\t" << Def << '\t' << *MI);
       LIS->RemoveMachineInstrFromMaps(*MI);
       MI->eraseFromParent();
       break;
@@ -3291,14 +2715,13 @@ void RegisterCoalescer::joinSubRegRanges(LiveRange &LRange, LiveRange &RRange,
   LRange.join(RRange, LHSVals.getAssignments(), RHSVals.getAssignments(),
               NewVNInfo);
 
-  LLVM_DEBUG(dbgs() << "\t\tjoined lanes: " << PrintLaneMask(LaneMask)
-                    << ' ' << LRange << "\n");
+  DEBUG(dbgs() << "\t\tjoined lanes: " << LRange << "\n");
   if (EndPoints.empty())
     return;
 
   // Recompute the parts of the live range we had to remove because of
   // CR_Replace conflicts.
-  LLVM_DEBUG({
+  DEBUG({
     dbgs() << "\t\trestoring liveness to " << EndPoints.size() << " points: ";
     for (unsigned i = 0, n = EndPoints.size(); i != n; ++i) {
       dbgs() << EndPoints[i];
@@ -3313,32 +2736,41 @@ void RegisterCoalescer::joinSubRegRanges(LiveRange &LRange, LiveRange &RRange,
 void RegisterCoalescer::mergeSubRangeInto(LiveInterval &LI,
                                           const LiveRange &ToMerge,
                                           LaneBitmask LaneMask,
-                                          CoalescerPair &CP,
-                                          unsigned ComposeSubRegIdx) {
+                                          CoalescerPair &CP) {
   BumpPtrAllocator &Allocator = LIS->getVNInfoAllocator();
-  LI.refineSubRanges(
-      Allocator, LaneMask,
-      [this, &Allocator, &ToMerge, &CP](LiveInterval::SubRange &SR) {
-        if (SR.empty()) {
-          SR.assign(ToMerge, Allocator);
-        } else {
-          // joinSubRegRange() destroys the merged range, so we need a copy.
-          LiveRange RangeCopy(ToMerge, Allocator);
-          joinSubRegRanges(SR, RangeCopy, SR.LaneMask, CP);
-        }
-      },
-      *LIS->getSlotIndexes(), *TRI, ComposeSubRegIdx);
-}
+  for (LiveInterval::SubRange &R : LI.subranges()) {
+    LaneBitmask RMask = R.LaneMask;
+    // LaneMask of subregisters common to subrange R and ToMerge.
+    LaneBitmask Common = RMask & LaneMask;
+    // There is nothing to do without common subregs.
+    if (Common.none())
+      continue;
 
-bool RegisterCoalescer::isHighCostLiveInterval(LiveInterval &LI) {
-  if (LI.valnos.size() < LargeIntervalSizeThreshold)
-    return false;
-  auto &Counter = LargeLIVisitCounter[LI.reg];
-  if (Counter < LargeIntervalFreqThreshold) {
-    Counter++;
-    return false;
+    DEBUG(dbgs() << "\t\tCopy+Merge " << PrintLaneMask(RMask) << " into "
+                 << PrintLaneMask(Common) << '\n');
+    // LaneMask of subregisters contained in the R range but not in ToMerge,
+    // they have to split into their own subrange.
+    LaneBitmask LRest = RMask & ~LaneMask;
+    LiveInterval::SubRange *CommonRange;
+    if (LRest.any()) {
+      R.LaneMask = LRest;
+      DEBUG(dbgs() << "\t\tReduce Lane to " << PrintLaneMask(LRest) << '\n');
+      // Duplicate SubRange for newly merged common stuff.
+      CommonRange = LI.createSubRangeFrom(Allocator, Common, R);
+    } else {
+      // Reuse the existing range.
+      R.LaneMask = Common;
+      CommonRange = &R;
+    }
+    LiveRange RangeCopy(ToMerge, Allocator);
+    joinSubRegRanges(*CommonRange, RangeCopy, Common, CP);
+    LaneMask &= ~RMask;
   }
-  return true;
+
+  if (LaneMask.any()) {
+    DEBUG(dbgs() << "\t\tNew Lane " << PrintLaneMask(LaneMask) << '\n');
+    LI.createSubRangeFrom(Allocator, LaneMask, ToMerge);
+  }
 }
 
 bool RegisterCoalescer::joinVirtRegs(CoalescerPair &CP) {
@@ -3351,10 +2783,9 @@ bool RegisterCoalescer::joinVirtRegs(CoalescerPair &CP) {
   JoinVals LHSVals(LHS, CP.getDstReg(), CP.getDstIdx(), LaneBitmask::getNone(),
                    NewVNInfo, CP, LIS, TRI, false, TrackSubRegLiveness);
 
-  LLVM_DEBUG(dbgs() << "\t\tRHS = " << RHS << "\n\t\tLHS = " << LHS << '\n');
-
-  if (isHighCostLiveInterval(LHS) || isHighCostLiveInterval(RHS))
-    return false;
+  DEBUG(dbgs() << "\t\tRHS = " << RHS
+               << "\n\t\tLHS = " << LHS
+               << '\n');
 
   // First compute NewVNInfo and the simple value mappings.
   // Detect impossible conflicts early.
@@ -3385,23 +2816,23 @@ bool RegisterCoalescer::joinVirtRegs(CoalescerPair &CP) {
         R.LaneMask = Mask;
       }
     }
-    LLVM_DEBUG(dbgs() << "\t\tLHST = " << printReg(CP.getDstReg()) << ' ' << LHS
-                      << '\n');
+    DEBUG(dbgs() << "\t\tLHST = " << PrintReg(CP.getDstReg())
+                 << ' ' << LHS << '\n');
 
     // Determine lanemasks of RHS in the coalesced register and merge subranges.
     unsigned SrcIdx = CP.getSrcIdx();
     if (!RHS.hasSubRanges()) {
       LaneBitmask Mask = SrcIdx == 0 ? CP.getNewRC()->getLaneMask()
                                      : TRI->getSubRegIndexLaneMask(SrcIdx);
-      mergeSubRangeInto(LHS, RHS, Mask, CP, DstIdx);
+      mergeSubRangeInto(LHS, RHS, Mask, CP);
     } else {
       // Pair up subranges and merge.
       for (LiveInterval::SubRange &R : RHS.subranges()) {
         LaneBitmask Mask = TRI->composeSubRegIndexLaneMask(SrcIdx, R.LaneMask);
-        mergeSubRangeInto(LHS, R, Mask, CP, DstIdx);
+        mergeSubRangeInto(LHS, R, Mask, CP);
       }
     }
-    LLVM_DEBUG(dbgs() << "\tJoined SubRanges " << LHS << "\n");
+    DEBUG(dbgs() << "\tJoined SubRanges " << LHS << "\n");
 
     // Pruning implicit defs from subranges may result in the main range
     // having stale segments.
@@ -3427,9 +2858,6 @@ bool RegisterCoalescer::joinVirtRegs(CoalescerPair &CP) {
   while (!ShrinkRegs.empty())
     shrinkToUses(&LIS->getInterval(ShrinkRegs.pop_back_val()));
 
-  // Scan and mark undef any DBG_VALUEs that would refer to a different value.
-  checkMergingChangesDbgValues(CP, LHS, LHSVals, RHS, RHSVals);
-
   // Join RHS into LHS.
   LHS.join(RHS, LHSVals.getAssignments(), RHSVals.getAssignments(), NewVNInfo);
 
@@ -3442,7 +2870,7 @@ bool RegisterCoalescer::joinVirtRegs(CoalescerPair &CP) {
   if (!EndPoints.empty()) {
     // Recompute the parts of the live range we had to remove because of
     // CR_Replace conflicts.
-    LLVM_DEBUG({
+    DEBUG({
       dbgs() << "\t\trestoring liveness to " << EndPoints.size() << " points: ";
       for (unsigned i = 0, n = EndPoints.size(); i != n; ++i) {
         dbgs() << EndPoints[i];
@@ -3461,142 +2889,7 @@ bool RegisterCoalescer::joinIntervals(CoalescerPair &CP) {
   return CP.isPhys() ? joinReservedPhysReg(CP) : joinVirtRegs(CP);
 }
 
-void RegisterCoalescer::buildVRegToDbgValueMap(MachineFunction &MF)
-{
-  const SlotIndexes &Slots = *LIS->getSlotIndexes();
-  SmallVector<MachineInstr *, 8> ToInsert;
-
-  // After collecting a block of DBG_VALUEs into ToInsert, enter them into the
-  // vreg => DbgValueLoc map.
-  auto CloseNewDVRange = [this, &ToInsert](SlotIndex Slot) {
-    for (auto *X : ToInsert)
-      DbgVRegToValues[X->getOperand(0).getReg()].push_back({Slot, X});
-
-    ToInsert.clear();
-  };
-
-  // Iterate over all instructions, collecting them into the ToInsert vector.
-  // Once a non-debug instruction is found, record the slot index of the
-  // collected DBG_VALUEs.
-  for (auto &MBB : MF) {
-    SlotIndex CurrentSlot = Slots.getMBBStartIdx(&MBB);
-
-    for (auto &MI : MBB) {
-      if (MI.isDebugValue() && MI.getOperand(0).isReg() &&
-          MI.getOperand(0).getReg().isVirtual()) {
-        ToInsert.push_back(&MI);
-      } else if (!MI.isDebugInstr()) {
-        CurrentSlot = Slots.getInstructionIndex(MI);
-        CloseNewDVRange(CurrentSlot);
-      }
-    }
-
-    // Close range of DBG_VALUEs at the end of blocks.
-    CloseNewDVRange(Slots.getMBBEndIdx(&MBB));
-  }
-
-  // Sort all DBG_VALUEs we've seen by slot number.
-  for (auto &Pair : DbgVRegToValues)
-    llvm::sort(Pair.second);
-}
-
-void RegisterCoalescer::checkMergingChangesDbgValues(CoalescerPair &CP,
-                                                     LiveRange &LHS,
-                                                     JoinVals &LHSVals,
-                                                     LiveRange &RHS,
-                                                     JoinVals &RHSVals) {
-  auto ScanForDstReg = [&](unsigned Reg) {
-    checkMergingChangesDbgValuesImpl(Reg, RHS, LHS, LHSVals);
-  };
-
-  auto ScanForSrcReg = [&](unsigned Reg) {
-    checkMergingChangesDbgValuesImpl(Reg, LHS, RHS, RHSVals);
-  };
-
-  // Scan for potentially unsound DBG_VALUEs: examine first the register number
-  // Reg, and then any other vregs that may have been merged into  it.
-  auto PerformScan = [this](unsigned Reg, std::function<void(unsigned)> Func) {
-    Func(Reg);
-    if (DbgMergedVRegNums.count(Reg))
-      for (unsigned X : DbgMergedVRegNums[Reg])
-        Func(X);
-  };
-
-  // Scan for unsound updates of both the source and destination register.
-  PerformScan(CP.getSrcReg(), ScanForSrcReg);
-  PerformScan(CP.getDstReg(), ScanForDstReg);
-}
-
-void RegisterCoalescer::checkMergingChangesDbgValuesImpl(unsigned Reg,
-                                                         LiveRange &OtherLR,
-                                                         LiveRange &RegLR,
-                                                         JoinVals &RegVals) {
-  // Are there any DBG_VALUEs to examine?
-  auto VRegMapIt = DbgVRegToValues.find(Reg);
-  if (VRegMapIt == DbgVRegToValues.end())
-    return;
-
-  auto &DbgValueSet = VRegMapIt->second;
-  auto DbgValueSetIt = DbgValueSet.begin();
-  auto SegmentIt = OtherLR.begin();
-
-  bool LastUndefResult = false;
-  SlotIndex LastUndefIdx;
-
-  // If the "Other" register is live at a slot Idx, test whether Reg can
-  // safely be merged with it, or should be marked undef.
-  auto ShouldUndef = [&RegVals, &RegLR, &LastUndefResult,
-                      &LastUndefIdx](SlotIndex Idx) -> bool {
-    // Our worst-case performance typically happens with asan, causing very
-    // many DBG_VALUEs of the same location. Cache a copy of the most recent
-    // result for this edge-case.
-    if (LastUndefIdx == Idx)
-      return LastUndefResult;
-
-    // If the other range was live, and Reg's was not, the register coalescer
-    // will not have tried to resolve any conflicts. We don't know whether
-    // the DBG_VALUE will refer to the same value number, so it must be made
-    // undef.
-    auto OtherIt = RegLR.find(Idx);
-    if (OtherIt == RegLR.end())
-      return true;
-
-    // Both the registers were live: examine the conflict resolution record for
-    // the value number Reg refers to. CR_Keep meant that this value number
-    // "won" and the merged register definitely refers to that value. CR_Erase
-    // means the value number was a redundant copy of the other value, which
-    // was coalesced and Reg deleted. It's safe to refer to the other register
-    // (which will be the source of the copy).
-    auto Resolution = RegVals.getResolution(OtherIt->valno->id);
-    LastUndefResult = Resolution != JoinVals::CR_Keep &&
-                      Resolution != JoinVals::CR_Erase;
-    LastUndefIdx = Idx;
-    return LastUndefResult;
-  };
-
-  // Iterate over both the live-range of the "Other" register, and the set of
-  // DBG_VALUEs for Reg at the same time. Advance whichever one has the lowest
-  // slot index. This relies on the DbgValueSet being ordered.
-  while (DbgValueSetIt != DbgValueSet.end() && SegmentIt != OtherLR.end()) {
-    if (DbgValueSetIt->first < SegmentIt->end) {
-      // "Other" is live and there is a DBG_VALUE of Reg: test if we should
-      // set it undef.
-      if (DbgValueSetIt->first >= SegmentIt->start &&
-          DbgValueSetIt->second->getOperand(0).getReg() != 0 &&
-          ShouldUndef(DbgValueSetIt->first)) {
-        // Mark undef, erase record of this DBG_VALUE to avoid revisiting.
-        DbgValueSetIt->second->getOperand(0).setReg(0);
-        continue;
-      }
-      ++DbgValueSetIt;
-    } else {
-      ++SegmentIt;
-    }
-  }
-}
-
 namespace {
-
 /// Information concerning MBB coalescing priority.
 struct MBBPriorityInfo {
   MachineBasicBlock *MBB;
@@ -3606,8 +2899,7 @@ struct MBBPriorityInfo {
   MBBPriorityInfo(MachineBasicBlock *mbb, unsigned depth, bool issplit)
     : MBB(mbb), Depth(depth), IsSplit(issplit) {}
 };
-
-} // end anonymous namespace
+}
 
 /// C-style comparator that sorts first based on the loop depth of the basic
 /// block (the unsigned), and then on the MBB number.
@@ -3642,26 +2934,14 @@ static bool isLocalCopy(MachineInstr *Copy, const LiveIntervals *LIS) {
   if (Copy->getOperand(1).isUndef())
     return false;
 
-  Register SrcReg = Copy->getOperand(1).getReg();
-  Register DstReg = Copy->getOperand(0).getReg();
-  if (Register::isPhysicalRegister(SrcReg) ||
-      Register::isPhysicalRegister(DstReg))
+  unsigned SrcReg = Copy->getOperand(1).getReg();
+  unsigned DstReg = Copy->getOperand(0).getReg();
+  if (TargetRegisterInfo::isPhysicalRegister(SrcReg)
+      || TargetRegisterInfo::isPhysicalRegister(DstReg))
     return false;
 
   return LIS->intervalIsInOneMBB(LIS->getInterval(SrcReg))
     || LIS->intervalIsInOneMBB(LIS->getInterval(DstReg));
-}
-
-void RegisterCoalescer::lateLiveIntervalUpdate() {
-  for (unsigned reg : ToBeUpdated) {
-    if (!LIS->hasInterval(reg))
-      continue;
-    LiveInterval &LI = LIS->getInterval(reg);
-    shrinkToUses(&LI, &DeadDefs);
-    if (!DeadDefs.empty())
-      eliminateDeadDefs();
-  }
-  ToBeUpdated.clear();
 }
 
 bool RegisterCoalescer::
@@ -3672,7 +2952,7 @@ copyCoalesceWorkList(MutableArrayRef<MachineInstr*> CurrList) {
       continue;
     // Skip instruction pointers that have already been erased, for example by
     // dead code elimination.
-    if (ErasedInstrs.count(CurrList[i])) {
+    if (ErasedInstrs.erase(CurrList[i])) {
       CurrList[i] = nullptr;
       continue;
     }
@@ -3702,14 +2982,14 @@ bool RegisterCoalescer::applyTerminalRule(const MachineInstr &Copy) const {
   if (!UseTerminalRule)
     return false;
   unsigned DstReg, DstSubReg, SrcReg, SrcSubReg;
-  if (!isMoveInstr(*TRI, &Copy, SrcReg, DstReg, SrcSubReg, DstSubReg))
-    return false;
+  isMoveInstr(*TRI, &Copy, SrcReg, DstReg, SrcSubReg, DstSubReg);
   // Check if the destination of this copy has any other affinity.
-  if (Register::isPhysicalRegister(DstReg) ||
+  if (TargetRegisterInfo::isPhysicalRegister(DstReg) ||
       // If SrcReg is a physical register, the copy won't be coalesced.
       // Ignoring it may have other side effect (like missing
       // rematerialization). So keep it.
-      Register::isPhysicalRegister(SrcReg) || !isTerminalReg(DstReg, Copy, MRI))
+      TargetRegisterInfo::isPhysicalRegister(SrcReg) ||
+      !isTerminalReg(DstReg, Copy, MRI))
     return false;
 
   // DstReg is a terminal node. Check if it interferes with any other
@@ -3726,19 +3006,17 @@ bool RegisterCoalescer::applyTerminalRule(const MachineInstr &Copy) const {
     if (&MI == &Copy || !MI.isCopyLike() || MI.getParent() != OrigBB)
       continue;
     unsigned OtherReg, OtherSubReg, OtherSrcReg, OtherSrcSubReg;
-    if (!isMoveInstr(*TRI, &Copy, OtherSrcReg, OtherReg, OtherSrcSubReg,
-                OtherSubReg))
-      return false;
+    isMoveInstr(*TRI, &Copy, OtherSrcReg, OtherReg, OtherSrcSubReg,
+                OtherSubReg);
     if (OtherReg == SrcReg)
       OtherReg = OtherSrcReg;
     // Check if OtherReg is a non-terminal.
-    if (Register::isPhysicalRegister(OtherReg) ||
+    if (TargetRegisterInfo::isPhysicalRegister(OtherReg) ||
         isTerminalReg(OtherReg, MI, MRI))
       continue;
     // Check that OtherReg interfere with DstReg.
     if (LIS->getInterval(OtherReg).overlaps(DstLI)) {
-      LLVM_DEBUG(dbgs() << "Apply terminal rule for: " << printReg(DstReg)
-                        << '\n');
+      DEBUG(dbgs() << "Apply terminal rule for: " << PrintReg(DstReg) << '\n');
       return true;
     }
   }
@@ -3747,7 +3025,7 @@ bool RegisterCoalescer::applyTerminalRule(const MachineInstr &Copy) const {
 
 void
 RegisterCoalescer::copyCoalesceInMBB(MachineBasicBlock *MBB) {
-  LLVM_DEBUG(dbgs() << MBB->getName() << ":\n");
+  DEBUG(dbgs() << MBB->getName() << ":\n");
 
   // Collect all copy-like instructions in MBB. Don't start coalescing anything
   // yet, it might invalidate the iterator.
@@ -3799,7 +3077,7 @@ RegisterCoalescer::copyCoalesceInMBB(MachineBasicBlock *MBB) {
     CurrList(WorkList.begin() + PrevSize, WorkList.end());
   if (copyCoalesceWorkList(CurrList))
     WorkList.erase(std::remove(WorkList.begin() + PrevSize, WorkList.end(),
-                               nullptr), WorkList.end());
+                               (MachineInstr*)nullptr), WorkList.end());
 }
 
 void RegisterCoalescer::coalesceLocals() {
@@ -3812,7 +3090,7 @@ void RegisterCoalescer::coalesceLocals() {
 }
 
 void RegisterCoalescer::joinAllIntervals() {
-  LLVM_DEBUG(dbgs() << "********** JOINING INTERVALS ***********\n");
+  DEBUG(dbgs() << "********** JOINING INTERVALS ***********\n");
   assert(WorkList.empty() && LocalWorkList.empty() && "Old data still around.");
 
   std::vector<MBBPriorityInfo> MBBs;
@@ -3825,7 +3103,7 @@ void RegisterCoalescer::joinAllIntervals() {
   array_pod_sort(MBBs.begin(), MBBs.end(), compareMBBPriority);
 
   // Coalesce intervals in MBB priority order.
-  unsigned CurrDepth = std::numeric_limits<unsigned>::max();
+  unsigned CurrDepth = UINT_MAX;
   for (unsigned i = 0, e = MBBs.size(); i != e; ++i) {
     // Try coalescing the collected local copies for deeper loops.
     if (JoinGlobalCopies && MBBs[i].Depth < CurrDepth) {
@@ -3834,14 +3112,12 @@ void RegisterCoalescer::joinAllIntervals() {
     }
     copyCoalesceInMBB(MBBs[i].MBB);
   }
-  lateLiveIntervalUpdate();
   coalesceLocals();
 
   // Joining intervals can allow other intervals to be joined.  Iteratively join
   // until we make no progress.
   while (copyCoalesceWorkList(WorkList))
     /* empty */ ;
-  lateLiveIntervalUpdate();
 }
 
 void RegisterCoalescer::releaseMemory() {
@@ -3849,12 +3125,12 @@ void RegisterCoalescer::releaseMemory() {
   WorkList.clear();
   DeadDefs.clear();
   InflateRegs.clear();
-  LargeLIVisitCounter.clear();
 }
 
 bool RegisterCoalescer::runOnMachineFunction(MachineFunction &fn) {
   MF = &fn;
   MRI = &fn.getRegInfo();
+  TM = &fn.getTarget();
   const TargetSubtargetInfo &STI = fn.getSubtarget();
   TRI = STI.getRegisterInfo();
   TII = STI.getInstrInfo();
@@ -3871,15 +3147,11 @@ bool RegisterCoalescer::runOnMachineFunction(MachineFunction &fn) {
   // splitting optimization.
   JoinSplitEdges = EnableJoinSplits;
 
-  LLVM_DEBUG(dbgs() << "********** SIMPLE REGISTER COALESCING **********\n"
-                    << "********** Function: " << MF->getName() << '\n');
+  DEBUG(dbgs() << "********** SIMPLE REGISTER COALESCING **********\n"
+               << "********** Function: " << MF->getName() << '\n');
 
   if (VerifyCoalescing)
     MF->verify(this, "Before register coalescing");
-
-  DbgVRegToValues.clear();
-  DbgMergedVRegNums.clear();
-  buildVRegToDbgValueMap(fn);
 
   RegClassInfo.runOnMachineFunction(fn);
 
@@ -3893,15 +3165,14 @@ bool RegisterCoalescer::runOnMachineFunction(MachineFunction &fn) {
   array_pod_sort(InflateRegs.begin(), InflateRegs.end());
   InflateRegs.erase(std::unique(InflateRegs.begin(), InflateRegs.end()),
                     InflateRegs.end());
-  LLVM_DEBUG(dbgs() << "Trying to inflate " << InflateRegs.size()
-                    << " regs.\n");
+  DEBUG(dbgs() << "Trying to inflate " << InflateRegs.size() << " regs.\n");
   for (unsigned i = 0, e = InflateRegs.size(); i != e; ++i) {
     unsigned Reg = InflateRegs[i];
     if (MRI->reg_nodbg_empty(Reg))
       continue;
     if (MRI->recomputeRegClass(Reg)) {
-      LLVM_DEBUG(dbgs() << printReg(Reg) << " inflated to "
-                        << TRI->getRegClassName(MRI->getRegClass(Reg)) << '\n');
+      DEBUG(dbgs() << PrintReg(Reg) << " inflated to "
+                   << TRI->getRegClassName(MRI->getRegClass(Reg)) << '\n');
       ++NumInflated;
 
       LiveInterval &LI = LIS->getInterval(Reg);
@@ -3924,7 +3195,7 @@ bool RegisterCoalescer::runOnMachineFunction(MachineFunction &fn) {
     }
   }
 
-  LLVM_DEBUG(dump());
+  DEBUG(dump());
   if (VerifyCoalescing)
     MF->verify(this, "After register coalescing");
   return true;

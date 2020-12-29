@@ -1,8 +1,9 @@
 //===- lib/ReaderWriter/YAML/ReaderWriterYAML.cpp -------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -25,7 +26,6 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Error.h"
@@ -43,7 +43,6 @@
 #include <system_error>
 #include <vector>
 
-using llvm::file_magic;
 using llvm::yaml::MappingTraits;
 using llvm::yaml::ScalarEnumerationTraits;
 using llvm::yaml::ScalarTraits;
@@ -121,7 +120,7 @@ public:
       StringRef newName = copyString(buffer.str());
       _refNames[&atom] = newName;
       DEBUG_WITH_TYPE("WriterYAML",
-                      llvm::dbgs() << "name collision: creating ref-name: '"
+                      llvm::dbgs() << "name collsion: creating ref-name: '"
                                    << newName << "' ("
                                    << (const void *)newName.data()
                                    << ", " << newName.size() << ")\n");
@@ -135,7 +134,7 @@ public:
         StringRef newName2 = copyString(buffer2.str());
         _refNames[prevAtom] = newName2;
         DEBUG_WITH_TYPE("WriterYAML",
-                        llvm::dbgs() << "name collision: creating ref-name: '"
+                        llvm::dbgs() << "name collsion: creating ref-name: '"
                                      << newName2 << "' ("
                                      << (const void *)newName2.data() << ", "
                                      << newName2.size() << ")\n");
@@ -279,7 +278,7 @@ template <> struct ScalarTraits<RefKind> {
     return StringRef("unknown reference kind");
   }
 
-  static QuotingType mustQuote(StringRef) { return QuotingType::None; }
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template <> struct ScalarEnumerationTraits<lld::File::Kind> {
@@ -494,7 +493,7 @@ template <> struct ScalarTraits<lld::DefinedAtom::Alignment> {
     return StringRef(); // returning empty string means success
   }
 
-  static QuotingType mustQuote(StringRef) { return QuotingType::None; }
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template <> struct ScalarEnumerationTraits<FileKinds> {
@@ -551,7 +550,7 @@ template <> struct ScalarTraits<ImplicitHex8> {
     return StringRef(); // returning empty string means success
   }
 
-  static QuotingType mustQuote(StringRef) { return QuotingType::None; }
+  static bool mustQuote(StringRef) { return false; }
 };
 
 // YAML conversion for std::vector<const lld::File*>
@@ -1299,7 +1298,7 @@ public:
   llvm::Error writeFile(const lld::File &file, StringRef outPath) override {
     // Create stream to path.
     std::error_code ec;
-    llvm::raw_fd_ostream out(outPath, ec, llvm::sys::fs::OF_Text);
+    llvm::raw_fd_ostream out(outPath, ec, llvm::sys::fs::F_Text);
     if (ec)
       return llvm::errorCodeToError(ec);
 

@@ -1,8 +1,9 @@
 //===------------------------ private_typeinfo.h --------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,9 +13,10 @@
 #include "__cxxabi_config.h"
 
 #include <typeinfo>
-#include <stddef.h>
+#include <cstddef>
 
 namespace __cxxabiv1 {
+#pragma GCC visibility push(hidden)
 
 class _LIBCXXABI_TYPE_VIS __shim_type_info : public std::type_info {
 public:
@@ -65,14 +67,14 @@ enum
 
 class _LIBCXXABI_TYPE_VIS __class_type_info;
 
-struct _LIBCXXABI_HIDDEN __dynamic_cast_info
+struct __dynamic_cast_info
 {
 // const data supplied to the search:
 
     const __class_type_info* dst_type;
     const void* static_ptr;
     const __class_type_info* static_type;
-    ptrdiff_t src2dst_offset;
+    std::ptrdiff_t src2dst_offset;
 
 // Data that represents the answer:
 
@@ -151,7 +153,7 @@ public:
   has_unambiguous_public_base(__dynamic_cast_info *, void *, int) const;
 };
 
-struct _LIBCXXABI_HIDDEN __base_class_type_info
+struct __base_class_type_info
 {
 public:
     const __class_type_info* __base_type;
@@ -245,6 +247,8 @@ public:
                                            void *&) const;
   _LIBCXXABI_HIDDEN bool can_catch_nested(const __shim_type_info *) const;
 };
+
+#pragma GCC visibility pop
 
 }  // __cxxabiv1
 

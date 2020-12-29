@@ -1,7 +1,3 @@
-add_lldb_library(lldbPluginScriptInterpreterNone PLUGIN
+add_lldb_library(lldbPluginScriptInterpreterNone
   ScriptInterpreterNone.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbInterpreter
   )

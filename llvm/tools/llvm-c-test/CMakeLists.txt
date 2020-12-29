@@ -1,9 +1,5 @@
 set(LLVM_LINK_COMPONENTS
-  AllTargetsAsmParsers
-  AllTargetsCodeGens
-  AllTargetsDescs
-  AllTargetsDisassemblers
-  AllTargetsInfos
+  ${LLVM_TARGETS_TO_BUILD}
   BitReader
   Core
   MCDisassembler
@@ -42,7 +38,6 @@ endif ()
 add_llvm_tool(llvm-c-test
   attributes.c
   calc.c
-  debuginfo.c
   diagnostic.c
   disassemble.c
   echo.cpp

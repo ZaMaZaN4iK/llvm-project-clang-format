@@ -1,8 +1,9 @@
 //===- lib/ReaderWriter/MachO/MachONormalizedFileToAtoms.cpp --------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,20 +20,20 @@
 ///                    | Atoms |
 ///                    +-------+
 
+#include "MachONormalizedFile.h"
 #include "ArchHandler.h"
 #include "Atoms.h"
 #include "File.h"
-#include "MachONormalizedFile.h"
 #include "MachONormalizedFileBinaryUtils.h"
-#include "lld/Common/LLVM.h"
 #include "lld/Core/Error.h"
-#include "llvm/BinaryFormat/Dwarf.h"
-#include "llvm/BinaryFormat/MachO.h"
+#include "lld/Core/LLVM.h"
 #include "llvm/DebugInfo/DWARF/DWARFFormValue.h"
 #include "llvm/Support/DataExtractor.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/Dwarf.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/MachO.h"
 #include "llvm/Support/LEB128.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -253,7 +254,7 @@ void atomFromSymbol(DefinedAtom::ContentType atomType, const Section &section,
                               ? DefinedAtom::mergeAsWeak : DefinedAtom::mergeNo;
     bool thumb = (symbolDescFlags & N_ARM_THUMB_DEF);
     if (atomType == DefinedAtom::typeUnknown) {
-      // Mach-O needs a segment and section name.  Concatenate those two
+      // Mach-O needs a segment and section name.  Concatentate those two
       // with a / separator (e.g. "seg/sect") to fit into the lld model
       // of just a section name.
       std::string segSectName = section.segmentName.str()
@@ -316,7 +317,7 @@ llvm::Error processSymboledSection(DefinedAtom::ContentType atomType,
             });
 
   // Debug logging of symbols.
-  // for (const Symbol *sym : symbols)
+  //for (const Symbol *sym : symbols)
   //  llvm::errs() << "  sym: "
   //    << llvm::format("0x%08llx ", (uint64_t)sym->value)
   //    << ", " << sym->name << "\n";
@@ -326,7 +327,7 @@ llvm::Error processSymboledSection(DefinedAtom::ContentType atomType,
     return llvm::Error::success();
 
   if (symbols.empty()) {
-    // Section has no symbols, put all content in one anonymous atom.
+    // Section has no symbols, put all content in one anoymous atom.
     atomFromSymbol(atomType, section, file, section.address, StringRef(),
                   0, Atom::scopeTranslationUnit,
                   section.address + section.content.size(),
@@ -471,7 +472,7 @@ llvm::Error processSection(DefinedAtom::ContentType atomType,
                                               "is not zero terminated.");
       }
       if (customSectionName) {
-        // Mach-O needs a segment and section name.  Concatenate those two
+        // Mach-O needs a segment and section name.  Concatentate those two
         // with a / separator (e.g. "seg/sect") to fit into the lld model
         // of just a section name.
         std::string segSectName = section.segmentName.str()
@@ -717,7 +718,7 @@ llvm::Error parseStabs(MachOFile &file,
   // FIXME: Kill this off when we can move to sane yaml parsing.
   std::unique_ptr<BumpPtrAllocator> allocator;
   if (copyRefs)
-    allocator = std::make_unique<BumpPtrAllocator>();
+    allocator = llvm::make_unique<BumpPtrAllocator>();
 
   enum { start, inBeginEnd } state = start;
 
@@ -812,7 +813,7 @@ llvm::Error parseStabs(MachOFile &file,
     stabsList.push_back(stab);
   }
 
-  file.setDebugInfo(std::make_unique<StabsDebugInfo>(std::move(stabsList)));
+  file.setDebugInfo(llvm::make_unique<StabsDebugInfo>(std::move(stabsList)));
 
   // FIXME: Kill this off when we fix YAML memory ownership.
   file.debugInfo()->setAllocator(std::move(allocator));
@@ -832,10 +833,10 @@ dataExtractorFromSection(const NormalizedFile &normalizedFile,
 
 // FIXME: Cribbed from llvm-dwp -- should share "lightweight CU DIE
 //        inspection" code if possible.
-static uint64_t getCUAbbrevOffset(llvm::DataExtractor abbrevData,
+static uint32_t getCUAbbrevOffset(llvm::DataExtractor abbrevData,
                                   uint64_t abbrCode) {
   uint64_t curCode;
-  uint64_t offset = 0;
+  uint32_t offset = 0;
   while ((curCode = abbrevData.getULEB128(&offset)) != abbrCode) {
     // Tag
     abbrevData.getULEB128(&offset);
@@ -853,13 +854,13 @@ static uint64_t getCUAbbrevOffset(llvm::DataExtractor abbrevData,
 static Expected<const char *>
 getIndexedString(const NormalizedFile &normalizedFile,
                  llvm::dwarf::Form form, llvm::DataExtractor infoData,
-                 uint64_t &infoOffset, const Section &stringsSection) {
+                 uint32_t &infoOffset, const Section &stringsSection) {
   if (form == llvm::dwarf::DW_FORM_string)
    return infoData.getCStr(&infoOffset);
   if (form != llvm::dwarf::DW_FORM_strp)
     return llvm::make_error<GenericError>(
         "string field encoded without DW_FORM_strp");
-  uint64_t stringOffset = infoData.getU32(&infoOffset);
+  uint32_t stringOffset = infoData.getU32(&infoOffset);
   llvm::DataExtractor stringsData =
     dataExtractorFromSection(normalizedFile, stringsSection);
   return stringsData.getCStr(&stringOffset);
@@ -875,15 +876,15 @@ readCompUnit(const NormalizedFile &normalizedFile,
              StringRef path) {
   // FIXME: Cribbed from llvm-dwp -- should share "lightweight CU DIE
   //        inspection" code if possible.
-  uint64_t offset = 0;
+  uint32_t offset = 0;
   llvm::dwarf::DwarfFormat Format = llvm::dwarf::DwarfFormat::DWARF32;
   auto infoData = dataExtractorFromSection(normalizedFile, info);
   uint32_t length = infoData.getU32(&offset);
-  if (length == llvm::dwarf::DW_LENGTH_DWARF64) {
+  if (length == 0xffffffff) {
     Format = llvm::dwarf::DwarfFormat::DWARF64;
     infoData.getU64(&offset);
   }
-  else if (length >= llvm::dwarf::DW_LENGTH_lo_reserved)
+  else if (length > 0xffffff00)
     return llvm::make_error<GenericError>("Malformed DWARF in " + path);
 
   uint16_t version = infoData.getU16(&offset);
@@ -897,7 +898,7 @@ readCompUnit(const NormalizedFile &normalizedFile,
 
   uint32_t abbrCode = infoData.getULEB128(&offset);
   auto abbrevData = dataExtractorFromSection(normalizedFile, abbrev);
-  uint64_t abbrevOffset = getCUAbbrevOffset(abbrevData, abbrCode);
+  uint32_t abbrevOffset = getCUAbbrevOffset(abbrevData, abbrCode);
   uint64_t tag = abbrevData.getULEB128(&abbrevOffset);
   if (tag != llvm::dwarf::DW_TAG_compile_unit)
     return llvm::make_error<GenericError>("top level DIE is not a compile unit");
@@ -905,7 +906,6 @@ readCompUnit(const NormalizedFile &normalizedFile,
   abbrevData.getU8(&abbrevOffset);
   uint32_t name;
   llvm::dwarf::Form form;
-  llvm::dwarf::FormParams formParams = {version, addrSize, Format};
   TranslationUnitSource tu;
   while ((name = abbrevData.getULEB128(&abbrevOffset)) |
          (form = static_cast<llvm::dwarf::Form>(
@@ -929,7 +929,8 @@ readCompUnit(const NormalizedFile &normalizedFile,
       break;
     }
     default:
-      llvm::DWARFFormValue::skipValue(form, infoData, &offset, formParams);
+      llvm::DWARFFormValue::skipValue(form, infoData, &offset, version,
+                                      addrSize, Format);
     }
   }
   return tu;
@@ -974,11 +975,11 @@ llvm::Error parseDebugInfo(MachOFile &file,
     //        memory ownership.
     std::unique_ptr<BumpPtrAllocator> allocator;
     if (copyRefs) {
-      allocator = std::make_unique<BumpPtrAllocator>();
+      allocator = llvm::make_unique<BumpPtrAllocator>();
       tuOrErr->name = copyDebugString(tuOrErr->name, *allocator);
       tuOrErr->path = copyDebugString(tuOrErr->path, *allocator);
     }
-    file.setDebugInfo(std::make_unique<DwarfDebugInfo>(std::move(*tuOrErr)));
+    file.setDebugInfo(llvm::make_unique<DwarfDebugInfo>(std::move(*tuOrErr)));
     if (copyRefs)
       file.debugInfo()->setAllocator(std::move(allocator));
   } else
@@ -1430,8 +1431,8 @@ llvm::Error
 normalizedObjectToAtoms(MachOFile *file,
                         const NormalizedFile &normalizedFile,
                         bool copyRefs) {
-  LLVM_DEBUG(llvm::dbgs() << "******** Normalizing file to atoms: "
-                          << file->path() << "\n");
+  DEBUG(llvm::dbgs() << "******** Normalizing file to atoms: "
+                    << file->path() << "\n");
   bool scatterable = ((normalizedFile.flags & MH_SUBSECTIONS_VIA_SYMBOLS) != 0);
 
   // Create atoms from each section.
@@ -1460,7 +1461,7 @@ normalizedObjectToAtoms(MachOFile *file,
   }
   // Create atoms from undefined symbols.
   for (auto &sym : normalizedFile.undefinedSymbols) {
-    // Undefined symbols with n_value != 0 are actually tentative definitions.
+    // Undefinded symbols with n_value != 0 are actually tentative definitions.
     if (sym.value == Hex64(0)) {
       file->addUndefinedAtom(sym.name, copyRefs);
     } else {

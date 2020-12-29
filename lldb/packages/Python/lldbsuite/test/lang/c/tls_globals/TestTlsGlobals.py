@@ -1,9 +1,11 @@
 """Test that thread-local storage can be read correctly."""
 
+from __future__ import print_function
 
 
 import unittest2
 import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -27,10 +29,10 @@ class TlsGlobalTestCase(TestBase):
                     "=" +
                     os.environ["LD_LIBRARY_PATH"] +
                     ":" +
-                    self.getBuildDir())
+                    os.getcwd())
             else:
                 self.runCmd("settings set target.env-vars " +
-                            self.dylibPath + "=" + self.getBuildDir())
+                            self.dylibPath + "=" + os.getcwd())
             self.addTearDownHook(
                 lambda: self.runCmd(
                     "settings remove target.env-vars " +
@@ -46,10 +48,8 @@ class TlsGlobalTestCase(TestBase):
     def test(self):
         """Test thread-local storage."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
-        target = self.dbg.CreateTarget(exe)
-        if self.platformIsDarwin():
-            self.registerSharedLibrariesWithTarget(target, ['liba.dylib'])
+        exe = os.path.join(os.getcwd(), "a.out")
+        self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         line1 = line_number('main.c', '// thread breakpoint')
         lldbutil.run_break_set_by_file_and_line(

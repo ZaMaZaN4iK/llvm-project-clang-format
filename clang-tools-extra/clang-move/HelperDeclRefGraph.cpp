@@ -1,18 +1,16 @@
-//===-- HelperDeclRefGraph.cpp - AST-based call graph for helper decls ----===//
+//===-- UsedHelperDeclFinder.cpp - AST-based call graph for helper decls --===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "HelperDeclRefGraph.h"
-#include "Move.h"
+#include "ClangMove.h"
 #include "clang/AST/Decl.h"
-#include "llvm/Support/Debug.h"
 #include <vector>
-
-#define DEBUG_TYPE "clang-move"
 
 namespace clang {
 namespace move {
@@ -59,7 +57,7 @@ CallGraphNode *HelperDeclRefGraph::getOrInsertNode(Decl *F) {
   if (Node)
     return Node.get();
 
-  Node = std::make_unique<CallGraphNode>(F);
+  Node = llvm::make_unique<CallGraphNode>(F);
   return Node.get();
 }
 
@@ -115,19 +113,13 @@ void HelperDeclRGBuilder::run(
   if (const auto *FuncRef = Result.Nodes.getNodeAs<DeclRefExpr>("func_ref")) {
     const auto *DC = Result.Nodes.getNodeAs<Decl>("dc");
     assert(DC);
-    LLVM_DEBUG(llvm::dbgs() << "Find helper function usage: "
-                            << FuncRef->getDecl()->getNameAsString() << " ("
-                            << FuncRef->getDecl() << ")\n");
-    RG->addEdge(
-        getOutmostClassOrFunDecl(DC->getCanonicalDecl()),
-        getOutmostClassOrFunDecl(FuncRef->getDecl()->getCanonicalDecl()));
+
+    RG->addEdge(getOutmostClassOrFunDecl(DC->getCanonicalDecl()),
+                getOutmostClassOrFunDecl(FuncRef->getDecl()));
   } else if (const auto *UsedClass =
                  Result.Nodes.getNodeAs<CXXRecordDecl>("used_class")) {
     const auto *DC = Result.Nodes.getNodeAs<Decl>("dc");
     assert(DC);
-    LLVM_DEBUG(llvm::dbgs()
-               << "Find helper class usage: " << UsedClass->getNameAsString()
-               << " (" << UsedClass << ")\n");
     RG->addEdge(getOutmostClassOrFunDecl(DC->getCanonicalDecl()), UsedClass);
   }
 }

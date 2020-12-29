@@ -1,8 +1,9 @@
 //===-- DarwinProcessLauncher.cpp -------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -29,12 +30,11 @@
 // LLDB includes
 #include "lldb/lldb-enumerations.h"
 
-#include "lldb/Host/PseudoTerminal.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Log.h"
+#include "lldb/Core/StreamString.h"
 #include "lldb/Target/ProcessLaunchInfo.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/StreamString.h"
-#include "llvm/Support/Errno.h"
+#include "lldb/Utility/PseudoTerminal.h"
 
 #include "CFBundle.h"
 #include "CFString.h"
@@ -131,30 +131,34 @@ static bool ResolveExecutablePath(const char *path, char *resolved_path,
 
 // TODO check if we have a general purpose fork and exec.  We may be
 // able to get rid of this entirely.
-static Status ForkChildForPTraceDebugging(const char *path, char const *argv[],
-                                          char const *envp[], ::pid_t *pid,
-                                          int *pty_fd) {
-  Status error;
+static Error ForkChildForPTraceDebugging(const char *path, char const *argv[],
+                                         char const *envp[], ::pid_t *pid,
+                                         int *pty_fd) {
+  Error error;
   if (!path || !argv || !envp || !pid || !pty_fd) {
     error.SetErrorString("invalid arguments");
     return error;
   }
 
   // Use a fork that ties the child process's stdin/out/err to a pseudo
-  // terminal so we can read it in our MachProcess::STDIOThread as unbuffered
-  // io.
-  PseudoTerminal pty;
+  // terminal so we can read it in our MachProcess::STDIOThread
+  // as unbuffered io.
+  lldb_utility::PseudoTerminal pty;
   char fork_error[256];
   memset(fork_error, 0, sizeof(fork_error));
   *pid = static_cast<::pid_t>(pty.Fork(fork_error, sizeof(fork_error)));
   if (*pid < 0) {
-    // Status during fork.
+    //--------------------------------------------------------------
+    // Error during fork.
+    //--------------------------------------------------------------
     *pid = static_cast<::pid_t>(LLDB_INVALID_PROCESS_ID);
     error.SetErrorStringWithFormat("%s(): fork failed: %s", __FUNCTION__,
                                    fork_error);
     return error;
   } else if (pid == 0) {
+    //--------------------------------------------------------------
     // Child process
+    //--------------------------------------------------------------
 
     // Debug this process.
     ::ptrace(PT_TRACE_ME, 0, 0, 0);
@@ -162,12 +166,12 @@ static Status ForkChildForPTraceDebugging(const char *path, char const *argv[],
     // Get BSD signals as mach exceptions.
     ::ptrace(PT_SIGEXC, 0, 0, 0);
 
-    // If our parent is setgid, lets make sure we don't inherit those extra
-    // powers due to nepotism.
+    // If our parent is setgid, lets make sure we don't inherit those
+    // extra powers due to nepotism.
     if (::setgid(getgid()) == 0) {
-      // Let the child have its own process group. We need to execute this call
-      // in both the child and parent to avoid a race condition between the two
-      // processes.
+      // Let the child have its own process group. We need to execute
+      // this call in both the child and parent to avoid a race
+      // condition between the two processes.
 
       // Set the child process group to match its pid.
       ::setpgid(0, 0);
@@ -178,30 +182,33 @@ static Status ForkChildForPTraceDebugging(const char *path, char const *argv[],
       // Turn this process into the given executable.
       ::execv(path, (char *const *)argv);
     }
-    // Exit with error code. Child process should have taken over in above exec
-    // call and if the exec fails it will exit the child process below.
+    // Exit with error code. Child process should have taken
+    // over in above exec call and if the exec fails it will
+    // exit the child process below.
     ::exit(127);
   } else {
+    //--------------------------------------------------------------
     // Parent process
-    // Let the child have its own process group. We need to execute this call
-    // in both the child and parent to avoid a race condition between the two
-    // processes.
+    //--------------------------------------------------------------
+    // Let the child have its own process group. We need to execute
+    // this call in both the child and parent to avoid a race condition
+    // between the two processes.
 
     // Set the child process group to match its pid
     ::setpgid(*pid, *pid);
     if (pty_fd) {
-      // Release our master pty file descriptor so the pty class doesn't close
-      // it and so we can continue to use it in our STDIO thread
+      // Release our master pty file descriptor so the pty class doesn't
+      // close it and so we can continue to use it in our STDIO thread
       *pty_fd = pty.ReleaseMasterFileDescriptor();
     }
   }
   return error;
 }
 
-static Status
+static Error
 CreatePosixSpawnFileAction(const FileAction &action,
                            posix_spawn_file_actions_t *file_actions) {
-  Status error;
+  Error error;
 
   // Log it.
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
@@ -254,19 +261,20 @@ CreatePosixSpawnFileAction(const FileAction &action,
 
   case FileAction::eFileActionNone:
   default:
-    LLDB_LOGF(log, "%s(): unsupported file action %u", __FUNCTION__,
-              action.GetAction());
+    if (log)
+      log->Printf("%s(): unsupported file action %u", __FUNCTION__,
+                  action.GetAction());
     break;
   }
 
   return error;
 }
 
-static Status PosixSpawnChildForPTraceDebugging(const char *path,
-                                                ProcessLaunchInfo &launch_info,
-                                                ::pid_t *pid,
-                                                cpu_type_t *actual_cpu_type) {
-  Status error;
+static Error PosixSpawnChildForPTraceDebugging(const char *path,
+                                               ProcessLaunchInfo &launch_info,
+                                               ::pid_t *pid,
+                                               cpu_type_t *actual_cpu_type) {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
 
   if (!pid) {
@@ -287,12 +295,14 @@ static Status PosixSpawnChildForPTraceDebugging(const char *path,
 
   int error_code;
   if ((error_code = ::posix_spawnattr_init(&attr)) != 0) {
-    LLDB_LOGF(log, "::posix_spawnattr_init(&attr) failed");
+    if (log)
+      log->Printf("::posix_spawnattr_init(&attr) failed");
     error.SetError(error_code, eErrorTypePOSIX);
     return error;
   }
 
-  // Ensure we clean up the spawnattr structure however we exit this function.
+  // Ensure we clean up the spawnattr structure however we exit this
+  // function.
   std::unique_ptr<posix_spawnattr_t, int (*)(posix_spawnattr_t *)> spawnattr_up(
       &attr, ::posix_spawnattr_destroy);
 
@@ -309,31 +319,32 @@ static Status PosixSpawnChildForPTraceDebugging(const char *path,
   ::posix_spawnattr_setsigdefault(&attr, &all_signals);
 
   if ((error_code = ::posix_spawnattr_setflags(&attr, flags)) != 0) {
-    LLDB_LOG(log,
-             "::posix_spawnattr_setflags(&attr, "
-             "POSIX_SPAWN_START_SUSPENDED{0}) failed: {1}",
-             flags & _POSIX_SPAWN_DISABLE_ASLR ? " | _POSIX_SPAWN_DISABLE_ASLR"
-                                               : "",
-             llvm::sys::StrError(error_code));
+    if (log)
+      log->Printf("::posix_spawnattr_setflags(&attr, "
+                  "POSIX_SPAWN_START_SUSPENDED%s) failed: %s",
+                  flags & _POSIX_SPAWN_DISABLE_ASLR
+                      ? " | _POSIX_SPAWN_DISABLE_ASLR"
+                      : "",
+                  strerror(error_code));
     error.SetError(error_code, eErrorTypePOSIX);
     return error;
   }
 
 #if !defined(__arm__)
 
-  // We don't need to do this for ARM, and we really shouldn't now that we have
-  // multiple CPU subtypes and no posix_spawnattr call that allows us to set
-  // which CPU subtype to launch...
+  // We don't need to do this for ARM, and we really shouldn't now that we
+  // have multiple CPU subtypes and no posix_spawnattr call that allows us
+  // to set which CPU subtype to launch...
   cpu_type_t desired_cpu_type = launch_info.GetArchitecture().GetMachOCPUType();
   if (desired_cpu_type != LLDB_INVALID_CPUTYPE) {
     size_t ocount = 0;
     error_code =
         ::posix_spawnattr_setbinpref_np(&attr, 1, &desired_cpu_type, &ocount);
     if (error_code != 0) {
-      LLDB_LOG(log,
-               "::posix_spawnattr_setbinpref_np(&attr, 1, "
-               "cpu_type = {0:x8}, count => {1}): {2}",
-               desired_cpu_type, ocount, llvm::sys::StrError(error_code));
+      if (log)
+        log->Printf("::posix_spawnattr_setbinpref_np(&attr, 1, "
+                    "cpu_type = 0x%8.8x, count => %llu): %s",
+                    desired_cpu_type, (uint64_t)ocount, strerror(error_code));
       error.SetError(error_code, eErrorTypePOSIX);
       return error;
     }
@@ -350,8 +361,10 @@ static Status PosixSpawnChildForPTraceDebugging(const char *path,
 
   posix_spawn_file_actions_t file_actions;
   if ((error_code = ::posix_spawn_file_actions_init(&file_actions)) != 0) {
-    LLDB_LOG(log, "::posix_spawn_file_actions_init(&file_actions) failed: {0}",
-             llvm::sys::StrError(error_code));
+    if (log)
+      log->Printf("::posix_spawn_file_actions_init(&file_actions) "
+                  "failed: %s",
+                  strerror(error_code));
     error.SetError(error_code, eErrorTypePOSIX);
     return error;
   }
@@ -363,10 +376,10 @@ static Status PosixSpawnChildForPTraceDebugging(const char *path,
                   int (*)(posix_spawn_file_actions_t *)>
       file_actions_up(&file_actions, ::posix_spawn_file_actions_destroy);
 
-  // We assume the caller has setup the file actions appropriately.  We are not
-  // in the business of figuring out what we really need here. lldb-server will
-  // have already called FinalizeFileActions() as well to button these up
-  // properly.
+  // We assume the caller has setup the file actions appropriately.  We
+  // are not in the business of figuring out what we really need here.
+  // lldb-server will have already called FinalizeFileActions() as well
+  // to button these up properly.
   const size_t num_actions = launch_info.GetNumFileActions();
   for (size_t action_index = 0; action_index < num_actions; ++action_index) {
     const FileAction *const action =
@@ -376,10 +389,10 @@ static Status PosixSpawnChildForPTraceDebugging(const char *path,
 
     error = CreatePosixSpawnFileAction(*action, &file_actions);
     if (!error.Success()) {
-      LLDB_LOGF(log,
-                "%s(): error converting FileAction to posix_spawn "
-                "file action: %s",
-                __FUNCTION__, error.AsCString());
+      if (log)
+        log->Printf("%s(): error converting FileAction to posix_spawn "
+                    "file action: %s",
+                    __FUNCTION__, error.AsCString());
       return error;
     }
   }
@@ -396,11 +409,11 @@ static Status PosixSpawnChildForPTraceDebugging(const char *path,
   error_code = ::posix_spawnp(pid, path, &file_actions, &attr,
                               (char *const *)argv, (char *const *)envp);
   if (error_code != 0) {
-    LLDB_LOG(log,
-             "::posix_spawnp(pid => {0}, path = '{1}', file_actions "
-             "= {2}, attr = {3}, argv = {4}, envp = {5}) failed: {6}",
-             pid, path, &file_actions, &attr, argv, envp,
-             llvm::sys::StrError(error_code));
+    if (log)
+      log->Printf("::posix_spawnp(pid => %p, path = '%s', file_actions "
+                  "= %p, attr = %p, argv = %p, envp = %p) failed: %s",
+                  pid, path, &file_actions, &attr, argv, envp,
+                  strerror(error_code));
     error.SetError(error_code, eErrorTypePOSIX);
     return error;
   }
@@ -414,18 +427,18 @@ static Status PosixSpawnChildForPTraceDebugging(const char *path,
 
   if (actual_cpu_type) {
     *actual_cpu_type = GetCPUTypeForLocalProcess(*pid);
-    LLDB_LOGF(log,
-              "%s(): cpu type for launched process pid=%i: "
-              "cpu_type=0x%8.8x",
-              __FUNCTION__, *pid, *actual_cpu_type);
+    if (log)
+      log->Printf("%s(): cpu type for launched process pid=%i: "
+                  "cpu_type=0x%8.8x",
+                  __FUNCTION__, *pid, *actual_cpu_type);
   }
 
   return error;
 }
 
-Status LaunchInferior(ProcessLaunchInfo &launch_info, int *pty_master_fd,
-                      LaunchFlavor *launch_flavor) {
-  Status error;
+Error LaunchInferior(ProcessLaunchInfo &launch_info, int *pty_master_fd,
+                     LaunchFlavor *launch_flavor) {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
 
   if (!launch_flavor) {
@@ -475,21 +488,23 @@ Status LaunchInferior(ProcessLaunchInfo &launch_info, int *pty_master_fd,
   char resolved_path[PATH_MAX];
   resolved_path[0] = '\0';
 
-  LLDB_LOGF(log, "%s(): attempting to resolve given binary path: \"%s\"",
-            __FUNCTION__, given_path);
+  if (log)
+    log->Printf("%s(): attempting to resolve given binary path: \"%s\"",
+                __FUNCTION__, given_path);
 
   // If we fail to resolve the path to our executable, then just use what we
   // were given and hope for the best
   if (!ResolveExecutablePath(given_path, resolved_path,
                              sizeof(resolved_path))) {
-    LLDB_LOGF(log,
-              "%s(): failed to resolve binary path, using "
-              "what was given verbatim and hoping for the best",
-              __FUNCTION__);
+    if (log)
+      log->Printf("%s(): failed to resolve binary path, using "
+                  "what was given verbatim and hoping for the best",
+                  __FUNCTION__);
     ::strncpy(resolved_path, given_path, sizeof(resolved_path));
   } else {
-    LLDB_LOGF(log, "%s(): resolved given binary path to: \"%s\"", __FUNCTION__,
-              resolved_path);
+    if (log)
+      log->Printf("%s(): resolved given binary path to: \"%s\"", __FUNCTION__,
+                  resolved_path);
   }
 
   char launch_err_str[PATH_MAX];
@@ -520,8 +535,8 @@ Status LaunchInferior(ProcessLaunchInfo &launch_info, int *pty_master_fd,
     if (error.Success()) {
       launch_info.SetProcessID(static_cast<lldb::pid_t>(pid));
     } else {
-      // Reset any variables that might have been set during a failed launch
-      // attempt.
+      // Reset any variables that might have been set during a failed
+      // launch attempt.
       if (pty_master_fd)
         *pty_master_fd = -1;
 
@@ -603,8 +618,8 @@ Status LaunchInferior(ProcessLaunchInfo &launch_info, int *pty_master_fd,
       if (pty_master_fd)
         *pty_master_fd = launch_info.GetPTY().ReleaseMasterFileDescriptor();
     } else {
-      // Reset any variables that might have been set during a failed launch
-      // attempt.
+      // Reset any variables that might have been set during a failed
+      // launch attempt.
       if (pty_master_fd)
         *pty_master_fd = -1;
 
@@ -623,8 +638,8 @@ Status LaunchInferior(ProcessLaunchInfo &launch_info, int *pty_master_fd,
   }
 
   if (launch_info.GetProcessID() == LLDB_INVALID_PROCESS_ID) {
-    // If we don't have a valid process ID and no one has set the error, then
-    // return a generic error.
+    // If we don't have a valid process ID and no one has set the error,
+    // then return a generic error.
     if (error.Success())
       error.SetErrorStringWithFormat("%s(): failed to launch, no reason "
                                      "specified",

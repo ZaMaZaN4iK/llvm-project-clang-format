@@ -1,8 +1,9 @@
-//===- llvm/CallingConvLower.h - Calling Conventions ------------*- C++ -*-===//
+//===-- llvm/CallingConvLower.h - Calling Conventions -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,13 +18,11 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/TargetCallingConv.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/MC/MCRegisterInfo.h"
-#include "llvm/Support/Alignment.h"
+#include "llvm/Target/TargetCallingConv.h"
 
 namespace llvm {
-
 class CCState;
 class MVT;
 class TargetMachine;
@@ -44,7 +43,6 @@ public:
     AExtUpper, // The value is in the upper bits of the location and should be
                // extended with undefined upper bits when retrieved.
     BCvt,      // The value is bit-converted in the location.
-    Trunc,     // The value is truncated in the location.
     VExt,      // The value is vector-widened in the location.
                // FIXME: Not implemented yet. Code that uses AExt to mean
                // vector-widen should be fixed to use VExt instead.
@@ -147,7 +145,7 @@ public:
 
   bool needsCustom() const { return isCustom; }
 
-  Register getLocReg() const { assert(isRegLoc()); return Loc; }
+  unsigned getLocReg() const { assert(isRegLoc()); return Loc; }
   unsigned getLocMemOffset() const { assert(isMemLoc()); return Loc; }
   unsigned getExtraInfo() const { return Loc; }
   MVT getLocVT() const { return LocVT; }
@@ -185,6 +183,11 @@ typedef bool CCCustomFn(unsigned &ValNo, MVT &ValVT,
                         MVT &LocVT, CCValAssign::LocInfo &LocInfo,
                         ISD::ArgFlagsTy &ArgFlags, CCState &State);
 
+/// ParmContext - This enum tracks whether calling convention lowering is in
+/// the context of prologue or call generation. Not all backends make use of
+/// this information.
+typedef enum { Unknown, Prologue, Call } ParmContext;
+
 /// CCState - This class holds information needed while lowering arguments and
 /// return values.  It captures which registers are already assigned and which
 /// stack slots are used.  It provides accessors to allocate these values.
@@ -199,10 +202,9 @@ private:
   LLVMContext &Context;
 
   unsigned StackOffset;
-  Align MaxStackArgAlign;
+  unsigned MaxStackArgAlign;
   SmallVector<uint32_t, 16> UsedRegs;
   SmallVector<CCValAssign, 4> PendingLocs;
-  SmallVector<ISD::ArgFlagsTy, 4> PendingArgFlags;
 
   // ByValInfo and SmallVector<ByValInfo, 4> ByValRegs:
   //
@@ -253,6 +255,9 @@ private:
   // InRegsParamsProcessed - shows how many instances of ByValRegs was proceed
   // during argument analysis.
   unsigned InRegsParamsProcessed;
+
+protected:
+  ParmContext CallOrPrologue;
 
 public:
   CCState(CallingConv::ID CC, bool isVarArg, MachineFunction &MF,
@@ -305,7 +310,7 @@ public:
   /// CheckReturn - Analyze the return values of a function, returning
   /// true if the return can be performed without sret-demotion, and
   /// false otherwise.
-  bool CheckReturn(const SmallVectorImpl<ISD::OutputArg> &Outs,
+  bool CheckReturn(const SmallVectorImpl<ISD::OutputArg> &ArgsFlags,
                    CCAssignFn Fn);
 
   /// AnalyzeCallOperands - Analyze the outgoing arguments to a call,
@@ -423,19 +428,19 @@ public:
 
   /// AllocateStack - Allocate a chunk of stack space with the specified size
   /// and alignment.
-  unsigned AllocateStack(unsigned Size, unsigned Alignment) {
-    const Align CheckedAlignment(Alignment);
-    StackOffset = alignTo(StackOffset, CheckedAlignment);
+  unsigned AllocateStack(unsigned Size, unsigned Align) {
+    assert(Align && ((Align - 1) & Align) == 0); // Align is power of 2.
+    StackOffset = alignTo(StackOffset, Align);
     unsigned Result = StackOffset;
     StackOffset += Size;
-    MaxStackArgAlign = std::max(CheckedAlignment, MaxStackArgAlign);
-    ensureMaxAlignment(CheckedAlignment);
+    MaxStackArgAlign = std::max(Align, MaxStackArgAlign);
+    ensureMaxAlignment(Align);
     return Result;
   }
 
-  void ensureMaxAlignment(Align Alignment) {
+  void ensureMaxAlignment(unsigned Align) {
     if (!AnalyzingMustTailForwardedRegs)
-      MF.getFrameInfo().ensureMaxAlignment(Alignment.value());
+      MF.getFrameInfo().ensureMaxAlignment(Align);
   }
 
   /// Version of AllocateStack with extra register to be shadowed.
@@ -505,14 +510,11 @@ public:
     InRegsParamsProcessed = 0;
   }
 
-  // Get list of pending assignments
-  SmallVectorImpl<CCValAssign> &getPendingLocs() {
-    return PendingLocs;
-  }
+  ParmContext getCallOrPrologue() const { return CallOrPrologue; }
 
-  // Get a list of argflags for pending assignments.
-  SmallVectorImpl<ISD::ArgFlagsTy> &getPendingArgFlags() {
-    return PendingArgFlags;
+  // Get list of pending assignments
+  SmallVectorImpl<llvm::CCValAssign> &getPendingLocs() {
+    return PendingLocs;
   }
 
   /// Compute the remaining unused register parameters that would be used for
@@ -558,7 +560,7 @@ public:
 
     // Sort the locations of the arguments according to their original position.
     SmallVector<CCValAssign, 16> TmpArgLocs;
-    TmpArgLocs.swap(Locs);
+    std::swap(TmpArgLocs, Locs);
     auto B = TmpArgLocs.begin(), E = TmpArgLocs.end();
     std::merge(B, B + NumFirstPassLocs, B + NumFirstPassLocs, E,
                std::back_inserter(Locs),
@@ -572,6 +574,8 @@ private:
   void MarkAllocated(unsigned Reg);
 };
 
+
+
 } // end namespace llvm
 
-#endif // LLVM_CODEGEN_CALLINGCONVLOWER_H
+#endif

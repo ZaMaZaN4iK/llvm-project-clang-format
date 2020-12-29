@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,7 +11,7 @@
 // <optional>
 
 // template <class U, class... Args>
-//   T& optional<T>::emplace(initializer_list<U> il, Args&&... args);
+//   void optional<T>::emplace(initializer_list<U> il, Args&&... args);
 
 #include <optional>
 #include <type_traits>
@@ -69,33 +70,27 @@ public:
 
 bool Z::dtor_called = false;
 
-int main(int, char**)
+int main()
 {
     {
         X x;
         optional<X> opt(x);
         assert(X::dtor_called == false);
-        auto &v = opt.emplace({1, 2});
-        static_assert( std::is_same_v<X&, decltype(v)>, "" );
+        opt.emplace({1, 2});
         assert(X::dtor_called == true);
         assert(*opt == X({1, 2}));
-        assert(&v == &*opt);
     }
     {
         optional<std::vector<int>> opt;
-        auto &v = opt.emplace({1, 2, 3}, std::allocator<int>());
-        static_assert( std::is_same_v<std::vector<int>&, decltype(v)>, "" );
+        opt.emplace({1, 2, 3}, std::allocator<int>());
         assert(static_cast<bool>(opt) == true);
         assert(*opt == std::vector<int>({1, 2, 3}));
-        assert(&v == &*opt);
     }
     {
         optional<Y> opt;
-        auto &v = opt.emplace({1, 2});
-        static_assert( std::is_same_v<Y&, decltype(v)>, "" );
+        opt.emplace({1, 2});
         assert(static_cast<bool>(opt) == true);
         assert(*opt == Y({1, 2}));
-        assert(&v == &*opt);
     }
 #ifndef TEST_HAS_NO_EXCEPTIONS
     {
@@ -105,9 +100,7 @@ int main(int, char**)
         {
             assert(static_cast<bool>(opt) == true);
             assert(Z::dtor_called == false);
-            auto &v = opt.emplace({1, 2});
-            static_assert( std::is_same_v<Z&, decltype(v)>, "" );
-            assert(false);
+            opt.emplace({1, 2});
         }
         catch (int i)
         {
@@ -117,6 +110,4 @@ int main(int, char**)
         }
     }
 #endif
-
-  return 0;
 }

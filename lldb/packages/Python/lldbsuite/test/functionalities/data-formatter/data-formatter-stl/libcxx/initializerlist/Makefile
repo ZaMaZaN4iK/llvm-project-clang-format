@@ -1,4 +1,4 @@
+LEVEL = ../../../../../make
 CXX_SOURCES := main.cpp
-CXXFLAGS_EXTRAS := -std=c++11
-
-include Makefile.rules
+CXXFLAGS += -std=c++11
+include $(LEVEL)/Makefile.rules

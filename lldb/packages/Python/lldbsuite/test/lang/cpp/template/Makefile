@@ -1,3 +1,7 @@
+LEVEL = ../../../make
+
 CXX_SOURCES := main.cpp
 
-include Makefile.rules
+CFLAGS_EXTRAS += $(NO_LIMIT_DEBUG_INFO_FLAGS)
+
+include $(LEVEL)/Makefile.rules

@@ -1,18 +1,16 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef EMPLACEABLE_H
 #define EMPLACEABLE_H
 
-#include <functional>
-#include "test_macros.h"
-
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
 
 class Emplaceable
 {
@@ -44,14 +42,13 @@ namespace std {
 
 template <>
 struct hash<Emplaceable>
+    : public std::unary_function<Emplaceable, std::size_t>
 {
-    typedef Emplaceable argument_type;
-    typedef std::size_t result_type;
-
     std::size_t operator()(const Emplaceable& x) const {return x.get();}
 };
 
 }
 
-#endif  // TEST_STD_VER >= 11
+#endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
+
 #endif  // EMPLACEABLE_H

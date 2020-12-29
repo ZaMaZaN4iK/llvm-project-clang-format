@@ -1,21 +1,22 @@
 //===--- UseEqualsDefaultCheck.h - clang-tidy--------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_MODERNIZE_USE_EQUALS_DEFAULT_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_MODERNIZE_USE_EQUALS_DEFAULT_H
 
-#include "../ClangTidyCheck.h"
+#include "../ClangTidy.h"
 
 namespace clang {
 namespace tidy {
 namespace modernize {
 
-/// Replace default bodies of special member functions with '= default;'.
+/// \brief Replace default bodies of special member functions with '= default;'.
 /// \code
 ///   struct A {
 ///     A() {}
@@ -36,13 +37,10 @@ namespace modernize {
 /// http://clang.llvm.org/extra/clang-tidy/checks/modernize-use-equals-default.html
 class UseEqualsDefaultCheck : public ClangTidyCheck {
 public:
-  UseEqualsDefaultCheck(StringRef Name, ClangTidyContext *Context);
-  void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
+  UseEqualsDefaultCheck(StringRef Name, ClangTidyContext *Context)
+      : ClangTidyCheck(Name, Context) {}
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
-
-private:
-  const bool IgnoreMacros;
 };
 
 } // namespace modernize

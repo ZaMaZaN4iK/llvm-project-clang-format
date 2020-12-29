@@ -1,20 +1,21 @@
-//===- HexagonBlockRanges.h -------------------------------------*- C++ -*-===//
+//===--- HexagonBlockRanges.h -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-#ifndef LLVM_LIB_TARGET_HEXAGON_HEXAGONBLOCKRANGES_H
-#define LLVM_LIB_TARGET_HEXAGON_HEXAGONBLOCKRANGES_H
+#ifndef HEXAGON_BLOCK_RANGES_H
+#define HEXAGON_BLOCK_RANGES_H
 
 #include "llvm/ADT/BitVector.h"
+#include "llvm/CodeGen/MachineBasicBlock.h"
 #include <cassert>
 #include <map>
 #include <set>
-#include <utility>
 #include <vector>
+#include <utility>
 
 namespace llvm {
 
@@ -22,7 +23,6 @@ class HexagonSubtarget;
 class MachineBasicBlock;
 class MachineFunction;
 class MachineInstr;
-class MachineRegisterInfo;
 class raw_ostream;
 class TargetInstrInfo;
 class TargetRegisterInfo;
@@ -32,12 +32,11 @@ struct HexagonBlockRanges {
 
   struct RegisterRef {
     unsigned Reg, Sub;
-
     bool operator<(RegisterRef R) const {
       return Reg < R.Reg || (Reg == R.Reg && Sub < R.Sub);
     }
   };
-  using RegisterSet = std::set<RegisterRef>;
+  typedef std::set<RegisterRef> RegisterSet;
 
   // This is to represent an "index", which is an abstraction of a position
   // of an instruction within a basic block.
@@ -50,7 +49,7 @@ struct HexagonBlockRanges {
       First = 11  // 10th + 1st
     };
 
-    IndexType() {}
+    IndexType() : Index(None) {}
     IndexType(unsigned Idx) : Index(Idx) {}
 
     static bool isInstr(IndexType X) { return X.Index >= First; }
@@ -69,7 +68,7 @@ struct HexagonBlockRanges {
     bool operator>  (IndexType Idx) const;
     bool operator>= (IndexType Idx) const;
 
-    unsigned Index = None;
+    unsigned Index;
   };
 
   // A range of indices, essentially a representation of a live range.
@@ -139,8 +138,7 @@ struct HexagonBlockRanges {
     std::map<IndexType,MachineInstr*> Map;
   };
 
-  using RegToRangeMap = std::map<RegisterRef, RangeList>;
-
+  typedef std::map<RegisterRef,RangeList> RegToRangeMap;
   RegToRangeMap computeLiveMap(InstrIndexMap &IndexMap);
   RegToRangeMap computeDeadMap(InstrIndexMap &IndexMap, RegToRangeMap &LiveMap);
   static RegisterSet expandToSubRegs(RegisterRef R,
@@ -243,4 +241,4 @@ raw_ostream &operator<< (raw_ostream &OS,
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_TARGET_HEXAGON_HEXAGONBLOCKRANGES_H
+#endif // HEXAGON_BLOCK_RANGES_H

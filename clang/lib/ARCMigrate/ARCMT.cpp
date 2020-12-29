@@ -1,8 +1,9 @@
 //===--- ARCMT.cpp - Migration to ARC mode --------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -35,10 +36,10 @@ bool CapturedDiagList::clearDiagnostic(ArrayRef<unsigned> IDs,
   while (I != List.end()) {
     FullSourceLoc diagLoc = I->getLocation();
     if ((IDs.empty() || // empty means clear all diagnostics in the range.
-         llvm::is_contained(IDs, I->getID())) &&
+         std::find(IDs.begin(), IDs.end(), I->getID()) != IDs.end()) &&
         !diagLoc.isBeforeInTranslationUnitThan(range.getBegin()) &&
         (diagLoc == range.getEnd() ||
-         diagLoc.isBeforeInTranslationUnitThan(range.getEnd()))) {
+           diagLoc.isBeforeInTranslationUnitThan(range.getEnd()))) {
       cleared = true;
       ListTy::iterator eraseS = I++;
       if (eraseS->getLevel() != DiagnosticsEngine::Note)
@@ -64,10 +65,10 @@ bool CapturedDiagList::hasDiagnostic(ArrayRef<unsigned> IDs,
   while (I != List.end()) {
     FullSourceLoc diagLoc = I->getLocation();
     if ((IDs.empty() || // empty means any diagnostic in the range.
-         llvm::find(IDs, I->getID()) != IDs.end()) &&
+         std::find(IDs.begin(), IDs.end(), I->getID()) != IDs.end()) &&
         !diagLoc.isBeforeInTranslationUnitThan(range.getBegin()) &&
         (diagLoc == range.getEnd() ||
-         diagLoc.isBeforeInTranslationUnitThan(range.getEnd()))) {
+           diagLoc.isBeforeInTranslationUnitThan(range.getEnd()))) {
       return true;
     }
 
@@ -139,7 +140,7 @@ public:
     }
 
     // Non-ARC warnings are ignored.
-    Diags.setLastDiagnosticIgnored(true);
+    Diags.setLastDiagnosticIgnored();
   }
 };
 
@@ -189,6 +190,8 @@ createInvocationForMigration(CompilerInvocation &origCI,
       PPOpts.Includes.insert(PPOpts.Includes.begin(), OriginalFile);
     PPOpts.ImplicitPCHInclude.clear();
   }
+  // FIXME: Get the original header of a PTH as well.
+  CInvok->getPreprocessorOpts().ImplicitPTHInclude.clear();
   std::string define = getARCMTMacroName();
   define += '=';
   CInvok->getPreprocessorOpts().addMacroDef(define);
@@ -223,7 +226,7 @@ static void emitPremigrationErrors(const CapturedDiagList &arcDiags,
       new DiagnosticsEngine(DiagID, diagOpts, &printer,
                             /*ShouldOwnClient=*/false));
   Diags->setSourceManager(&PP.getSourceManager());
-
+  
   printer.BeginSourceFile(PP.getLangOpts(), &PP);
   arcDiags.reportDiagnostics(*Diags);
   printer.EndSourceFile();
@@ -238,7 +241,7 @@ bool arcmt::checkForManualIssues(
     std::shared_ptr<PCHContainerOperations> PCHContainerOps,
     DiagnosticConsumer *DiagClient, bool emitPremigrationARCErrors,
     StringRef plistOut) {
-  if (!origCI.getLangOpts()->ObjC)
+  if (!origCI.getLangOpts()->ObjC1)
     return false;
 
   LangOptions::GCMode OrigGCMode = origCI.getLangOpts()->getGC();
@@ -302,7 +305,7 @@ bool arcmt::checkForManualIssues(
 
   // After parsing of source files ended, we want to reuse the
   // diagnostics objects to emit further diagnostics.
-  // We call BeginSourceFile because DiagnosticConsumer requires that
+  // We call BeginSourceFile because DiagnosticConsumer requires that 
   // diagnostics with source range information are emitted only in between
   // BeginSourceFile() and EndSourceFile().
   DiagClient->BeginSourceFile(Ctx.getLangOpts(), &Unit->getPreprocessor());
@@ -339,7 +342,7 @@ applyTransforms(CompilerInvocation &origCI, const FrontendInputFile &Input,
                 std::shared_ptr<PCHContainerOperations> PCHContainerOps,
                 DiagnosticConsumer *DiagClient, StringRef outputDir,
                 bool emitPremigrationARCErrors, StringRef plistOut) {
-  if (!origCI.getLangOpts()->ObjC)
+  if (!origCI.getLangOpts()->ObjC1)
     return false;
 
   LangOptions::GCMode OrigGCMode = origCI.getLangOpts()->getGC();
@@ -453,8 +456,8 @@ public:
   std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
                                                  StringRef InFile) override {
     CI.getPreprocessor().addPPCallbacks(
-               std::make_unique<ARCMTMacroTrackerPPCallbacks>(ARCMTMacroLocs));
-    return std::make_unique<ASTConsumer>();
+               llvm::make_unique<ARCMTMacroTrackerPPCallbacks>(ARCMTMacroLocs));
+    return llvm::make_unique<ASTConsumer>();
   }
 };
 
@@ -500,7 +503,7 @@ public:
 
 } // end anonymous namespace.
 
-/// Anchor for VTable.
+/// \brief Anchor for VTable.
 MigrationProcess::RewriteListener::~RewriteListener() { }
 
 MigrationProcess::MigrationProcess(
@@ -514,7 +517,7 @@ MigrationProcess::MigrationProcess(
     IntrusiveRefCntPtr<DiagnosticsEngine> Diags(
       new DiagnosticsEngine(DiagID, &CI.getDiagnosticOpts(),
                             DiagClient, /*ShouldOwnClient=*/false));
-    Remapper.initFromDisk(outputDir, *Diags, /*ignoreIfFilesChanged=*/true);
+    Remapper.initFromDisk(outputDir, *Diags, /*ignoreIfFilesChanges=*/true);
   }
 }
 
@@ -569,7 +572,7 @@ bool MigrationProcess::applyTransform(TransformFn trans,
 
   // After parsing of source files ended, we want to reuse the
   // diagnostics objects to emit further diagnostics.
-  // We call BeginSourceFile because DiagnosticConsumer requires that
+  // We call BeginSourceFile because DiagnosticConsumer requires that 
   // diagnostics with source range information are emitted only in between
   // BeginSourceFile() and EndSourceFile().
   DiagClient->BeginSourceFile(Ctx.getLangOpts(), &Unit->getPreprocessor());

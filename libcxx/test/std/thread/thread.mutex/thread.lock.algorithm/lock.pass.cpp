@@ -1,17 +1,18 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: libcpp-has-no-threads
 
-// This test hangs forever when built against libstdc++ and MSVC. In order to allow
+// This test hangs forever when built against libstdc++. In order to allow
 // validation of the test suite against other STLs we have to mark it
 // unsupported.
-// UNSUPPORTED: libstdc++, msvc
+// UNSUPPORTED: libstdc++
 
 // <mutex>
 
@@ -92,7 +93,7 @@ public:
     bool locked() const {return locked_;}
 };
 
-int main(int, char**)
+int main()
 {
     {
         L0 l0;
@@ -187,7 +188,7 @@ int main(int, char**)
         }
     }
 #endif
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_VARIADICS
     {
         L0 l0;
         L0 l1;
@@ -517,7 +518,5 @@ int main(int, char**)
         }
     }
 #endif  // TEST_HAS_NO_EXCEPTIONS
-#endif // TEST_STD_VER >= 11
-
-  return 0;
+#endif  // _LIBCPP_HAS_NO_VARIADICS
 }

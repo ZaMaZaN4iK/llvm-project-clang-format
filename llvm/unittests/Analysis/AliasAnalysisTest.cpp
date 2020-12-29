@@ -1,8 +1,9 @@
 //===--- AliasAnalysisTest.cpp - Mixed TBAA unit tests --------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,7 +19,6 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/SourceMgr.h"
 #include "gtest/gtest.h"
 
@@ -55,8 +55,8 @@ struct AATestPass : FunctionPass {
 
     for (Value *P1 : Pointers)
       for (Value *P2 : Pointers)
-        (void)AA.alias(P1, LocationSize::unknown(), P2,
-                       LocationSize::unknown());
+        (void)AA.alias(P1, MemoryLocation::UnknownSize, P2,
+                       MemoryLocation::UnknownSize);
 
     return false;
   }
@@ -86,8 +86,7 @@ struct TestCustomAAResult : AAResultBase<TestCustomAAResult> {
 
   bool invalidate(Function &, const PreservedAnalyses &) { return false; }
 
-  AliasResult alias(const MemoryLocation &LocA, const MemoryLocation &LocB,
-                    AAQueryInfo &AAQI) {
+  AliasResult alias(const MemoryLocation &LocA, const MemoryLocation &LocB) {
     CB();
     return MayAlias;
   }
@@ -157,7 +156,7 @@ protected:
 
     // Build the various AA results and register them.
     AC.reset(new AssumptionCache(F));
-    BAR.reset(new BasicAAResult(M.getDataLayout(), F, TLI, *AC));
+    BAR.reset(new BasicAAResult(M.getDataLayout(), TLI, *AC));
     AAR->addAAResult(*BAR);
 
     return *AAR;
@@ -168,7 +167,7 @@ TEST_F(AliasAnalysisTest, getModRefInfo) {
   // Setup function.
   FunctionType *FTy =
       FunctionType::get(Type::getVoidTy(C), std::vector<Type *>(), false);
-  auto *F = Function::Create(FTy, Function::ExternalLinkage, "f", M);
+  auto *F = cast<Function>(M.getOrInsertFunction("f", FTy));
   auto *BB = BasicBlock::Create(C, "entry", F);
   auto IntType = Type::getInt32Ty(C);
   auto PtrType = Type::getInt32PtrTy(C);
@@ -176,34 +175,33 @@ TEST_F(AliasAnalysisTest, getModRefInfo) {
   auto *Addr = ConstantPointerNull::get(PtrType);
 
   auto *Store1 = new StoreInst(Value, Addr, BB);
-  auto *Load1 = new LoadInst(IntType, Addr, "load", BB);
+  auto *Load1 = new LoadInst(Addr, "load", BB);
   auto *Add1 = BinaryOperator::CreateAdd(Value, Value, "add", BB);
   auto *VAArg1 = new VAArgInst(Addr, PtrType, "vaarg", BB);
   auto *CmpXChg1 = new AtomicCmpXchgInst(
       Addr, ConstantInt::get(IntType, 0), ConstantInt::get(IntType, 1),
-      AtomicOrdering::Monotonic, AtomicOrdering::Monotonic,
-      SyncScope::System, BB);
+      AtomicOrdering::Monotonic, AtomicOrdering::Monotonic, CrossThread, BB);
   auto *AtomicRMW =
       new AtomicRMWInst(AtomicRMWInst::Xchg, Addr, ConstantInt::get(IntType, 1),
-                        AtomicOrdering::Monotonic, SyncScope::System, BB);
+                        AtomicOrdering::Monotonic, CrossThread, BB);
 
   ReturnInst::Create(C, nullptr, BB);
 
   auto &AA = getAAResults(*F);
 
   // Check basic results
-  EXPECT_EQ(AA.getModRefInfo(Store1, MemoryLocation()), ModRefInfo::Mod);
-  EXPECT_EQ(AA.getModRefInfo(Store1, None), ModRefInfo::Mod);
-  EXPECT_EQ(AA.getModRefInfo(Load1, MemoryLocation()), ModRefInfo::Ref);
-  EXPECT_EQ(AA.getModRefInfo(Load1, None), ModRefInfo::Ref);
-  EXPECT_EQ(AA.getModRefInfo(Add1, MemoryLocation()), ModRefInfo::NoModRef);
-  EXPECT_EQ(AA.getModRefInfo(Add1, None), ModRefInfo::NoModRef);
-  EXPECT_EQ(AA.getModRefInfo(VAArg1, MemoryLocation()), ModRefInfo::ModRef);
-  EXPECT_EQ(AA.getModRefInfo(VAArg1, None), ModRefInfo::ModRef);
-  EXPECT_EQ(AA.getModRefInfo(CmpXChg1, MemoryLocation()), ModRefInfo::ModRef);
-  EXPECT_EQ(AA.getModRefInfo(CmpXChg1, None), ModRefInfo::ModRef);
-  EXPECT_EQ(AA.getModRefInfo(AtomicRMW, MemoryLocation()), ModRefInfo::ModRef);
-  EXPECT_EQ(AA.getModRefInfo(AtomicRMW, None), ModRefInfo::ModRef);
+  EXPECT_EQ(AA.getModRefInfo(Store1, MemoryLocation()), MRI_Mod);
+  EXPECT_EQ(AA.getModRefInfo(Store1), MRI_Mod);
+  EXPECT_EQ(AA.getModRefInfo(Load1, MemoryLocation()), MRI_Ref);
+  EXPECT_EQ(AA.getModRefInfo(Load1), MRI_Ref);
+  EXPECT_EQ(AA.getModRefInfo(Add1, MemoryLocation()), MRI_NoModRef);
+  EXPECT_EQ(AA.getModRefInfo(Add1), MRI_NoModRef);
+  EXPECT_EQ(AA.getModRefInfo(VAArg1, MemoryLocation()), MRI_ModRef);
+  EXPECT_EQ(AA.getModRefInfo(VAArg1), MRI_ModRef);
+  EXPECT_EQ(AA.getModRefInfo(CmpXChg1, MemoryLocation()), MRI_ModRef);
+  EXPECT_EQ(AA.getModRefInfo(CmpXChg1), MRI_ModRef);
+  EXPECT_EQ(AA.getModRefInfo(AtomicRMW, MemoryLocation()), MRI_ModRef);
+  EXPECT_EQ(AA.getModRefInfo(AtomicRMW), MRI_ModRef);
 }
 
 class AAPassInfraTest : public testing::Test {

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -35,7 +36,6 @@ test()
     typedef std::hash<T> H;
     static_assert((std::is_same<typename H::argument_type, T>::value), "" );
     static_assert((std::is_same<typename H::result_type, std::size_t>::value), "" );
-    ASSERT_NOEXCEPT(H()(T()));
     typedef typename std::underlying_type<T>::type under_type;
 
     H h1;
@@ -43,13 +43,12 @@ test()
     for (int i = 0; i <= 5; ++i)
     {
         T t(static_cast<T> (i));
-        const bool small = std::integral_constant<bool, sizeof(T) <= sizeof(std::size_t)>::value; // avoid compiler warnings
-        if (small)
+        if (sizeof(T) <= sizeof(std::size_t))
             assert(h1(t) == h2(static_cast<under_type>(i)));
     }
 }
 
-int main(int, char**)
+int main()
 {
     test<Cardinals>();
 
@@ -59,6 +58,4 @@ int main(int, char**)
     test<EightBitColors>();
 
     test<Fruits>();
-
-  return 0;
 }

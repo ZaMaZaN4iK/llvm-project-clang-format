@@ -1,31 +1,27 @@
-//===- AtomicExpandUtils.h - Utilities for expanding atomic instructions --===//
+//===-- AtomicExpandUtils.h - Utilities for expanding atomic instructions -===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CODEGEN_ATOMICEXPANDUTILS_H
-#define LLVM_CODEGEN_ATOMICEXPANDUTILS_H
-
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/Support/AtomicOrdering.h"
 
 namespace llvm {
-
-class AtomicRMWInst;
 class Value;
+class AtomicRMWInst;
+
 
 /// Parameters (see the expansion example below):
 /// (the builder, %addr, %loaded, %new_val, ordering,
 ///  /* OUT */ %success, /* OUT */ %new_loaded)
-using CreateCmpXchgInstFun =
-    function_ref<void(IRBuilder<> &, Value *, Value *, Value *, AtomicOrdering,
-                      Value *&, Value *&)>;
+typedef function_ref<void(IRBuilder<> &, Value *, Value *, Value *,
+                          AtomicOrdering, Value *&, Value *&)> CreateCmpXchgInstFun;
 
-/// Expand an atomic RMW instruction into a loop utilizing
+/// \brief Expand an atomic RMW instruction into a loop utilizing
 /// cmpxchg. You'll want to make sure your target machine likes cmpxchg
 /// instructions in the first place and that there isn't another, better,
 /// transformation available (for example AArch32/AArch64 have linked loads).
@@ -46,8 +42,7 @@ using CreateCmpXchgInstFun =
 /// loop:
 ///     %loaded = phi iN [ %init_loaded, %entry ], [ %new_loaded, %loop ]
 ///     %new = some_op iN %loaded, %incr
-/// ; This is what -atomic-expand will produce using this function on i686
-/// targets:
+/// ; This is what -atomic-expand will produce using this function on i686 targets:
 ///     %pair = cmpxchg iN* %addr, iN %loaded, iN %new_val
 ///     %new_loaded = extractvalue { iN, i1 } %pair, 0
 ///     %success = extractvalue { iN, i1 } %pair, 1
@@ -57,8 +52,6 @@ using CreateCmpXchgInstFun =
 ///     [...]
 ///
 /// Returns true if the containing function was modified.
-bool expandAtomicRMWToCmpXchg(AtomicRMWInst *AI, CreateCmpXchgInstFun CreateCmpXchg);
-
-} // end namespace llvm
-
-#endif // LLVM_CODEGEN_ATOMICEXPANDUTILS_H
+bool
+expandAtomicRMWToCmpXchg(AtomicRMWInst *AI, CreateCmpXchgInstFun Factory);
+}

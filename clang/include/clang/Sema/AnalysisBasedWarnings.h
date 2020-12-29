@@ -1,8 +1,9 @@
 //=- AnalysisBasedWarnings.h - Sema warnings based on libAnalysis -*- C++ -*-=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -53,34 +54,34 @@ private:
   /// \name Statistics
   /// @{
 
-  /// Number of function CFGs built and analyzed.
+  /// \brief Number of function CFGs built and analyzed.
   unsigned NumFunctionsAnalyzed;
 
-  /// Number of functions for which the CFG could not be successfully
+  /// \brief Number of functions for which the CFG could not be successfully
   /// built.
   unsigned NumFunctionsWithBadCFGs;
 
-  /// Total number of blocks across all CFGs.
+  /// \brief Total number of blocks across all CFGs.
   unsigned NumCFGBlocks;
 
-  /// Largest number of CFG blocks for a single function analyzed.
+  /// \brief Largest number of CFG blocks for a single function analyzed.
   unsigned MaxCFGBlocksPerFunction;
 
-  /// Total number of CFGs with variables analyzed for uninitialized
+  /// \brief Total number of CFGs with variables analyzed for uninitialized
   /// uses.
   unsigned NumUninitAnalysisFunctions;
 
-  /// Total number of variables analyzed for uninitialized uses.
+  /// \brief Total number of variables analyzed for uninitialized uses.
   unsigned NumUninitAnalysisVariables;
 
-  /// Max number of variables analyzed for uninitialized uses in a single
+  /// \brief Max number of variables analyzed for uninitialized uses in a single
   /// function.
   unsigned MaxUninitAnalysisVariablesPerFunction;
 
-  /// Total number of block visits during uninitialized use analysis.
+  /// \brief Total number of block visits during uninitialized use analysis.
   unsigned NumUninitAnalysisBlockVisits;
 
-  /// Max number of block visits during uninitialized use analysis of
+  /// \brief Max number of block visits during uninitialized use analysis of
   /// a single function.
   unsigned MaxUninitAnalysisBlockVisitsPerFunction;
 
@@ -90,7 +91,7 @@ public:
   AnalysisBasedWarnings(Sema &s);
 
   void IssueWarnings(Policy P, FunctionScopeInfo *fscope,
-                     const Decl *D, QualType BlockType);
+                     const Decl *D, const BlockExpr *blkExpr);
 
   Policy getDefaultPolicy() { return DefaultPolicy; }
 

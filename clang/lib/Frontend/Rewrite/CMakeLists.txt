@@ -19,5 +19,4 @@ add_clang_library(clangRewriteFrontend
   clangFrontend
   clangLex
   clangRewrite
-  clangSerialization
   )

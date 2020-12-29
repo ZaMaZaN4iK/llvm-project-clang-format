@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,16 +12,14 @@
 
 // std::find with vector<bool>::iterator
 
-// https://bugs.llvm.org/show_bug.cgi?id=16816
+// http://llvm.org/bugs/show_bug.cgi?id=16816
 
 #include <vector>
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     {
         for (unsigned i = 1; i < 256; ++i)
@@ -40,6 +39,4 @@ int main(int, char**)
             assert(b.end() == j);
         }
     }
-
-  return 0;
 }

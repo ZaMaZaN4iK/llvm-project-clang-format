@@ -1,8 +1,9 @@
 //===-- main.cpp ------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,7 +12,7 @@
 // the breakpoint in the second thread will be hit while the breakpoint handler
 // in the first thread is trying to stop all threads.
 
-#include "pseudo_barrier.h"
+#include <atomic>
 #include <thread>
 
 pseudo_barrier_t g_barrier;

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,8 +14,6 @@
 #include <locale>
 #include <cassert>
 
-#include "test_macros.h"
-
 struct my_facet
     : public std::locale::facet
 {
@@ -23,13 +22,11 @@ struct my_facet
 
 std::locale::id my_facet::id;
 
-int main(int, char**)
+int main()
 {
     std::locale loc;
     assert(std::has_facet<std::ctype<char> >(loc));
     assert(!std::has_facet<my_facet>(loc));
     std::locale loc2(loc, new my_facet);
     assert(std::has_facet<my_facet>(loc2));
-
-  return 0;
 }

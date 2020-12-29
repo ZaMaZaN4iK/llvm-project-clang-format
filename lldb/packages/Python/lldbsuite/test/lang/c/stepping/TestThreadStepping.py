@@ -2,8 +2,12 @@
 Test thread stepping features in combination with frame select.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 import lldbsuite.test.lldbutil as lldbutil
 from lldbsuite.test.lldbtest import *
@@ -30,7 +34,7 @@ class ThreadSteppingTestCase(TestBase):
     def test_step_out_with_run_command(self):
         """Exercise thread step-out and frame select followed by thread step-out."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Create a breakpoint inside function 'c'.

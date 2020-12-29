@@ -1,15 +1,5 @@
-add_lldb_library(lldbPluginDynamicLoaderPosixDYLD PLUGIN
+add_lldb_library(lldbPluginDynamicLoaderPosixDYLD
+  AuxVector.cpp
   DYLDRendezvous.cpp
   DynamicLoaderPOSIXDYLD.cpp
-
-  LINK_LIBS
-    lldbBreakpoint
-    lldbCore
-    lldbHost
-    lldbSymbol
-    lldbTarget
-    lldbPluginProcessElfCore
-    lldbPluginProcessUtility
-  LINK_COMPONENTS
-    Support
   )

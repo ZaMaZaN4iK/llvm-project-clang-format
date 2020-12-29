@@ -1,16 +1,13 @@
-add_llvm_component_library(LLVMAArch64Desc
+add_llvm_library(LLVMAArch64Desc
   AArch64AsmBackend.cpp
   AArch64ELFObjectWriter.cpp
   AArch64ELFStreamer.cpp
-  AArch64InstPrinter.cpp
   AArch64MCAsmInfo.cpp
   AArch64MCCodeEmitter.cpp
   AArch64MCExpr.cpp
   AArch64MCTargetDesc.cpp
   AArch64MachObjectWriter.cpp
   AArch64TargetStreamer.cpp
-  AArch64WinCOFFObjectWriter.cpp
-  AArch64WinCOFFStreamer.cpp
 )
 add_dependencies(LLVMAArch64Desc AArch64CommonTableGen)
 

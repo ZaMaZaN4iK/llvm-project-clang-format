@@ -1,7 +1,3 @@
-add_lldb_library(lldbPluginSymbolFileSymtab PLUGIN
+add_lldb_library(lldbPluginSymbolFileSymtab
   SymbolFileSymtab.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbSymbol
   )

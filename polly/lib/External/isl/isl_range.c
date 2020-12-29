@@ -1,5 +1,4 @@
 #include <isl_ctx_private.h>
-#include <isl/val.h>
 #include <isl_constraint_private.h>
 #include <isl/set.h>
 #include <isl_polynomial_private.h>
@@ -484,9 +483,8 @@ error:
 	return isl_stat_error;
 }
 
-static isl_stat qpolynomial_bound_on_domain_range(
-	__isl_take isl_basic_set *bset, __isl_take isl_qpolynomial *poly,
-	struct range_data *data)
+static int qpolynomial_bound_on_domain_range(__isl_take isl_basic_set *bset,
+	__isl_take isl_qpolynomial *poly, struct range_data *data)
 {
 	unsigned nparam = isl_basic_set_dim(bset, isl_dim_param);
 	unsigned nvar = isl_basic_set_dim(bset, isl_dim_set);
@@ -511,18 +509,18 @@ static isl_stat qpolynomial_bound_on_domain_range(
 	isl_set_free(set);
 	isl_qpolynomial_free(poly);
 
-	return isl_stat_ok;
+	return 0;
 error:
 	isl_set_free(set);
 	isl_qpolynomial_free(poly);
-	return isl_stat_error;
+	return -1;
 }
 
-isl_stat isl_qpolynomial_bound_on_domain_range(__isl_take isl_basic_set *bset,
+int isl_qpolynomial_bound_on_domain_range(__isl_take isl_basic_set *bset,
 	__isl_take isl_qpolynomial *poly, struct isl_bound *bound)
 {
 	struct range_data data;
-	isl_stat r;
+	int r;
 
 	data.pwf = bound->pwf;
 	data.pwf_tight = bound->pwf_tight;

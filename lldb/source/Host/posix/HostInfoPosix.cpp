@@ -1,15 +1,21 @@
 //===-- HostInfoPosix.cpp ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "lldb/Host/posix/HostInfoPosix.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/UserIDResolver.h"
+#if !defined(LLDB_DISABLE_PYTHON)
+#include "Plugins/ScriptInterpreter/Python/lldb-python.h"
+#endif
 
+#include "lldb/Core/Log.h"
+#include "lldb/Host/posix/HostInfoPosix.h"
+
+#include "clang/Basic/Version.h"
+#include "clang/Config/config.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Path.h"
@@ -18,6 +24,7 @@
 #include <grp.h>
 #include <limits.h>
 #include <mutex>
+#include <netdb.h>
 #include <pwd.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -31,7 +38,11 @@ bool HostInfoPosix::GetHostname(std::string &s) {
   char hostname[PATH_MAX];
   hostname[sizeof(hostname) - 1] = '\0';
   if (::gethostname(hostname, sizeof(hostname) - 1) == 0) {
-    s.assign(hostname);
+    struct hostent *h = ::gethostbyname(hostname);
+    if (h)
+      s.assign(h->h_name);
+    else
+      s.assign(hostname);
     return true;
   }
   return false;
@@ -44,48 +55,40 @@ bool HostInfoPosix::GetHostname(std::string &s) {
 #define USE_GETPWUID
 #endif
 
-namespace {
-class PosixUserIDResolver : public UserIDResolver {
-protected:
-  llvm::Optional<std::string> DoGetUserName(id_t uid) override;
-  llvm::Optional<std::string> DoGetGroupName(id_t gid) override;
-};
-} // namespace
+#ifdef USE_GETPWUID
+static std::mutex s_getpwuid_lock;
+#endif
 
-struct PasswdEntry {
-  std::string username;
-  std::string shell;
-};
-
-static llvm::Optional<PasswdEntry> GetPassword(id_t uid) {
+const char *HostInfoPosix::LookupUserName(uint32_t uid,
+                                          std::string &user_name) {
 #ifdef USE_GETPWUID
   // getpwuid_r is missing from android-9
-  // The caller should provide some thread safety by making sure no one calls
-  // this function concurrently, because using getpwuid is ultimately not
-  // thread-safe as we don't know who else might be calling it.
-  if (auto *user_info_ptr = ::getpwuid(uid))
-    return PasswdEntry{user_info_ptr->pw_name, user_info_ptr->pw_shell};
+  // make getpwuid thread safe with a mutex
+  std::lock_guard<std::mutex> lock(s_getpwuid_lock);
+  struct passwd *user_info_ptr = ::getpwuid(uid);
+  if (user_info_ptr) {
+    user_name.assign(user_info_ptr->pw_name);
+    return user_name.c_str();
+  }
 #else
   struct passwd user_info;
   struct passwd *user_info_ptr = &user_info;
   char user_buffer[PATH_MAX];
   size_t user_buffer_size = sizeof(user_buffer);
   if (::getpwuid_r(uid, &user_info, user_buffer, user_buffer_size,
-                   &user_info_ptr) == 0 &&
-      user_info_ptr) {
-    return PasswdEntry{user_info_ptr->pw_name, user_info_ptr->pw_shell};
+                   &user_info_ptr) == 0) {
+    if (user_info_ptr) {
+      user_name.assign(user_info_ptr->pw_name);
+      return user_name.c_str();
+    }
   }
 #endif
-  return llvm::None;
+  user_name.clear();
+  return nullptr;
 }
 
-llvm::Optional<std::string> PosixUserIDResolver::DoGetUserName(id_t uid) {
-  if (llvm::Optional<PasswdEntry> password = GetPassword(uid))
-    return password->username;
-  return llvm::None;
-}
-
-llvm::Optional<std::string> PosixUserIDResolver::DoGetGroupName(id_t gid) {
+const char *HostInfoPosix::LookupGroupName(uint32_t gid,
+                                           std::string &group_name) {
 #ifndef __ANDROID__
   char group_buffer[PATH_MAX];
   size_t group_buffer_size = sizeof(group_buffer);
@@ -94,23 +97,25 @@ llvm::Optional<std::string> PosixUserIDResolver::DoGetGroupName(id_t gid) {
   // Try the threadsafe version first
   if (::getgrgid_r(gid, &group_info, group_buffer, group_buffer_size,
                    &group_info_ptr) == 0) {
-    if (group_info_ptr)
-      return std::string(group_info_ptr->gr_name);
+    if (group_info_ptr) {
+      group_name.assign(group_info_ptr->gr_name);
+      return group_name.c_str();
+    }
   } else {
     // The threadsafe version isn't currently working for me on darwin, but the
-    // non-threadsafe version is, so I am calling it below.
+    // non-threadsafe version
+    // is, so I am calling it below.
     group_info_ptr = ::getgrgid(gid);
-    if (group_info_ptr)
-      return std::string(group_info_ptr->gr_name);
+    if (group_info_ptr) {
+      group_name.assign(group_info_ptr->gr_name);
+      return group_name.c_str();
+    }
   }
+  group_name.clear();
+#else
+  assert(false && "getgrgid_r() not supported on Android");
 #endif
-  return llvm::None;
-}
-
-static llvm::ManagedStatic<PosixUserIDResolver> g_user_id_resolver;
-
-UserIDResolver &HostInfoPosix::GetUserIDResolver() {
-  return *g_user_id_resolver;
+  return NULL;
 }
 
 uint32_t HostInfoPosix::GetUserID() { return getuid(); }
@@ -121,22 +126,100 @@ uint32_t HostInfoPosix::GetEffectiveUserID() { return geteuid(); }
 
 uint32_t HostInfoPosix::GetEffectiveGroupID() { return getegid(); }
 
-FileSpec HostInfoPosix::GetDefaultShell() {
-  if (const char *v = ::getenv("SHELL"))
-    return FileSpec(v);
-  if (llvm::Optional<PasswdEntry> password = GetPassword(::geteuid()))
-    return FileSpec(password->shell);
-  return FileSpec("/bin/sh");
+FileSpec HostInfoPosix::GetDefaultShell() { return FileSpec("/bin/sh", false); }
+
+bool HostInfoPosix::ComputePathRelativeToLibrary(FileSpec &file_spec,
+                                                 llvm::StringRef dir) {
+  Log *log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_HOST);
+
+  FileSpec lldb_file_spec;
+  if (!GetLLDBPath(lldb::ePathTypeLLDBShlibDir, lldb_file_spec))
+    return false;
+
+  std::string raw_path = lldb_file_spec.GetPath();
+  // drop library directory
+  llvm::StringRef parent_path = llvm::sys::path::parent_path(raw_path);
+
+  // Most Posix systems (e.g. Linux/*BSD) will attempt to replace a */lib with
+  // */bin as the base directory for helper exe programs.  This will fail if the
+  // /lib and /bin directories are rooted in entirely different trees.
+  if (log)
+    log->Printf("HostInfoPosix::ComputePathRelativeToLibrary() attempting to "
+                "derive the %s path from this path: %s",
+                dir.data(), raw_path.c_str());
+
+  if (!parent_path.empty()) {
+    // Now write in bin in place of lib.
+    raw_path = (parent_path + dir).str();
+
+    if (log)
+      log->Printf("Host::%s() derived the bin path as: %s", __FUNCTION__,
+                  raw_path.c_str());
+  } else {
+    if (log)
+      log->Printf("Host::%s() failed to find /lib/liblldb within the shared "
+                  "lib path, bailing on bin path construction",
+                  __FUNCTION__);
+  }
+  file_spec.GetDirectory().SetString(raw_path);
+  return (bool)file_spec.GetDirectory();
 }
 
 bool HostInfoPosix::ComputeSupportExeDirectory(FileSpec &file_spec) {
   return ComputePathRelativeToLibrary(file_spec, "/bin");
 }
 
+bool HostInfoPosix::ComputeClangDirectory(FileSpec &file_spec) {
+  return ComputePathRelativeToLibrary(
+      file_spec, (llvm::Twine("/lib") + CLANG_LIBDIR_SUFFIX + "/clang/" +
+                  CLANG_VERSION_STRING)
+                     .str());
+}
+
 bool HostInfoPosix::ComputeHeaderDirectory(FileSpec &file_spec) {
-  FileSpec temp_file("/opt/local/include/lldb");
+  FileSpec temp_file("/opt/local/include/lldb", false);
   file_spec.GetDirectory().SetCString(temp_file.GetPath().c_str());
   return true;
+}
+
+bool HostInfoPosix::ComputePythonDirectory(FileSpec &file_spec) {
+#ifndef LLDB_DISABLE_PYTHON
+  FileSpec lldb_file_spec;
+  if (!GetLLDBPath(lldb::ePathTypeLLDBShlibDir, lldb_file_spec))
+    return false;
+
+  char raw_path[PATH_MAX];
+  lldb_file_spec.GetPath(raw_path, sizeof(raw_path));
+
+#if defined(LLDB_PYTHON_RELATIVE_LIBDIR)
+  // Build the path by backing out of the lib dir, then building
+  // with whatever the real python interpreter uses.  (e.g. lib
+  // for most, lib64 on RHEL x86_64).
+  char python_path[PATH_MAX];
+  ::snprintf(python_path, sizeof(python_path), "%s/../%s", raw_path,
+             LLDB_PYTHON_RELATIVE_LIBDIR);
+
+  char final_path[PATH_MAX];
+  realpath(python_path, final_path);
+  file_spec.GetDirectory().SetCString(final_path);
+
+  return true;
+#else
+  llvm::SmallString<256> python_version_dir;
+  llvm::raw_svector_ostream os(python_version_dir);
+  os << "/python" << PY_MAJOR_VERSION << '.' << PY_MINOR_VERSION
+     << "/site-packages";
+
+  // We may get our string truncated. Should we protect this with an assert?
+  ::strncat(raw_path, python_version_dir.c_str(),
+            sizeof(raw_path) - strlen(raw_path) - 1);
+
+  file_spec.GetDirectory().SetCString(raw_path);
+  return true;
+#endif
+#else
+  return false;
+#endif
 }
 
 bool HostInfoPosix::GetEnvironmentVar(const std::string &var_name,

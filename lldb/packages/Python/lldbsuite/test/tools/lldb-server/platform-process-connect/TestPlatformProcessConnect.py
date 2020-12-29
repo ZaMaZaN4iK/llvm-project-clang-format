@@ -1,3 +1,4 @@
+from __future__ import print_function
 
 import time
 
@@ -10,14 +11,6 @@ from lldbsuite.test import lldbutil
 class TestPlatformProcessConnect(gdbremote_testcase.GdbRemoteTestCaseBase):
     mydir = TestBase.compute_mydir(__file__)
 
-    def setUp(self):
-        super(TestPlatformProcessConnect, self).setUp()
-        self._initial_platform = lldb.DBG.GetSelectedPlatform()
-
-    def tearDown(self):
-        lldb.DBG.SetSelectedPlatform(self._initial_platform)
-        super(TestPlatformProcessConnect, self).tearDown()
-
     @llgs_test
     @no_debug_info_test
     @skipIf(remote=False)
@@ -27,9 +20,12 @@ class TestPlatformProcessConnect(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.init_llgs_test(False)
 
         working_dir = lldb.remote_platform.GetWorkingDirectory()
-        src = lldb.SBFileSpec(self.getBuildArtifact("a.out"))
-        dest = lldb.SBFileSpec(os.path.join(working_dir, "a.out"))
-        err = lldb.remote_platform.Put(src, dest)
+        err = lldb.remote_platform.Put(
+            lldb.SBFileSpec(
+                os.path.join(
+                    os.getcwd(), "a.out")), lldb.SBFileSpec(
+                os.path.join(
+                    working_dir, "a.out")))
         if err.Fail():
             raise RuntimeError(
                 "Unable copy '%s' to '%s'.\n>>> %s" %
@@ -41,9 +37,9 @@ class TestPlatformProcessConnect(gdbremote_testcase.GdbRemoteTestCaseBase):
         unix_protocol = protocol.startswith("unix-")
         if unix_protocol:
             p = re.search("^(.*)-connect", protocol)
-            path = lldbutil.join_remote_paths(configuration.lldb_platform_working_dir,
-                    self.getBuildDirBasename(), "platform-%d.sock" % int(time.time()))
-            listen_url = "%s://%s" % (p.group(1), path)
+            listen_url = "%s://%s" % (p.group(1),
+                                      os.path.join(working_dir,
+                                                   "platform-%d.sock" % int(time.time())))
         else:
             listen_url = "*:0"
 

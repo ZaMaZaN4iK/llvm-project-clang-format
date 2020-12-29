@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,8 +14,6 @@
 #include <cstdlib>
 #include <cstddef>
 #include <cassert>
-#include <climits>
-#include <memory>
 
 #include "test_macros.h"
 
@@ -82,7 +81,6 @@ public:
 };
 
 struct malloc_allocator_base {
-    static size_t outstanding_bytes;
     static size_t alloc_count;
     static size_t dealloc_count;
     static bool disable_default_constructor;
@@ -95,13 +93,12 @@ struct malloc_allocator_base {
     static void reset() {
         assert(outstanding_alloc() == 0);
         disable_default_constructor = false;
-        outstanding_bytes = 0;
         alloc_count = 0;
         dealloc_count = 0;
     }
 };
 
-size_t malloc_allocator_base::outstanding_bytes = 0;
+
 size_t malloc_allocator_base::alloc_count = 0;
 size_t malloc_allocator_base::dealloc_count = 0;
 bool malloc_allocator_base::disable_default_constructor = false;
@@ -120,17 +117,13 @@ public:
 
     T* allocate(std::size_t n)
     {
-        const size_t nbytes = n*sizeof(T);
         ++alloc_count;
-        outstanding_bytes += nbytes;
-        return static_cast<T*>(std::malloc(nbytes));
+        return static_cast<T*>(std::malloc(n*sizeof(T)));
     }
 
-    void deallocate(T* p, std::size_t n)
+    void deallocate(T* p, std::size_t)
     {
-        const size_t nbytes = n*sizeof(T);
         ++dealloc_count;
-        outstanding_bytes -= nbytes;
         std::free(static_cast<void*>(p));
     }
 
@@ -138,84 +131,36 @@ public:
     friend bool operator!=(malloc_allocator x, malloc_allocator y) {return !(x == y);}
 };
 
-template <class T>
-struct cpp03_allocator : bare_allocator<T>
-{
-    typedef T value_type;
-    typedef value_type* pointer;
 
-    static bool construct_called;
+#if TEST_STD_VER >= 11
 
-    // Returned value is not used but it's not prohibited.
-    pointer construct(pointer p, const value_type& val)
-    {
-        ::new(p) value_type(val);
-        construct_called = true;
-        return p;
-    }
+#include <memory>
 
-    std::size_t max_size() const
-    {
-        return UINT_MAX / sizeof(T);
-    }
-};
-template <class T> bool cpp03_allocator<T>::construct_called = false;
-
-template <class T>
-struct cpp03_overload_allocator : bare_allocator<T>
-{
-    typedef T value_type;
-    typedef value_type* pointer;
-
-    static bool construct_called;
-
-    void construct(pointer p, const value_type& val)
-    {
-        construct(p, val, std::is_class<T>());
-    }
-    void construct(pointer p, const value_type& val, std::true_type)
-    {
-        ::new(p) value_type(val);
-        construct_called = true;
-    }
-    void construct(pointer p, const value_type& val, std::false_type)
-    {
-        ::new(p) value_type(val);
-        construct_called = true;
-    }
-
-    std::size_t max_size() const
-    {
-        return UINT_MAX / sizeof(T);
-    }
-};
-template <class T> bool cpp03_overload_allocator<T>::construct_called = false;
-
-template <class T, class = std::integral_constant<size_t, 0> > class min_pointer;
-template <class T, class ID> class min_pointer<const T, ID>;
-template <class ID> class min_pointer<void, ID>;
-template <class ID> class min_pointer<const void, ID>;
+template <class T> class min_pointer;
+template <class T> class min_pointer<const T>;
+template <> class min_pointer<void>;
+template <> class min_pointer<const void>;
 template <class T> class min_allocator;
 
-template <class ID>
-class min_pointer<const void, ID>
+template <>
+class min_pointer<const void>
 {
     const void* ptr_;
 public:
     min_pointer() TEST_NOEXCEPT = default;
     min_pointer(std::nullptr_t) TEST_NOEXCEPT : ptr_(nullptr) {}
     template <class T>
-    min_pointer(min_pointer<T, ID> p) TEST_NOEXCEPT : ptr_(p.ptr_) {}
+    min_pointer(min_pointer<T> p) TEST_NOEXCEPT : ptr_(p.ptr_) {}
 
     explicit operator bool() const {return ptr_ != nullptr;}
 
     friend bool operator==(min_pointer x, min_pointer y) {return x.ptr_ == y.ptr_;}
     friend bool operator!=(min_pointer x, min_pointer y) {return !(x == y);}
-    template <class U, class XID> friend class min_pointer;
+    template <class U> friend class min_pointer;
 };
 
-template <class ID>
-class min_pointer<void, ID>
+template <>
+class min_pointer<void>
 {
     void* ptr_;
 public:
@@ -227,16 +172,16 @@ public:
                             !std::is_const<T>::value
                        >::type
              >
-    min_pointer(min_pointer<T, ID> p) TEST_NOEXCEPT : ptr_(p.ptr_) {}
+    min_pointer(min_pointer<T> p) TEST_NOEXCEPT : ptr_(p.ptr_) {}
 
     explicit operator bool() const {return ptr_ != nullptr;}
 
     friend bool operator==(min_pointer x, min_pointer y) {return x.ptr_ == y.ptr_;}
     friend bool operator!=(min_pointer x, min_pointer y) {return !(x == y);}
-    template <class U, class XID> friend class min_pointer;
+    template <class U> friend class min_pointer;
 };
 
-template <class T, class ID>
+template <class T>
 class min_pointer
 {
     T* ptr_;
@@ -245,7 +190,7 @@ class min_pointer
 public:
     min_pointer() TEST_NOEXCEPT = default;
     min_pointer(std::nullptr_t) TEST_NOEXCEPT : ptr_(nullptr) {}
-    explicit min_pointer(min_pointer<void, ID> p) TEST_NOEXCEPT : ptr_(static_cast<T*>(p.ptr_)) {}
+    explicit min_pointer(min_pointer<void> p) TEST_NOEXCEPT : ptr_(static_cast<T*>(p.ptr_)) {}
 
     explicit operator bool() const {return ptr_ != nullptr;}
 
@@ -302,12 +247,12 @@ public:
 
     friend bool operator==(min_pointer x, min_pointer y) {return x.ptr_ == y.ptr_;}
     friend bool operator!=(min_pointer x, min_pointer y) {return !(x == y);}
-    template <class U, class XID> friend class min_pointer;
+    template <class U> friend class min_pointer;
     template <class U> friend class min_allocator;
 };
 
-template <class T, class ID>
-class min_pointer<const T, ID>
+template <class T>
+class min_pointer<const T>
 {
     const T* ptr_;
 
@@ -315,8 +260,8 @@ class min_pointer<const T, ID>
 public:
     min_pointer() TEST_NOEXCEPT = default;
     min_pointer(std::nullptr_t) : ptr_(nullptr) {}
-    min_pointer(min_pointer<T, ID> p) : ptr_(p.ptr_) {}
-    explicit min_pointer(min_pointer<const void, ID> p) : ptr_(static_cast<const T*>(p.ptr_)) {}
+    min_pointer(min_pointer<T> p) : ptr_(p.ptr_) {}
+    explicit min_pointer(min_pointer<const void> p) : ptr_(static_cast<const T*>(p.ptr_)) {}
 
     explicit operator bool() const {return ptr_ != nullptr;}
 
@@ -373,37 +318,37 @@ public:
 
     friend bool operator==(min_pointer x, min_pointer y) {return x.ptr_ == y.ptr_;}
     friend bool operator!=(min_pointer x, min_pointer y) {return !(x == y);}
-    template <class U, class XID> friend class min_pointer;
+    template <class U> friend class min_pointer;
 };
 
-template <class T, class ID>
+template <class T>
 inline
 bool
-operator==(min_pointer<T, ID> x, std::nullptr_t)
+operator==(min_pointer<T> x, std::nullptr_t)
 {
     return !static_cast<bool>(x);
 }
 
-template <class T, class ID>
+template <class T>
 inline
 bool
-operator==(std::nullptr_t, min_pointer<T, ID> x)
+operator==(std::nullptr_t, min_pointer<T> x)
 {
     return !static_cast<bool>(x);
 }
 
-template <class T, class ID>
+template <class T>
 inline
 bool
-operator!=(min_pointer<T, ID> x, std::nullptr_t)
+operator!=(min_pointer<T> x, std::nullptr_t)
 {
     return static_cast<bool>(x);
 }
 
-template <class T, class ID>
+template <class T>
 inline
 bool
-operator!=(std::nullptr_t, min_pointer<T, ID> x)
+operator!=(std::nullptr_t, min_pointer<T> x)
 {
     return static_cast<bool>(x);
 }
@@ -457,5 +402,7 @@ public:
     friend bool operator==(explicit_allocator, explicit_allocator) {return true;}
     friend bool operator!=(explicit_allocator x, explicit_allocator y) {return !(x == y);}
 };
+
+#endif  // TEST_STD_VER >= 11
 
 #endif  // MIN_ALLOCATOR_H

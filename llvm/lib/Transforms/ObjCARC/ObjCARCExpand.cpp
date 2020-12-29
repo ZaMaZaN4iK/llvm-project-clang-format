@@ -1,8 +1,9 @@
 //===- ObjCARCExpand.cpp - ObjC ARC Optimization --------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -28,7 +29,6 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Value.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/PassAnalysisSupport.h"
 #include "llvm/PassRegistry.h"
@@ -47,7 +47,7 @@ using namespace llvm;
 using namespace llvm::objcarc;
 
 namespace {
-  /// Early ARC transformations.
+  /// \brief Early ARC transformations.
   class ObjCARCExpand : public FunctionPass {
     void getAnalysisUsage(AnalysisUsage &AU) const override;
     bool doInitialization(Module &M) override;
@@ -91,13 +91,12 @@ bool ObjCARCExpand::runOnFunction(Function &F) {
 
   bool Changed = false;
 
-  LLVM_DEBUG(dbgs() << "ObjCARCExpand: Visiting Function: " << F.getName()
-                    << "\n");
+  DEBUG(dbgs() << "ObjCARCExpand: Visiting Function: " << F.getName() << "\n");
 
   for (inst_iterator I = inst_begin(&F), E = inst_end(&F); I != E; ++I) {
     Instruction *Inst = &*I;
 
-    LLVM_DEBUG(dbgs() << "ObjCARCExpand: Visiting: " << *Inst << "\n");
+    DEBUG(dbgs() << "ObjCARCExpand: Visiting: " << *Inst << "\n");
 
     switch (GetBasicARCInstKind(Inst)) {
     case ARCInstKind::Retain:
@@ -112,10 +111,8 @@ bool ObjCARCExpand::runOnFunction(Function &F) {
       // emitted here. We'll redo them in the contract pass.
       Changed = true;
       Value *Value = cast<CallInst>(Inst)->getArgOperand(0);
-      LLVM_DEBUG(dbgs() << "ObjCARCExpand: Old = " << *Inst
-                        << "\n"
-                           "               New = "
-                        << *Value << "\n");
+      DEBUG(dbgs() << "ObjCARCExpand: Old = " << *Inst << "\n"
+                      "               New = " << *Value << "\n");
       Inst->replaceAllUsesWith(Value);
       break;
     }
@@ -124,7 +121,7 @@ bool ObjCARCExpand::runOnFunction(Function &F) {
     }
   }
 
-  LLVM_DEBUG(dbgs() << "ObjCARCExpand: Finished List.\n\n");
+  DEBUG(dbgs() << "ObjCARCExpand: Finished List.\n\n");
 
   return Changed;
 }

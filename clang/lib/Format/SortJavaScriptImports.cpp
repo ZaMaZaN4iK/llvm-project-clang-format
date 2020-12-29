@@ -1,13 +1,14 @@
 //===--- SortJavaScriptImports.cpp - Sort ES6 Imports -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file implements a sort operation for JavaScript ES6 imports.
+/// \brief This file implements a sort operation for JavaScript ES6 imports.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -122,12 +123,13 @@ public:
       : TokenAnalyzer(Env, Style),
         FileContents(Env.getSourceManager().getBufferData(Env.getFileID())) {}
 
-  std::pair<tooling::Replacements, unsigned>
+  tooling::Replacements
   analyze(TokenAnnotator &Annotator,
           SmallVectorImpl<AnnotatedLine *> &AnnotatedLines,
           FormatTokenLexer &Tokens) override {
     tooling::Replacements Result;
-    AffectedRangeMgr.computeAffectedLines(AnnotatedLines);
+    AffectedRangeMgr.computeAffectedLines(AnnotatedLines.begin(),
+                                          AnnotatedLines.end());
 
     const AdditionalKeywords &Keywords = Tokens.getKeywords();
     SmallVector<JsModuleReference, 16> References;
@@ -136,14 +138,15 @@ public:
         parseModuleReferences(Keywords, AnnotatedLines);
 
     if (References.empty())
-      return {Result, 0};
+      return Result;
 
     SmallVector<unsigned, 16> Indices;
     for (unsigned i = 0, e = References.size(); i != e; ++i)
       Indices.push_back(i);
-    llvm::stable_sort(Indices, [&](unsigned LHSI, unsigned RHSI) {
-      return References[LHSI] < References[RHSI];
-    });
+    std::stable_sort(Indices.begin(), Indices.end(),
+                     [&](unsigned LHSI, unsigned RHSI) {
+                       return References[LHSI] < References[RHSI];
+                     });
     bool ReferencesInOrder = std::is_sorted(Indices.begin(), Indices.end());
 
     std::string ReferencesText;
@@ -165,7 +168,7 @@ public:
     }
 
     if (ReferencesInOrder && SymbolsInOrder)
-      return {Result, 0};
+      return Result;
 
     SourceRange InsertionPoint = References[0].Range;
     InsertionPoint.setEnd(References[References.size() - 1].Range.getEnd());
@@ -186,9 +189,9 @@ public:
     if (FirstNonImportLine && FirstNonImportLine->First->NewlinesBefore < 2)
       ReferencesText += "\n";
 
-    LLVM_DEBUG(llvm::dbgs() << "Replacing imports:\n"
-                            << getSourceText(InsertionPoint) << "\nwith:\n"
-                            << ReferencesText << "\n");
+    DEBUG(llvm::dbgs() << "Replacing imports:\n"
+                       << getSourceText(InsertionPoint) << "\nwith:\n"
+                       << ReferencesText << "\n");
     auto Err = Result.add(tooling::Replacement(
         Env.getSourceManager(), CharSourceRange::getCharRange(InsertionPoint),
         ReferencesText));
@@ -199,7 +202,7 @@ public:
       assert(false);
     }
 
-    return {Result, 0};
+    return Result;
   }
 
 private:
@@ -245,8 +248,9 @@ private:
     // Sort the individual symbols within the import.
     // E.g. `import {b, a} from 'x';` -> `import {a, b} from 'x';`
     SmallVector<JsImportedSymbol, 1> Symbols = Reference.Symbols;
-    llvm::stable_sort(
-        Symbols, [&](const JsImportedSymbol &LHS, const JsImportedSymbol &RHS) {
+    std::stable_sort(
+        Symbols.begin(), Symbols.end(),
+        [&](const JsImportedSymbol &LHS, const JsImportedSymbol &RHS) {
           return LHS.Symbol.compare_lower(RHS.Symbol) < 0;
         });
     if (Symbols == Reference.Symbols) {
@@ -273,7 +277,7 @@ private:
   // Parses module references in the given lines. Returns the module references,
   // and a pointer to the first "main code" line if that is adjacent to the
   // affected lines of module references, nullptr otherwise.
-  std::pair<SmallVector<JsModuleReference, 16>, AnnotatedLine *>
+  std::pair<SmallVector<JsModuleReference, 16>, AnnotatedLine*>
   parseModuleReferences(const AdditionalKeywords &Keywords,
                         SmallVectorImpl<AnnotatedLine *> &AnnotatedLines) {
     SmallVector<JsModuleReference, 16> References;
@@ -304,7 +308,7 @@ private:
       FirstNonImportLine = nullptr;
       AnyImportAffected = AnyImportAffected || Line->Affected;
       Reference.Range.setEnd(LineEnd->Tok.getEndLoc());
-      LLVM_DEBUG({
+      DEBUG({
         llvm::dbgs() << "JsModuleReference: {"
                      << "is_export: " << Reference.IsExport
                      << ", cat: " << Reference.Category
@@ -409,7 +413,7 @@ private:
       nextToken();
       if (Current->is(tok::r_brace))
         break;
-      if (!Current->isOneOf(tok::identifier, tok::kw_default))
+      if (Current->isNot(tok::identifier))
         return false;
 
       JsImportedSymbol Symbol;
@@ -421,7 +425,7 @@ private:
 
       if (Current->is(Keywords.kw_as)) {
         nextToken();
-        if (!Current->isOneOf(tok::identifier, tok::kw_default))
+        if (Current->isNot(tok::identifier))
           return false;
         Symbol.Alias = Current->TokenText;
         nextToken();
@@ -442,9 +446,10 @@ tooling::Replacements sortJavaScriptImports(const FormatStyle &Style,
                                             ArrayRef<tooling::Range> Ranges,
                                             StringRef FileName) {
   // FIXME: Cursor support.
-  return JavaScriptImportSorter(Environment(Code, FileName, Ranges), Style)
-      .process()
-      .first;
+  std::unique_ptr<Environment> Env =
+      Environment::CreateVirtualEnvironment(Code, FileName, Ranges);
+  JavaScriptImportSorter Sorter(*Env, Style);
+  return Sorter.process();
 }
 
 } // end namespace format

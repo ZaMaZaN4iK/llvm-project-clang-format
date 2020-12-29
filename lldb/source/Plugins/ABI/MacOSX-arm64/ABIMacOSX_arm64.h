@@ -1,16 +1,21 @@
 //===-- ABIMacOSX_arm64.h ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ABIMacOSX_arm64_h_
 #define liblldb_ABIMacOSX_arm64_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/ConstString.h"
 #include "lldb/Target/ABI.h"
-#include "lldb/Utility/ConstString.h"
 #include "lldb/lldb-private.h"
 
 class ABIMacOSX_arm64 : public lldb_private::ABI {
@@ -65,15 +70,19 @@ public:
   const lldb_private::RegisterInfo *
   GetRegisterInfoArray(uint32_t &count) override;
 
+  //------------------------------------------------------------------
   // Static Functions
+  //------------------------------------------------------------------
 
   static void Initialize();
 
   static void Terminate();
 
-  static lldb::ABISP CreateInstance(lldb::ProcessSP process_sp, const lldb_private::ArchSpec &arch);
+  static lldb::ABISP CreateInstance(const lldb_private::ArchSpec &arch);
 
+  //------------------------------------------------------------------
   // PluginInterface protocol
+  //------------------------------------------------------------------
 
   static lldb_private::ConstString GetPluginNameStatic();
 
@@ -83,7 +92,7 @@ public:
 
   uint32_t GetPluginVersion() override;
 
-  lldb_private::Status
+  lldb_private::Error
   SetReturnValueObject(lldb::StackFrameSP &frame_sp,
                        lldb::ValueObjectSP &new_value) override;
 
@@ -93,9 +102,7 @@ protected:
                            lldb_private::CompilerType &ast_type) const override;
 
 private:
-  ABIMacOSX_arm64(lldb::ProcessSP process_sp,
-                  std::unique_ptr<llvm::MCRegisterInfo> info_up)
-      : lldb_private::ABI(std::move(process_sp), std::move(info_up)) {
+  ABIMacOSX_arm64() : lldb_private::ABI() {
     // Call CreateInstance instead.
   }
 };

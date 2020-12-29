@@ -1,8 +1,9 @@
 //===-- PPCTargetTransformInfo.h - PPC specific TTI -------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -16,10 +17,11 @@
 #ifndef LLVM_LIB_TARGET_POWERPC_PPCTARGETTRANSFORMINFO_H
 #define LLVM_LIB_TARGET_POWERPC_PPCTARGETTRANSFORMINFO_H
 
+#include "PPC.h"
 #include "PPCTargetMachine.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/BasicTTIImpl.h"
-#include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/Target/TargetLowering.h"
 
 namespace llvm {
 
@@ -33,7 +35,6 @@ class PPCTTIImpl : public BasicTTIImplBase<PPCTTIImpl> {
 
   const PPCSubtarget *getST() const { return ST; }
   const PPCTargetLowering *getTLI() const { return TLI; }
-  bool mightUseCTR(BasicBlock *BB, TargetLibraryInfo *LibInfo);
 
 public:
   explicit PPCTTIImpl(const PPCTargetMachine *TM, const Function &F)
@@ -46,73 +47,43 @@ public:
   using BaseT::getIntImmCost;
   int getIntImmCost(const APInt &Imm, Type *Ty);
 
-  int getIntImmCostInst(unsigned Opcode, unsigned Idx, const APInt &Imm,
-                        Type *Ty);
-  int getIntImmCostIntrin(Intrinsic::ID IID, unsigned Idx, const APInt &Imm,
-                          Type *Ty);
-
-  unsigned getUserCost(const User *U, ArrayRef<const Value *> Operands);
+  int getIntImmCost(unsigned Opcode, unsigned Idx, const APInt &Imm, Type *Ty);
+  int getIntImmCost(Intrinsic::ID IID, unsigned Idx, const APInt &Imm,
+                    Type *Ty);
 
   TTI::PopcntSupportKind getPopcntSupport(unsigned TyWidth);
-  bool isHardwareLoopProfitable(Loop *L, ScalarEvolution &SE,
-                                AssumptionCache &AC,
-                                TargetLibraryInfo *LibInfo,
-                                HardwareLoopInfo &HWLoopInfo);
-  bool canSaveCmp(Loop *L, BranchInst **BI, ScalarEvolution *SE, LoopInfo *LI,
-                  DominatorTree *DT, AssumptionCache *AC,
-                  TargetLibraryInfo *LibInfo);
-  void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
-                               TTI::UnrollingPreferences &UP);
+  void getUnrollingPreferences(Loop *L, TTI::UnrollingPreferences &UP);
 
   /// @}
 
   /// \name Vector TTI Implementations
   /// @{
-  bool useColdCCForColdCall(Function &F);
-  bool enableAggressiveInterleaving(bool LoopHasReductions);
-  TTI::MemCmpExpansionOptions enableMemCmpExpansion(bool OptSize,
-                                                    bool IsZeroCmp) const;
-  bool enableInterleavedAccessVectorization();
 
-  enum PPCRegisterClass {
-    GPRRC, FPRRC, VRRC, VSXRC
-  };
-  unsigned getNumberOfRegisters(unsigned ClassID) const;
-  unsigned getRegisterClassForType(bool Vector, Type *Ty = nullptr) const;
-  const char* getRegisterClassName(unsigned ClassID) const;
-  unsigned getRegisterBitWidth(bool Vector) const;
-  unsigned getCacheLineSize() const override;
-  unsigned getPrefetchDistance() const override;
+  bool enableAggressiveInterleaving(bool LoopHasReductions);
+  bool enableInterleavedAccessVectorization();
+  unsigned getNumberOfRegisters(bool Vector);
+  unsigned getRegisterBitWidth(bool Vector);
+  unsigned getCacheLineSize();
+  unsigned getPrefetchDistance();
   unsigned getMaxInterleaveFactor(unsigned VF);
-  int vectorCostAdjustment(int Cost, unsigned Opcode, Type *Ty1, Type *Ty2);
   int getArithmeticInstrCost(
       unsigned Opcode, Type *Ty,
       TTI::OperandValueKind Opd1Info = TTI::OK_AnyValue,
       TTI::OperandValueKind Opd2Info = TTI::OK_AnyValue,
       TTI::OperandValueProperties Opd1PropInfo = TTI::OP_None,
       TTI::OperandValueProperties Opd2PropInfo = TTI::OP_None,
-      ArrayRef<const Value *> Args = ArrayRef<const Value *>(),
-      const Instruction *CxtI = nullptr);
+      ArrayRef<const Value *> Args = ArrayRef<const Value *>());
   int getShuffleCost(TTI::ShuffleKind Kind, Type *Tp, int Index, Type *SubTp);
-  int getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src,
-                       const Instruction *I = nullptr);
-  int getCmpSelInstrCost(unsigned Opcode, Type *ValTy, Type *CondTy,
-                         const Instruction *I = nullptr);
+  int getCastInstrCost(unsigned Opcode, Type *Dst, Type *Src);
+  int getCmpSelInstrCost(unsigned Opcode, Type *ValTy, Type *CondTy);
   int getVectorInstrCost(unsigned Opcode, Type *Val, unsigned Index);
-  int getMemoryOpCost(unsigned Opcode, Type *Src, MaybeAlign Alignment,
-                      unsigned AddressSpace, const Instruction *I = nullptr);
+  int getMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
+                      unsigned AddressSpace);
   int getInterleavedMemoryOpCost(unsigned Opcode, Type *VecTy,
                                  unsigned Factor,
                                  ArrayRef<unsigned> Indices,
                                  unsigned Alignment,
-                                 unsigned AddressSpace,
-                                 bool UseMaskForCond = false,
-                                 bool UseMaskForGaps = false);
-  unsigned getIntrinsicInstrCost(Intrinsic::ID ID, Type *RetTy,
-            ArrayRef<Value*> Args, FastMathFlags FMF, unsigned VF);
-  unsigned getIntrinsicInstrCost(Intrinsic::ID ID, Type *RetTy,
-            ArrayRef<Type*> Tys, FastMathFlags FMF,
-            unsigned ScalarizationCostPassed = UINT_MAX);
+                                 unsigned AddressSpace);
 
   /// @}
 };

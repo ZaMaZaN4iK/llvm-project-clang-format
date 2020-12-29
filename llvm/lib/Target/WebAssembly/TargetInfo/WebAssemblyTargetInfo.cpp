@@ -1,17 +1,19 @@
 //===-- WebAssemblyTargetInfo.cpp - WebAssembly Target Implementation -----===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file registers the WebAssembly target.
+/// \brief This file registers the WebAssembly target.
 ///
 //===----------------------------------------------------------------------===//
 
-#include "TargetInfo/WebAssemblyTargetInfo.h"
+#include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 
@@ -26,9 +28,9 @@ Target &llvm::getTheWebAssemblyTarget64() {
   return TheWebAssemblyTarget64;
 }
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeWebAssemblyTargetInfo() {
+extern "C" void LLVMInitializeWebAssemblyTargetInfo() {
   RegisterTarget<Triple::wasm32> X(getTheWebAssemblyTarget32(), "wasm32",
-                                   "WebAssembly 32-bit", "WebAssembly");
+                                   "WebAssembly 32-bit");
   RegisterTarget<Triple::wasm64> Y(getTheWebAssemblyTarget64(), "wasm64",
-                                   "WebAssembly 64-bit", "WebAssembly");
+                                   "WebAssembly 64-bit");
 }

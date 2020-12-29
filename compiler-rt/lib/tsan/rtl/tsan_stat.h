@@ -1,8 +1,9 @@
 //===-- tsan_stat.h ---------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -73,12 +74,15 @@ enum StatType {
   StatClockAcquire,
   StatClockAcquireEmpty,
   StatClockAcquireFastRelease,
+  StatClockAcquireLarge,
+  StatClockAcquireRepeat,
   StatClockAcquireFull,
   StatClockAcquiredSomething,
   // Clocks - release.
   StatClockRelease,
   StatClockReleaseResize,
-  StatClockReleaseFast,
+  StatClockReleaseFast1,
+  StatClockReleaseFast2,
   StatClockReleaseSlow,
   StatClockReleaseFull,
   StatClockReleaseAcquired,
@@ -153,16 +157,6 @@ enum StatType {
   StatAnnotatePublishMemoryRange,
   StatAnnotateUnpublishMemoryRange,
   StatAnnotateThreadName,
-  Stat__tsan_mutex_create,
-  Stat__tsan_mutex_destroy,
-  Stat__tsan_mutex_pre_lock,
-  Stat__tsan_mutex_post_lock,
-  Stat__tsan_mutex_pre_unlock,
-  Stat__tsan_mutex_post_unlock,
-  Stat__tsan_mutex_pre_signal,
-  Stat__tsan_mutex_post_signal,
-  Stat__tsan_mutex_pre_divert,
-  Stat__tsan_mutex_post_divert,
 
   // Internal mutex contentionz.
   StatMtxTotal,

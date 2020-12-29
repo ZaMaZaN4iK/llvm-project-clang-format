@@ -1,23 +1,14 @@
-// RUN: %clang_cc1 -triple x86_64-apple-macos10.7.0 -verify -fopenmp -ferror-limit 100 -o - %s -Wuninitialized
-
-// RUN: %clang_cc1 -triple x86_64-apple-macos10.7.0 -verify -fopenmp-simd -ferror-limit 100 -o - %s -Wuninitialized
+// RUN: %clang_cc1 -triple x86_64-apple-macos10.7.0 -verify -fopenmp -ferror-limit 100 -o - %s
 
 void foo() { }
 
-void xxx(int argc) {
-  int map; // expected-note {{initialize the variable 'map' to silence this warning}}
-#pragma omp target data map(map) // expected-warning {{variable 'map' is uninitialized when used here}}
-  for (int i = 0; i < 10; ++i)
-    ;
-}
-
 int main(int argc, char **argv) {
   int a;
-  #pragma omp target data // expected-error {{expected at least one 'map' or 'use_device_ptr' clause for '#pragma omp target data'}}
+  #pragma omp target data // expected-error {{expected at least one map clause for '#pragma omp target data'}}
   {}
   L1:
     foo();
-  #pragma omp target data map(a) allocate(a) // expected-error {{unexpected OpenMP clause 'allocate' in directive '#pragma omp target data'}}
+  #pragma omp target data map(a)
   {
     foo();
     goto L1; // expected-error {{use of undeclared label 'L1'}}

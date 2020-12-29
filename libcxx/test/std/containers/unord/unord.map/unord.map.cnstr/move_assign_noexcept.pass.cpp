@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -40,11 +41,9 @@ struct some_hash
     some_hash();
     some_hash(const some_hash&);
     some_hash& operator=(const some_hash&);
-
-    std::size_t operator()(T const&) const;
 };
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::unordered_map<MoveOnly, MoveOnly> C;
@@ -55,13 +54,11 @@ int main(int, char**)
                            std::equal_to<MoveOnly>, test_allocator<std::pair<const MoveOnly, MoveOnly>>> C;
         static_assert(!std::is_nothrow_move_assignable<C>::value, "");
     }
-#if defined(_LIBCPP_VERSION)
     {
         typedef std::unordered_map<MoveOnly, MoveOnly, std::hash<MoveOnly>,
                           std::equal_to<MoveOnly>, other_allocator<std::pair<const MoveOnly, MoveOnly>>> C;
-        static_assert(std::is_nothrow_move_assignable<C>::value, "");
+        LIBCPP_STATIC_ASSERT(std::is_nothrow_move_assignable<C>::value, "");
     }
-#endif // _LIBCPP_VERSION
     {
         typedef std::unordered_map<MoveOnly, MoveOnly, some_hash<MoveOnly>> C;
         static_assert(!std::is_nothrow_move_assignable<C>::value, "");
@@ -71,6 +68,4 @@ int main(int, char**)
                                                          some_comp<MoveOnly>> C;
         static_assert(!std::is_nothrow_move_assignable<C>::value, "");
     }
-
-  return 0;
 }

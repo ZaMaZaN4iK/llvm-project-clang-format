@@ -1,13 +1,14 @@
 //===- MipsMSAInstrFormats.td - Mips Instruction Formats ---*- tablegen -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 class MSAInst : MipsInst<(outs), (ins), "", [], NoItinerary, FrmOther>,
-                ASE_MSA {
+                PredicateControl, ASE_MSA {
   let EncodingPredicates = [HasStdEnc];
   let Inst{31-26} = 0b011110;
 }
@@ -23,8 +24,7 @@ class MSASpecial : MSAInst {
 class MSAPseudo<dag outs, dag ins, list<dag> pattern,
                 InstrItinClass itin = IIPseudo>:
   MipsPseudo<outs, ins, pattern, itin> {
-  let EncodingPredicates = [HasStdEnc];
-  let ASEPredicate = [HasMSA];
+  let Predicates = [HasMSA];
 }
 
 class MSA_BIT_B_FMT<bits<3> major, bits<6> minor>: MSAInst {

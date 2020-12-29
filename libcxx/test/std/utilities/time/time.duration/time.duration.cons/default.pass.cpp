@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,7 +18,6 @@
 #include <chrono>
 #include <cassert>
 
-#include "test_macros.h"
 #include "../../rep.h"
 
 template <class D>
@@ -26,15 +26,13 @@ test()
 {
     D d;
     assert(d.count() == typename D::rep());
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_CONSTEXPR
     constexpr D d2 = D();
     static_assert(d2.count() == typename D::rep(), "");
 #endif
 }
 
-int main(int, char**)
+int main()
 {
     test<std::chrono::duration<Rep> >();
-
-  return 0;
 }

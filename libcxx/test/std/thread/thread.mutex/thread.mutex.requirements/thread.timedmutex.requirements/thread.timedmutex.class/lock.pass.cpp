@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -19,7 +20,7 @@
 #include <cstdlib>
 #include <cassert>
 
-#include "test_macros.h"
+#include <iostream>
 
 std::timed_mutex m;
 
@@ -39,13 +40,11 @@ void f()
     assert(d < ms(50));  // within 50ms
 }
 
-int main(int, char**)
+int main()
 {
     m.lock();
     std::thread t(f);
     std::this_thread::sleep_for(ms(250));
     m.unlock();
     t.join();
-
-  return 0;
 }

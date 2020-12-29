@@ -1,8 +1,9 @@
 //===- llvm/ADT/EpochTracker.h - ADT epoch tracking --------------*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,6 +17,7 @@
 #define LLVM_ADT_EPOCH_TRACKER_H
 
 #include "llvm/Config/abi-breaking.h"
+#include "llvm/Config/llvm-config.h"
 
 #include <cstdint>
 
@@ -23,7 +25,7 @@ namespace llvm {
 
 #if LLVM_ENABLE_ABI_BREAKING_CHECKS
 
-/// A base class for data structure classes wishing to make iterators
+/// \brief A base class for data structure classes wishing to make iterators
 /// ("handles") pointing into themselves fail-fast.  When building without
 /// asserts, this class is empty and does nothing.
 ///
@@ -38,15 +40,15 @@ class DebugEpochBase {
 public:
   DebugEpochBase() : Epoch(0) {}
 
-  /// Calling incrementEpoch invalidates all handles pointing into the
+  /// \brief Calling incrementEpoch invalidates all handles pointing into the
   /// calling instance.
   void incrementEpoch() { ++Epoch; }
 
-  /// The destructor calls incrementEpoch to make use-after-free bugs
+  /// \brief The destructor calls incrementEpoch to make use-after-free bugs
   /// more likely to crash deterministically.
   ~DebugEpochBase() { incrementEpoch(); }
 
-  /// A base class for iterator classes ("handles") that wish to poll for
+  /// \brief A base class for iterator classes ("handles") that wish to poll for
   /// iterator invalidating modifications in the underlying data structure.
   /// When LLVM is built without asserts, this class is empty and does nothing.
   ///
@@ -64,12 +66,12 @@ public:
     explicit HandleBase(const DebugEpochBase *Parent)
         : EpochAddress(&Parent->Epoch), EpochAtCreation(Parent->Epoch) {}
 
-    /// Returns true if the DebugEpochBase this Handle is linked to has
+    /// \brief Returns true if the DebugEpochBase this Handle is linked to has
     /// not called incrementEpoch on itself since the creation of this
     /// HandleBase instance.
     bool isHandleInSync() const { return *EpochAddress == EpochAtCreation; }
 
-    /// Returns a pointer to the epoch word stored in the data structure
+    /// \brief Returns a pointer to the epoch word stored in the data structure
     /// this handle points into.  Can be used to check if two iterators point
     /// into the same data structure.
     const void *getEpochAddress() const { return EpochAddress; }

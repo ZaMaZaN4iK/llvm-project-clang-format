@@ -1,19 +1,11 @@
 #import <Foundation/Foundation.h>
 
-// This should be a big enough struct that it will force
-// the struct return convention:
-typedef struct BigStruct {
-  float a, b, c, d, e, f, g, h, i, j, k, l;
-} BigStruct;
-
-
 @interface Simple : NSObject
 {
   int _value;
 }
 - (int) value;
 - (void) setValue: (int) newValue;
-- (BigStruct) getBigStruct;
 @end
 
 @implementation Simple
@@ -25,13 +17,6 @@ typedef struct BigStruct {
 - (void) setValue: (int) newValue
 {
   _value = newValue;
-}
-
-- (BigStruct) getBigStruct
-{
-  BigStruct big_struct = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0,
-                          7.0, 8.0, 9.0, 10.0, 11.0, 12.0};
-  return big_struct;
 }
 @end
 

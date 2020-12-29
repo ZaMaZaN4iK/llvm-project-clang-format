@@ -2,8 +2,12 @@
 Use lldb Python API to test base class resolution for ObjC classes
 """
 
+from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -29,7 +33,7 @@ class ObjCDynamicValueTestCase(TestBase):
             self.skipTest("Dynamic types for ObjC V1 runtime not implemented")
 
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target from the debugger.
 

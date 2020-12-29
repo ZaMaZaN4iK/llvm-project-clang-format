@@ -1,26 +1,37 @@
 //===-- Memory.h ------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_Memory_h_
 #define liblldb_Memory_h_
 
-#include "lldb/Utility/RangeMap.h"
-#include "lldb/lldb-private.h"
+// C Includes
+// C++ Includes
 #include <map>
 #include <mutex>
 #include <vector>
 
+// Other libraries and framework includes
+
+// Project includes
+#include "lldb/Core/RangeMap.h"
+#include "lldb/lldb-private.h"
+
 namespace lldb_private {
+//----------------------------------------------------------------------
 // A class to track memory that was read from a live process between
 // runs.
+//----------------------------------------------------------------------
 class MemoryCache {
 public:
+  //------------------------------------------------------------------
   // Constructors and Destructors
+  //------------------------------------------------------------------
   MemoryCache(Process &process);
 
   ~MemoryCache();
@@ -29,7 +40,7 @@ public:
 
   void Flush(lldb::addr_t addr, size_t size);
 
-  size_t Read(lldb::addr_t addr, void *dst, size_t dst_len, Status &error);
+  size_t Read(lldb::addr_t addr, void *dst, size_t dst_len, Error &error);
 
   uint32_t GetMemoryCacheLineSize() const { return m_L2_cache_line_byte_size; }
 
@@ -47,7 +58,9 @@ protected:
   typedef std::map<lldb::addr_t, lldb::DataBufferSP> BlockMap;
   typedef RangeArray<lldb::addr_t, lldb::addr_t, 4> InvalidRanges;
   typedef Range<lldb::addr_t, lldb::addr_t> AddrRange;
+  //------------------------------------------------------------------
   // Classes that inherit from MemoryCache can see and modify these
+  //------------------------------------------------------------------
   std::recursive_mutex m_mutex;
   BlockMap m_L1_cache; // A first level memory cache whose chunk sizes vary that
                        // will be used only if the memory read fits entirely in
@@ -62,8 +75,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(MemoryCache);
 };
 
-    
-
 class AllocatedBlock {
 public:
   AllocatedBlock(lldb::addr_t addr, uint32_t byte_size, uint32_t permissions,
@@ -75,42 +86,44 @@ public:
 
   bool FreeBlock(lldb::addr_t addr);
 
-  lldb::addr_t GetBaseAddress() const { return m_range.GetRangeBase(); }
+  lldb::addr_t GetBaseAddress() const { return m_addr; }
 
-  uint32_t GetByteSize() const { return m_range.GetByteSize(); }
+  uint32_t GetByteSize() const { return m_byte_size; }
 
   uint32_t GetPermissions() const { return m_permissions; }
 
   uint32_t GetChunkSize() const { return m_chunk_size; }
 
   bool Contains(lldb::addr_t addr) const {
-    return m_range.Contains(addr);
+    return ((addr >= m_addr) && addr < (m_addr + m_byte_size));
   }
 
 protected:
-  uint32_t TotalChunks() const { return GetByteSize() / GetChunkSize(); }
+  uint32_t TotalChunks() const { return m_byte_size / m_chunk_size; }
 
   uint32_t CalculateChunksNeededForSize(uint32_t size) const {
     return (size + m_chunk_size - 1) / m_chunk_size;
   }
-  // Base address of this block of memory 4GB of chunk should be enough.
-  Range<lldb::addr_t, uint32_t> m_range;
-  // Permissions for this memory (logical OR of lldb::Permissions bits)
-  const uint32_t m_permissions;
-  // The size of chunks that the memory at m_addr is divied up into.
-  const uint32_t m_chunk_size;
-  // A sorted list of free address ranges.
-  RangeVector<lldb::addr_t, uint32_t> m_free_blocks;
-  // A sorted list of reserved address.
-  RangeVector<lldb::addr_t, uint32_t> m_reserved_blocks;
+  const lldb::addr_t m_addr;    // Base address of this block of memory
+  const uint32_t m_byte_size;   // 4GB of chunk should be enough...
+  const uint32_t m_permissions; // Permissions for this memory (logical OR of
+                                // lldb::Permissions bits)
+  const uint32_t m_chunk_size;  // The size of chunks that the memory at m_addr
+                                // is divied up into
+  typedef std::map<uint32_t, uint32_t> OffsetToChunkSize;
+  OffsetToChunkSize m_offset_to_chunk_size;
 };
 
+//----------------------------------------------------------------------
 // A class that can track allocated memory and give out allocated memory
-// without us having to make an allocate/deallocate call every time we need
-// some memory in a process that is being debugged.
+// without us having to make an allocate/deallocate call every time we
+// need some memory in a process that is being debugged.
+//----------------------------------------------------------------------
 class AllocatedMemoryCache {
 public:
+  //------------------------------------------------------------------
   // Constructors and Destructors
+  //------------------------------------------------------------------
   AllocatedMemoryCache(Process &process);
 
   ~AllocatedMemoryCache();
@@ -118,7 +131,7 @@ public:
   void Clear();
 
   lldb::addr_t AllocateMemory(size_t byte_size, uint32_t permissions,
-                              Status &error);
+                              Error &error);
 
   bool DeallocateMemory(lldb::addr_t ptr);
 
@@ -126,9 +139,11 @@ protected:
   typedef std::shared_ptr<AllocatedBlock> AllocatedBlockSP;
 
   AllocatedBlockSP AllocatePage(uint32_t byte_size, uint32_t permissions,
-                                uint32_t chunk_size, Status &error);
+                                uint32_t chunk_size, Error &error);
 
+  //------------------------------------------------------------------
   // Classes that inherit from MemoryCache can see and modify these
+  //------------------------------------------------------------------
   Process &m_process;
   std::recursive_mutex m_mutex;
   typedef std::multimap<uint32_t, AllocatedBlockSP> PermissionsToBlockMap;

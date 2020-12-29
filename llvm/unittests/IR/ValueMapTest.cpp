@@ -1,8 +1,9 @@
 //===- llvm/unittest/ADT/ValueMapTest.cpp - ValueMap unit tests -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -194,11 +195,11 @@ struct LockMutex : ValueMapConfig<KeyT, MutexT> {
   static MutexT *getMutex(const ExtraData &Data) { return Data.M; }
 };
 // FIXME: These tests started failing on Windows.
-#if LLVM_ENABLE_THREADS && !defined(_WIN32)
+#if LLVM_ENABLE_THREADS && !defined(LLVM_ON_WIN32)
 TYPED_TEST(ValueMapTest, LocksMutex) {
-  std::mutex M;
+  sys::Mutex M(false);  // Not recursive.
   bool CalledRAUW = false, CalledDeleted = false;
-  typedef LockMutex<TypeParam*, std::mutex> ConfigType;
+  typedef LockMutex<TypeParam*, sys::Mutex> ConfigType;
   typename ConfigType::ExtraData Data = {&M, &CalledRAUW, &CalledDeleted};
   ValueMap<TypeParam*, int, ConfigType> VM(Data);
   VM[this->BitcastV.get()] = 7;

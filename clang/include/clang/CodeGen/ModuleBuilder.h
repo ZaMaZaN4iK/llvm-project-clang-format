@@ -1,8 +1,9 @@
 //===--- CodeGen/ModuleBuilder.h - Build LLVM from ASTs ---------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -34,7 +35,6 @@ namespace clang {
 
 namespace CodeGen {
   class CodeGenModule;
-  class CGDebugInfo;
 }
 
 /// The primary public interface to the Clang code generator.
@@ -65,9 +65,6 @@ public:
   /// CodeGenerator after releasing its module.
   llvm::Module *ReleaseModule();
 
-  /// Return debug info code generator.
-  CodeGen::CGDebugInfo *getCGDebugInfo();
-
   /// Given a mangled name, return a declaration which mangles that way
   /// which has been added to this code generator via a Handle method.
   ///
@@ -83,10 +80,6 @@ public:
   ///   code generator will schedule the entity for emission if a
   ///   definition has been registered with this code generator.
   llvm::Constant *GetAddrOfGlobal(GlobalDecl decl, bool isForDefinition);
-
-  /// Create a new \c llvm::Module after calling HandleTranslationUnit. This
-  /// enable codegen in interactive processing environments.
-  llvm::Module* StartModule(llvm::StringRef ModuleName, llvm::LLVMContext &C);
 };
 
 /// CreateLLVMCodeGen - Create a CodeGenerator instance.

@@ -1,8 +1,9 @@
 //===--- ASTTypeTraits.cpp --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,8 +16,6 @@
 #include "clang/AST/ASTTypeTraits.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/DeclCXX.h"
-#include "clang/AST/NestedNameSpecifier.h"
-#include "clang/AST/OpenMPClause.h"
 
 namespace clang {
 namespace ast_type_traits {
@@ -38,10 +37,7 @@ const ASTNodeKind::KindInfo ASTNodeKind::AllKindInfo[] = {
 #include "clang/AST/StmtNodes.inc"
   { NKI_None, "Type" },
 #define TYPE(DERIVED, BASE) { NKI_##BASE, #DERIVED "Type" },
-#include "clang/AST/TypeNodes.inc"
-  { NKI_None, "OMPClause" },
-#define OPENMP_CLAUSE(TextualSpelling, Class) {NKI_OMPClause, #Class},
-#include "clang/Basic/OpenMPKinds.def"
+#include "clang/AST/TypeNodes.def"
 };
 
 bool ASTNodeKind::isBaseOf(ASTNodeKind Other, unsigned *Distance) const {
@@ -105,24 +101,9 @@ ASTNodeKind ASTNodeKind::getFromNode(const Type &T) {
 #define TYPE(Class, Base)                                                      \
     case Type::Class: return ASTNodeKind(NKI_##Class##Type);
 #define ABSTRACT_TYPE(Class, Base)
-#include "clang/AST/TypeNodes.inc"
+#include "clang/AST/TypeNodes.def"
   }
   llvm_unreachable("invalid type kind");
- }
-
-ASTNodeKind ASTNodeKind::getFromNode(const OMPClause &C) {
-  switch (C.getClauseKind()) {
-#define OPENMP_CLAUSE(Name, Class)                                             \
-    case OMPC_##Name: return ASTNodeKind(NKI_##Class);
-#include "clang/Basic/OpenMPKinds.def"
-  case OMPC_threadprivate:
-  case OMPC_uniform:
-  case OMPC_device_type:
-  case OMPC_match:
-  case OMPC_unknown:
-    llvm_unreachable("unexpected OpenMP clause kind");
-  }
-  llvm_unreachable("invalid stmt kind");
 }
 
 void DynTypedNode::print(llvm::raw_ostream &OS,
@@ -133,12 +114,9 @@ void DynTypedNode::print(llvm::raw_ostream &OS,
     TN->print(OS, PP);
   else if (const NestedNameSpecifier *NNS = get<NestedNameSpecifier>())
     NNS->print(OS, PP);
-  else if (const NestedNameSpecifierLoc *NNSL = get<NestedNameSpecifierLoc>()) {
-    if (const NestedNameSpecifier *NNS = NNSL->getNestedNameSpecifier())
-      NNS->print(OS, PP);
-    else
-      OS << "(empty NestedNameSpecifierLoc)";
-  } else if (const QualType *QT = get<QualType>())
+  else if (const NestedNameSpecifierLoc *NNSL = get<NestedNameSpecifierLoc>())
+    NNSL->getNestedNameSpecifier()->print(OS, PP);
+  else if (const QualType *QT = get<QualType>())
     QT->print(OS, PP);
   else if (const TypeLoc *TL = get<TypeLoc>())
     TL->getType().print(OS, PP);
@@ -174,8 +152,6 @@ SourceRange DynTypedNode::getSourceRange() const {
     return D->getSourceRange();
   if (const Stmt *S = get<Stmt>())
     return S->getSourceRange();
-  if (const auto *C = get<OMPClause>())
-    return SourceRange(C->getBeginLoc(), C->getEndLoc());
   return SourceRange();
 }
 

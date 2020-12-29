@@ -1,8 +1,9 @@
 //===-- X86InstrBuilder.h - Functions to aid building x86 insts -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -131,11 +132,11 @@ addDirectMem(const MachineInstrBuilder &MIB, unsigned Reg) {
 /// reference.
 static inline void setDirectAddressInInstr(MachineInstr *MI, unsigned Operand,
                                            unsigned Reg) {
-  // Direct memory address is in a form of: Reg/FI, 1 (Scale), NoReg, 0, NoReg.
-  MI->getOperand(Operand).ChangeToRegister(Reg, /*isDef=*/false);
+  // Direct memory address is in a form of: Reg, 1 (Scale), NoReg, 0, NoReg.
+  MI->getOperand(Operand).setReg(Reg);
   MI->getOperand(Operand + 1).setImm(1);
   MI->getOperand(Operand + 2).setReg(0);
-  MI->getOperand(Operand + 3).ChangeToImmediate(0);
+  MI->getOperand(Operand + 3).setImm(0);
   MI->getOperand(Operand + 4).setReg(0);
 }
 
@@ -146,7 +147,7 @@ addOffset(const MachineInstrBuilder &MIB, int Offset) {
 
 static inline const MachineInstrBuilder &
 addOffset(const MachineInstrBuilder &MIB, const MachineOperand& Offset) {
-  return MIB.addImm(1).addReg(0).add(Offset).addReg(0);
+  return MIB.addImm(1).addReg(0).addOperand(Offset).addReg(0);
 }
 
 /// addRegOffset - This function is used to add a memory reference of the form

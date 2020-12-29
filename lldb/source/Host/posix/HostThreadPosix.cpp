@@ -1,13 +1,14 @@
 //===-- HostThreadPosix.cpp -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Host/posix/HostThreadPosix.h"
-#include "lldb/Utility/Status.h"
+#include "lldb/Core/Error.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -22,14 +23,14 @@ HostThreadPosix::HostThreadPosix(lldb::thread_t thread)
 
 HostThreadPosix::~HostThreadPosix() {}
 
-Status HostThreadPosix::Join(lldb::thread_result_t *result) {
-  Status error;
+Error HostThreadPosix::Join(lldb::thread_result_t *result) {
+  Error error;
   if (IsJoinable()) {
     int err = ::pthread_join(m_thread, result);
     error.SetError(err, lldb::eErrorTypePOSIX);
   } else {
     if (result)
-      *result = nullptr;
+      *result = NULL;
     error.SetError(EINVAL, eErrorTypePOSIX);
   }
 
@@ -37,21 +38,24 @@ Status HostThreadPosix::Join(lldb::thread_result_t *result) {
   return error;
 }
 
-Status HostThreadPosix::Cancel() {
-  Status error;
+Error HostThreadPosix::Cancel() {
+  Error error;
   if (IsJoinable()) {
+#ifndef __ANDROID__
 #ifndef __FreeBSD__
-    llvm_unreachable("someone is calling HostThread::Cancel()");
-#else
+    assert(false && "someone is calling HostThread::Cancel()");
+#endif
     int err = ::pthread_cancel(m_thread);
     error.SetError(err, eErrorTypePOSIX);
+#else
+    error.SetErrorString("HostThreadPosix::Cancel() not supported on Android");
 #endif
   }
   return error;
 }
 
-Status HostThreadPosix::Detach() {
-  Status error;
+Error HostThreadPosix::Detach() {
+  Error error;
   if (IsJoinable()) {
     int err = ::pthread_detach(m_thread);
     error.SetError(err, eErrorTypePOSIX);

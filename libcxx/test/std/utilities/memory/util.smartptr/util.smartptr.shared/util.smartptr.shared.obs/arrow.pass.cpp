@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,9 +17,7 @@
 #include <utility>
 #include <cassert>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     const std::shared_ptr<std::pair<int, int> > p(new std::pair<int, int>(3, 4));
     assert(p->first == 3);
@@ -27,6 +26,4 @@ int main(int, char**)
     p->second = 6;
     assert(p->first == 5);
     assert(p->second == 6);
-
-  return 0;
 }

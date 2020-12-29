@@ -1,8 +1,9 @@
-//===- ModuleSymbolTable.h - symbol table for in-memory IR ------*- C++ -*-===//
+//===- ModuleSymbolTable.h - symbol table for in-memory IR ----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,15 +16,12 @@
 #ifndef LLVM_OBJECT_MODULESYMBOLTABLE_H
 #define LLVM_OBJECT_MODULESYMBOLTABLE_H
 
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/PointerUnion.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/IR/Mangler.h"
 #include "llvm/Object/SymbolicFile.h"
-#include "llvm/Support/Allocator.h"
-#include <cstdint>
 #include <string>
 #include <utility>
-#include <vector>
 
 namespace llvm {
 
@@ -31,8 +29,8 @@ class GlobalValue;
 
 class ModuleSymbolTable {
 public:
-  using AsmSymbol = std::pair<std::string, uint32_t>;
-  using Symbol = PointerUnion<GlobalValue *, AsmSymbol *>;
+  typedef std::pair<std::string, uint32_t> AsmSymbol;
+  typedef PointerUnion<GlobalValue *, AsmSymbol *> Symbol;
 
 private:
   Module *FirstMod = nullptr;
@@ -54,19 +52,10 @@ public:
   /// For each found symbol, call \p AsmSymbol with the name of the symbol found
   /// and the associated flags.
   static void CollectAsmSymbols(
-      const Module &M,
+      const Triple &TheTriple, StringRef InlineAsm,
       function_ref<void(StringRef, object::BasicSymbolRef::Flags)> AsmSymbol);
-
-  /// Parse inline ASM and collect the symvers directives that are defined in
-  /// the current module.
-  ///
-  /// For each found symbol, call \p AsmSymver with the name of the symbol and
-  /// its alias.
-  static void
-  CollectAsmSymvers(const Module &M,
-                    function_ref<void(StringRef, StringRef)> AsmSymver);
 };
 
-} // end namespace llvm
+}
 
-#endif // LLVM_OBJECT_MODULESYMBOLTABLE_H
+#endif

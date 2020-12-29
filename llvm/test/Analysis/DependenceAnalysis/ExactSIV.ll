@@ -1,7 +1,6 @@
-; RUN: opt < %s -disable-output "-passes=print<da>" -aa-pipeline=basic-aa 2>&1 \
-; RUN: | FileCheck %s
 ; RUN: opt < %s -analyze -basicaa -da | FileCheck %s
 
+; ModuleID = 'ExactSIV.bc'
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64-S128"
 target triple = "x86_64-apple-macosx10.6.0"
 
@@ -14,9 +13,8 @@ define void @exact0(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact0
 ; CHECK: da analyze - none!
-; CHECK: da analyze - flow [>]!
+; CHECK: da analyze - flow [<=|<]!
 ; CHECK: da analyze - confused!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!
@@ -52,7 +50,6 @@ define void @exact1(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact1
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!
@@ -91,7 +88,6 @@ define void @exact2(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact2
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!
@@ -128,9 +124,8 @@ define void @exact3(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact3
 ; CHECK: da analyze - none!
-; CHECK: da analyze - flow [<]!
+; CHECK: da analyze - flow [>]!
 ; CHECK: da analyze - confused!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!
@@ -165,9 +160,8 @@ define void @exact4(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact4
 ; CHECK: da analyze - none!
-; CHECK: da analyze - flow [<]!
+; CHECK: da analyze - flow [>]!
 ; CHECK: da analyze - confused!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!
@@ -202,9 +196,8 @@ define void @exact5(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact5
 ; CHECK: da analyze - none!
-; CHECK: da analyze - flow [<]!
+; CHECK: da analyze - flow [=>|<]!
 ; CHECK: da analyze - confused!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!
@@ -239,9 +232,8 @@ define void @exact6(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact6
 ; CHECK: da analyze - none!
-; CHECK: da analyze - flow [<]!
+; CHECK: da analyze - flow [=>|<]!
 ; CHECK: da analyze - confused!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!
@@ -276,9 +268,8 @@ define void @exact7(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact7
 ; CHECK: da analyze - none!
-; CHECK: da analyze - flow [<]!
+; CHECK: da analyze - flow [*|<]!
 ; CHECK: da analyze - confused!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!
@@ -313,7 +304,6 @@ define void @exact8(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact8
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!
@@ -350,9 +340,8 @@ define void @exact9(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact9
 ; CHECK: da analyze - none!
-; CHECK: da analyze - flow [<]!
+; CHECK: da analyze - flow [>]!
 ; CHECK: da analyze - confused!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!
@@ -387,9 +376,8 @@ define void @exact10(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact10
 ; CHECK: da analyze - none!
-; CHECK: da analyze - flow [<]!
+; CHECK: da analyze - flow [>]!
 ; CHECK: da analyze - confused!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!
@@ -424,9 +412,8 @@ define void @exact11(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact11
 ; CHECK: da analyze - none!
-; CHECK: da analyze - flow [<]!
+; CHECK: da analyze - flow [=>|<]!
 ; CHECK: da analyze - confused!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!
@@ -461,9 +448,8 @@ define void @exact12(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact12
 ; CHECK: da analyze - none!
-; CHECK: da analyze - flow [<]!
+; CHECK: da analyze - flow [=>|<]!
 ; CHECK: da analyze - confused!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!
@@ -498,9 +484,8 @@ define void @exact13(i32* %A, i32* %B) nounwind uwtable ssp {
 entry:
   br label %for.body
 
-; CHECK-LABEL: exact13
 ; CHECK: da analyze - none!
-; CHECK: da analyze - flow [<]!
+; CHECK: da analyze - flow [*|<]!
 ; CHECK: da analyze - confused!
 ; CHECK: da analyze - none!
 ; CHECK: da analyze - confused!

@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=i686-- | FileCheck %s
+; RUN: llc < %s -march=x86 | \
+; RUN:   not grep ".byte[[:space:]]*true"
 
-@X = global i1 true
-; CHECK-NOT: .byte true
+@X = global i1 true             ; <i1*> [#uses=0]

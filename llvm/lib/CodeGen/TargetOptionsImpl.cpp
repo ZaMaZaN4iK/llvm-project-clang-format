@@ -1,8 +1,9 @@
 //===-- TargetOptionsImpl.cpp - Options that apply to all targets ----------==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,34 +11,35 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/CodeGen/MachineFrameInfo.h"
-#include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/TargetFrameLowering.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/Target/TargetFrameLowering.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 using namespace llvm;
 
 /// DisableFramePointerElim - This returns true if frame pointer elimination
 /// optimization should be disabled for the given machine function.
 bool TargetOptions::DisableFramePointerElim(const MachineFunction &MF) const {
-  // Check to see if the target want to forcably keep frame pointer.
-  if (MF.getSubtarget().getFrameLowering()->keepFramePointer(MF))
+  // Check to see if we should eliminate all frame pointers.
+  if (MF.getSubtarget().getFrameLowering()->noFramePointerElim(MF))
     return true;
 
-  const Function &F = MF.getFunction();
-
-  if (!F.hasFnAttribute("frame-pointer"))
-    return false;
-  StringRef FP = F.getFnAttribute("frame-pointer").getValueAsString();
-  if (FP == "all")
-    return true;
-  if (FP == "non-leaf")
+  // Check to see if we should eliminate non-leaf frame pointers.
+  if (MF.getFunction()->hasFnAttribute("no-frame-pointer-elim-non-leaf"))
     return MF.getFrameInfo().hasCalls();
-  if (FP == "none")
-    return false;
-  llvm_unreachable("unknown frame pointer flag");
+
+  return false;
+}
+
+/// LessPreciseFPMAD - This flag return true when -enable-fp-mad option
+/// is specified on the command line.  When this flag is off(default), the
+/// code generator is not allowed to generate mad (multiply add) if the
+/// result is "less precise" than doing those operations individually.
+bool TargetOptions::LessPreciseFPMAD() const {
+  return UnsafeFPMath || LessPreciseFPMADOption;
 }
 
 /// HonorSignDependentRoundingFPMath - Return true if the codegen must assume

@@ -1,67 +1,73 @@
 //===-- BreakpointResolverName.h --------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_BreakpointResolverName_h_
 #define liblldb_BreakpointResolverName_h_
 
+// C Includes
+// C++ Includes
 #include <string>
 #include <vector>
 
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Breakpoint/BreakpointResolver.h"
 #include "lldb/Core/Module.h"
 
 namespace lldb_private {
 
-/// \class BreakpointResolverName BreakpointResolverName.h
-/// "lldb/Breakpoint/BreakpointResolverName.h" This class sets breakpoints on
-/// a given function name, either by exact match or by regular expression.
+//----------------------------------------------------------------------
+/// @class BreakpointResolverName BreakpointResolverName.h
+/// "lldb/Breakpoint/BreakpointResolverName.h"
+/// @brief This class sets breakpoints on a given function name, either by exact
+/// match
+/// or by regular expression.
+//----------------------------------------------------------------------
 
 class BreakpointResolverName : public BreakpointResolver {
 public:
   BreakpointResolverName(Breakpoint *bkpt, const char *name,
-                         lldb::FunctionNameType name_type_mask,
-                         lldb::LanguageType language,
+                         uint32_t name_type_mask, lldb::LanguageType language,
                          Breakpoint::MatchType type, lldb::addr_t offset,
                          bool skip_prologue);
 
   // This one takes an array of names.  It is always MatchType = Exact.
   BreakpointResolverName(Breakpoint *bkpt, const char *names[],
-                         size_t num_names,
-                         lldb::FunctionNameType name_type_mask,
+                         size_t num_names, uint32_t name_type_mask,
                          lldb::LanguageType language, lldb::addr_t offset,
                          bool skip_prologue);
 
   // This one takes a C++ array of names.  It is always MatchType = Exact.
   BreakpointResolverName(Breakpoint *bkpt, std::vector<std::string> names,
-                         lldb::FunctionNameType name_type_mask,
-                         lldb::LanguageType language, lldb::addr_t offset,
-                         bool skip_prologue);
+                         uint32_t name_type_mask, lldb::LanguageType language,
+                         lldb::addr_t offset, bool skip_prologue);
 
-  // Creates a function breakpoint by regular expression.  Takes over control
-  // of the lifespan of func_regex.
-  BreakpointResolverName(Breakpoint *bkpt, RegularExpression func_regex,
+  // Creates a function breakpoint by regular expression.  Takes over control of
+  // the lifespan of func_regex.
+  BreakpointResolverName(Breakpoint *bkpt, RegularExpression &func_regex,
                          lldb::LanguageType language, lldb::addr_t offset,
                          bool skip_prologue);
 
   static BreakpointResolver *
   CreateFromStructuredData(Breakpoint *bkpt,
                            const StructuredData::Dictionary &data_dict,
-                           Status &error);
+                           Error &error);
 
   StructuredData::ObjectSP SerializeToStructuredData() override;
 
   ~BreakpointResolverName() override;
 
   Searcher::CallbackReturn SearchCallback(SearchFilter &filter,
-                                          SymbolContext &context,
-                                          Address *addr) override;
+                                          SymbolContext &context, Address *addr,
+                                          bool containing) override;
 
-  lldb::SearchDepth GetDepth() override;
+  Searcher::Depth GetDepth() override;
 
   void GetDescription(Stream *s) override;
 
@@ -85,8 +91,7 @@ protected:
   lldb::LanguageType m_language;
   bool m_skip_prologue;
 
-  void AddNameLookup(ConstString name,
-                     lldb::FunctionNameType name_type_mask);
+  void AddNameLookup(const ConstString &name, uint32_t name_type_mask);
 };
 
 } // namespace lldb_private

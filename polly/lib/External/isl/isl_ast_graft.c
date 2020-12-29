@@ -10,8 +10,6 @@
  * B.P. 105 - 78153 Le Chesnay, France
  */
 
-#include <isl/id.h>
-#include <isl/space.h>
 #include <isl_ast_private.h>
 #include <isl_ast_build_expr.h>
 #include <isl_ast_build_private.h>
@@ -993,7 +991,7 @@ __isl_give isl_ast_node *isl_ast_node_from_graft_list(
 	return isl_ast_node_from_ast_node_list(node_list);
 }
 
-__isl_null isl_ast_graft *isl_ast_graft_free(__isl_take isl_ast_graft *graft)
+void *isl_ast_graft_free(__isl_take isl_ast_graft *graft)
 {
 	if (!graft)
 		return NULL;
@@ -1232,7 +1230,6 @@ __isl_give isl_ast_graft_list *isl_ast_graft_list_merge(
 				disjoint = isl_set_is_disjoint(graft->guard,
 							list1->p[j - 1]->guard);
 				if (disjoint < 0) {
-					isl_ast_graft_free(graft);
 					list1 = isl_ast_graft_list_free(list1);
 					break;
 				}
@@ -1256,12 +1253,10 @@ __isl_give isl_ast_graft_list *isl_ast_graft_list_merge(
 			break;
 		}
 
-		if (j < 0) {
-			isl_ast_graft_free(graft);
+		if (j < 0)
 			isl_die(isl_ast_build_get_ctx(build),
 				isl_error_internal,
 				"element failed to get inserted", break);
-		}
 
 		first = j + 1;
 		if (!list1)

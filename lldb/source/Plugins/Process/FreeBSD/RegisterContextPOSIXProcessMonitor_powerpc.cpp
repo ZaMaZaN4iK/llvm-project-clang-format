@@ -1,19 +1,20 @@
 //===-- RegisterContextPOSIXProcessMonitor_powerpc.cpp ----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+#include "lldb/Core/DataBufferHeap.h"
+#include "lldb/Core/RegisterValue.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/RegisterValue.h"
 
 #include "ProcessFreeBSD.h"
 #include "ProcessMonitor.h"
 #include "RegisterContextPOSIXProcessMonitor_powerpc.h"
-#include "Plugins/Process/Utility/RegisterContextPOSIX_powerpc.h"
+#include "RegisterContextPOSIX_powerpc.h"
 
 using namespace lldb_private;
 using namespace lldb;
@@ -87,7 +88,7 @@ bool RegisterContextPOSIXProcessMonitor_powerpc::WriteRegister(
 
     // Read the full register.
     if (ReadRegister(full_reg_info, full_value)) {
-      Status error;
+      Error error;
       ByteOrder byte_order = GetByteOrder();
       uint8_t dst[RegisterValue::kMaxRegisterByteSize];
 
@@ -139,8 +140,8 @@ bool RegisterContextPOSIXProcessMonitor_powerpc::ReadRegister(
 
     if (success) {
       // If our return byte size was greater than the return value reg size,
-      // then use the type specified by reg_info rather than the uint64_t
-      // default
+      // then
+      // use the type specified by reg_info rather than the uint64_t default
       if (value.GetByteSize() > reg_info->byte_size)
         value.SetType(reg_info);
     }
@@ -170,7 +171,7 @@ bool RegisterContextPOSIXProcessMonitor_powerpc::ReadAllRegisterValues(
     DataBufferSP &data_sp) {
   bool success = false;
   data_sp.reset(new DataBufferHeap(REG_CONTEXT_SIZE, 0));
-  if (ReadGPR() && ReadFPR()) {
+  if (data_sp && ReadGPR() && ReadFPR()) {
     uint8_t *dst = data_sp->GetBytes();
     success = dst != 0;
 

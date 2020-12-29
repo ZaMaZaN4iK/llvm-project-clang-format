@@ -1,8 +1,9 @@
 //===- ScalarEvolutionAliasAnalysis.cpp - SCEV-based Alias Analysis -------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -19,15 +20,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Analysis/ScalarEvolutionAliasAnalysis.h"
-#include "llvm/InitializePasses.h"
 using namespace llvm;
 
 AliasResult SCEVAAResult::alias(const MemoryLocation &LocA,
-                                const MemoryLocation &LocB, AAQueryInfo &AAQI) {
+                                const MemoryLocation &LocB) {
   // If either of the memory references is empty, it doesn't matter what the
   // pointer values are. This allows the code below to ignore this special
   // case.
-  if (LocA.Size.isZero() || LocB.Size.isZero())
+  if (LocA.Size == 0 || LocB.Size == 0)
     return NoAlias;
 
   // This is SCEVAAResult. Get the SCEVs!
@@ -43,12 +43,8 @@ AliasResult SCEVAAResult::alias(const MemoryLocation &LocA,
   if (SE.getEffectiveSCEVType(AS->getType()) ==
       SE.getEffectiveSCEVType(BS->getType())) {
     unsigned BitWidth = SE.getTypeSizeInBits(AS->getType());
-    APInt ASizeInt(BitWidth, LocA.Size.hasValue()
-                                 ? LocA.Size.getValue()
-                                 : MemoryLocation::UnknownSize);
-    APInt BSizeInt(BitWidth, LocB.Size.hasValue()
-                                 ? LocB.Size.getValue()
-                                 : MemoryLocation::UnknownSize);
+    APInt ASizeInt(BitWidth, LocA.Size);
+    APInt BSizeInt(BitWidth, LocB.Size);
 
     // Compute the difference between the two pointers.
     const SCEV *BA = SE.getMinusSCEV(BS, AS);
@@ -82,16 +78,15 @@ AliasResult SCEVAAResult::alias(const MemoryLocation &LocA,
   Value *BO = GetBaseValue(BS);
   if ((AO && AO != LocA.Ptr) || (BO && BO != LocB.Ptr))
     if (alias(MemoryLocation(AO ? AO : LocA.Ptr,
-                             AO ? LocationSize::unknown() : LocA.Size,
+                             AO ? +MemoryLocation::UnknownSize : LocA.Size,
                              AO ? AAMDNodes() : LocA.AATags),
               MemoryLocation(BO ? BO : LocB.Ptr,
-                             BO ? LocationSize::unknown() : LocB.Size,
-                             BO ? AAMDNodes() : LocB.AATags),
-              AAQI) == NoAlias)
+                             BO ? +MemoryLocation::UnknownSize : LocB.Size,
+                             BO ? AAMDNodes() : LocB.AATags)) == NoAlias)
       return NoAlias;
 
   // Forward the query to the next analysis.
-  return AAResultBase::alias(LocA, LocB, AAQI);
+  return AAResultBase::alias(LocA, LocB);
 }
 
 /// Given an expression, try to find a base value.

@@ -1,18 +1,22 @@
 //===-- AppleObjCRuntimeV1.h ------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_AppleObjCRuntimeV1_h_
 #define liblldb_AppleObjCRuntimeV1_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "AppleObjCRuntime.h"
+#include "lldb/Target/ObjCLanguageRuntime.h"
 #include "lldb/lldb-private.h"
-
-#include "Plugins/LanguageRuntime/ObjC/ObjCLanguageRuntime.h"
 
 namespace lldb_private {
 
@@ -20,7 +24,9 @@ class AppleObjCRuntimeV1 : public AppleObjCRuntime {
 public:
   ~AppleObjCRuntimeV1() override = default;
 
+  //------------------------------------------------------------------
   // Static Functions
+  //------------------------------------------------------------------
   static void Initialize();
 
   static void Terminate();
@@ -30,17 +36,14 @@ public:
 
   static lldb_private::ConstString GetPluginNameStatic();
 
-  static char ID;
-
-  bool isA(const void *ClassID) const override {
-    return ClassID == &ID || AppleObjCRuntime::isA(ClassID);
+  static bool classof(const ObjCLanguageRuntime *runtime) {
+    switch (runtime->GetRuntimeVersion()) {
+    case ObjCRuntimeVersions::eAppleObjC_V1:
+      return true;
+    default:
+      return false;
+    }
   }
-
-  static bool classof(const LanguageRuntime *runtime) {
-    return runtime->isA(&ID);
-  }
-
-  lldb::addr_t GetTaggedPointerObfuscator();
 
   class ClassDescriptorV1 : public ObjCLanguageRuntime::ClassDescriptor {
   public:
@@ -99,7 +102,9 @@ public:
 
   UtilityFunction *CreateObjectChecker(const char *) override;
 
+  //------------------------------------------------------------------
   // PluginInterface protocol
+  //------------------------------------------------------------------
   ConstString GetPluginName() override;
 
   uint32_t GetPluginVersion() override;
@@ -145,7 +150,7 @@ protected:
 
   HashTableSignature m_hash_signature;
   lldb::addr_t m_isa_hash_table_ptr;
-  std::unique_ptr<DeclVendor> m_decl_vendor_up;
+  std::unique_ptr<DeclVendor> m_decl_vendor_ap;
 
 private:
   AppleObjCRuntimeV1(Process *process);

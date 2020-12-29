@@ -1,7 +1,8 @@
+LEVEL = ../../make
+
 CXX_SOURCES := main.cpp
 
-include Makefile.rules
-
 # Clean renamed executable on 'make clean'
-clean::
-	$(RM) -f no_synth
+clean: OBJECTS+=no_synth
+
+include $(LEVEL)/Makefile.rules

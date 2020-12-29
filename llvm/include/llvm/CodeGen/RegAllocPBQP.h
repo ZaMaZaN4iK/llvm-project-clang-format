@@ -1,8 +1,9 @@
-//===- RegAllocPBQP.h -------------------------------------------*- C++ -*-===//
+//===-- RegAllocPBQP.h ------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,44 +16,36 @@
 #ifndef LLVM_CODEGEN_REGALLOCPBQP_H
 #define LLVM_CODEGEN_REGALLOCPBQP_H
 
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/Hashing.h"
+#include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/PBQP/CostAllocator.h"
-#include "llvm/CodeGen/PBQP/Graph.h"
-#include "llvm/CodeGen/PBQP/Math.h"
 #include "llvm/CodeGen/PBQP/ReductionRules.h"
-#include "llvm/CodeGen/PBQP/Solution.h"
+#include "llvm/CodeGen/PBQPRAConstraint.h"
 #include "llvm/Support/ErrorHandling.h"
-#include <algorithm>
-#include <cassert>
-#include <cstddef>
-#include <limits>
-#include <memory>
 #include <set>
-#include <vector>
 
 namespace llvm {
 
-class FunctionPass;
-class LiveIntervals;
-class MachineBlockFrequencyInfo;
-class MachineFunction;
 class raw_ostream;
 
 namespace PBQP {
 namespace RegAlloc {
 
-/// Spill option index.
+/// @brief Spill option index.
 inline unsigned getSpillOptionIdx() { return 0; }
 
-/// Metadata to speed allocatability test.
+/// \brief Metadata to speed allocatability test.
 ///
 /// Keeps track of the number of infinities in each row and column.
 class MatrixMetadata {
+private:
+  MatrixMetadata(const MatrixMetadata&);
+  void operator=(const MatrixMetadata&);
 public:
   MatrixMetadata(const Matrix& M)
-    : UnsafeRows(new bool[M.getRows() - 1]()),
+    : WorstRow(0), WorstCol(0),
+      UnsafeRows(new bool[M.getRows() - 1]()),
       UnsafeCols(new bool[M.getCols() - 1]()) {
+
     unsigned* ColCounts = new unsigned[M.getCols() - 1]();
 
     for (unsigned i = 1; i < M.getRows(); ++i) {
@@ -73,33 +66,30 @@ public:
     delete[] ColCounts;
   }
 
-  MatrixMetadata(const MatrixMetadata &) = delete;
-  MatrixMetadata &operator=(const MatrixMetadata &) = delete;
-
   unsigned getWorstRow() const { return WorstRow; }
   unsigned getWorstCol() const { return WorstCol; }
   const bool* getUnsafeRows() const { return UnsafeRows.get(); }
   const bool* getUnsafeCols() const { return UnsafeCols.get(); }
 
 private:
-  unsigned WorstRow = 0;
-  unsigned WorstCol = 0;
+  unsigned WorstRow, WorstCol;
   std::unique_ptr<bool[]> UnsafeRows;
   std::unique_ptr<bool[]> UnsafeCols;
 };
 
-/// Holds a vector of the allowed physical regs for a vreg.
+/// \brief Holds a vector of the allowed physical regs for a vreg.
 class AllowedRegVector {
   friend hash_code hash_value(const AllowedRegVector &);
-
 public:
-  AllowedRegVector() = default;
-  AllowedRegVector(AllowedRegVector &&) = default;
+
+  AllowedRegVector() : NumOpts(0), Opts(nullptr) {}
 
   AllowedRegVector(const std::vector<unsigned> &OptVec)
     : NumOpts(OptVec.size()), Opts(new unsigned[NumOpts]) {
     std::copy(OptVec.begin(), OptVec.end(), Opts.get());
   }
+
+  AllowedRegVector(AllowedRegVector &&) = default;
 
   unsigned size() const { return NumOpts; }
   unsigned operator[](size_t I) const { return Opts[I]; }
@@ -115,7 +105,7 @@ public:
   }
 
 private:
-  unsigned NumOpts = 0;
+  unsigned NumOpts;
   std::unique_ptr<unsigned[]> Opts;
 };
 
@@ -126,13 +116,13 @@ inline hash_code hash_value(const AllowedRegVector &OptRegs) {
                       hash_combine_range(OStart, OEnd));
 }
 
-/// Holds graph-level metadata relevant to PBQP RA problems.
+/// \brief Holds graph-level metadata relevant to PBQP RA problems.
 class GraphMetadata {
 private:
-  using AllowedRegVecPool = ValuePool<AllowedRegVector>;
-
+  typedef ValuePool<AllowedRegVector> AllowedRegVecPool;
 public:
-  using AllowedRegVecRef = AllowedRegVecPool::PoolRef;
+
+  typedef AllowedRegVecPool::PoolRef AllowedRegVecRef;
 
   GraphMetadata(MachineFunction &MF,
                 LiveIntervals &LIS,
@@ -163,22 +153,28 @@ private:
   AllowedRegVecPool AllowedRegVecs;
 };
 
-/// Holds solver state and other metadata relevant to each PBQP RA node.
+/// \brief Holds solver state and other metadata relevant to each PBQP RA node.
 class NodeMetadata {
 public:
-  using AllowedRegVector = RegAlloc::AllowedRegVector;
+  typedef RegAlloc::AllowedRegVector AllowedRegVector;
 
   // The node's reduction state. The order in this enum is important,
   // as it is assumed nodes can only progress up (i.e. towards being
   // optimally reducible) when reducing the graph.
-  using ReductionState = enum {
+  typedef enum {
     Unprocessed,
     NotProvablyAllocatable,
     ConservativelyAllocatable,
     OptimallyReducible
-  };
+  } ReductionState;
 
-  NodeMetadata() = default;
+  NodeMetadata()
+    : RS(Unprocessed), NumOpts(0), DeniedOpts(0), OptUnsafeEdges(nullptr),
+      VReg(0)
+#ifndef NDEBUG
+      , everConservativelyAllocatable(false)
+#endif
+      {}
 
   NodeMetadata(const NodeMetadata &Other)
     : RS(Other.RS), NumOpts(Other.NumOpts), DeniedOpts(Other.DeniedOpts),
@@ -194,8 +190,9 @@ public:
     }
   }
 
-  NodeMetadata(NodeMetadata &&) = default;
-  NodeMetadata& operator=(NodeMetadata &&) = default;
+  NodeMetadata(NodeMetadata &&Other) = default;
+
+  NodeMetadata& operator=(NodeMetadata &&Other) = default;
 
   void setVReg(unsigned VReg) { this->VReg = VReg; }
   unsigned getVReg() const { return VReg; }
@@ -252,37 +249,36 @@ public:
 #endif
 
 private:
-  ReductionState RS = Unprocessed;
-  unsigned NumOpts = 0;
-  unsigned DeniedOpts = 0;
+  ReductionState RS;
+  unsigned NumOpts;
+  unsigned DeniedOpts;
   std::unique_ptr<unsigned[]> OptUnsafeEdges;
-  unsigned VReg = 0;
+  unsigned VReg;
   GraphMetadata::AllowedRegVecRef AllowedRegs;
 
 #ifndef NDEBUG
-  bool everConservativelyAllocatable = false;
+  bool everConservativelyAllocatable;
 #endif
 };
 
 class RegAllocSolverImpl {
 private:
-  using RAMatrix = MDMatrix<MatrixMetadata>;
-
+  typedef MDMatrix<MatrixMetadata> RAMatrix;
 public:
-  using RawVector = PBQP::Vector;
-  using RawMatrix = PBQP::Matrix;
-  using Vector = PBQP::Vector;
-  using Matrix = RAMatrix;
-  using CostAllocator = PBQP::PoolCostAllocator<Vector, Matrix>;
+  typedef PBQP::Vector RawVector;
+  typedef PBQP::Matrix RawMatrix;
+  typedef PBQP::Vector Vector;
+  typedef RAMatrix     Matrix;
+  typedef PBQP::PoolCostAllocator<Vector, Matrix> CostAllocator;
 
-  using NodeId = GraphBase::NodeId;
-  using EdgeId = GraphBase::EdgeId;
+  typedef GraphBase::NodeId NodeId;
+  typedef GraphBase::EdgeId EdgeId;
 
-  using NodeMetadata = RegAlloc::NodeMetadata;
-  struct EdgeMetadata {};
-  using GraphMetadata = RegAlloc::GraphMetadata;
+  typedef RegAlloc::NodeMetadata NodeMetadata;
+  struct EdgeMetadata { };
+  typedef RegAlloc::GraphMetadata GraphMetadata;
 
-  using Graph = PBQP::Graph<RegAllocSolverImpl>;
+  typedef PBQP::Graph<RegAllocSolverImpl> Graph;
 
   RegAllocSolverImpl(Graph &G) : G(G) {}
 
@@ -300,7 +296,6 @@ public:
            "PBQP Graph should not contain single or zero-option nodes");
     G.getNodeMetadata(NId).setup(G.getNodeCosts(NId));
   }
-
   void handleRemoveNode(NodeId NId) {}
   void handleSetNodeCosts(NodeId NId, const Vector& newCosts) {}
 
@@ -347,6 +342,7 @@ public:
   }
 
 private:
+
   void promote(NodeId NId, NodeMetadata& NMd) {
     if (G.getNodeDegree(NId) == 3) {
       // This node is becoming optimally reducible.
@@ -425,7 +421,7 @@ private:
   std::vector<GraphBase::NodeId> reduce() {
     assert(!G.empty() && "Cannot reduce empty graph.");
 
-    using NodeId = GraphBase::NodeId;
+    typedef GraphBase::NodeId NodeId;
     std::vector<NodeId> NodeStack;
 
     // Consume worklists.
@@ -458,6 +454,7 @@ private:
         ConservativelyAllocatableNodes.erase(NItr);
         NodeStack.push_back(NId);
         G.disconnectAllNeighborsFromNode(NId);
+
       } else if (!NotProvablyAllocatableNodes.empty()) {
         NodeSet::iterator NItr =
           std::min_element(NotProvablyAllocatableNodes.begin(),
@@ -477,7 +474,6 @@ private:
   class SpillCostComparator {
   public:
     SpillCostComparator(const Graph& G) : G(G) {}
-
     bool operator()(NodeId N1Id, NodeId N2Id) {
       PBQPNum N1SC = G.getNodeCosts(N1Id)[0];
       PBQPNum N2SC = G.getNodeCosts(N2Id)[0];
@@ -485,13 +481,12 @@ private:
         return G.getNodeDegree(N1Id) < G.getNodeDegree(N2Id);
       return N1SC < N2SC;
     }
-
   private:
     const Graph& G;
   };
 
   Graph& G;
-  using NodeSet = std::set<NodeId>;
+  typedef std::set<NodeId> NodeSet;
   NodeSet OptimallyReducibleNodes;
   NodeSet ConservativelyAllocatableNodes;
   NodeSet NotProvablyAllocatableNodes;
@@ -499,19 +494,18 @@ private:
 
 class PBQPRAGraph : public PBQP::Graph<RegAllocSolverImpl> {
 private:
-  using BaseT = PBQP::Graph<RegAllocSolverImpl>;
-
+  typedef PBQP::Graph<RegAllocSolverImpl> BaseT;
 public:
-  PBQPRAGraph(GraphMetadata Metadata) : BaseT(std::move(Metadata)) {}
+  PBQPRAGraph(GraphMetadata Metadata) : BaseT(Metadata) {}
 
-  /// Dump this graph to dbgs().
+  /// @brief Dump this graph to dbgs().
   void dump() const;
 
-  /// Dump this graph to an output stream.
+  /// @brief Dump this graph to an output stream.
   /// @param OS Output stream to print on.
   void dump(raw_ostream &OS) const;
 
-  /// Print a representation of this graph in DOT format.
+  /// @brief Print a representation of this graph in DOT format.
   /// @param OS Output stream to print on.
   void printDot(raw_ostream &OS) const;
 };
@@ -523,13 +517,13 @@ inline Solution solve(PBQPRAGraph& G) {
   return RegAllocSolver.solve();
 }
 
-} // end namespace RegAlloc
-} // end namespace PBQP
+} // namespace RegAlloc
+} // namespace PBQP
 
-/// Create a PBQP register allocator instance.
+/// @brief Create a PBQP register allocator instance.
 FunctionPass *
 createPBQPRegisterAllocator(char *customPassID = nullptr);
 
-} // end namespace llvm
+} // namespace llvm
 
-#endif // LLVM_CODEGEN_REGALLOCPBQP_H
+#endif /* LLVM_CODEGEN_REGALLOCPBQP_H */

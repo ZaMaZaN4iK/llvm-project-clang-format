@@ -1,14 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: c++98, c++03, c++11, c++14
-
-// XFAIL: dylib-has-no-bad_optional_access && !libcpp-no-exceptions
 
 // <optional>
 
@@ -20,8 +19,8 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "archetypes.h"
-#include "test_convertible.h"
+#include "archetypes.hpp"
+#include "test_convertible.hpp"
 
 
 using std::optional;
@@ -34,11 +33,6 @@ struct ImplicitThrow
 struct ExplicitThrow
 {
     constexpr explicit ExplicitThrow(int x) { if (x != -1) TEST_THROW(6);}
-};
-
-struct ImplicitAny {
-  template <class U>
-  constexpr ImplicitAny(U&&) {}
 };
 
 
@@ -67,9 +61,11 @@ constexpr bool explicit_conversion(Input&& in, const Expect& v)
 void test_implicit()
 {
     {
+        using T = long long;
         static_assert(implicit_conversion<long long>(42, 42), "");
     }
     {
+        using T = long double;
         static_assert(implicit_conversion<long double>(3.14, 3.14), "");
     }
     {
@@ -85,15 +81,6 @@ void test_implicit()
         using T = TestTypes::TestType;
         assert(implicit_conversion<T>(3, T(3)));
     }
-  {
-    using O = optional<ImplicitAny>;
-    static_assert(!test_convertible<O, std::in_place_t>(), "");
-    static_assert(!test_convertible<O, std::in_place_t&>(), "");
-    static_assert(!test_convertible<O, const std::in_place_t&>(), "");
-    static_assert(!test_convertible<O, std::in_place_t&&>(), "");
-    static_assert(!test_convertible<O, const std::in_place_t&&>(), "");
-
-  }
 #ifndef TEST_HAS_NO_EXCEPTIONS
     {
         try {
@@ -110,15 +97,18 @@ void test_implicit()
 void test_explicit() {
     {
         using T = ExplicitTrivialTestTypes::TestType;
+        using O = optional<T>;
         static_assert(explicit_conversion<T>(42, 42), "");
     }
     {
         using T = ExplicitConstexprTestTypes::TestType;
+        using O = optional<T>;
         static_assert(explicit_conversion<T>(42, 42), "");
         static_assert(!std::is_convertible<int, T>::value, "");
     }
     {
         using T = ExplicitTestTypes::TestType;
+        using O = optional<T>;
         T::reset();
         {
             assert(explicit_conversion<T>(42, 42));
@@ -147,9 +137,7 @@ void test_explicit() {
 #endif
 }
 
-int main(int, char**) {
+int main() {
     test_implicit();
     test_explicit();
-
-  return 0;
 }

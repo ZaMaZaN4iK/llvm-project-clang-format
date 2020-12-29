@@ -1,15 +1,20 @@
 //===-- RegisterContextMach_i386.cpp ----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #if defined(__APPLE__)
 
+// C Includes
 #include <mach/thread_act.h>
 
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "RegisterContextMach_i386.h"
 
 using namespace lldb;
@@ -38,23 +43,17 @@ int RegisterContextMach_i386::DoReadEXC(lldb::tid_t tid, int flavor, EXC &exc) {
 
 int RegisterContextMach_i386::DoWriteGPR(lldb::tid_t tid, int flavor,
                                          const GPR &gpr) {
-  return ::thread_set_state(
-      tid, flavor, reinterpret_cast<thread_state_t>(const_cast<GPR *>(&gpr)),
-      GPRWordCount);
+  return ::thread_set_state(tid, flavor, (thread_state_t)&gpr, GPRWordCount);
 }
 
 int RegisterContextMach_i386::DoWriteFPU(lldb::tid_t tid, int flavor,
                                          const FPU &fpu) {
-  return ::thread_set_state(
-      tid, flavor, reinterpret_cast<thread_state_t>(const_cast<FPU *>(&fpu)),
-      FPUWordCount);
+  return ::thread_set_state(tid, flavor, (thread_state_t)&fpu, FPUWordCount);
 }
 
 int RegisterContextMach_i386::DoWriteEXC(lldb::tid_t tid, int flavor,
                                          const EXC &exc) {
-  return ::thread_set_state(
-      tid, flavor, reinterpret_cast<thread_state_t>(const_cast<EXC *>(&exc)),
-      EXCWordCount);
+  return ::thread_set_state(tid, flavor, (thread_state_t)&exc, EXCWordCount);
 }
 
 #endif

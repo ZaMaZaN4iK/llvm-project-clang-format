@@ -5,6 +5,9 @@ Use lldb Python SBTarget API to iterate on the watchpoint(s) for the target.
 from __future__ import print_function
 
 
+import os
+import re
+import time
 
 import lldb
 from lldbsuite.test.decorators import *
@@ -15,11 +18,6 @@ from lldbsuite.test import lldbutil
 class WatchpointIteratorTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
-    NO_DEBUG_INFO_TESTCASE = True
-
-    # hardware watchpoints are not reported with a hardware index # on armv7 on ios devices
-    def affected_by_radar_34564183(self):
-        return (self.getArchitecture() in ['armv7', 'armv7k', 'arm64_32']) and self.platformIsDarwin()
 
     def setUp(self):
         # Call super's setUp().
@@ -31,10 +29,15 @@ class WatchpointIteratorTestCase(TestBase):
             self.source, '// Set break point at this line.')
 
     @add_test_categories(['pyapi'])
+    # Watchpoints not supported
+    @expectedFailureAndroid(archs=['arm', 'aarch64'])
+    @expectedFailureAll(
+        oslist=["windows"],
+        bugnumber="llvm.org/pr24446: WINDOWS XFAIL TRIAGE - Watchpoints not supported on Windows")
     def test_watch_iter(self):
         """Exercise SBTarget.watchpoint_iter() API to iterate on the available watchpoints."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)
@@ -96,8 +99,7 @@ class WatchpointIteratorTestCase(TestBase):
         # meaningful hardware index at this point.  Exercise the printed repr of
         # SBWatchpointLocation.
         print(watchpoint)
-        if not self.affected_by_radar_34564183():
-            self.assertTrue(watchpoint.GetHardwareIndex() != -1)
+        self.assertTrue(watchpoint.GetHardwareIndex() != -1)
 
         # SBWatchpoint.GetDescription() takes a description level arg.
         print(lldbutil.get_description(watchpoint, lldb.eDescriptionLevelFull))

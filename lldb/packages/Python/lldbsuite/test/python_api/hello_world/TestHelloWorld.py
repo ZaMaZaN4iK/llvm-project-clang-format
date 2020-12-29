@@ -1,21 +1,28 @@
 """Test Python APIs for target (launch and attach), breakpoint, and process."""
 
+from __future__ import print_function
 
 
 import os
+import sys
+import time
 
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
-import lldbsuite.test.lldbutil as lldbutil
+from lldbsuite.test import lldbutil
+
 
 class HelloWorldTestCase(TestBase):
-    NO_DEBUG_INFO_TESTCASE = True
+
     mydir = TestBase.compute_mydir(__file__)
 
     def setUp(self):
         # Call super's setUp().
         TestBase.setUp(self)
+        # Get the full path to our executable to be attached/debugged.
+        self.exe = os.path.join(os.getcwd(), self.testMethodName)
+        self.d = {'EXE': self.testMethodName}
         # Find a couple of the line numbers within main.c.
         self.line1 = line_number('main.c', '// Set break point at this line.')
         self.line2 = line_number('main.c', '// Waiting to be attached...')
@@ -30,12 +37,9 @@ class HelloWorldTestCase(TestBase):
     @skipIfiOSSimulator
     def test_with_process_launch_api(self):
         """Create target, breakpoint, launch a process, and then kill it."""
-        # Get the full path to our executable to be attached/debugged.
-        exe = '%s_%d'%(self.getBuildArtifact(self.testMethodName), os.getpid())
-        d = {'EXE': exe}
-        self.build(dictionary=d)
-        self.setTearDownCleanup(dictionary=d)
-        target = self.dbg.CreateTarget(exe)
+        self.build(dictionary=self.d)
+        self.setTearDownCleanup(dictionary=self.d)
+        target = self.dbg.CreateTarget(self.exe)
 
         breakpoint = target.BreakpointCreateByLocation("main.c", self.line1)
 
@@ -73,25 +77,20 @@ class HelloWorldTestCase(TestBase):
         self.assertEqual(breakpoint.GetHitCount(), 1, BREAKPOINT_HIT_ONCE)
 
     @add_test_categories(['pyapi'])
+    @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr24600")
     @skipIfiOSSimulator
-    @expectedFailureNetBSD
     def test_with_attach_to_process_with_id_api(self):
         """Create target, spawn a process, and attach to it with process id."""
-        exe = '%s_%d'%(self.testMethodName, os.getpid())
-        d = {'EXE': exe}
-        self.build(dictionary=d)
-        self.setTearDownCleanup(dictionary=d)
-        target = self.dbg.CreateTarget(self.getBuildArtifact(exe))
+        self.build(dictionary=self.d)
+        self.setTearDownCleanup(dictionary=self.d)
+        target = self.dbg.CreateTarget(self.exe)
 
         # Spawn a new process
-        token = exe+'.token'
-        if not lldb.remote_platform:
-            token = self.getBuildArtifact(token)
-            if os.path.exists(token):
-                os.remove(token)
-        popen = self.spawnSubprocess(self.getBuildArtifact(exe), [token])
+        popen = self.spawnSubprocess(self.exe, ["abc", "xyz"])
         self.addTearDownHook(self.cleanupSubprocesses)
-        lldbutil.wait_for_file_on_target(self, token)
+
+        # Give the subprocess time to start and wait for user input
+        time.sleep(0.25)
 
         listener = lldb.SBListener("my.attach.listener")
         error = lldb.SBError()
@@ -100,38 +99,33 @@ class HelloWorldTestCase(TestBase):
         self.assertTrue(error.Success() and process, PROCESS_IS_VALID)
 
         # Let's check the stack traces of the attached process.
+        import lldbsuite.test.lldbutil as lldbutil
         stacktraces = lldbutil.print_stacktraces(process, string_buffer=True)
         self.expect(stacktraces, exe=False,
                     substrs=['main.c:%d' % self.line2,
-                             '(int)argc=2'])
+                             '(int)argc=3'])
 
     @add_test_categories(['pyapi'])
+    @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr24600")
     @skipIfiOSSimulator
-    @skipIfAsan # FIXME: Hangs indefinitely.
-    @expectedFailureNetBSD
     def test_with_attach_to_process_with_name_api(self):
         """Create target, spawn a process, and attach to it with process name."""
-        exe = '%s_%d'%(self.testMethodName, os.getpid())
-        d = {'EXE': exe}
-        self.build(dictionary=d)
-        self.setTearDownCleanup(dictionary=d)
-        target = self.dbg.CreateTarget(self.getBuildArtifact(exe))
+        self.build(dictionary=self.d)
+        self.setTearDownCleanup(dictionary=self.d)
+        target = self.dbg.CreateTarget(self.exe)
 
-        # Spawn a new process.
-        token = exe+'.token'
-        if not lldb.remote_platform:
-            token = self.getBuildArtifact(token)
-            if os.path.exists(token):
-                os.remove(token)
-        popen = self.spawnSubprocess(self.getBuildArtifact(exe), [token])
+        # Spawn a new process
+        popen = self.spawnSubprocess(self.exe, ["abc", "xyz"])
         self.addTearDownHook(self.cleanupSubprocesses)
-        lldbutil.wait_for_file_on_target(self, token)
+
+        # Give the subprocess time to start and wait for user input
+        time.sleep(0.25)
 
         listener = lldb.SBListener("my.attach.listener")
         error = lldb.SBError()
         # Pass 'False' since we don't want to wait for new instance of
         # "hello_world" to be launched.
-        name = os.path.basename(exe)
+        name = os.path.basename(self.exe)
 
         # While we're at it, make sure that passing a None as the process name
         # does not hang LLDB.
@@ -140,6 +134,7 @@ class HelloWorldTestCase(TestBase):
         target.ConnectRemote(listener, None, None, error)
 
         process = target.AttachToProcessWithName(listener, name, False, error)
+
         self.assertTrue(error.Success() and process, PROCESS_IS_VALID)
 
         # Verify that after attach, our selected target indeed matches name.
@@ -149,7 +144,8 @@ class HelloWorldTestCase(TestBase):
             startstr=name)
 
         # Let's check the stack traces of the attached process.
+        import lldbsuite.test.lldbutil as lldbutil
         stacktraces = lldbutil.print_stacktraces(process, string_buffer=True)
         self.expect(stacktraces, exe=False,
                     substrs=['main.c:%d' % self.line2,
-                             '(int)argc=2'])
+                             '(int)argc=3'])

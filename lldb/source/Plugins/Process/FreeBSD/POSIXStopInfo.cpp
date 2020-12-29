@@ -1,8 +1,9 @@
 //===-- POSIXStopInfo.cpp ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -25,6 +26,22 @@ const char *POSIXLimboStopInfo::GetDescription() { return "thread exiting"; }
 bool POSIXLimboStopInfo::ShouldStop(Event *event_ptr) { return false; }
 
 bool POSIXLimboStopInfo::ShouldNotify(Event *event_ptr) { return false; }
+
+//===----------------------------------------------------------------------===//
+// POSIXCrashStopInfo
+
+POSIXCrashStopInfo::POSIXCrashStopInfo(FreeBSDThread &thread, uint32_t status,
+                                       CrashReason reason,
+                                       lldb::addr_t fault_addr)
+    : POSIXStopInfo(thread, status) {
+  m_description = ::GetCrashReasonString(reason, fault_addr);
+}
+
+POSIXCrashStopInfo::~POSIXCrashStopInfo() {}
+
+lldb::StopReason POSIXCrashStopInfo::GetStopReason() const {
+  return lldb::eStopReasonException;
+}
 
 //===----------------------------------------------------------------------===//
 // POSIXNewThreadStopInfo

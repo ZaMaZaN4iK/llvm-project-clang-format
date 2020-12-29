@@ -1,13 +1,14 @@
 //===--- ASTFwd.h ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===--------------------------------------------------------------===//
 ///
 /// \file
-/// Forward declaration of all AST node types.
+/// \brief Forward declaration of all AST node types.
 ///
 //===-------------------------------------------------------------===//
 
@@ -24,12 +25,8 @@ class Stmt;
 #include "clang/AST/StmtNodes.inc"
 class Type;
 #define TYPE(DERIVED, BASE) class DERIVED##Type;
-#include "clang/AST/TypeNodes.inc"
+#include "clang/AST/TypeNodes.def"
 class CXXCtorInitializer;
-class OMPClause;
-#define OPENMP_CLAUSE(KIND, CLASSNAME) class CLASSNAME;
-#include "clang/Basic/OpenMPKinds.def"
-
 
 } // end namespace clang
 

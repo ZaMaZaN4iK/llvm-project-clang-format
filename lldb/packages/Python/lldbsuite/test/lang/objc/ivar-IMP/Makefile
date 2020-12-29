@@ -1,13 +1,12 @@
-CFLAGS := -g -O0
-CFLAGS_NO_DEBUG = 
+LEVEL = ../../../make
 
-all: aout
+myclass.o: myclass.h myclass.m
+	$(CC) myclass.m -c -o myclass.o
 
-aout: 
-	$(CC) $(CFLAGS_NO_DEBUG) $(SRCDIR)/myclass.m -c -o myclass.o
-	$(CC) $(CFLAGS) myclass.o $(SRCDIR)/repro.m -framework Foundation
+repro: myclass.o repro.m
+	$(CC) -g -O0 myclass.o repro.m -framework Foundation
 
-clean::
-	rm -f myclass.o
+cleanup:
+	rm -r myclass.o
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

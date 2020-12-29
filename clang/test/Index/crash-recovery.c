@@ -4,6 +4,5 @@
 // RUN: env LIBCLANG_DISABLE_CRASH_RECOVERY=1 not --crash c-index-test -test-load-source all %s
 //
 // REQUIRES: crash-recovery
-// UNSUPPORTED: libstdcxx-safe-mode
 
 #pragma clang __debug crash

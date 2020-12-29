@@ -1,8 +1,9 @@
 //===------ FlattenSchedule.cpp --------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,8 +17,6 @@
 #include "polly/FlattenAlgo.h"
 #include "polly/ScopInfo.h"
 #include "polly/ScopPass.h"
-#include "polly/Support/ISLOStream.h"
-#include "polly/Support/ISLTools.h"
 #define DEBUG_TYPE "polly-flatten-schedule"
 
 using namespace polly;
@@ -28,10 +27,11 @@ namespace {
 /// Print a schedule to @p OS.
 ///
 /// Prints the schedule for each statements on a new line.
-void printSchedule(raw_ostream &OS, const isl::union_map &Schedule,
+void printSchedule(raw_ostream &OS, NonowningIslPtr<isl_union_map> Schedule,
                    int indent) {
-  for (isl::map Map : Schedule.get_map_list())
+  foreachElt(Schedule, [&OS, indent](IslPtr<isl_map> Map) {
     OS.indent(indent) << Map << "\n";
+  });
 }
 
 /// Flatten the schedule stored in an polly::Scop.
@@ -41,7 +41,7 @@ private:
   const FlattenSchedule &operator=(const FlattenSchedule &) = delete;
 
   std::shared_ptr<isl_ctx> IslCtx;
-  isl::union_map OldSchedule;
+  IslPtr<isl_union_map> OldSchedule;
 
 public:
   static char ID;
@@ -57,25 +57,27 @@ public:
     // OldSchedule.
     IslCtx = S.getSharedIslCtx();
 
-    LLVM_DEBUG(dbgs() << "Going to flatten old schedule:\n");
-    OldSchedule = S.getSchedule();
-    LLVM_DEBUG(printSchedule(dbgs(), OldSchedule, 2));
+    DEBUG(dbgs() << "Going to flatten old schedule:\n");
+    OldSchedule = give(S.getSchedule());
+    DEBUG(printSchedule(dbgs(), OldSchedule, 2));
 
-    auto Domains = S.getDomains();
-    auto RestrictedOldSchedule = OldSchedule.intersect_domain(Domains);
-    LLVM_DEBUG(dbgs() << "Old schedule with domains:\n");
-    LLVM_DEBUG(printSchedule(dbgs(), RestrictedOldSchedule, 2));
+    auto Domains = give(S.getDomains());
+    auto RestrictedOldSchedule = give(
+        isl_union_map_intersect_domain(OldSchedule.copy(), Domains.copy()));
+    DEBUG(dbgs() << "Old schedule with domains:\n");
+    DEBUG(printSchedule(dbgs(), RestrictedOldSchedule, 2));
 
     auto NewSchedule = flattenSchedule(RestrictedOldSchedule);
 
-    LLVM_DEBUG(dbgs() << "Flattened new schedule:\n");
-    LLVM_DEBUG(printSchedule(dbgs(), NewSchedule, 2));
+    DEBUG(dbgs() << "Flattened new schedule:\n");
+    DEBUG(printSchedule(dbgs(), NewSchedule, 2));
 
-    NewSchedule = NewSchedule.gist_domain(Domains);
-    LLVM_DEBUG(dbgs() << "Gisted, flattened new schedule:\n");
-    LLVM_DEBUG(printSchedule(dbgs(), NewSchedule, 2));
+    NewSchedule =
+        give(isl_union_map_gist_domain(NewSchedule.take(), Domains.take()));
+    DEBUG(dbgs() << "Gisted, flattened new schedule:\n");
+    DEBUG(printSchedule(dbgs(), NewSchedule, 2));
 
-    S.setSchedule(NewSchedule);
+    S.setSchedule(NewSchedule.take());
     return false;
   }
 
@@ -85,7 +87,7 @@ public:
     OS << "}\n\n";
 
     OS << "Schedule after flattening {\n";
-    printSchedule(OS, S.getSchedule(), 4);
+    printSchedule(OS, give(S.getSchedule()), 4);
     OS << "}\n";
   }
 

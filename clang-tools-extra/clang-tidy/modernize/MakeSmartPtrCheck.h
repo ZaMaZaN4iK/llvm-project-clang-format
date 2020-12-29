@@ -1,16 +1,16 @@
 //===--- MakeSmartPtrCheck.h - clang-tidy------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_MODERNIZE_MAKE_SMART_PTR_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_MODERNIZE_MAKE_SMART_PTR_H
 
-#include "../ClangTidyCheck.h"
-#include "../utils/IncludeInserter.h"
+#include "../ClangTidy.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchersInternal.h"
 #include "llvm/ADT/StringRef.h"
@@ -24,12 +24,9 @@ namespace modernize {
 class MakeSmartPtrCheck : public ClangTidyCheck {
 public:
   MakeSmartPtrCheck(StringRef Name, ClangTidyContext *Context,
-                    StringRef MakeSmartPtrFunctionName);
+                    std::string makeSmartPtrFunctionName);
   void registerMatchers(ast_matchers::MatchFinder *Finder) final;
-  void registerPPCallbacks(const SourceManager &SM, Preprocessor *PP,
-                           Preprocessor *ModuleExpanderPP) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) final;
-  void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
 
 protected:
   using SmartPtrTypeMatcher = ast_matchers::internal::BindableMatcher<QualType>;
@@ -40,28 +37,19 @@ protected:
   /// in this class.
   virtual SmartPtrTypeMatcher getSmartPointerTypeMatcher() const = 0;
 
-  /// Returns whether the C++ version is compatible with current check.
-  virtual bool isLanguageVersionSupported(const LangOptions &LangOpts) const;
-
   static const char PointerType[];
+  static const char ConstructorCall[];
+  static const char ResetCall[];
+  static const char NewExpression[];
 
 private:
-  std::unique_ptr<utils::IncludeInserter> Inserter;
-  const utils::IncludeSorter::IncludeStyle IncludeStyle;
-  const std::string MakeSmartPtrFunctionHeader;
-  const std::string MakeSmartPtrFunctionName;
-  const bool IgnoreMacros;
+  std::string makeSmartPtrFunctionName;
 
-  void checkConstruct(SourceManager &SM, ASTContext *Ctx,
-                      const CXXConstructExpr *Construct, const QualType *Type,
-                      const CXXNewExpr *New);
-  void checkReset(SourceManager &SM, ASTContext *Ctx,
-                  const CXXMemberCallExpr *Member, const CXXNewExpr *New);
-
-  /// Returns true when the fixes for replacing CXXNewExpr are generated.
-  bool replaceNew(DiagnosticBuilder &Diag, const CXXNewExpr *New,
-                  SourceManager &SM, ASTContext *Ctx);
-  void insertHeader(DiagnosticBuilder &Diag, FileID FD);
+  void checkConstruct(SourceManager &SM, const CXXConstructExpr *Construct,
+                      const QualType *Type, const CXXNewExpr *New);
+  void checkReset(SourceManager &SM, const CXXMemberCallExpr *Member,
+                  const CXXNewExpr *New);
+  void replaceNew(DiagnosticBuilder &Diag, const CXXNewExpr *New);
 };
 
 } // namespace modernize

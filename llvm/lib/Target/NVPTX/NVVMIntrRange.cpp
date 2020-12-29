@@ -1,8 +1,9 @@
 //===- NVVMIntrRange.cpp - Set !range metadata for NVVM intrinsics --------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,10 +15,8 @@
 #include "NVPTX.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/InstIterator.h"
-#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/IntrinsicsNVPTX.h"
-#include "llvm/Support/CommandLine.h"
+#include "llvm/IR/Instructions.h"
 
 using namespace llvm;
 

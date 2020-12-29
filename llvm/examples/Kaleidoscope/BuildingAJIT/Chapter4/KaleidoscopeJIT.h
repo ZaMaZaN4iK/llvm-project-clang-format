@@ -1,8 +1,9 @@
-//===- KaleidoscopeJIT.h - A simple JIT for Kaleidoscope --------*- C++ -*-===//
+//===----- KaleidoscopeJIT.h - A simple JIT for Kaleidoscope ----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,14 +17,14 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"
+#include "llvm/ExecutionEngine/RuntimeDyld.h"
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#include "llvm/ExecutionEngine/Orc/CompileOnDemandLayer.h"
 #include "llvm/ExecutionEngine/Orc/CompileUtils.h"
 #include "llvm/ExecutionEngine/Orc/IRCompileLayer.h"
 #include "llvm/ExecutionEngine/Orc/IRTransformLayer.h"
-#include "llvm/ExecutionEngine/Orc/IndirectionUtils.h"
 #include "llvm/ExecutionEngine/Orc/LambdaResolver.h"
-#include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
-#include "llvm/ExecutionEngine/RTDyldMemoryManager.h"
-#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#include "llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Mangler.h"
@@ -31,13 +32,11 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -72,52 +71,32 @@ namespace orc {
 
 class KaleidoscopeJIT {
 private:
-  ExecutionSession ES;
-  std::shared_ptr<SymbolResolver> Resolver;
   std::unique_ptr<TargetMachine> TM;
   const DataLayout DL;
-  LegacyRTDyldObjectLinkingLayer ObjectLayer;
-  LegacyIRCompileLayer<decltype(ObjectLayer), SimpleCompiler> CompileLayer;
+  ObjectLinkingLayer<> ObjectLayer;
+  IRCompileLayer<decltype(ObjectLayer)> CompileLayer;
 
-  using OptimizeFunction =
-      std::function<std::unique_ptr<Module>(std::unique_ptr<Module>)>;
+  typedef std::function<std::unique_ptr<Module>(std::unique_ptr<Module>)>
+    OptimizeFunction;
 
-  LegacyIRTransformLayer<decltype(CompileLayer), OptimizeFunction> OptimizeLayer;
+  IRTransformLayer<decltype(CompileLayer), OptimizeFunction> OptimizeLayer;
 
   std::unique_ptr<JITCompileCallbackManager> CompileCallbackMgr;
   std::unique_ptr<IndirectStubsManager> IndirectStubsMgr;
 
 public:
+  typedef decltype(OptimizeLayer)::ModuleSetHandleT ModuleHandle;
+
   KaleidoscopeJIT()
-      : Resolver(createLegacyLookupResolver(
-            ES,
-            [this](const std::string &Name) -> JITSymbol {
-              if (auto Sym = IndirectStubsMgr->findStub(Name, false))
-                return Sym;
-              if (auto Sym = OptimizeLayer.findSymbol(Name, false))
-                return Sym;
-              else if (auto Err = Sym.takeError())
-                return std::move(Err);
-              if (auto SymAddr =
-                      RTDyldMemoryManager::getSymbolAddressInProcess(Name))
-                return JITSymbol(SymAddr, JITSymbolFlags::Exported);
-              return nullptr;
-            },
-            [](Error Err) { cantFail(std::move(Err), "lookupFlags failed"); })),
-        TM(EngineBuilder().selectTarget()), DL(TM->createDataLayout()),
-        ObjectLayer(AcknowledgeORCv1Deprecation, ES,
-                    [this](VModuleKey K) {
-                      return LegacyRTDyldObjectLinkingLayer::Resources{
-                          std::make_shared<SectionMemoryManager>(), Resolver};
-                    }),
-        CompileLayer(AcknowledgeORCv1Deprecation, ObjectLayer,
-                     SimpleCompiler(*TM)),
-        OptimizeLayer(AcknowledgeORCv1Deprecation, CompileLayer,
+      : TM(EngineBuilder().selectTarget()),
+        DL(TM->createDataLayout()),
+        CompileLayer(ObjectLayer, SimpleCompiler(*TM)),
+        OptimizeLayer(CompileLayer,
                       [this](std::unique_ptr<Module> M) {
                         return optimizeModule(std::move(M));
                       }),
-        CompileCallbackMgr(cantFail(orc::createLocalCompileCallbackManager(
-            TM->getTargetTriple(), ES, 0))) {
+        CompileCallbackMgr(
+            orc::createLocalCompileCallbackManager(TM->getTargetTriple(), 0)) {
     auto IndirectStubsMgrBuilder =
       orc::createLocalIndirectStubsManagerBuilder(TM->getTargetTriple());
     IndirectStubsMgr = IndirectStubsMgrBuilder();
@@ -126,14 +105,55 @@ public:
 
   TargetMachine &getTargetMachine() { return *TM; }
 
-  VModuleKey addModule(std::unique_ptr<Module> M) {
-    // Add the module to the JIT with a new VModuleKey.
-    auto K = ES.allocateVModule();
-    cantFail(OptimizeLayer.addModule(K, std::move(M)));
-    return K;
+  ModuleHandle addModule(std::unique_ptr<Module> M) {
+
+    // Build our symbol resolver:
+    // Lambda 1: Look back into the JIT itself to find symbols that are part of
+    //           the same "logical dylib".
+    // Lambda 2: Search for external symbols in the host process.
+    auto Resolver = createLambdaResolver(
+        [&](const std::string &Name) {
+          if (auto Sym = IndirectStubsMgr->findStub(Name, false))
+            return Sym;
+          if (auto Sym = OptimizeLayer.findSymbol(Name, false))
+            return Sym;
+          return JITSymbol(nullptr);
+        },
+        [](const std::string &Name) {
+          if (auto SymAddr =
+                RTDyldMemoryManager::getSymbolAddressInProcess(Name))
+            return JITSymbol(SymAddr, JITSymbolFlags::Exported);
+          return JITSymbol(nullptr);
+        });
+
+    // Build a singleton module set to hold our module.
+    std::vector<std::unique_ptr<Module>> Ms;
+    Ms.push_back(std::move(M));
+
+    // Add the set to the JIT with the resolver we created above and a newly
+    // created SectionMemoryManager.
+    return OptimizeLayer.addModuleSet(std::move(Ms),
+                                      make_unique<SectionMemoryManager>(),
+                                      std::move(Resolver));
   }
 
   Error addFunctionAST(std::unique_ptr<FunctionAST> FnAST) {
+    // Create a CompileCallback - this is the re-entry point into the compiler
+    // for functions that haven't been compiled yet.
+    auto CCInfo = CompileCallbackMgr->getCompileCallback();
+
+    // Create an indirect stub. This serves as the functions "canonical
+    // definition" - an unchanging (constant address) entry point to the
+    // function implementation.
+    // Initially we point the stub's function-pointer at the compile callback
+    // that we just created. In the compile action for the callback (see below)
+    // we will update the stub's function pointer to point at the function
+    // implementation that we just implemented.
+    if (auto Err = IndirectStubsMgr->createStub(mangle(FnAST->getName()),
+                                                CCInfo.getAddress(),
+                                                JITSymbolFlags::Exported))
+      return Err;
+
     // Move ownership of FnAST to a shared pointer - C++11 lambdas don't support
     // capture-by-move, which is be required for unique_ptr.
     auto SharedFnAST = std::shared_ptr<FunctionAST>(std::move(FnAST));
@@ -154,37 +174,23 @@ public:
     //     The JIT runtime (the resolver block) will use the return address of
     //     this function as the address to continue at once it has reset the
     //     CPU state to what it was immediately before the call.
-    auto CompileAction = [this, SharedFnAST]() {
-      auto M = irgenAndTakeOwnership(*SharedFnAST, "$impl");
-      addModule(std::move(M));
-      auto Sym = findSymbol(SharedFnAST->getName() + "$impl");
-      assert(Sym && "Couldn't find compiled function?");
-      JITTargetAddress SymAddr = cantFail(Sym.getAddress());
-      if (auto Err = IndirectStubsMgr->updatePointer(
-              mangle(SharedFnAST->getName()), SymAddr)) {
-        logAllUnhandledErrors(std::move(Err), errs(),
-                              "Error updating function pointer: ");
-        exit(1);
-      }
+    CCInfo.setCompileAction(
+      [this, SharedFnAST]() {
+        auto M = irgenAndTakeOwnership(*SharedFnAST, "$impl");
+        addModule(std::move(M));
+        auto Sym = findSymbol(SharedFnAST->getName() + "$impl");
+        assert(Sym && "Couldn't find compiled function?");
+        JITTargetAddress SymAddr = Sym.getAddress();
+        if (auto Err =
+              IndirectStubsMgr->updatePointer(mangle(SharedFnAST->getName()),
+                                              SymAddr)) {
+          logAllUnhandledErrors(std::move(Err), errs(),
+                                "Error updating function pointer: ");
+          exit(1);
+        }
 
-      return SymAddr;
-    };
-
-    // Create a CompileCallback using the CompileAction - this is the re-entry
-    // point into the compiler for functions that haven't been compiled yet.
-    auto CCAddr = cantFail(
-        CompileCallbackMgr->getCompileCallback(std::move(CompileAction)));
-
-    // Create an indirect stub. This serves as the functions "canonical
-    // definition" - an unchanging (constant address) entry point to the
-    // function implementation.
-    // Initially we point the stub's function-pointer at the compile callback
-    // that we just created. When the compile action for the callback is run we
-    // will update the stub's function pointer to point at the function
-    // implementation that we just implemented.
-    if (auto Err = IndirectStubsMgr->createStub(
-            mangle(SharedFnAST->getName()), CCAddr, JITSymbolFlags::Exported))
-      return Err;
+        return SymAddr;
+      });
 
     return Error::success();
   }
@@ -193,8 +199,8 @@ public:
     return OptimizeLayer.findSymbol(mangle(Name), true);
   }
 
-  void removeModule(VModuleKey K) {
-    cantFail(OptimizeLayer.removeModule(K));
+  void removeModule(ModuleHandle H) {
+    OptimizeLayer.removeModuleSet(H);
   }
 
 private:
@@ -207,7 +213,7 @@ private:
 
   std::unique_ptr<Module> optimizeModule(std::unique_ptr<Module> M) {
     // Create a function pass manager.
-    auto FPM = std::make_unique<legacy::FunctionPassManager>(M.get());
+    auto FPM = llvm::make_unique<legacy::FunctionPassManager>(M.get());
 
     // Add some optimizations.
     FPM->add(createInstructionCombiningPass());

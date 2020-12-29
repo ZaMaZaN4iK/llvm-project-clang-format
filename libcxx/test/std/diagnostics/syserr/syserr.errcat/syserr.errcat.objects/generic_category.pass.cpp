@@ -1,18 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// XFAIL: suse-linux-enterprise-server-11
-// XFAIL: with_system_cxx_lib=macosx10.12
-// XFAIL: with_system_cxx_lib=macosx10.11
-// XFAIL: with_system_cxx_lib=macosx10.10
-// XFAIL: with_system_cxx_lib=macosx10.9
-// XFAIL: with_system_cxx_lib=macosx10.7
-// XFAIL: with_system_cxx_lib=macosx10.8
 
 // <system_error>
 
@@ -31,11 +24,11 @@ void test_message_for_bad_value() {
     errno = E2BIG; // something that message will never generate
     const std::error_category& e_cat1 = std::generic_category();
     const std::string msg = e_cat1.message(-1);
-    LIBCPP_ASSERT(msg == "Unknown error -1" || msg == "Unknown error");
+    LIBCPP_ASSERT(msg == "Unknown error -1");
     assert(errno == E2BIG);
 }
 
-int main(int, char**)
+int main()
 {
     const std::error_category& e_cat1 = std::generic_category();
     std::string m1 = e_cat1.name();
@@ -43,6 +36,4 @@ int main(int, char**)
     {
         test_message_for_bad_value();
     }
-
-  return 0;
 }

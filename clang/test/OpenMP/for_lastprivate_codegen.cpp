@@ -3,45 +3,9 @@
 // RUN: %clang_cc1 -fopenmp -x c++ -triple x86_64-apple-darwin10 -std=c++11 -include-pch %t -verify %s -emit-llvm -o - | FileCheck %s
 // RUN: %clang_cc1 -verify -fopenmp -x c++ -std=c++11 -DLAMBDA -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck -check-prefix=LAMBDA %s
 // RUN: %clang_cc1 -verify -fopenmp -x c++ -fblocks -DBLOCKS -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck -check-prefix=BLOCKS %s
-// RUN: %clang_cc1 -verify -fopenmp -fopenmp-version=50 -DOMP5 -x c++ -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck %s -check-prefix=CHECK -check-prefix=OMP50
-// RUN: %clang_cc1 -fopenmp -fopenmp-version=50 -DOMP5 -x c++ -std=c++11 -triple x86_64-apple-darwin10 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp -fopenmp-version=50 -DOMP5 -x c++ -triple x86_64-apple-darwin10 -std=c++11 -include-pch %t -verify %s -emit-llvm -o - | FileCheck %s -check-prefix=CHECK -check-prefix=OMP50
-// RUN: %clang_cc1 -verify -fopenmp -fopenmp-version=50 -DOMP5 -x c++ -std=c++11 -DLAMBDA -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck -check-prefix=LAMBDA %s
-// RUN: %clang_cc1 -verify -fopenmp -fopenmp-version=50 -DOMP5 -x c++ -fblocks -DBLOCKS -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck -check-prefix=BLOCKS %s
-
-// RUN: %clang_cc1 -verify -fopenmp-simd -x c++ -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
-// RUN: %clang_cc1 -fopenmp-simd -x c++ -std=c++11 -triple x86_64-apple-darwin10 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp-simd -x c++ -triple x86_64-apple-darwin10 -std=c++11 -include-pch %t -verify %s -emit-llvm -o - | FileCheck --check-prefix SIMD-ONLY0 %s
-// RUN: %clang_cc1 -verify -fopenmp-simd -x c++ -std=c++11 -DLAMBDA -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
-// RUN: %clang_cc1 -verify -fopenmp-simd -x c++ -fblocks -DBLOCKS -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
-// RUN: %clang_cc1 -verify -fopenmp-simd -fopenmp-version=50 -DOMP5 -x c++ -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
-// RUN: %clang_cc1 -fopenmp-simd -fopenmp-version=50 -DOMP5 -x c++ -std=c++11 -triple x86_64-apple-darwin10 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp-simd -fopenmp-version=50 -DOMP5 -x c++ -triple x86_64-apple-darwin10 -std=c++11 -include-pch %t -verify %s -emit-llvm -o - | FileCheck --check-prefix SIMD-ONLY0 %s
-// RUN: %clang_cc1 -verify -fopenmp-simd -fopenmp-version=50 -DOMP5 -x c++ -std=c++11 -DLAMBDA -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
-// RUN: %clang_cc1 -verify -fopenmp-simd -fopenmp-version=50 -DOMP5 -x c++ -fblocks -DBLOCKS -triple x86_64-apple-darwin10 -emit-llvm %s -o - | FileCheck --check-prefix SIMD-ONLY0 %s
-// SIMD-ONLY0-NOT: {{__kmpc|__tgt}}
 // expected-no-diagnostics
 #ifndef HEADER
 #define HEADER
-
-#ifdef OMP5
-#define CONDITIONAL conditional :
-#else
-#define CONDITIONAL
-#endif //OMP5
-
-enum omp_allocator_handle_t {
-  omp_null_allocator = 0,
-  omp_default_mem_alloc = 1,
-  omp_large_cap_mem_alloc = 2,
-  omp_const_mem_alloc = 3,
-  omp_high_bw_mem_alloc = 4,
-  omp_low_lat_mem_alloc = 5,
-  omp_cgroup_mem_alloc = 6,
-  omp_pteam_mem_alloc = 7,
-  omp_thread_mem_alloc = 8,
-  KMP_ALLOCATOR_MAX_HANDLE = __UINTPTR_MAX__
-};
 
 struct SS {
   int a;
@@ -172,14 +136,10 @@ char cnt;
 // BLOCKS: [[SS_TY:%.+]] = type { i{{[0-9]+}}, i8
 // CHECK: [[S_FLOAT_TY:%.+]] = type { float }
 // CHECK: [[S_INT_TY:%.+]] = type { i32 }
-// CHECK-DAG: [[IMPLICIT_BARRIER_LOC:@.+]] = private unnamed_addr global %{{.+}} { i32 0, i32 66, i32 0, i32 0, i8*
+// CHECK-DAG: [[IMPLICIT_BARRIER_LOC:@.+]] = private unnamed_addr constant %{{.+}} { i32 0, i32 66, i32 0, i32 0, i8*
 // CHECK-DAG: [[X:@.+]] = global double 0.0
 // CHECK-DAG: [[F:@.+]] = global float 0.0
 // CHECK-DAG: [[CNT:@.+]] = global i8 0
-// OMP50-DAG: [[IV_REF:@.+]] = {{.*}}common global i32 0
-// OMP50-DAG: [[LAST_IV_F:@.+]] = {{.*}}common global i32 0
-// OMP50-DAG: [[LAST_F:@.+]] = {{.*}}common global float 0.000000e+00,
-
 template <typename T>
 T tmain() {
   S<T> test;
@@ -213,13 +173,10 @@ int main() {
   // LAMBDA-LABEL: @main
   // LAMBDA: alloca [[SS_TY]],
   // LAMBDA: alloca [[CAP_TY:%.+]],
-  // FIXME: The outer lambda should not capture 'sivar'; that capture is not
-  // used for anything.
-  // LAMBDA: store {{.*}}@_ZZ4mainE5sivar,
   // LAMBDA: call void [[OUTER_LAMBDA:@.+]]([[CAP_TY]]*
   [&]() {
   // LAMBDA: define{{.*}} internal{{.*}} void [[OUTER_LAMBDA]](
-  // LAMBDA: call void {{.+}} @__kmpc_fork_call({{.+}}, i32 1, {{.+}}* [[OMP_REGION:@.+]] to {{.+}}, i32* @_ZZ4mainE5sivar)
+  // LAMBDA: call void {{.+}} @__kmpc_fork_call({{.+}}, i32 1, {{.+}}* [[OMP_REGION:@.+]] to {{.+}}, i32* %{{.+}})
 #pragma omp parallel
 #pragma omp for lastprivate(g, g1, sivar)
   for (int i = 0; i < 2; ++i) {
@@ -251,7 +208,6 @@ int main() {
     // LAMBDA: ret void
 
     // LAMBDA: define internal void @{{.+}}(i{{[0-9]+}}* noalias [[GTID_ADDR:%.+]], i{{[0-9]+}}* noalias %{{.+}}, [[SS_TY]]* %{{.+}}, i32* {{.+}}, i32* {{.+}}, i32* {{.+}})
-    // LAMBDA: alloca i{{[0-9]+}},
     // LAMBDA: alloca i{{[0-9]+}},
     // LAMBDA: alloca i{{[0-9]+}},
     // LAMBDA: alloca i{{[0-9]+}},
@@ -290,7 +246,6 @@ int main() {
     // LAMBDA: alloca i{{[0-9]+}},
     // LAMBDA: [[G_PRIVATE_ADDR:%.+]] = alloca i{{[0-9]+}}, align 128
     // LAMBDA: [[G1_PRIVATE_ADDR:%.+]] = alloca i{{[0-9]+}},
-    // LAMBDA: [[G1_PRIVATE_REF:%.+]] = alloca i{{[0-9]+}}*,
     // LAMBDA: [[SIVAR_PRIVATE_ADDR:%.+]] = alloca i{{[0-9]+}},
     // LAMBDA: [[SIVAR_PRIVATE_ADDR_REF:%.+]] = load i{{[0-9]+}}*, i{{[0-9]+}}** %{{.+}},
 
@@ -299,15 +254,10 @@ int main() {
 
     // LAMBDA: call {{.+}} @__kmpc_for_static_init_4(%{{.+}}* @{{.+}}, i32 [[GTID]], i32 34, i32* [[IS_LAST_ADDR:%.+]], i32* %{{.+}}, i32* %{{.+}}, i32* %{{.+}}, i32 1, i32 1)
     // LAMBDA: store i{{[0-9]+}} 1, i{{[0-9]+}}* [[G_PRIVATE_ADDR]],
-    // LAMBDA: [[G1_PRIVATE_ADDR:%.+]] = load i{{[0-9]+}}*, i{{[0-9]+}}** [[G1_PRIVATE_REF]],
-    // LAMBDA: store volatile i{{[0-9]+}} 1, i{{[0-9]+}}* [[G1_PRIVATE_ADDR]],
     // LAMBDA: store i{{[0-9]+}} 2, i{{[0-9]+}}* [[SIVAR_PRIVATE_ADDR]],
     // LAMBDA: [[G_PRIVATE_ADDR_REF:%.+]] = getelementptr inbounds %{{.+}}, %{{.+}}* [[ARG:%.+]], i{{[0-9]+}} 0, i{{[0-9]+}} 0
     // LAMBDA: store i{{[0-9]+}}* [[G_PRIVATE_ADDR]], i{{[0-9]+}}** [[G_PRIVATE_ADDR_REF]]
-    // LAMBDA: [[G1_PRIVATE_ADDR_REF:%.+]] = getelementptr inbounds %{{.+}}, %{{.+}}* [[ARG:%.+]], i{{[0-9]+}} 0, i{{[0-9]+}} 1
-    // LAMBDA: [[G1_PRIVATE_ADDR:%.+]] = load i{{[0-9]+}}*, i{{[0-9]+}}** [[G1_PRIVATE_REF]],
-    // LAMBDA: store i{{[0-9]+}}* [[G1_PRIVATE_ADDR]], i{{[0-9]+}}** [[G1_PRIVATE_ADDR_REF]]
-    // LAMBDA: [[SIVAR_PRIVATE_ADDR_REF:%.+]] = getelementptr inbounds %{{.+}}, %{{.+}}* [[ARG:%.+]], i{{[0-9]+}} 0, i{{[0-9]+}} 2
+    // LAMBDA: [[SIVAR_PRIVATE_ADDR_REF:%.+]] = getelementptr inbounds %{{.+}}, %{{.+}}* [[ARG:%.+]], i{{[0-9]+}} 0, i{{[0-9]+}} 1
     // LAMBDA: store i{{[0-9]+}}* [[SIVAR_PRIVATE_ADDR]], i{{[0-9]+}}** [[SIVAR_PRIVATE_ADDR_REF]]
     // LAMBDA: call void [[INNER_LAMBDA:@.+]](%{{.+}}* [[ARG]])
     // LAMBDA: call void @__kmpc_for_static_fini(%{{.+}}* @{{.+}}, i32 [[GTID]])
@@ -341,10 +291,7 @@ int main() {
       // LAMBDA: [[G_PTR_REF:%.+]] = getelementptr inbounds %{{.+}}, %{{.+}}* [[ARG_PTR]], i{{[0-9]+}} 0, i{{[0-9]+}} 0
       // LAMBDA: [[G_REF:%.+]] = load i{{[0-9]+}}*, i{{[0-9]+}}** [[G_PTR_REF]]
       // LAMBDA: store i{{[0-9]+}} 2, i{{[0-9]+}}* [[G_REF]]
-      // LAMBDA: [[G1_PTR_REF:%.+]] = getelementptr inbounds %{{.+}}, %{{.+}}* [[ARG_PTR]], i{{[0-9]+}} 0, i{{[0-9]+}} 1
-      // LAMBDA: [[G1_REF:%.+]] = load i{{[0-9]+}}*, i{{[0-9]+}}** [[G1_PTR_REF]]
-      // LAMBDA: store i{{[0-9]+}} 2, i{{[0-9]+}}* [[G1_REF]]
-      // LAMBDA: [[SIVAR_PTR_REF:%.+]] = getelementptr inbounds %{{.+}}, %{{.+}}* [[ARG_PTR]], i{{[0-9]+}} 0, i{{[0-9]+}} 2
+      // LAMBDA: [[SIVAR_PTR_REF:%.+]] = getelementptr inbounds %{{.+}}, %{{.+}}* [[ARG_PTR]], i{{[0-9]+}} 0, i{{[0-9]+}} 1
       // LAMBDA: [[SIVAR_REF:%.+]] = load i{{[0-9]+}}*, i{{[0-9]+}}** [[SIVAR_PTR_REF]]
       // LAMBDA: store i{{[0-9]+}} 4, i{{[0-9]+}}* [[SIVAR_REF]]
     }();
@@ -451,7 +398,6 @@ int main() {
 // BLOCKS: alloca i{{[0-9]+}},
 // BLOCKS: alloca i{{[0-9]+}},
 // BLOCKS: alloca i{{[0-9]+}},
-// BLOCKS: alloca i{{[0-9]+}},
 // BLOCKS: [[A_PRIV:%.+]] = alloca i{{[0-9]+}},
 // BLOCKS: [[B_PRIV:%.+]] = alloca i{{[0-9]+}},
 // BLOCKS: [[C_PRIV:%.+]] = alloca i{{[0-9]+}},
@@ -492,15 +438,14 @@ int main() {
     A::x++;
   }
 #pragma omp parallel
-#pragma omp for allocate(omp_const_mem_alloc: f) firstprivate(f) lastprivate(f)
+#pragma omp for firstprivate(f) lastprivate(f)
   for (int i = 0; i < 2; ++i) {
     A::x++;
   }
 #pragma omp parallel
-#pragma omp for allocate(omp_const_mem_alloc :cnt) lastprivate(cnt) lastprivate(CONDITIONAL f)
+#pragma omp for lastprivate(cnt)
   for (cnt = 0; cnt < 2; ++cnt) {
     A::x++;
-    f = 0;
   }
   return tmain<int>();
 #endif
@@ -518,7 +463,6 @@ int main() {
 // CHECK: ret
 
 // CHECK: define internal void [[MAIN_MICROTASK]](i32* noalias [[GTID_ADDR:%.+]], i32* noalias %{{.+}}, i32* dereferenceable(4) %{{.+}}, [2 x i32]* dereferenceable(8) %{{.+}}, [2 x [[S_FLOAT_TY]]]* dereferenceable(8) %{{.+}}, [[S_FLOAT_TY]]* dereferenceable(4) %{{.+}})
-// CHECK: alloca i{{[0-9]+}},
 // CHECK: alloca i{{[0-9]+}},
 // CHECK: alloca i{{[0-9]+}},
 // CHECK: alloca i{{[0-9]+}},
@@ -560,7 +504,7 @@ int main() {
 // original vec[]=private_vec[];
 // CHECK: [[VEC_DEST:%.+]] = bitcast [2 x i{{[0-9]+}}]* [[VEC_REF]] to i8*
 // CHECK: [[VEC_SRC:%.+]] = bitcast [2 x i{{[0-9]+}}]* [[VEC_PRIV]] to i8*
-// CHECK: call void @llvm.memcpy.{{.+}}(i8* align {{[0-9]+}} [[VEC_DEST]], i8* align {{[0-9]+}} [[VEC_SRC]],
+// CHECK: call void @llvm.memcpy.{{.+}}(i8* [[VEC_DEST]], i8* [[VEC_SRC]],
 
 // original s_arr[]=private_s_arr[];
 // CHECK: [[S_ARR_BEGIN:%.+]] = getelementptr inbounds [2 x [[S_FLOAT_TY]]], [2 x [[S_FLOAT_TY]]]* [[S_ARR_REF]], i{{[0-9]+}} 0, i{{[0-9]+}} 0
@@ -627,16 +571,15 @@ int main() {
 // CHECK: ret void
 
 // CHECK: define internal void [[MAIN_MICROTASK2]](i{{[0-9]+}}* noalias [[GTID_ADDR:%.+]], i{{[0-9]+}}* noalias %{{.+}})
+// CHECK: [[F_PRIV:%.+]] = alloca float,
 // CHECK-NOT: alloca float
 
 // Check for default initialization.
-// CHECK: [[GTID_REF:%.+]] = load i{{[0-9]+}}*, i{{[0-9]+}}** [[GTID_ADDR_REF]]
-// CHECK: [[GTID:%.+]] = load i{{[0-9]+}}, i{{[0-9]+}}* [[GTID_REF]]
-// CHECK: [[F_VOID_PTR:%.+]] = call i8* @__kmpc_alloc(i32 [[GTID]], i64 4, i8* inttoptr (i64 3 to i8*))
-// CHECK: [[F_PRIV:%.+]] = bitcast i8* [[F_VOID_PTR]] to float*
 // CHECK: [[F_VAL:%.+]] = load float, float* [[F]],
 // CHECK: store float [[F_VAL]], float* [[F_PRIV]],
 
+// CHECK: [[GTID_REF:%.+]] = load i{{[0-9]+}}*, i{{[0-9]+}}** [[GTID_ADDR_REF]]
+// CHECK: [[GTID:%.+]] = load i{{[0-9]+}}, i{{[0-9]+}}* [[GTID_REF]]
 // CHECK: call {{.+}} @__kmpc_for_static_init_4(%{{.+}}* @{{.+}}, i32 [[GTID]], i32 34, i32* [[IS_LAST_ADDR:%.+]], i32* %{{.+}}, i32* %{{.+}}, i32* %{{.+}}, i32 1, i32 1)
 // <Skip loop body>
 // CHECK: call void @__kmpc_for_static_fini(%{{.+}}* @{{.+}}, i32 [[GTID]])
@@ -655,15 +598,14 @@ int main() {
 // CHECK-NEXT: br label %[[LAST_DONE]]
 // CHECK: [[LAST_DONE]]
 
-// CHECK:      call void @__kmpc_free(i32 [[GTID]], i8* [[F_VOID_PTR]], i8* inttoptr (i64 3 to i8*))
-// CHECK-NEXT: call void @__kmpc_barrier(%{{.+}}* [[IMPLICIT_BARRIER_LOC]], i{{[0-9]+}} [[GTID]])
-// CHECK-NEXT: ret void
+// CHECK: call void @__kmpc_barrier(%{{.+}}* [[IMPLICIT_BARRIER_LOC]], i{{[0-9]+}} [[GTID]])
+// CHECK: ret void
 
 // CHECK: define internal void [[MAIN_MICROTASK3]](i{{[0-9]+}}* noalias [[GTID_ADDR:%.+]], i{{[0-9]+}}* noalias %{{.+}})
+// CHECK: [[CNT_PRIV:%.+]] = alloca i8,
 
 // CHECK: [[GTID_REF:%.+]] = load i{{[0-9]+}}*, i{{[0-9]+}}** [[GTID_ADDR_REF]]
 // CHECK: [[GTID:%.+]] = load i{{[0-9]+}}, i{{[0-9]+}}* [[GTID_REF]]
-// CHECK: [[CNT_PRIV:%.+]] = call i8* @__kmpc_alloc(i32 [[GTID]], i64 1, i8* inttoptr (i64 3 to i8*))
 // CHECK: call {{.+}} @__kmpc_for_static_init_4(%{{.+}}* @{{.+}}, i32 [[GTID]], i32 34, i32* [[IS_LAST_ADDR:%.+]], i32* [[OMP_LB:%[^,]+]], i32* [[OMP_UB:%[^,]+]], i32* [[OMP_ST:%[^,]+]], i32 1, i32 1)
 // UB = min(UB, GlobalUB)
 // CHECK-NEXT: [[UB:%.+]] = load i32, i32* [[OMP_UB]]
@@ -674,32 +616,11 @@ int main() {
 // CHECK-NEXT: [[LB:%.+]] = load i32, i32* [[OMP_LB]]
 // CHECK-NEXT: store i32 [[LB]], i32* [[OMP_IV:[^,]+]]
 // <Skip loop body>
-// OMP50: [[LOCAL_IV_REF:%.+]] = call i8* @__kmpc_threadprivate_cached(%struct.ident_t* @{{.+}}, i32 [[GTID]], i8* bitcast (i32* [[IV_REF]] to i8*), i64 4, i8*** @{{.+}})
-// OMP50: [[BC:%.+]] = bitcast i8* [[LOCAL_IV_REF]] to i32*
-// OMP50: store i32 %{{.+}}, i32* [[BC]],
-// CHECK: store float 0.000000e+00, float* [[F_PRIV:%.+]],
-// OMP50: [[LOCAL_IV_REF:%.+]] = call i8* @__kmpc_threadprivate_cached(%struct.ident_t* @{{.+}}, i32 [[GTID]], i8* bitcast (i32* [[IV_REF]] to i8*), i64 4, i8*** @{{.+}})
-// OMP50: [[BC:%.+]] = bitcast i8* [[LOCAL_IV_REF]] to i32*
-// OMP50: [[IV:%.+]] = load i32, i32* [[BC]],
-// OMP50: call void @__kmpc_critical(%struct.ident_t* @{{.+}}, i32 [[GTID]], [8 x i32]* [[F_REGION:@.+]])
-// OMP50: [[LAST_IV:%.+]] = load i32, i32* [[LAST_IV_F]],
-// OMP50: [[CMP:%.+]] = icmp sle i32 [[LAST_IV]], [[IV]]
-// OMP50: br i1 [[CMP]], label %[[LP_THEN:.+]], label %[[LP_DONE:[^,]+]]
-
-// OMP50: [[LP_THEN]]:
-// OMP50: store i32 [[IV]], i32* [[LAST_IV_F]],
-// OMP50: [[F_VAL:%.+]] = load float, float* [[F_PRIV]],
-// OMP50: store float [[F_VAL]], float* [[LAST_F]],
-// OMP50: br label %[[LP_DONE]]
-
-// OMP50: [[LP_DONE]]:
-// OMP50: call void @__kmpc_end_critical(%struct.ident_t* @{{.+}}, i32 [[GTID]], [8 x i32]* [[F_REGION]])
 // CHECK: call void @__kmpc_for_static_fini(%{{.+}}* @{{.+}}, i32 [[GTID]])
 
 // Check for final copying of private values back to original vars.
 // CHECK: [[IS_LAST_VAL:%.+]] = load i32, i32* [[IS_LAST_ADDR]],
 // CHECK: [[IS_LAST_ITER:%.+]] = icmp ne i32 [[IS_LAST_VAL]], 0
-// OMP50-NEXT: call void @__kmpc_barrier(%{{.+}}* [[IMPLICIT_BARRIER_LOC]], i{{[0-9]+}} [[GTID]])
 // CHECK: br i1 [[IS_LAST_ITER:%.+]], label %[[LAST_THEN:.+]], label %[[LAST_DONE:.+]]
 // CHECK: [[LAST_THEN]]
 
@@ -708,17 +629,12 @@ int main() {
 // original cnt=private_cnt;
 // CHECK: [[CNT_VAL:%.+]] = load i8, i8* [[CNT_PRIV]],
 // CHECK: store i8 [[CNT_VAL]], i8* [[CNT]],
-// OMP50: [[F_VAL:%.+]] = load float, float* [[LAST_F]],
-// OMP50: store float [[F_VAL]], float* [[F_PRIV]],
-// CHECK: [[F_VAL:%.+]] = load float, float* [[F_PRIV]],
-// CHECK: store float [[F_VAL]], float* [[F]],
 
 // CHECK-NEXT: br label %[[LAST_DONE]]
 // CHECK: [[LAST_DONE]]
 
-// CHECK:      call void @__kmpc_free(i32 [[GTID]], i8* [[CNT_PRIV]], i8* inttoptr (i64 3 to i8*))
-// CHECK-NEXT: call void @__kmpc_barrier(%{{.+}}* [[IMPLICIT_BARRIER_LOC]], i{{[0-9]+}} [[GTID]])
-// CHECK-NEXT: ret void
+// CHECK: call void @__kmpc_barrier(%{{.+}}* [[IMPLICIT_BARRIER_LOC]], i{{[0-9]+}} [[GTID]])
+// CHECK: ret void
 
 // CHECK: define {{.*}} i{{[0-9]+}} [[TMAIN_INT]]()
 // CHECK: [[TEST:%.+]] = alloca [[S_INT_TY]],
@@ -742,7 +658,6 @@ int main() {
 // CHECK: ret
 
 // CHECK: define internal void [[SS_MICROTASK]](i{{[0-9]+}}* noalias [[GTID_ADDR:%.+]], i{{[0-9]+}}* noalias %{{.+}}, [[SS_TY]]* %{{.+}})
-// CHECK: alloca i{{[0-9]+}},
 // CHECK: alloca i{{[0-9]+}},
 // CHECK: alloca i{{[0-9]+}},
 // CHECK: alloca i{{[0-9]+}},
@@ -816,7 +731,7 @@ int main() {
 // original vec[]=private_vec[];
 // CHECK: [[VEC_DEST:%.+]] = bitcast [2 x i{{[0-9]+}}]* [[VEC_REF]] to i8*
 // CHECK: [[VEC_SRC:%.+]] = bitcast [2 x i{{[0-9]+}}]* [[VEC_PRIV]] to i8*
-// CHECK: call void @llvm.memcpy.{{.+}}(i8* align {{[0-9]+}} [[VEC_DEST]], i8* align {{[0-9]+}} [[VEC_SRC]],
+// CHECK: call void @llvm.memcpy.{{.+}}(i8* [[VEC_DEST]], i8* [[VEC_SRC]],
 
 // original s_arr[]=private_s_arr[];
 // CHECK: [[S_ARR_BEGIN:%.+]] = getelementptr inbounds [2 x [[S_INT_TY]]], [2 x [[S_INT_TY]]]* [[S_ARR_REF]], i{{[0-9]+}} 0, i{{[0-9]+}} 0

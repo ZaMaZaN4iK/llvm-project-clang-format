@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,7 +13,7 @@
 
 // istream_iterator(const istream_iterator& x);
 //  C++17 says:  If is_trivially_copy_constructible_v<T> is true, then
-//     this constructor is a trivial copy constructor.
+//     this constructor shall beis a trivial copy constructor.
 
 #include <iterator>
 #include <sstream>
@@ -20,7 +21,7 @@
 
 #include "test_macros.h"
 
-int main(int, char**)
+int main()
 {
     {
         std::istream_iterator<int> io;
@@ -36,6 +37,4 @@ int main(int, char**)
         j = *i;
         assert(j == 1);
     }
-
-  return 0;
 }

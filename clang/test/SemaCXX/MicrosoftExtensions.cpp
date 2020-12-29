@@ -1,10 +1,36 @@
 // RUN: %clang_cc1 %s -triple i686-pc-win32 -fsyntax-only -Wmicrosoft -Wc++11-extensions -Wno-long-long -verify -fms-extensions -fexceptions -fcxx-exceptions -DTEST1
-// RUN: %clang_cc1 -std=c++98 %s -triple i686-pc-win32 -fsyntax-only -Wmicrosoft -Wc++11-extensions -Wno-long-long -verify -fms-extensions -fexceptions -fcxx-exceptions -DTEST1
-// RUN: %clang_cc1 -std=c++11 %s -triple i686-pc-win32 -fsyntax-only -Wmicrosoft -Wc++11-extensions -Wno-long-long -verify -fms-extensions -fexceptions -fcxx-exceptions -DTEST1
 // RUN: %clang_cc1 %s -triple i686-pc-win32 -fsyntax-only -Wmicrosoft -Wc++11-extensions -Wno-long-long -verify -fexceptions -fcxx-exceptions -DTEST2
-// RUN: %clang_cc1 %s -triple i686-pc-win32 -fsyntax-only -std=c++11 -fms-compatibility -verify -DTEST3
 
 #if TEST1
+
+// Microsoft doesn't validate exception specification.
+namespace microsoft_exception_spec {
+
+void foo(); // expected-note {{previous declaration}}
+void foo() throw(); // expected-warning {{exception specification in declaration does not match previous declaration}}
+
+void r6() throw(...); // expected-note {{previous declaration}}
+void r6() throw(int); // expected-warning {{exception specification in declaration does not match previous declaration}}
+
+struct Base {
+  virtual void f2();
+  virtual void f3() throw(...);
+};
+
+struct Derived : Base {
+  virtual void f2() throw(...);
+  virtual void f3();
+};
+
+class A {
+  virtual ~A() throw();  // expected-note {{overridden virtual function is here}}
+};
+
+class B : public A {
+  virtual ~B();  // expected-warning {{exception specification of overriding function is more lax than base version}}
+};
+
+}
 
 // MSVC allows type definition in anonymous union and struct
 struct A
@@ -148,18 +174,11 @@ const int seventeen = 17;
 typedef int Int;
 
 struct X0 {
-  enum E1 : Int { SomeOtherValue } field;
-#if __cplusplus <= 199711L
-  // expected-warning@-2 {{enumeration types with a fixed underlying type are a C++11 extension}}
-#endif
-
+  enum E1 : Int { SomeOtherValue } field; // expected-warning{{enumeration types with a fixed underlying type are a C++11 extension}}
   enum E1 : seventeen;
 };
 
-#if __cplusplus <= 199711L
-// expected-warning@+2 {{enumeration types with a fixed underlying type are a C++11 extension}}
-#endif
-enum : long long {
+enum : long long {  // expected-warning{{enumeration types with a fixed underlying type are a C++11 extension}}
   SomeValue = 0x100000000
 };
 
@@ -431,19 +450,12 @@ struct SealedType sealed : SomeBase {
   // FIXME. warning can be suppressed if we're also issuing error for overriding a 'final' function.
   virtual void SealedFunction(); // expected-warning {{'SealedFunction' overrides a member function but is not marked 'override'}}
 
-#if __cplusplus <= 199711L
-  // expected-warning@+2 {{'override' keyword is a C++11 extension}}
-#endif
+  // expected-warning@+1 {{'override' keyword is a C++11 extension}}
   virtual void OverrideMe() override;
 };
 
 // expected-error@+1 {{base 'SealedType' is marked 'sealed'}}
 struct InheritFromSealed : SealedType {};
-
-class SealedDestructor { // expected-note {{mark 'SealedDestructor' as 'sealed' to silence this warning}}
-    // expected-warning@+1 {{'sealed' keyword is a Microsoft extension}}
-    virtual ~SealedDestructor() sealed; // expected-warning {{class with destructor marked 'sealed' cannot be inherited from}}
-};
 
 void AfterClassBody() {
   // expected-warning@+1 {{attribute 'deprecated' is ignored, place it after "struct" to apply attribute to type declaration}}
@@ -459,46 +471,25 @@ void AfterClassBody() {
 namespace PR24246 {
 template <typename TX> struct A {
   template <bool> struct largest_type_select;
+  // expected-warning@+1 {{explicit specialization of 'largest_type_select' within class scope is a Microsoft extension}}
   template <> struct largest_type_select<false> {
     blah x;  // expected-error {{unknown type name 'blah'}}
   };
 };
 }
 
-class PR34109_class {
-  PR34109_class() {}
-  virtual ~PR34109_class() {}
+namespace PR25265 {
+struct S {
+  int fn() throw(); // expected-note {{previous declaration is here}}
 };
 
-void operator delete(void *) throw();
-// expected-note@-1 {{previous declaration is here}}
-__declspec(dllexport) void operator delete(void *) throw();
-// expected-error@-1  {{redeclaration of 'operator delete' cannot add 'dllexport' attribute}}
-
-void PR34109(int* a) {
-  delete a;
-}
-
-namespace PR42089 {
-  struct S {
-    __attribute__((nothrow)) void Foo(); // expected-note {{previous declaration is here}}
-    __attribute__((nothrow)) void Bar();
-  };
-  void S::Foo(){} // expected-warning {{is missing exception specification}}
-  __attribute__((nothrow)) void S::Bar(){}
+int S::fn() { return 0; } // expected-warning {{is missing exception specification}}
 }
 
 #elif TEST2
 
 // Check that __unaligned is not recognized if MS extensions are not enabled
 typedef char __unaligned *aligned_type; // expected-error {{expected ';' after top level declarator}}
-
-#elif TEST3
-
-namespace PR32750 {
-template<typename T> struct A {};
-template<typename T> struct B : A<A<T>> { A<T>::C::D d; }; // expected-error {{missing 'typename' prior to dependent type name 'A<T>::C::D'}}
-}
 
 #else
 

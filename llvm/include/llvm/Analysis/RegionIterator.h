@@ -1,31 +1,26 @@
 //===- RegionIterator.h - Iterators to iteratate over Regions ---*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 // This file defines the iterators to iterate over the elements of a Region.
 //===----------------------------------------------------------------------===//
-
 #ifndef LLVM_ANALYSIS_REGIONITERATOR_H
 #define LLVM_ANALYSIS_REGIONITERATOR_H
 
-#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/PointerIntPair.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/RegionInfo.h"
 #include "llvm/IR/CFG.h"
-#include <cassert>
-#include <iterator>
-#include <type_traits>
+#include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
-
-class BasicBlock;
-
 //===----------------------------------------------------------------------===//
-/// Hierarchical RegionNode successor iterator.
+/// @brief Hierarchical RegionNode successor iterator.
 ///
 /// This iterator iterates over all successors of a RegionNode.
 ///
@@ -38,9 +33,10 @@ class BasicBlock;
 template <class NodeRef, class BlockT, class RegionT>
 class RNSuccIterator
     : public std::iterator<std::forward_iterator_tag, NodeRef> {
-  using super = std::iterator<std::forward_iterator_tag, NodeRef>;
-  using BlockTraits = GraphTraits<BlockT *>;
-  using SuccIterTy = typename BlockTraits::ChildIteratorType;
+  typedef std::iterator<std::forward_iterator_tag, NodeRef> super;
+
+  typedef GraphTraits<BlockT*> BlockTraits;
+  typedef typename BlockTraits::ChildIteratorType SuccIterTy;
 
   // The iterator works in two modes, bb mode or region mode.
   enum ItMode {
@@ -96,15 +92,16 @@ class RNSuccIterator
   inline bool isExit(BlockT* BB) const {
     return getNode()->getParent()->getExit() == BB;
   }
-
 public:
-  using Self = RNSuccIterator<NodeRef, BlockT, RegionT>;
-  using value_type = typename super::value_type;
+  typedef RNSuccIterator<NodeRef, BlockT, RegionT> Self;
 
-  /// Create begin iterator of a RegionNode.
+  typedef typename super::value_type value_type;
+
+  /// @brief Create begin iterator of a RegionNode.
   inline RNSuccIterator(NodeRef node)
       : Node(node, node->isSubRegion() ? ItRgBegin : ItBB),
         BItor(BlockTraits::child_begin(node->getEntry())) {
+
     // Skip the exit block
     if (!isRegionMode())
       while (BlockTraits::child_end(node->getEntry()) != BItor && isExit(*BItor))
@@ -114,7 +111,7 @@ public:
       advanceRegionSucc();
   }
 
-  /// Create an end iterator.
+  /// @brief Create an end iterator.
   inline RNSuccIterator(NodeRef node, bool)
       : Node(node, node->isSubRegion() ? ItRgEnd : ItBB),
         BItor(BlockTraits::child_end(node->getEntry())) {}
@@ -156,8 +153,9 @@ public:
   }
 };
 
+
 //===----------------------------------------------------------------------===//
-/// Flat RegionNode iterator.
+/// @brief Flat RegionNode iterator.
 ///
 /// The Flat Region iterator will iterate over all BasicBlock RegionNodes that
 /// are contained in the Region and its subregions. This is close to a virtual
@@ -165,18 +163,18 @@ public:
 template <class NodeRef, class BlockT, class RegionT>
 class RNSuccIterator<FlatIt<NodeRef>, BlockT, RegionT>
     : public std::iterator<std::forward_iterator_tag, NodeRef> {
-  using super = std::iterator<std::forward_iterator_tag, NodeRef>;
-  using BlockTraits = GraphTraits<BlockT *>;
-  using SuccIterTy = typename BlockTraits::ChildIteratorType;
+  typedef std::iterator<std::forward_iterator_tag, NodeRef> super;
+  typedef GraphTraits<BlockT*> BlockTraits;
+  typedef typename BlockTraits::ChildIteratorType SuccIterTy;
 
   NodeRef Node;
   SuccIterTy Itor;
 
 public:
-  using Self = RNSuccIterator<FlatIt<NodeRef>, BlockT, RegionT>;
-  using value_type = typename super::value_type;
+  typedef RNSuccIterator<FlatIt<NodeRef>, BlockT, RegionT> Self;
+  typedef typename super::value_type value_type;
 
-  /// Create the iterator from a RegionNode.
+  /// @brief Create the iterator from a RegionNode.
   ///
   /// Note that the incoming node must be a bb node, otherwise it will trigger
   /// an assertion when we try to get a BasicBlock.
@@ -192,7 +190,7 @@ public:
       ++Itor;
   }
 
-  /// Create an end iterator
+  /// @brief Create an end iterator
   inline RNSuccIterator(NodeRef node, bool)
       : Node(node), Itor(BlockTraits::child_end(node->getEntry())) {
     assert(!Node->isSubRegion() &&
@@ -257,8 +255,8 @@ inline RNSuccIterator<NodeRef, BlockT, RegionT> succ_end(NodeRef Node) {
 
 #define RegionNodeGraphTraits(NodeT, BlockT, RegionT)                          \
   template <> struct GraphTraits<NodeT *> {                                    \
-    using NodeRef = NodeT *;                                                   \
-    using ChildIteratorType = RNSuccIterator<NodeRef, BlockT, RegionT>;        \
+    typedef NodeT *NodeRef;                                                    \
+    typedef RNSuccIterator<NodeRef, BlockT, RegionT> ChildIteratorType;        \
     static NodeRef getEntryNode(NodeRef N) { return N; }                       \
     static inline ChildIteratorType child_begin(NodeRef N) {                   \
       return RNSuccIterator<NodeRef, BlockT, RegionT>(N);                      \
@@ -268,9 +266,9 @@ inline RNSuccIterator<NodeRef, BlockT, RegionT> succ_end(NodeRef Node) {
     }                                                                          \
   };                                                                           \
   template <> struct GraphTraits<FlatIt<NodeT *>> {                            \
-    using NodeRef = NodeT *;                                                   \
-    using ChildIteratorType =                                                  \
-        RNSuccIterator<FlatIt<NodeRef>, BlockT, RegionT>;                      \
+    typedef NodeT *NodeRef;                                                    \
+    typedef RNSuccIterator<FlatIt<NodeRef>, BlockT, RegionT>                   \
+        ChildIteratorType;                                                     \
     static NodeRef getEntryNode(NodeRef N) { return N; }                       \
     static inline ChildIteratorType child_begin(NodeRef N) {                   \
       return RNSuccIterator<FlatIt<NodeRef>, BlockT, RegionT>(N);              \
@@ -282,7 +280,7 @@ inline RNSuccIterator<NodeRef, BlockT, RegionT> succ_end(NodeRef Node) {
 
 #define RegionGraphTraits(RegionT, NodeT)                                      \
   template <> struct GraphTraits<RegionT *> : public GraphTraits<NodeT *> {    \
-    using nodes_iterator = df_iterator<NodeRef>;                               \
+    typedef df_iterator<NodeRef> nodes_iterator;                               \
     static NodeRef getEntryNode(RegionT *R) {                                  \
       return R->getNode(R->getEntry());                                        \
     }                                                                          \
@@ -296,9 +294,9 @@ inline RNSuccIterator<NodeRef, BlockT, RegionT> succ_end(NodeRef Node) {
   template <>                                                                  \
   struct GraphTraits<FlatIt<RegionT *>>                                        \
       : public GraphTraits<FlatIt<NodeT *>> {                                  \
-    using nodes_iterator =                                                     \
-        df_iterator<NodeRef, df_iterator_default_set<NodeRef>, false,          \
-                    GraphTraits<FlatIt<NodeRef>>>;                             \
+    typedef df_iterator<NodeRef, df_iterator_default_set<NodeRef>, false,      \
+                        GraphTraits<FlatIt<NodeRef>>>                          \
+        nodes_iterator;                                                        \
     static NodeRef getEntryNode(RegionT *R) {                                  \
       return R->getBBNode(R->getEntry());                                      \
     }                                                                          \
@@ -317,19 +315,17 @@ RegionGraphTraits(Region, RegionNode);
 RegionGraphTraits(const Region, const RegionNode);
 
 template <> struct GraphTraits<RegionInfo*>
-  : public GraphTraits<FlatIt<RegionNode*>> {
-  using nodes_iterator =
-      df_iterator<NodeRef, df_iterator_default_set<NodeRef>, false,
-                  GraphTraits<FlatIt<NodeRef>>>;
+  : public GraphTraits<FlatIt<RegionNode*> > {
+  typedef df_iterator<NodeRef, df_iterator_default_set<NodeRef>, false,
+                      GraphTraits<FlatIt<NodeRef>>>
+      nodes_iterator;
 
   static NodeRef getEntryNode(RegionInfo *RI) {
-    return GraphTraits<FlatIt<Region*>>::getEntryNode(RI->getTopLevelRegion());
+    return GraphTraits<FlatIt<Region*> >::getEntryNode(RI->getTopLevelRegion());
   }
-
   static nodes_iterator nodes_begin(RegionInfo* RI) {
     return nodes_iterator::begin(getEntryNode(RI));
   }
-
   static nodes_iterator nodes_end(RegionInfo *RI) {
     return nodes_iterator::end(getEntryNode(RI));
   }
@@ -337,23 +333,21 @@ template <> struct GraphTraits<RegionInfo*>
 
 template <> struct GraphTraits<RegionInfoPass*>
   : public GraphTraits<RegionInfo *> {
-  using nodes_iterator =
-      df_iterator<NodeRef, df_iterator_default_set<NodeRef>, false,
-                  GraphTraits<FlatIt<NodeRef>>>;
+  typedef df_iterator<NodeRef, df_iterator_default_set<NodeRef>, false,
+                      GraphTraits<FlatIt<NodeRef>>>
+      nodes_iterator;
 
   static NodeRef getEntryNode(RegionInfoPass *RI) {
     return GraphTraits<RegionInfo*>::getEntryNode(&RI->getRegionInfo());
   }
-
   static nodes_iterator nodes_begin(RegionInfoPass* RI) {
     return GraphTraits<RegionInfo*>::nodes_begin(&RI->getRegionInfo());
   }
-
   static nodes_iterator nodes_end(RegionInfoPass *RI) {
     return GraphTraits<RegionInfo*>::nodes_end(&RI->getRegionInfo());
   }
 };
 
-} // end namespace llvm
+} // End namespace llvm
 
-#endif // LLVM_ANALYSIS_REGIONITERATOR_H
+#endif

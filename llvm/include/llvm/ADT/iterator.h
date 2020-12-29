@@ -1,24 +1,22 @@
 //===- iterator.h - Utilities for using and defining iterators --*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_ADT_ITERATOR_H
 #define LLVM_ADT_ITERATOR_H
 
-#include "llvm/ADT/iterator_range.h"
-#include <algorithm>
 #include <cstddef>
 #include <iterator>
 #include <type_traits>
-#include <utility>
 
 namespace llvm {
 
-/// CRTP base class which implements the entire standard iterator facade
+/// \brief CRTP base class which implements the entire standard iterator facade
 /// in terms of a minimal subset of the interface.
 ///
 /// Use this when it is reasonable to implement most of the iterator
@@ -69,10 +67,10 @@ class iterator_facade_base
                            ReferenceT> {
 protected:
   enum {
-    IsRandomAccess = std::is_base_of<std::random_access_iterator_tag,
-                                     IteratorCategoryT>::value,
-    IsBidirectional = std::is_base_of<std::bidirectional_iterator_tag,
-                                      IteratorCategoryT>::value,
+    IsRandomAccess =
+        std::is_base_of<std::random_access_iterator_tag, IteratorCategoryT>::value,
+    IsBidirectional =
+        std::is_base_of<std::bidirectional_iterator_tag, IteratorCategoryT>::value,
   };
 
   /// A proxy object for computing a reference via indirecting a copy of an
@@ -93,8 +91,6 @@ protected:
 
 public:
   DerivedT operator+(DifferenceTypeT n) const {
-    static_assert(std::is_base_of<iterator_facade_base, DerivedT>::value,
-                  "Must pass the derived type to this template!");
     static_assert(
         IsRandomAccess,
         "The '+' operator is only defined for random access iterators.");
@@ -118,8 +114,6 @@ public:
   }
 
   DerivedT &operator++() {
-    static_assert(std::is_base_of<iterator_facade_base, DerivedT>::value,
-                  "Must pass the derived type to this template!");
     return static_cast<DerivedT *>(this)->operator+=(1);
   }
   DerivedT operator++(int) {
@@ -166,14 +160,8 @@ public:
     return !static_cast<const DerivedT *>(this)->operator<(RHS);
   }
 
-  PointerT operator->() { return &static_cast<DerivedT *>(this)->operator*(); }
   PointerT operator->() const {
     return &static_cast<const DerivedT *>(this)->operator*();
-  }
-  ReferenceProxy operator[](DifferenceTypeT n) {
-    static_assert(IsRandomAccess,
-                  "Subscripting is only defined for random access iterators.");
-    return ReferenceProxy(static_cast<DerivedT *>(this)->operator+(n));
   }
   ReferenceProxy operator[](DifferenceTypeT n) const {
     static_assert(IsRandomAccess,
@@ -182,7 +170,7 @@ public:
   }
 };
 
-/// CRTP base class for adapting an iterator to a different type.
+/// \brief CRTP base class for adapting an iterator to a different type.
 ///
 /// This class can be used through CRTP to adapt one iterator into another.
 /// Typically this is done through providing in the derived class a custom \c
@@ -201,26 +189,25 @@ template <
     typename ReferenceT = typename std::conditional<
         std::is_same<T, typename std::iterator_traits<
                             WrappedIteratorT>::value_type>::value,
-        typename std::iterator_traits<WrappedIteratorT>::reference, T &>::type>
+        typename std::iterator_traits<WrappedIteratorT>::reference, T &>::type,
+    // Don't provide these, they are mostly to act as aliases below.
+    typename WrappedTraitsT = std::iterator_traits<WrappedIteratorT>>
 class iterator_adaptor_base
     : public iterator_facade_base<DerivedT, IteratorCategoryT, T,
                                   DifferenceTypeT, PointerT, ReferenceT> {
-  using BaseT = typename iterator_adaptor_base::iterator_facade_base;
+  typedef typename iterator_adaptor_base::iterator_facade_base BaseT;
 
 protected:
   WrappedIteratorT I;
 
   iterator_adaptor_base() = default;
 
-  explicit iterator_adaptor_base(WrappedIteratorT u) : I(std::move(u)) {
-    static_assert(std::is_base_of<iterator_adaptor_base, DerivedT>::value,
-                  "Must pass the derived type to this template!");
-  }
+  explicit iterator_adaptor_base(WrappedIteratorT u) : I(std::move(u)) {}
 
   const WrappedIteratorT &wrapped() const { return I; }
 
 public:
-  using difference_type = DifferenceTypeT;
+  typedef DifferenceTypeT difference_type;
 
   DerivedT &operator+=(difference_type n) {
     static_assert(
@@ -271,21 +258,21 @@ public:
   ReferenceT operator*() const { return *I; }
 };
 
-/// An iterator type that allows iterating over the pointees via some
+/// \brief An iterator type that allows iterating over the pointees via some
 /// other iterator.
 ///
 /// The typical usage of this is to expose a type that iterates over Ts, but
 /// which is implemented with some iterator over T*s:
 ///
 /// \code
-///   using iterator = pointee_iterator<SmallVectorImpl<T *>::iterator>;
+///   typedef pointee_iterator<SmallVectorImpl<T *>::iterator> iterator;
 /// \endcode
 template <typename WrappedIteratorT,
           typename T = typename std::remove_reference<
               decltype(**std::declval<WrappedIteratorT>())>::type>
 struct pointee_iterator
     : iterator_adaptor_base<
-          pointee_iterator<WrappedIteratorT, T>, WrappedIteratorT,
+          pointee_iterator<WrappedIteratorT>, WrappedIteratorT,
           typename std::iterator_traits<WrappedIteratorT>::iterator_category,
           T> {
   pointee_iterator() = default;
@@ -296,22 +283,11 @@ struct pointee_iterator
   T &operator*() const { return **this->I; }
 };
 
-template <typename RangeT, typename WrappedIteratorT =
-                               decltype(std::begin(std::declval<RangeT>()))>
-iterator_range<pointee_iterator<WrappedIteratorT>>
-make_pointee_range(RangeT &&Range) {
-  using PointeeIteratorT = pointee_iterator<WrappedIteratorT>;
-  return make_range(PointeeIteratorT(std::begin(std::forward<RangeT>(Range))),
-                    PointeeIteratorT(std::end(std::forward<RangeT>(Range))));
-}
-
 template <typename WrappedIteratorT,
           typename T = decltype(&*std::declval<WrappedIteratorT>())>
 class pointer_iterator
-    : public iterator_adaptor_base<
-          pointer_iterator<WrappedIteratorT, T>, WrappedIteratorT,
-          typename std::iterator_traits<WrappedIteratorT>::iterator_category,
-          T> {
+    : public iterator_adaptor_base<pointer_iterator<WrappedIteratorT>,
+                                   WrappedIteratorT, T> {
   mutable T Ptr;
 
 public:
@@ -322,48 +298,6 @@ public:
 
   T &operator*() { return Ptr = &*this->I; }
   const T &operator*() const { return Ptr = &*this->I; }
-};
-
-template <typename RangeT, typename WrappedIteratorT =
-                               decltype(std::begin(std::declval<RangeT>()))>
-iterator_range<pointer_iterator<WrappedIteratorT>>
-make_pointer_range(RangeT &&Range) {
-  using PointerIteratorT = pointer_iterator<WrappedIteratorT>;
-  return make_range(PointerIteratorT(std::begin(std::forward<RangeT>(Range))),
-                    PointerIteratorT(std::end(std::forward<RangeT>(Range))));
-}
-
-template <typename WrappedIteratorT,
-          typename T1 = typename std::remove_reference<decltype(**std::declval<WrappedIteratorT>())>::type,
-          typename T2 = typename std::add_pointer<T1>::type>
-using raw_pointer_iterator = pointer_iterator<pointee_iterator<WrappedIteratorT, T1>, T2>;
-
-// Wrapper iterator over iterator ItType, adding DataRef to the type of ItType,
-// to create NodeRef = std::pair<InnerTypeOfItType, DataRef>.
-template <typename ItType, typename NodeRef, typename DataRef>
-class WrappedPairNodeDataIterator
-    : public iterator_adaptor_base<
-          WrappedPairNodeDataIterator<ItType, NodeRef, DataRef>, ItType,
-          typename std::iterator_traits<ItType>::iterator_category, NodeRef,
-          std::ptrdiff_t, NodeRef *, NodeRef &> {
-  using BaseT = iterator_adaptor_base<
-      WrappedPairNodeDataIterator, ItType,
-      typename std::iterator_traits<ItType>::iterator_category, NodeRef,
-      std::ptrdiff_t, NodeRef *, NodeRef &>;
-
-  const DataRef DR;
-  mutable NodeRef NR;
-
-public:
-  WrappedPairNodeDataIterator(ItType Begin, const DataRef DR)
-      : BaseT(Begin), DR(DR) {
-    NR.first = DR;
-  }
-
-  NodeRef &operator*() const {
-    NR.second = *this->I;
-    return NR;
-  }
 };
 
 } // end namespace llvm

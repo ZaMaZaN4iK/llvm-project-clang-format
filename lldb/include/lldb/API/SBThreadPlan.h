@@ -1,8 +1,9 @@
-//===-- SBThreadPlan.h ------------------------------------------*- C++ -*-===//
+//===-- SBThread.h ----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -28,12 +29,7 @@ public:
 
   SBThreadPlan(lldb::SBThread &thread, const char *class_name);
 
-  SBThreadPlan(lldb::SBThread &thread, const char *class_name, 
-               lldb::SBStructuredData &args_data);
-
   ~SBThreadPlan();
-
-  explicit operator bool() const;
 
   bool IsValid() const;
 
@@ -45,6 +41,7 @@ public:
   /// See also GetStopReasonDataAtIndex().
   size_t GetStopReasonDataCount();
 
+  //--------------------------------------------------------------------------
   /// Get information associated with a stop reason.
   ///
   /// Breakpoint stop reasons will have data that consists of pairs of
@@ -61,6 +58,7 @@ public:
   /// eStopReasonException     N     exception data
   /// eStopReasonExec          0
   /// eStopReasonPlanComplete  0
+  //--------------------------------------------------------------------------
   uint64_t GetStopReasonDataAtIndex(uint32_t idx);
 
   SBThread GetThread() const;
@@ -81,33 +79,20 @@ public:
   // plans...
   SBThreadPlan QueueThreadPlanForStepOverRange(SBAddress &start_address,
                                                lldb::addr_t range_size);
-  SBThreadPlan QueueThreadPlanForStepOverRange(SBAddress &start_address,
-                                               lldb::addr_t range_size,
-                                               SBError &error);
 
   SBThreadPlan QueueThreadPlanForStepInRange(SBAddress &start_address,
                                              lldb::addr_t range_size);
-  SBThreadPlan QueueThreadPlanForStepInRange(SBAddress &start_address,
-                                             lldb::addr_t range_size,
-                                             SBError &error);
 
   SBThreadPlan QueueThreadPlanForStepOut(uint32_t frame_idx_to_step_to,
                                          bool first_insn = false);
-  SBThreadPlan QueueThreadPlanForStepOut(uint32_t frame_idx_to_step_to,
-                                         bool first_insn, SBError &error);
 
   SBThreadPlan QueueThreadPlanForRunToAddress(SBAddress address);
-  SBThreadPlan QueueThreadPlanForRunToAddress(SBAddress address,
-                                              SBError &error);
 
-  SBThreadPlan QueueThreadPlanForStepScripted(const char *script_class_name);
-  SBThreadPlan QueueThreadPlanForStepScripted(const char *script_class_name,
-                                              SBError &error);
-  SBThreadPlan QueueThreadPlanForStepScripted(const char *script_class_name,
-                                              lldb::SBStructuredData &args_data,
-                                              SBError &error);
+#ifndef SWIG
+  lldb_private::ThreadPlan *get();
+#endif
 
-private:
+protected:
   friend class SBBreakpoint;
   friend class SBBreakpointLocation;
   friend class SBFrame;
@@ -117,9 +102,11 @@ private:
   friend class lldb_private::QueueImpl;
   friend class SBQueueItem;
 
-  lldb_private::ThreadPlan *get();
+#ifndef SWIG
   void SetThreadPlan(const lldb::ThreadPlanSP &lldb_object_sp);
+#endif
 
+private:
   lldb::ThreadPlanSP m_opaque_sp;
 };
 

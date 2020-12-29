@@ -1,11 +1,9 @@
-// RUN: %clang_builtins %s %librt -o %t && %run %t
-// REQUIRES: librt_has_ltsf2vfp
-
 //===-- ltsf2vfp_test.c - Test __ltsf2vfp ---------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,7 +19,7 @@
 
 extern int __ltsf2vfp(float a, float b);
 
-#if __arm__ && __VFP_FP__
+#if __arm__
 int test__ltsf2vfp(float a, float b)
 {
     int actual = __ltsf2vfp(a, b);
@@ -35,7 +33,7 @@ int test__ltsf2vfp(float a, float b)
 
 int main()
 {
-#if __arm__ && __VFP_FP__
+#if __arm__
     if (test__ltsf2vfp(0.0, 0.0))
         return 1;
     if (test__ltsf2vfp(-1.0, 1.0))

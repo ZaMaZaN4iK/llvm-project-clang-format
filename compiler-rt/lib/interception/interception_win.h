@@ -1,8 +1,9 @@
 //===-- interception_linux.h ------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,7 +12,7 @@
 // Windows-specific interception methods.
 //===----------------------------------------------------------------------===//
 
-#if SANITIZER_WINDOWS
+#ifdef _WIN32
 
 #if !defined(INCLUDED_FROM_INTERCEPTION_LIB)
 # error "interception_win.h should be included from interception library only"
@@ -80,4 +81,4 @@ void TestOnlyReleaseTrampolineRegions();
       (::__interception::uptr *)&REAL(func))
 
 #endif  // INTERCEPTION_WIN_H
-#endif  // SANITIZER_WINDOWS
+#endif  // _WIN32

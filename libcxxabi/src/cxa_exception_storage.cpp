@@ -1,17 +1,19 @@
 //===--------------------- cxa_exception_storage.cpp ----------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
 //
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
+//  
 //  This file implements the storage for the "Caught Exception Stack"
-//  https://itanium-cxx-abi.github.io/cxx-abi/abi-eh.html#cxx-exc-stack
-//
+//  http://mentorembedded.github.io/cxx-abi/abi-eh.html (section 2.2.2)
+//  
 //===----------------------------------------------------------------------===//
 
-#include "cxa_exception.h"
+#include "cxa_exception.hpp"
 
+#include "config.h"
 #include <__threading_support>
 
 #if defined(_LIBCXXABI_HAS_NO_THREADS)
@@ -46,10 +48,6 @@ extern "C" {
 #include "abort_message.h"
 #include "fallback_malloc.h"
 
-#if defined(__ELF__) && defined(_LIBCXXABI_LINK_PTHREAD_LIB)
-#pragma comment(lib, "pthread")
-#endif
-
 //  In general, we treat all threading errors as fatal.
 //  We cannot call std::terminate() because that will in turn
 //  call __cxa_get_globals() and cause infinite recursion.
@@ -59,7 +57,7 @@ namespace {
     std::__libcpp_tls_key key_;
     std::__libcpp_exec_once_flag flag_ = _LIBCPP_EXEC_ONCE_INITIALIZER;
 
-    void _LIBCPP_TLS_DESTRUCTOR_CC destruct_ (void *p) {
+    void destruct_ (void *p) {
         __free_with_fallback ( p );
         if ( 0 != std::__libcpp_tls_set ( key_, NULL ) )
             abort_message("cannot zero out thread value for __cxa_get_globals()");
@@ -69,13 +67,13 @@ namespace {
         if ( 0 != std::__libcpp_tls_create ( &key_, destruct_ ) )
             abort_message("cannot create thread specific key for __cxa_get_globals()");
         }
-}
+}   
 
 extern "C" {
     __cxa_eh_globals * __cxa_get_globals () {
     //  Try to get the globals for this thread
         __cxa_eh_globals* retVal = __cxa_get_globals_fast ();
-
+    
     //  If this is the first time we've been asked for these globals, create them
         if ( NULL == retVal ) {
             retVal = static_cast<__cxa_eh_globals*>
@@ -99,7 +97,7 @@ extern "C" {
 //        static int init = construct_();
         return static_cast<__cxa_eh_globals*>(std::__libcpp_tls_get(key_));
         }
-
+    
 }
 }
 #endif

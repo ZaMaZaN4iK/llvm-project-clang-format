@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,7 +20,7 @@
 #include <cassert>
 #include "test_macros.h"
 
-int main(int, char**)
+int main()
 {
     {
         std::regex phone_numbers("\\d{3}-\\d{4}");
@@ -72,6 +73,4 @@ int main(int, char**)
         ++i;
         assert(i == std::cregex_token_iterator());
     }
-
-  return 0;
 }

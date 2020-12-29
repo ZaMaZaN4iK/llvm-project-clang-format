@@ -1,8 +1,9 @@
 //===-- llvm/IR/Mangler.h - Self-contained name mangler ---------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,7 +21,6 @@ namespace llvm {
 
 class DataLayout;
 template <typename T> class SmallVectorImpl;
-class Triple;
 class Twine;
 class raw_ostream;
 
@@ -45,12 +45,6 @@ public:
   static void getNameWithPrefix(SmallVectorImpl<char> &OutName,
                                 const Twine &GVName, const DataLayout &DL);
 };
-
-void emitLinkerFlagsForGlobalCOFF(raw_ostream &OS, const GlobalValue *GV,
-                                  const Triple &TT, Mangler &Mangler);
-
-void emitLinkerFlagsForUsedCOFF(raw_ostream &OS, const GlobalValue *GV,
-                                const Triple &T, Mangler &M);
 
 } // End llvm namespace
 

@@ -1,18 +1,19 @@
 //===- Core/Resolver.cpp - Resolves Atom References -----------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "lld/Core/Resolver.h"
-#include "lld/Common/LLVM.h"
-#include "lld/Core/ArchiveLibraryFile.h"
 #include "lld/Core/Atom.h"
+#include "lld/Core/ArchiveLibraryFile.h"
 #include "lld/Core/File.h"
 #include "lld/Core/Instrumentation.h"
+#include "lld/Core/LLVM.h"
 #include "lld/Core/LinkingContext.h"
+#include "lld/Core/Resolver.h"
 #include "lld/Core/SharedLibraryFile.h"
 #include "lld/Core/SymbolTable.h"
 #include "lld/Core/UndefinedAtom.h"
@@ -223,8 +224,8 @@ bool Resolver::resolveUndefines() {
     if (!file)
       return true;
     if (std::error_code ec = file->parse()) {
-      llvm::errs() << "Cannot open " + file->path() << ": " << ec.message()
-                   << "\n";
+      llvm::errs() << "Cannot open " + file->path()
+                   << ": " << ec.message() << "\n";
       return false;
     }
     DEBUG_WITH_TYPE("resolver",
@@ -424,8 +425,9 @@ bool Resolver::checkUndefines() {
     // Seems like this symbol is undefined. Warn that.
     foundUndefines = true;
     if (_ctx.printRemainingUndefines()) {
-      llvm::errs() << "Undefined symbol: " << undef->file().path() << ": "
-                   << _ctx.demangle(undef->name()) << "\n";
+      llvm::errs() << "Undefined symbol: " << undef->file().path()
+                   << ": " << _ctx.demangle(undef->name())
+                   << "\n";
     }
   }
   if (!foundUndefines)
@@ -435,7 +437,7 @@ bool Resolver::checkUndefines() {
   return true;
 }
 
-// Remove from _atoms all coalesced away atoms.
+// remove from _atoms all coaleseced away atoms
 void Resolver::removeCoalescedAwayAtoms() {
   DEBUG_WITH_TYPE("resolver",
                   llvm::dbgs() << "******** Removing coalesced away atoms:\n");

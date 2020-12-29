@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,7 +21,7 @@
 
 int new_handler_called = 0;
 
-void my_new_handler()
+void new_handler()
 {
     ++new_handler_called;
     std::set_new_handler(0);
@@ -34,9 +35,9 @@ struct A
     ~A() {A_constructed = false;}
 };
 
-int main(int, char**)
+int main()
 {
-    std::set_new_handler(my_new_handler);
+    std::set_new_handler(new_handler);
 #ifndef TEST_HAS_NO_EXCEPTIONS
     try
 #endif
@@ -56,6 +57,4 @@ int main(int, char**)
     assert(A_constructed);
     delete ap;
     assert(!A_constructed);
-
-  return 0;
 }

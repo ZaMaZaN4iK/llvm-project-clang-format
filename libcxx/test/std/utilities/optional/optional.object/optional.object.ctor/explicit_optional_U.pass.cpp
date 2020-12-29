@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -62,7 +63,7 @@ public:
     explicit Z(int) { TEST_THROW(6); }
 };
 
-int main(int, char**)
+int main()
 {
     {
         optional<int> rhs;
@@ -80,6 +81,4 @@ int main(int, char**)
         optional<int> rhs(3);
         test<Z>(std::move(rhs), true);
     }
-
-  return 0;
 }

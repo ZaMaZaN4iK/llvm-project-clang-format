@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -54,7 +55,7 @@ void do_insert_rv_test()
     assert(r->second == 3);
 }
 
-int main(int, char**)
+int main()
 {
     do_insert_rv_test<std::multimap<int, MoveOnly>>();
     {
@@ -89,6 +90,4 @@ int main(int, char**)
         assert(r->first == 3);
         assert(r->second == 3);
     }
-
-  return 0;
 }

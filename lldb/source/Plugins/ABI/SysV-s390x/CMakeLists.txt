@@ -1,10 +1,3 @@
-add_lldb_library(lldbPluginABISysV_s390x PLUGIN
+add_lldb_library(lldbPluginABISysV_s390x
   ABISysV_s390x.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbSymbol
-    lldbTarget
-  LINK_COMPONENTS
-    Support
   )

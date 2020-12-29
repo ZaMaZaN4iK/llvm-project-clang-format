@@ -1,8 +1,9 @@
 //===- Archive.h - ar archive file format -----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,19 +16,13 @@
 
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/fallible_iterator.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Support/Chrono.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include <algorithm>
-#include <cassert>
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <vector>
 
 namespace llvm {
 namespace object {
@@ -37,27 +32,25 @@ class Archive;
 class ArchiveMemberHeader {
 public:
   friend class Archive;
-
   ArchiveMemberHeader(Archive const *Parent, const char *RawHeaderPtr,
                       uint64_t Size, Error *Err);
   // ArchiveMemberHeader() = default;
 
   /// Get the name without looking up long names.
-  Expected<StringRef> getRawName() const;
+  Expected<llvm::StringRef> getRawName() const;
 
   /// Get the name looking up long names.
-  Expected<StringRef> getName(uint64_t Size) const;
+  Expected<llvm::StringRef> getName(uint64_t Size) const;
 
-  Expected<uint64_t> getSize() const;
+  /// Members are not larger than 4GB.
+  Expected<uint32_t> getSize() const;
 
   Expected<sys::fs::perms> getAccessMode() const;
   Expected<sys::TimePoint<std::chrono::seconds>> getLastModified() const;
-
-  StringRef getRawLastModified() const {
+  llvm::StringRef getRawLastModified() const {
     return StringRef(ArMemHdr->LastModified,
                      sizeof(ArMemHdr->LastModified)).rtrim(' ');
   }
-
   Expected<unsigned> getUID() const;
   Expected<unsigned> getGID() const;
 
@@ -82,17 +75,15 @@ private:
 
 class Archive : public Binary {
   virtual void anchor();
-
 public:
   class Child {
     friend Archive;
-    friend ArchiveMemberHeader;
-
     const Archive *Parent;
+    friend ArchiveMemberHeader;
     ArchiveMemberHeader Header;
-    /// Includes header but not padding byte.
+    /// \brief Includes header but not padding byte.
     StringRef Data;
-    /// Offset from Data to the start of the file.
+    /// \brief Offset from Data to the start of the file.
     uint16_t StartOfFile;
 
     Expected<bool> isThinMember() const;
@@ -112,22 +103,17 @@ public:
     Expected<StringRef> getName() const;
     Expected<std::string> getFullName() const;
     Expected<StringRef> getRawName() const { return Header.getRawName(); }
-
     Expected<sys::TimePoint<std::chrono::seconds>> getLastModified() const {
       return Header.getLastModified();
     }
-
     StringRef getRawLastModified() const {
       return Header.getRawLastModified();
     }
-
     Expected<unsigned> getUID() const { return Header.getUID(); }
     Expected<unsigned> getGID() const { return Header.getGID(); }
-
     Expected<sys::fs::perms> getAccessMode() const {
       return Header.getAccessMode();
     }
-
     /// \return the size of the archive member without the header or padding.
     Expected<uint64_t> getSize() const;
     /// \return the size in the archive header for this member.
@@ -135,7 +121,6 @@ public:
 
     Expected<StringRef> getBuffer() const;
     uint64_t getChildOffset() const;
-    uint64_t getDataOffset() const { return getChildOffset() + StartOfFile; }
 
     Expected<MemoryBufferRef> getMemoryBufferRef() const;
 
@@ -143,37 +128,42 @@ public:
     getAsBinary(LLVMContext *Context = nullptr) const;
   };
 
-  class ChildFallibleIterator {
+  class child_iterator {
     Child C;
+    Error *E;
 
   public:
-    ChildFallibleIterator() : C(Child(nullptr, nullptr, nullptr)) {}
-    ChildFallibleIterator(const Child &C) : C(C) {}
-
+    child_iterator() : C(Child(nullptr, nullptr, nullptr)), E(nullptr) {}
+    child_iterator(const Child &C, Error *E) : C(C), E(E) {}
     const Child *operator->() const { return &C; }
     const Child &operator*() const { return C; }
 
-    bool operator==(const ChildFallibleIterator &other) const {
+    bool operator==(const child_iterator &other) const {
       // Ignore errors here: If an error occurred during increment then getNext
       // will have been set to child_end(), and the following comparison should
       // do the right thing.
       return C == other.C;
     }
 
-    bool operator!=(const ChildFallibleIterator &other) const {
+    bool operator!=(const child_iterator &other) const {
       return !(*this == other);
     }
 
-    Error inc() {
-      auto NextChild = C.getNext();
-      if (!NextChild)
-        return NextChild.takeError();
-      C = std::move(*NextChild);
-      return Error::success();
+    // Code in loops with child_iterators must check for errors on each loop
+    // iteration.  And if there is an error break out of the loop.
+    child_iterator &operator++() { // Preincrement
+      assert(E && "Can't increment iterator with no Error attached");
+      ErrorAsOutParameter ErrAsOutParam(E);
+      if (auto ChildOrErr = C.getNext())
+        C = *ChildOrErr;
+      else {
+        C = C.getParent()->child_end().C;
+        *E = ChildOrErr.takeError();
+        E = nullptr;
+      }
+      return *this;
     }
   };
-
-  using child_iterator = fallible_iterator<ChildFallibleIterator>;
 
   class Symbol {
     const Archive *Parent;
@@ -181,15 +171,14 @@ public:
     uint32_t StringIndex; // Extra index to the string.
 
   public:
-    Symbol(const Archive *p, uint32_t symi, uint32_t stri)
-      : Parent(p)
-      , SymbolIndex(symi)
-      , StringIndex(stri) {}
-
     bool operator ==(const Symbol &other) const {
       return (Parent == other.Parent) && (SymbolIndex == other.SymbolIndex);
     }
 
+    Symbol(const Archive *p, uint32_t symi, uint32_t stri)
+      : Parent(p)
+      , SymbolIndex(symi)
+      , StringIndex(stri) {}
     StringRef getName() const;
     Expected<Child> getMember() const;
     Symbol getNext() const;
@@ -197,10 +186,8 @@ public:
 
   class symbol_iterator {
     Symbol symbol;
-
   public:
     symbol_iterator(const Symbol &s) : symbol(s) {}
-
     const Symbol *operator->() const { return &symbol; }
     const Symbol &operator*() const { return symbol; }
 
@@ -221,14 +208,10 @@ public:
   Archive(MemoryBufferRef Source, Error &Err);
   static Expected<std::unique_ptr<Archive>> create(MemoryBufferRef Source);
 
-  /// Size field is 10 decimal digits long
-  static const uint64_t MaxMemberSize = 9999999999;
-
   enum Kind {
     K_GNU,
-    K_GNU64,
+    K_MIPS64,
     K_BSD,
-    K_DARWIN,
     K_DARWIN64,
     K_COFF
   };
@@ -250,7 +233,7 @@ public:
   }
 
   // Cast methods.
-  static bool classof(Binary const *v) {
+  static inline bool classof(Binary const *v) {
     return v->isArchive();
   }
 
@@ -280,7 +263,7 @@ private:
   mutable std::vector<std::unique_ptr<MemoryBuffer>> ThinBuffers;
 };
 
-} // end namespace object
-} // end namespace llvm
+}
+}
 
-#endif // LLVM_OBJECT_ARCHIVE_H
+#endif

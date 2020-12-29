@@ -1,26 +1,18 @@
-//===-- CppCoreGuidelinesTidyModule.cpp - clang-tidy ----------------------===//
+//===--- CppCoreGuidelinesModule.cpp - clang-tidy -------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "../ClangTidy.h"
 #include "../ClangTidyModule.h"
 #include "../ClangTidyModuleRegistry.h"
-#include "../misc/NonPrivateMemberVariablesInClassesCheck.h"
 #include "../misc/UnconventionalAssignOperatorCheck.h"
-#include "../modernize/AvoidCArraysCheck.h"
-#include "../modernize/UseOverrideCheck.h"
-#include "../readability/MagicNumbersCheck.h"
-#include "AvoidGotoCheck.h"
-#include "InitVariablesCheck.h"
 #include "InterfacesGlobalInitCheck.h"
-#include "MacroUsageCheck.h"
-#include "NarrowingConversionsCheck.h"
 #include "NoMallocCheck.h"
-#include "OwningMemoryCheck.h"
 #include "ProBoundsArrayToPointerDecayCheck.h"
 #include "ProBoundsConstantArrayIndexCheck.h"
 #include "ProBoundsPointerArithmeticCheck.h"
@@ -42,27 +34,9 @@ namespace cppcoreguidelines {
 class CppCoreGuidelinesModule : public ClangTidyModule {
 public:
   void addCheckFactories(ClangTidyCheckFactories &CheckFactories) override {
-    CheckFactories.registerCheck<modernize::AvoidCArraysCheck>(
-        "cppcoreguidelines-avoid-c-arrays");
-    CheckFactories.registerCheck<AvoidGotoCheck>(
-        "cppcoreguidelines-avoid-goto");
-    CheckFactories.registerCheck<readability::MagicNumbersCheck>(
-        "cppcoreguidelines-avoid-magic-numbers");
-    CheckFactories.registerCheck<modernize::UseOverrideCheck>(
-        "cppcoreguidelines-explicit-virtual-functions");
-    CheckFactories.registerCheck<InitVariablesCheck>(
-        "cppcoreguidelines-init-variables");
     CheckFactories.registerCheck<InterfacesGlobalInitCheck>(
         "cppcoreguidelines-interfaces-global-init");
-    CheckFactories.registerCheck<MacroUsageCheck>(
-        "cppcoreguidelines-macro-usage");
-    CheckFactories.registerCheck<NarrowingConversionsCheck>(
-        "cppcoreguidelines-narrowing-conversions");
     CheckFactories.registerCheck<NoMallocCheck>("cppcoreguidelines-no-malloc");
-    CheckFactories.registerCheck<misc::NonPrivateMemberVariablesInClassesCheck>(
-        "cppcoreguidelines-non-private-member-variables-in-classes");
-    CheckFactories.registerCheck<OwningMemoryCheck>(
-        "cppcoreguidelines-owning-memory");
     CheckFactories.registerCheck<ProBoundsArrayToPointerDecayCheck>(
         "cppcoreguidelines-pro-bounds-array-to-pointer-decay");
     CheckFactories.registerCheck<ProBoundsConstantArrayIndexCheck>(
@@ -88,19 +62,6 @@ public:
     CheckFactories.registerCheck<SlicingCheck>("cppcoreguidelines-slicing");
     CheckFactories.registerCheck<misc::UnconventionalAssignOperatorCheck>(
         "cppcoreguidelines-c-copy-assignment-signature");
-  }
-
-  ClangTidyOptions getModuleOptions() override {
-    ClangTidyOptions Options;
-    ClangTidyOptions::OptionMap &Opts = Options.CheckOptions;
-
-    Opts["cppcoreguidelines-non-private-member-variables-in-classes."
-         "IgnoreClassesWithAllMemberVariablesBeingPublic"] = "1";
-
-    Opts["cppcoreguidelines-explicit-virtual-functions."
-         "IgnoreDestructors"] = "1";
-
-    return Options;
   }
 };
 

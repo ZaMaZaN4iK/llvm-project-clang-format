@@ -1,8 +1,9 @@
 //===-- CallingConvLower.cpp - Calling Conventions ------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,14 +15,14 @@
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/TargetLowering.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetLowering.h"
+#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include <algorithm>
 
 using namespace llvm;
@@ -29,9 +30,11 @@ using namespace llvm;
 CCState::CCState(CallingConv::ID CC, bool isVarArg, MachineFunction &mf,
                  SmallVectorImpl<CCValAssign> &locs, LLVMContext &C)
     : CallingConv(CC), IsVarArg(isVarArg), MF(mf),
-      TRI(*MF.getSubtarget().getRegisterInfo()), Locs(locs), Context(C) {
+      TRI(*MF.getSubtarget().getRegisterInfo()), Locs(locs), Context(C),
+      CallOrPrologue(Unknown) {
   // No stack is used.
   StackOffset = 0;
+  MaxStackArgAlign = 1;
 
   clearByValRegsInfo();
   UsedRegs.resize((TRI.getNumRegs()+31)/32);
@@ -40,21 +43,20 @@ CCState::CCState(CallingConv::ID CC, bool isVarArg, MachineFunction &mf,
 /// Allocate space on the stack large enough to pass an argument by value.
 /// The size and alignment information of the argument is encoded in
 /// its parameter attribute.
-void CCState::HandleByVal(unsigned ValNo, MVT ValVT, MVT LocVT,
-                          CCValAssign::LocInfo LocInfo, int MinSize,
-                          int MinAlignment, ISD::ArgFlagsTy ArgFlags) {
-  Align MinAlign(MinAlignment);
-  Align Alignment(ArgFlags.getByValAlign());
+void CCState::HandleByVal(unsigned ValNo, MVT ValVT,
+                          MVT LocVT, CCValAssign::LocInfo LocInfo,
+                          int MinSize, int MinAlign,
+                          ISD::ArgFlagsTy ArgFlags) {
+  unsigned Align = ArgFlags.getByValAlign();
   unsigned Size  = ArgFlags.getByValSize();
   if (MinSize > (int)Size)
     Size = MinSize;
-  if (MinAlign > Alignment)
-    Alignment = MinAlign;
-  ensureMaxAlignment(Alignment);
-  MF.getSubtarget().getTargetLowering()->HandleByVal(this, Size,
-                                                     Alignment.value());
+  if (MinAlign > (int)Align)
+    Align = MinAlign;
+  ensureMaxAlignment(Align);
+  MF.getSubtarget().getTargetLowering()->HandleByVal(this, Size, Align);
   Size = unsigned(alignTo(Size, MinAlign));
-  unsigned Offset = AllocateStack(Size, Alignment.value());
+  unsigned Offset = AllocateStack(Size, Align);
   addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
 }
 
@@ -90,8 +92,13 @@ CCState::AnalyzeFormalArguments(const SmallVectorImpl<ISD::InputArg> &Ins,
   for (unsigned i = 0; i != NumArgs; ++i) {
     MVT ArgVT = Ins[i].VT;
     ISD::ArgFlagsTy ArgFlags = Ins[i].Flags;
-    if (Fn(i, ArgVT, ArgVT, CCValAssign::Full, ArgFlags, *this))
-      report_fatal_error("unable to allocate function argument #" + Twine(i));
+    if (Fn(i, ArgVT, ArgVT, CCValAssign::Full, ArgFlags, *this)) {
+#ifndef NDEBUG
+      dbgs() << "Formal argument #" << i << " has unhandled type "
+             << EVT(ArgVT).getEVTString() << '\n';
+#endif
+      llvm_unreachable(nullptr);
+    }
   }
 }
 
@@ -117,8 +124,13 @@ void CCState::AnalyzeReturn(const SmallVectorImpl<ISD::OutputArg> &Outs,
   for (unsigned i = 0, e = Outs.size(); i != e; ++i) {
     MVT VT = Outs[i].VT;
     ISD::ArgFlagsTy ArgFlags = Outs[i].Flags;
-    if (Fn(i, VT, VT, CCValAssign::Full, ArgFlags, *this))
-      report_fatal_error("unable to allocate function return #" + Twine(i));
+    if (Fn(i, VT, VT, CCValAssign::Full, ArgFlags, *this)) {
+#ifndef NDEBUG
+      dbgs() << "Return operand #" << i << " has unhandled type "
+             << EVT(VT).getEVTString() << '\n';
+#endif
+      llvm_unreachable(nullptr);
+    }
   }
 }
 
@@ -199,7 +211,7 @@ static bool isValueTypeInRegForCC(CallingConv::ID CC, MVT VT) {
 void CCState::getRemainingRegParmsForType(SmallVectorImpl<MCPhysReg> &Regs,
                                           MVT VT, CCAssignFn Fn) {
   unsigned SavedStackOffset = StackOffset;
-  Align SavedMaxStackArgAlign = MaxStackArgAlign;
+  unsigned SavedMaxStackArgAlign = MaxStackArgAlign;
   unsigned NumLocs = Locs.size();
 
   // Set the 'inreg' flag if it is used for this calling convention.

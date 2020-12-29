@@ -1,8 +1,9 @@
 //===- Caching.h - LLVM Link Time Optimizer Configuration -----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -23,15 +24,12 @@ namespace lto {
 /// This type defines the callback to add a pre-existing native object file
 /// (e.g. in a cache).
 ///
-/// Buffer callbacks must be thread safe.
-using AddBufferFn =
-    std::function<void(unsigned Task, std::unique_ptr<MemoryBuffer> MB)>;
+/// File callbacks must be thread safe.
+typedef std::function<void(unsigned Task, StringRef Path)> AddFileFn;
 
 /// Create a local file system cache which uses the given cache directory and
-/// file callback. This function also creates the cache directory if it does not
-/// already exist.
-Expected<NativeObjectCache> localCache(StringRef CacheDirectoryPath,
-                                       AddBufferFn AddBuffer);
+/// file callback.
+NativeObjectCache localCache(std::string CacheDirectoryPath, AddFileFn AddFile);
 
 } // namespace lto
 } // namespace llvm

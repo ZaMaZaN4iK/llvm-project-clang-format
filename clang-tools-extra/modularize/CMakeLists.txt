@@ -3,7 +3,7 @@ set(LLVM_LINK_COMPONENTS
   Support
   )
 
-add_clang_tool(modularize
+add_clang_executable(modularize
   Modularize.cpp
   ModuleAssistant.cpp
   ModularizeUtilities.cpp
@@ -11,14 +11,12 @@ add_clang_tool(modularize
   PreprocessorTracker.cpp
   )
 
-clang_target_link_libraries(modularize
-  PRIVATE
+target_link_libraries(modularize
   clangAST
   clangBasic
   clangDriver
   clangFrontend
   clangLex
-  clangSerialization
   clangTooling
   )
 

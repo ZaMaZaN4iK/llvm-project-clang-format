@@ -1,8 +1,9 @@
 //===--- ParentMap.cpp - Mappings from Stmts to their Parents ---*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,7 +15,6 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
-#include "clang/AST/StmtObjC.h"
 #include "llvm/ADT/DenseMap.h"
 
 using namespace clang;
@@ -83,18 +83,6 @@ static void BuildParentMap(MapTy& M, Stmt* S,
     }
     break;
   }
-  case Stmt::CapturedStmtClass:
-    for (Stmt *SubStmt : S->children()) {
-      if (SubStmt) {
-        M[SubStmt] = S;
-        BuildParentMap(M, SubStmt, OVMode);
-      }
-    }
-    if (Stmt *SubStmt = cast<CapturedStmt>(S)->getCapturedStmt()) {
-      M[SubStmt] = S;
-      BuildParentMap(M, SubStmt, OVMode);
-    }
-    break;
   default:
     for (Stmt *SubStmt : S->children()) {
       if (SubStmt) {
@@ -148,7 +136,7 @@ Stmt *ParentMap::getParentIgnoreParenCasts(Stmt *S) const {
   }
   while (S && (isa<ParenExpr>(S) || isa<CastExpr>(S)));
 
-  return S;
+  return S;  
 }
 
 Stmt *ParentMap::getParentIgnoreParenImpCasts(Stmt *S) const {
@@ -174,7 +162,7 @@ bool ParentMap::isConsumedExpr(Expr* E) const {
 
   // Ignore parents that don't guarantee consumption.
   while (P && (isa<ParenExpr>(P) || isa<CastExpr>(P) ||
-               isa<FullExpr>(P))) {
+               isa<ExprWithCleanups>(P))) {
     DirectChild = P;
     P = getParent(P);
   }
@@ -205,8 +193,6 @@ bool ParentMap::isConsumedExpr(Expr* E) const {
       return DirectChild == cast<IndirectGotoStmt>(P)->getTarget();
     case Stmt::SwitchStmtClass:
       return DirectChild == cast<SwitchStmt>(P)->getCond();
-    case Stmt::ObjCForCollectionStmtClass:
-      return DirectChild == cast<ObjCForCollectionStmt>(P)->getCollection();
     case Stmt::ReturnStmtClass:
       return true;
   }

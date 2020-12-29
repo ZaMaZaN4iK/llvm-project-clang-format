@@ -1,8 +1,9 @@
 //===-- ubsan_flags.inc -----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -23,6 +24,3 @@ UBSAN_FLAG(bool, print_stacktrace, false,
 UBSAN_FLAG(const char *, suppressions, "", "Suppressions file name.")
 UBSAN_FLAG(bool, report_error_type, false,
         "Print specific error type instead of 'undefined-behavior' in summary.")
-UBSAN_FLAG(bool, silence_unsigned_overflow, false,
-        "Do not print non-fatal error reports for unsigned integer overflow. "
-        "Used to provide fuzzing signal without blowing up logs.")

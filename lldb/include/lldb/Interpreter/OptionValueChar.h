@@ -1,14 +1,19 @@
-//===-- OptionValueChar.h ---------------------------------------*- C++ -*-===//
+//===-- OptionValueBoolean.h ------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_OptionValueChar_h_
 #define liblldb_OptionValueChar_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Interpreter/OptionValue.h"
 
 namespace lldb_private {
@@ -24,17 +29,19 @@ public:
 
   ~OptionValueChar() override {}
 
+  //---------------------------------------------------------------------
   // Virtual subclass pure virtual overrides
+  //---------------------------------------------------------------------
 
   OptionValue::Type GetType() const override { return eTypeChar; }
 
   void DumpValue(const ExecutionContext *exe_ctx, Stream &strm,
                  uint32_t dump_mask) override;
 
-  Status
+  Error
   SetValueFromString(llvm::StringRef value,
                      VarSetOperationType op = eVarSetOperationAssign) override;
-  Status
+  Error
   SetValueFromString(const char *,
                      VarSetOperationType = eVarSetOperationAssign) = delete;
 
@@ -44,7 +51,9 @@ public:
     return true;
   }
 
+  //---------------------------------------------------------------------
   // Subclass specific functions
+  //---------------------------------------------------------------------
 
   const char &operator=(char c) {
     m_current_value = c;

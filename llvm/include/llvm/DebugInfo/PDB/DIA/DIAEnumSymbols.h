@@ -1,8 +1,9 @@
 //==- DIAEnumSymbols.h - DIA Symbol Enumerator impl --------------*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,7 +12,6 @@
 
 #include "DIASupport.h"
 #include "llvm/DebugInfo/PDB/IPDBEnumChildren.h"
-#include "llvm/DebugInfo/PDB/PDBSymbol.h"
 
 namespace llvm {
 namespace pdb {
@@ -26,6 +26,7 @@ public:
   std::unique_ptr<PDBSymbol> getChildAtIndex(uint32_t Index) const override;
   std::unique_ptr<PDBSymbol> getNext() override;
   void reset() override;
+  DIAEnumSymbols *clone() const override;
 
 private:
   const DIASession &Session;

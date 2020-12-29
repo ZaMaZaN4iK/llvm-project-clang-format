@@ -1,8 +1,9 @@
 //===--- TransRetainReleaseDealloc.cpp - Transformations to ARC mode ------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -70,15 +71,13 @@ public:
           // will likely die immediately while previously it was kept alive
           // by the autorelease pool. This is bad practice in general, leave it
           // and emit an error to force the user to restructure their code.
-          Pass.TA.reportError(
-              "it is not safe to remove an unused 'autorelease' "
+          Pass.TA.reportError("it is not safe to remove an unused 'autorelease' "
               "message; its receiver may be destroyed immediately",
-              E->getBeginLoc(), E->getSourceRange());
+              E->getLocStart(), E->getSourceRange());
           return true;
         }
       }
       // Pass through.
-      LLVM_FALLTHROUGH;
     case OMF_retain:
     case OMF_release:
       if (E->getReceiverKind() == ObjCMessageExpr::Instance)
@@ -89,7 +88,7 @@ public:
             std::string err = "it is not safe to remove '";
             err += E->getSelector().getAsString() + "' message on "
                 "an __unsafe_unretained type";
-            Pass.TA.reportError(err, rec->getBeginLoc());
+            Pass.TA.reportError(err, rec->getLocStart());
             return true;
           }
 
@@ -98,21 +97,18 @@ public:
             std::string err = "it is not safe to remove '";
             err += E->getSelector().getAsString() + "' message on "
                 "a global variable";
-            Pass.TA.reportError(err, rec->getBeginLoc());
+            Pass.TA.reportError(err, rec->getLocStart());
             return true;
           }
 
           if (E->getMethodFamily() == OMF_release && isDelegateMessage(rec)) {
-            Pass.TA.reportError(
-                "it is not safe to remove 'retain' "
+            Pass.TA.reportError("it is not safe to remove 'retain' "
                 "message on the result of a 'delegate' message; "
                 "the object that was passed to 'setDelegate:' may not be "
-                "properly retained",
-                rec->getBeginLoc());
+                "properly retained", rec->getLocStart());
             return true;
           }
         }
-      break;
     case OMF_dealloc:
       break;
     }
@@ -161,7 +157,7 @@ public:
   }
 
 private:
-  /// Checks for idioms where an unused -autorelease is common.
+  /// \brief Checks for idioms where an unused -autorelease is common.
   ///
   /// Returns true for this idiom which is common in property
   /// setters:
@@ -253,8 +249,8 @@ private:
     }
     while (OuterS && (isa<ParenExpr>(OuterS) ||
                       isa<CastExpr>(OuterS) ||
-                      isa<FullExpr>(OuterS)));
-
+                      isa<ExprWithCleanups>(OuterS)));
+    
     if (!OuterS)
       return std::make_pair(prevStmt, nextStmt);
 
@@ -269,8 +265,8 @@ private:
 
     if (prevChildS != childE) {
       prevStmt = *prevChildS;
-      if (auto *E = dyn_cast_or_null<Expr>(prevStmt))
-        prevStmt = E->IgnoreImplicit();
+      if (prevStmt)
+        prevStmt = prevStmt->IgnoreImplicit();
     }
 
     if (currChildS == childE)
@@ -280,8 +276,8 @@ private:
       return std::make_pair(prevStmt, nextStmt);
 
     nextStmt = *currChildS;
-    if (auto *E = dyn_cast_or_null<Expr>(nextStmt))
-      nextStmt = E->IgnoreImplicit();
+    if (nextStmt)
+      nextStmt = nextStmt->IgnoreImplicit();
 
     return std::make_pair(prevStmt, nextStmt);
   }
@@ -312,7 +308,7 @@ private:
     return nullptr;
   }
 
-  /// Check if the retain/release is due to a GCD/XPC macro that are
+  /// \brief Check if the retain/release is due to a GCD/XPC macro that are
   /// defined as:
   ///
   /// #define dispatch_retain(object) ({ dispatch_object_t _o = (object); _dispatch_object_validate(_o); (void)[_o retain]; })
@@ -376,8 +372,8 @@ private:
 
     RecContainer = StmtE;
     Rec = Init->IgnoreParenImpCasts();
-    if (FullExpr *FE = dyn_cast<FullExpr>(Rec))
-      Rec = FE->getSubExpr()->IgnoreParenImpCasts();
+    if (ExprWithCleanups *EWC = dyn_cast<ExprWithCleanups>(Rec))
+      Rec = EWC->getSubExpr()->IgnoreParenImpCasts();
     RecRange = Rec->getSourceRange();
     if (SM.isMacroArgExpansion(RecRange.getBegin()))
       RecRange.setBegin(SM.getImmediateSpellingLoc(RecRange.getBegin()));
@@ -422,7 +418,7 @@ private:
   bool isRemovable(Expr *E) const {
     return Removables.count(E);
   }
-
+  
   bool tryRemoving(Expr *E) const {
     if (isRemovable(E)) {
       Pass.TA.removeStmt(E);

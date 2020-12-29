@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,13 +17,7 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "count_new.h"
-
-#if TEST_STD_VER >= 11
-#define DELETE_FUNCTION = delete
-#else
-#define DELETE_FUNCTION
-#endif
+#include "count_new.hpp"
 
 struct A
 {
@@ -36,9 +31,6 @@ struct A
 
     int get_int() const {return int_;}
     char get_char() const {return char_;}
-
-    A* operator& () DELETE_FUNCTION;
-
 private:
     int int_;
     char char_;
@@ -53,27 +45,8 @@ struct Foo
     virtual ~Foo() = default;
 };
 
-#ifdef _LIBCPP_VERSION
-struct Result {};
-static Result theFunction() { return Result(); }
-static int resultDeletorCount;
-static void resultDeletor(Result (*pf)()) {
-  assert(pf == theFunction);
-  ++resultDeletorCount;
-}
 
-void test_pointer_to_function() {
-    { // https://bugs.llvm.org/show_bug.cgi?id=27566
-      std::shared_ptr<Result()> x(&theFunction, &resultDeletor);
-      std::shared_ptr<Result()> y(theFunction, resultDeletor);
-    }
-    assert(resultDeletorCount == 2);
-}
-#else // _LIBCPP_VERSION
-void test_pointer_to_function() {}
-#endif // _LIBCPP_VERSION
-
-int main(int, char**)
+int main()
 {
     int nc = globalMemCounter.outstanding_new;
     {
@@ -86,14 +59,12 @@ int main(int, char**)
     assert(p->get_char() == 'e');
     }
 
-    { // https://bugs.llvm.org/show_bug.cgi?id=24137
+    { // https://llvm.org/bugs/show_bug.cgi?id=24137
     std::shared_ptr<Foo> p1       = std::make_shared<Foo>();
     assert(p1.get());
     std::shared_ptr<const Foo> p2 = std::make_shared<const Foo>();
     assert(p2.get());
     }
-
-    test_pointer_to_function();
 
 #if TEST_STD_VER >= 11
     nc = globalMemCounter.outstanding_new;
@@ -107,6 +78,4 @@ int main(int, char**)
     }
 #endif
     assert(A::count == 0);
-
-  return 0;
 }

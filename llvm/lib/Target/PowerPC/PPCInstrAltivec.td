@@ -1,8 +1,9 @@
 //===-- PPCInstrAltivec.td - The PowerPC Altivec Extension -*- tablegen -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -215,21 +216,21 @@ def vsldoi_swapped_shuffle : PatFrag<(ops node:$lhs, node:$rhs),
 
 // VSPLT*_get_imm xform function: convert vector_shuffle mask to VSPLT* imm.
 def VSPLTB_get_imm : SDNodeXForm<vector_shuffle, [{
-  return getI32Imm(PPC::getSplatIdxForPPCMnemonics(N, 1, *CurDAG), SDLoc(N));
+  return getI32Imm(PPC::getVSPLTImmediate(N, 1, *CurDAG), SDLoc(N));
 }]>;
 def vspltb_shuffle : PatFrag<(ops node:$lhs, node:$rhs),
                              (vector_shuffle node:$lhs, node:$rhs), [{
   return PPC::isSplatShuffleMask(cast<ShuffleVectorSDNode>(N), 1);
 }], VSPLTB_get_imm>;
 def VSPLTH_get_imm : SDNodeXForm<vector_shuffle, [{
-  return getI32Imm(PPC::getSplatIdxForPPCMnemonics(N, 2, *CurDAG), SDLoc(N));
+  return getI32Imm(PPC::getVSPLTImmediate(N, 2, *CurDAG), SDLoc(N));
 }]>;
 def vsplth_shuffle : PatFrag<(ops node:$lhs, node:$rhs),
                              (vector_shuffle node:$lhs, node:$rhs), [{
   return PPC::isSplatShuffleMask(cast<ShuffleVectorSDNode>(N), 2);
 }], VSPLTH_get_imm>;
 def VSPLTW_get_imm : SDNodeXForm<vector_shuffle, [{
-  return getI32Imm(PPC::getSplatIdxForPPCMnemonics(N, 4, *CurDAG), SDLoc(N));
+  return getI32Imm(PPC::getVSPLTImmediate(N, 4, *CurDAG), SDLoc(N));
 }]>;
 def vspltw_shuffle : PatFrag<(ops node:$lhs, node:$rhs),
                              (vector_shuffle node:$lhs, node:$rhs), [{
@@ -261,11 +262,6 @@ def vecspltisw : PatLeaf<(build_vector), [{
   return PPC::get_VSPLTI_elt(N, 4, *CurDAG).getNode() != nullptr;
 }], VSPLTISW_get_imm>;
 
-def immEQOneV : PatLeaf<(build_vector), [{
-  if (ConstantSDNode *C = cast<BuildVectorSDNode>(N)->getConstantSplatNode())
-    return C->isOne();
-  return false;
-}]>;
 //===----------------------------------------------------------------------===//
 // Helpers for defining instructions that directly correspond to intrinsics.
 
@@ -336,7 +332,7 @@ class VXBX_Int_Ty<bits<11> xo, string opc, Intrinsic IntID, ValueType Ty>
 class VXCR_Int_Ty<bits<11> xo, string opc, Intrinsic IntID, ValueType Ty>
   : VXForm_CR<xo, (outs vrrc:$vD), (ins vrrc:$vA, u1imm:$ST, u4imm:$SIX),
               !strconcat(opc, " $vD, $vA, $ST, $SIX"), IIC_VecFP,
-              [(set Ty:$vD, (IntID Ty:$vA, timm:$ST, timm:$SIX))]>;
+              [(set Ty:$vD, (IntID Ty:$vA, imm:$ST, imm:$SIX))]>;
 
 //===----------------------------------------------------------------------===//
 // Instruction Definitions.
@@ -406,52 +402,52 @@ let isCodeGenOnly = 1 in {
 
 def MFVSCR : VXForm_4<1540, (outs vrrc:$vD), (ins),
                       "mfvscr $vD", IIC_LdStStore,
-                      [(set v8i16:$vD, (int_ppc_altivec_mfvscr))]>;
+                      [(set v8i16:$vD, (int_ppc_altivec_mfvscr))]>; 
 def MTVSCR : VXForm_5<1604, (outs), (ins vrrc:$vB),
                       "mtvscr $vB", IIC_LdStLoad,
-                      [(int_ppc_altivec_mtvscr v4i32:$vB)]>;
+                      [(int_ppc_altivec_mtvscr v4i32:$vB)]>; 
 
-let PPC970_Unit = 2, mayLoad = 1, mayStore = 0 in {  // Loads.
-def LVEBX: XForm_1_memOp<31,   7, (outs vrrc:$vD), (ins memrr:$src),
+let PPC970_Unit = 2 in {  // Loads.
+def LVEBX: XForm_1<31,   7, (outs vrrc:$vD), (ins memrr:$src),
                    "lvebx $vD, $src", IIC_LdStLoad,
                    [(set v16i8:$vD, (int_ppc_altivec_lvebx xoaddr:$src))]>;
-def LVEHX: XForm_1_memOp<31,  39, (outs vrrc:$vD), (ins memrr:$src),
+def LVEHX: XForm_1<31,  39, (outs vrrc:$vD), (ins memrr:$src),
                    "lvehx $vD, $src", IIC_LdStLoad,
                    [(set v8i16:$vD, (int_ppc_altivec_lvehx xoaddr:$src))]>;
-def LVEWX: XForm_1_memOp<31,  71, (outs vrrc:$vD), (ins memrr:$src),
+def LVEWX: XForm_1<31,  71, (outs vrrc:$vD), (ins memrr:$src),
                    "lvewx $vD, $src", IIC_LdStLoad,
                    [(set v4i32:$vD, (int_ppc_altivec_lvewx xoaddr:$src))]>;
-def LVX  : XForm_1_memOp<31, 103, (outs vrrc:$vD), (ins memrr:$src),
+def LVX  : XForm_1<31, 103, (outs vrrc:$vD), (ins memrr:$src),
                    "lvx $vD, $src", IIC_LdStLoad,
                    [(set v4i32:$vD, (int_ppc_altivec_lvx xoaddr:$src))]>;
-def LVXL : XForm_1_memOp<31, 359, (outs vrrc:$vD), (ins memrr:$src),
+def LVXL : XForm_1<31, 359, (outs vrrc:$vD), (ins memrr:$src),
                    "lvxl $vD, $src", IIC_LdStLoad,
                    [(set v4i32:$vD, (int_ppc_altivec_lvxl xoaddr:$src))]>;
 }
 
-def LVSL : XForm_1_memOp<31,   6, (outs vrrc:$vD), (ins memrr:$src),
+def LVSL : XForm_1<31,   6, (outs vrrc:$vD), (ins memrr:$src),
                    "lvsl $vD, $src", IIC_LdStLoad,
                    [(set v16i8:$vD, (int_ppc_altivec_lvsl xoaddr:$src))]>,
                    PPC970_Unit_LSU;
-def LVSR : XForm_1_memOp<31,  38, (outs vrrc:$vD), (ins memrr:$src),
+def LVSR : XForm_1<31,  38, (outs vrrc:$vD), (ins memrr:$src),
                    "lvsr $vD, $src", IIC_LdStLoad,
                    [(set v16i8:$vD, (int_ppc_altivec_lvsr xoaddr:$src))]>,
                    PPC970_Unit_LSU;
 
-let PPC970_Unit = 2, mayStore = 1, mayLoad = 0 in {   // Stores.
-def STVEBX: XForm_8_memOp<31, 135, (outs), (ins vrrc:$rS, memrr:$dst),
+let PPC970_Unit = 2 in {   // Stores.
+def STVEBX: XForm_8<31, 135, (outs), (ins vrrc:$rS, memrr:$dst),
                    "stvebx $rS, $dst", IIC_LdStStore,
                    [(int_ppc_altivec_stvebx v16i8:$rS, xoaddr:$dst)]>;
-def STVEHX: XForm_8_memOp<31, 167, (outs), (ins vrrc:$rS, memrr:$dst),
+def STVEHX: XForm_8<31, 167, (outs), (ins vrrc:$rS, memrr:$dst),
                    "stvehx $rS, $dst", IIC_LdStStore,
                    [(int_ppc_altivec_stvehx v8i16:$rS, xoaddr:$dst)]>;
-def STVEWX: XForm_8_memOp<31, 199, (outs), (ins vrrc:$rS, memrr:$dst),
+def STVEWX: XForm_8<31, 199, (outs), (ins vrrc:$rS, memrr:$dst),
                    "stvewx $rS, $dst", IIC_LdStStore,
                    [(int_ppc_altivec_stvewx v4i32:$rS, xoaddr:$dst)]>;
-def STVX  : XForm_8_memOp<31, 231, (outs), (ins vrrc:$rS, memrr:$dst),
+def STVX  : XForm_8<31, 231, (outs), (ins vrrc:$rS, memrr:$dst),
                    "stvx $rS, $dst", IIC_LdStStore,
                    [(int_ppc_altivec_stvx v4i32:$rS, xoaddr:$dst)]>;
-def STVXL : XForm_8_memOp<31, 487, (outs), (ins vrrc:$rS, memrr:$dst),
+def STVXL : XForm_8<31, 487, (outs), (ins vrrc:$rS, memrr:$dst),
                    "stvxl $rS, $dst", IIC_LdStStore,
                    [(int_ppc_altivec_stvxl v4i32:$rS, xoaddr:$dst)]>;
 }
@@ -481,10 +477,10 @@ def VPERM      : VA1a_Int_Ty3<43, "vperm", int_ppc_altivec_vperm,
 def VSEL       : VA1a_Int_Ty<42, "vsel",  int_ppc_altivec_vsel, v4i32>;
 
 // Shuffles.
-def VSLDOI  : VAForm_2<44, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB, u4imm:$SH),
+def VSLDOI  : VAForm_2<44, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB, u5imm:$SH),
                        "vsldoi $vD, $vA, $vB, $SH", IIC_VecFP,
-                       [(set v16i8:$vD,
-                         (PPCvecshl v16i8:$vA, v16i8:$vB, imm32SExt16:$SH))]>;
+                       [(set v16i8:$vD, 
+                         (vsldoi_shuffle:$SH v16i8:$vA, v16i8:$vB))]>;
 
 // VX-Form instructions.  AltiVec arithmetic ops.
 let isCommutable = 1 in {
@@ -523,19 +519,19 @@ def VANDC : VXForm_1<1092, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB),
 def VCFSX  : VXForm_1<842, (outs vrrc:$vD), (ins u5imm:$UIMM, vrrc:$vB),
                       "vcfsx $vD, $vB, $UIMM", IIC_VecFP,
                       [(set v4f32:$vD,
-                             (int_ppc_altivec_vcfsx v4i32:$vB, timm:$UIMM))]>;
+                             (int_ppc_altivec_vcfsx v4i32:$vB, imm:$UIMM))]>;
 def VCFUX  : VXForm_1<778, (outs vrrc:$vD), (ins u5imm:$UIMM, vrrc:$vB),
                       "vcfux $vD, $vB, $UIMM", IIC_VecFP,
                       [(set v4f32:$vD,
-                             (int_ppc_altivec_vcfux v4i32:$vB, timm:$UIMM))]>;
+                             (int_ppc_altivec_vcfux v4i32:$vB, imm:$UIMM))]>;
 def VCTSXS : VXForm_1<970, (outs vrrc:$vD), (ins u5imm:$UIMM, vrrc:$vB),
                       "vctsxs $vD, $vB, $UIMM", IIC_VecFP,
                       [(set v4i32:$vD,
-                             (int_ppc_altivec_vctsxs v4f32:$vB, timm:$UIMM))]>;
+                             (int_ppc_altivec_vctsxs v4f32:$vB, imm:$UIMM))]>;
 def VCTUXS : VXForm_1<906, (outs vrrc:$vD), (ins u5imm:$UIMM, vrrc:$vB),
                       "vctuxs $vD, $vB, $UIMM", IIC_VecFP,
                       [(set v4i32:$vD,
-                             (int_ppc_altivec_vctuxs v4f32:$vB, timm:$UIMM))]>;
+                             (int_ppc_altivec_vctuxs v4f32:$vB, imm:$UIMM))]>;
 
 // Defines with the UIM field set to 0 for floating-point
 // to integer (fp_to_sint/fp_to_uint) conversions and integer
@@ -709,9 +705,9 @@ def VSPLTH : VXForm_1<588, (outs vrrc:$vD), (ins u5imm:$UIMM, vrrc:$vB),
                         (vsplth_shuffle:$UIMM v16i8:$vB, (undef)))]>;
 def VSPLTW : VXForm_1<652, (outs vrrc:$vD), (ins u5imm:$UIMM, vrrc:$vB),
                       "vspltw $vD, $vB, $UIMM", IIC_VecPerm,
-                      [(set v16i8:$vD,
+                      [(set v16i8:$vD, 
                         (vspltw_shuffle:$UIMM v16i8:$vB, (undef)))]>;
-let isCodeGenOnly = 1, hasSideEffects = 0 in {
+let isCodeGenOnly = 1 in {
   def VSPLTBs : VXForm_1<524, (outs vrrc:$vD), (ins u5imm:$UIMM, vfrc:$vB),
                          "vspltb $vD, $vB, $UIMM", IIC_VecPerm, []>;
   def VSPLTHs : VXForm_1<588, (outs vrrc:$vD), (ins u5imm:$UIMM, vfrc:$vB),
@@ -794,41 +790,39 @@ class VCMPo<bits<10> xo, string asmstr, ValueType Ty>
 
 // f32 element comparisons.0
 def VCMPBFP   : VCMP <966, "vcmpbfp $vD, $vA, $vB"  , v4f32>;
-def VCMPBFP_rec  : VCMPo<966, "vcmpbfp. $vD, $vA, $vB" , v4f32>;
+def VCMPBFPo  : VCMPo<966, "vcmpbfp. $vD, $vA, $vB" , v4f32>;
 def VCMPEQFP  : VCMP <198, "vcmpeqfp $vD, $vA, $vB" , v4f32>;
-def VCMPEQFP_rec : VCMPo<198, "vcmpeqfp. $vD, $vA, $vB", v4f32>;
+def VCMPEQFPo : VCMPo<198, "vcmpeqfp. $vD, $vA, $vB", v4f32>;
 def VCMPGEFP  : VCMP <454, "vcmpgefp $vD, $vA, $vB" , v4f32>;
-def VCMPGEFP_rec : VCMPo<454, "vcmpgefp. $vD, $vA, $vB", v4f32>;
+def VCMPGEFPo : VCMPo<454, "vcmpgefp. $vD, $vA, $vB", v4f32>;
 def VCMPGTFP  : VCMP <710, "vcmpgtfp $vD, $vA, $vB" , v4f32>;
-def VCMPGTFP_rec : VCMPo<710, "vcmpgtfp. $vD, $vA, $vB", v4f32>;
+def VCMPGTFPo : VCMPo<710, "vcmpgtfp. $vD, $vA, $vB", v4f32>;
 
 // i8 element comparisons.
 def VCMPEQUB  : VCMP <  6, "vcmpequb $vD, $vA, $vB" , v16i8>;
-def VCMPEQUB_rec : VCMPo<  6, "vcmpequb. $vD, $vA, $vB", v16i8>;
+def VCMPEQUBo : VCMPo<  6, "vcmpequb. $vD, $vA, $vB", v16i8>;
 def VCMPGTSB  : VCMP <774, "vcmpgtsb $vD, $vA, $vB" , v16i8>;
-def VCMPGTSB_rec : VCMPo<774, "vcmpgtsb. $vD, $vA, $vB", v16i8>;
+def VCMPGTSBo : VCMPo<774, "vcmpgtsb. $vD, $vA, $vB", v16i8>;
 def VCMPGTUB  : VCMP <518, "vcmpgtub $vD, $vA, $vB" , v16i8>;
-def VCMPGTUB_rec : VCMPo<518, "vcmpgtub. $vD, $vA, $vB", v16i8>;
+def VCMPGTUBo : VCMPo<518, "vcmpgtub. $vD, $vA, $vB", v16i8>;
 
 // i16 element comparisons.
 def VCMPEQUH  : VCMP < 70, "vcmpequh $vD, $vA, $vB" , v8i16>;
-def VCMPEQUH_rec : VCMPo< 70, "vcmpequh. $vD, $vA, $vB", v8i16>;
+def VCMPEQUHo : VCMPo< 70, "vcmpequh. $vD, $vA, $vB", v8i16>;
 def VCMPGTSH  : VCMP <838, "vcmpgtsh $vD, $vA, $vB" , v8i16>;
-def VCMPGTSH_rec : VCMPo<838, "vcmpgtsh. $vD, $vA, $vB", v8i16>;
+def VCMPGTSHo : VCMPo<838, "vcmpgtsh. $vD, $vA, $vB", v8i16>;
 def VCMPGTUH  : VCMP <582, "vcmpgtuh $vD, $vA, $vB" , v8i16>;
-def VCMPGTUH_rec : VCMPo<582, "vcmpgtuh. $vD, $vA, $vB", v8i16>;
+def VCMPGTUHo : VCMPo<582, "vcmpgtuh. $vD, $vA, $vB", v8i16>;
 
 // i32 element comparisons.
 def VCMPEQUW  : VCMP <134, "vcmpequw $vD, $vA, $vB" , v4i32>;
-def VCMPEQUW_rec : VCMPo<134, "vcmpequw. $vD, $vA, $vB", v4i32>;
+def VCMPEQUWo : VCMPo<134, "vcmpequw. $vD, $vA, $vB", v4i32>;
 def VCMPGTSW  : VCMP <902, "vcmpgtsw $vD, $vA, $vB" , v4i32>;
-def VCMPGTSW_rec : VCMPo<902, "vcmpgtsw. $vD, $vA, $vB", v4i32>;
+def VCMPGTSWo : VCMPo<902, "vcmpgtsw. $vD, $vA, $vB", v4i32>;
 def VCMPGTUW  : VCMP <646, "vcmpgtuw $vD, $vA, $vB" , v4i32>;
-def VCMPGTUW_rec : VCMPo<646, "vcmpgtuw. $vD, $vA, $vB", v4i32>;
+def VCMPGTUWo : VCMPo<646, "vcmpgtuw. $vD, $vA, $vB", v4i32>;
 
-let isCodeGenOnly = 1, isMoveImm = 1, isAsCheapAsAMove = 1,
-    isReMaterializable = 1 in {
-
+let isCodeGenOnly = 1 in {
 def V_SET0B : VXForm_setzero<1220, (outs vrrc:$vD), (ins),
                       "vxor $vD, $vD, $vD", IIC_VecFP,
                       [(set v16i8:$vD, (v16i8 immAllZerosV))]>;
@@ -856,18 +850,6 @@ def V_SETALLONES  : VXForm_3<908, (outs vrrc:$vD), (ins),
 //===----------------------------------------------------------------------===//
 // Additional Altivec Patterns
 //
-
-// Extended mnemonics
-def : InstAlias<"vmr $vD, $vA", (VOR vrrc:$vD, vrrc:$vA, vrrc:$vA)>;
-def : InstAlias<"vnot $vD, $vA", (VNOR vrrc:$vD, vrrc:$vA, vrrc:$vA)>;
-
-// Rotates.
-def : Pat<(v16i8 (rotl v16i8:$vA, v16i8:$vB)),
-          (v16i8 (VRLB v16i8:$vA, v16i8:$vB))>;
-def : Pat<(v8i16 (rotl v8i16:$vA, v8i16:$vB)),
-          (v8i16 (VRLH v8i16:$vA, v8i16:$vB))>;
-def : Pat<(v4i32 (rotl v4i32:$vA, v4i32:$vB)),
-          (v4i32 (VRLW v4i32:$vA, v4i32:$vB))>;
 
 // Loads.
 def : Pat<(v4i32 (load xoaddr:$src)), (LVX xoaddr:$src)>;
@@ -913,32 +895,6 @@ def : Pat<(v1i128 (bitconvert (v4i32 VRRC:$src))), (v1i128 VRRC:$src)>;
 def : Pat<(v1i128 (bitconvert (v4f32 VRRC:$src))), (v1i128 VRRC:$src)>;
 def : Pat<(v1i128 (bitconvert (v2i64 VRRC:$src))), (v1i128 VRRC:$src)>;
 
-// Max/Min
-def : Pat<(v16i8 (umax v16i8:$src1, v16i8:$src2)),
-          (v16i8 (VMAXUB $src1, $src2))>;
-def : Pat<(v16i8 (smax v16i8:$src1, v16i8:$src2)),
-          (v16i8 (VMAXSB $src1, $src2))>;
-def : Pat<(v8i16 (umax v8i16:$src1, v8i16:$src2)),
-          (v8i16 (VMAXUH $src1, $src2))>;
-def : Pat<(v8i16 (smax v8i16:$src1, v8i16:$src2)),
-          (v8i16 (VMAXSH $src1, $src2))>;
-def : Pat<(v4i32 (umax v4i32:$src1, v4i32:$src2)),
-          (v4i32 (VMAXUW $src1, $src2))>;
-def : Pat<(v4i32 (smax v4i32:$src1, v4i32:$src2)),
-          (v4i32 (VMAXSW $src1, $src2))>;
-def : Pat<(v16i8 (umin v16i8:$src1, v16i8:$src2)),
-          (v16i8 (VMINUB $src1, $src2))>;
-def : Pat<(v16i8 (smin v16i8:$src1, v16i8:$src2)),
-          (v16i8 (VMINSB $src1, $src2))>;
-def : Pat<(v8i16 (umin v8i16:$src1, v8i16:$src2)),
-          (v8i16 (VMINUH $src1, $src2))>;
-def : Pat<(v8i16 (smin v8i16:$src1, v8i16:$src2)),
-          (v8i16 (VMINSH $src1, $src2))>;
-def : Pat<(v4i32 (umin v4i32:$src1, v4i32:$src2)),
-          (v4i32 (VMINUW $src1, $src2))>;
-def : Pat<(v4i32 (smin v4i32:$src1, v4i32:$src2)),
-          (v4i32 (VMINSW $src1, $src2))>;
-
 // Shuffles.
 
 // Match vsldoi(x,x), vpkuwum(x,x), vpkuhum(x,x)
@@ -948,9 +904,6 @@ def:Pat<(vpkuwum_unary_shuffle v16i8:$vA, undef),
         (VPKUWUM $vA, $vA)>;
 def:Pat<(vpkuhum_unary_shuffle v16i8:$vA, undef),
         (VPKUHUM $vA, $vA)>;
-def:Pat<(vsldoi_shuffle:$SH v16i8:$vA, v16i8:$vB),
-        (VSLDOI v16i8:$vA, v16i8:$vB, (VSLDOI_get_imm $SH))>;
-
 
 // Match vsldoi(y,x), vpkuwum(y,x), vpkuhum(y,x), i.e., swapped operands.
 // These fragments are matched for little-endian, where the inputs must
@@ -1002,7 +955,7 @@ def : Pat<(and v4i32:$A, (vnot_ppc v4i32:$B)),
 
 def : Pat<(fmul v4f32:$vA, v4f32:$vB),
           (VMADDFP $vA, $vB,
-             (v4i32 (VSLW (v4i32 (V_SETALLONES)), (v4i32 (V_SETALLONES)))))>; 
+             (v4i32 (VSLW (V_SETALLONES), (V_SETALLONES))))>; 
 
 // Fused multiply add and multiply sub for packed float.  These are represented
 // separately from the real instructions above, for operations that must have
@@ -1030,16 +983,6 @@ def : Pat<(v8i16 (shl v8i16:$vA, v8i16:$vB)),
           (v8i16 (VSLH $vA, $vB))>;
 def : Pat<(v4i32 (shl v4i32:$vA, v4i32:$vB)),
           (v4i32 (VSLW $vA, $vB))>;
-def : Pat<(v1i128 (shl v1i128:$vA, v1i128:$vB)),
-          (v1i128 (VSL (v16i8 (VSLO $vA, $vB)), (v16i8 (VSPLTB 15, $vB))))>;
-def : Pat<(v16i8 (PPCshl v16i8:$vA, v16i8:$vB)),
-          (v16i8 (VSLB $vA, $vB))>;
-def : Pat<(v8i16 (PPCshl v8i16:$vA, v8i16:$vB)),
-          (v8i16 (VSLH $vA, $vB))>;
-def : Pat<(v4i32 (PPCshl v4i32:$vA, v4i32:$vB)),
-          (v4i32 (VSLW $vA, $vB))>;
-def : Pat<(v1i128 (PPCshl v1i128:$vA, v1i128:$vB)),
-          (v1i128 (VSL (v16i8 (VSLO $vA, $vB)), (v16i8 (VSPLTB 15, $vB))))>;
 
 def : Pat<(v16i8 (srl v16i8:$vA, v16i8:$vB)),
           (v16i8 (VSRB $vA, $vB))>;
@@ -1047,28 +990,12 @@ def : Pat<(v8i16 (srl v8i16:$vA, v8i16:$vB)),
           (v8i16 (VSRH $vA, $vB))>;
 def : Pat<(v4i32 (srl v4i32:$vA, v4i32:$vB)),
           (v4i32 (VSRW $vA, $vB))>;
-def : Pat<(v1i128 (srl v1i128:$vA, v1i128:$vB)),
-          (v1i128 (VSR (v16i8 (VSRO $vA, $vB)), (v16i8 (VSPLTB 15, $vB))))>;
-def : Pat<(v16i8 (PPCsrl v16i8:$vA, v16i8:$vB)),
-          (v16i8 (VSRB $vA, $vB))>;
-def : Pat<(v8i16 (PPCsrl v8i16:$vA, v8i16:$vB)),
-          (v8i16 (VSRH $vA, $vB))>;
-def : Pat<(v4i32 (PPCsrl v4i32:$vA, v4i32:$vB)),
-          (v4i32 (VSRW $vA, $vB))>;
-def : Pat<(v1i128 (PPCsrl v1i128:$vA, v1i128:$vB)),
-          (v1i128 (VSR (v16i8 (VSRO $vA, $vB)), (v16i8 (VSPLTB 15, $vB))))>;
 
 def : Pat<(v16i8 (sra v16i8:$vA, v16i8:$vB)),
           (v16i8 (VSRAB $vA, $vB))>;
 def : Pat<(v8i16 (sra v8i16:$vA, v8i16:$vB)),
           (v8i16 (VSRAH $vA, $vB))>;
 def : Pat<(v4i32 (sra v4i32:$vA, v4i32:$vB)),
-          (v4i32 (VSRAW $vA, $vB))>;
-def : Pat<(v16i8 (PPCsra v16i8:$vA, v16i8:$vB)),
-          (v16i8 (VSRAB $vA, $vB))>;
-def : Pat<(v8i16 (PPCsra v8i16:$vA, v8i16:$vB)),
-          (v8i16 (VSRAH $vA, $vB))>;
-def : Pat<(v4i32 (PPCsra v4i32:$vA, v4i32:$vB)),
           (v4i32 (VSRAW $vA, $vB))>;
 
 // Float to integer and integer to float conversions
@@ -1090,34 +1017,6 @@ def : Pat<(v4f32 (ftrunc v4f32:$vA)),
           (VRFIZ $vA)>;
 def : Pat<(v4f32 (fnearbyint v4f32:$vA)),
           (VRFIN $vA)>;
-
-// Vector selection
-def : Pat<(v16i8 (vselect v16i8:$vA, v16i8:$vB, v16i8:$vC)),
-          (VSEL $vC, $vB, $vA)>;
-def : Pat<(v8i16 (vselect v8i16:$vA, v8i16:$vB, v8i16:$vC)),
-          (VSEL $vC, $vB, $vA)>;
-def : Pat<(v4i32 (vselect v4i32:$vA, v4i32:$vB, v4i32:$vC)),
-          (VSEL $vC, $vB, $vA)>;
-def : Pat<(v2i64 (vselect v2i64:$vA, v2i64:$vB, v2i64:$vC)),
-          (VSEL $vC, $vB, $vA)>;
-def : Pat<(v4f32 (vselect v4i32:$vA, v4f32:$vB, v4f32:$vC)),
-          (VSEL $vC, $vB, $vA)>;
-def : Pat<(v2f64 (vselect v2i64:$vA, v2f64:$vB, v2f64:$vC)),
-          (VSEL $vC, $vB, $vA)>;
-
-// Vector Integer Average Instructions
-def : Pat<(v4i32 (sra (sub v4i32:$vA, (vnot_ppc v4i32:$vB)),
-          (v4i32 (immEQOneV)))), (v4i32 (VAVGSW $vA, $vB))>;
-def : Pat<(v8i16 (sra (sub v8i16:$vA, (v8i16 (bitconvert(vnot_ppc v4i32:$vB)))),
-          (v8i16 (immEQOneV)))), (v8i16 (VAVGSH $vA, $vB))>;
-def : Pat<(v16i8 (sra (sub v16i8:$vA, (v16i8 (bitconvert(vnot_ppc v4i32:$vB)))),
-          (v16i8 (immEQOneV)))), (v16i8 (VAVGSB $vA, $vB))>;
-def : Pat<(v4i32 (srl (sub v4i32:$vA, (vnot_ppc v4i32:$vB)),
-          (v4i32 (immEQOneV)))), (v4i32 (VAVGUW $vA, $vB))>;
-def : Pat<(v8i16 (srl (sub v8i16:$vA, (v8i16 (bitconvert(vnot_ppc v4i32:$vB)))),
-          (v8i16 (immEQOneV)))), (v8i16 (VAVGUH $vA, $vB))>;
-def : Pat<(v16i8 (srl (sub v16i8:$vA, (v16i8 (bitconvert(vnot_ppc v4i32:$vB)))),
-          (v16i8 (immEQOneV)))), (v16i8 (VAVGUB $vA, $vB))>;
 
 } // end HasAltivec
 
@@ -1146,12 +1045,10 @@ def VMINUD : VX1_Int_Ty<706, "vminud", int_ppc_altivec_vminud, v2i64>;
 // Vector merge 
 def VMRGEW : VXForm_1<1932, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB),
                       "vmrgew $vD, $vA, $vB", IIC_VecFP,
-                      [(set v16i8:$vD,
-                            (v16i8 (vmrgew_shuffle v16i8:$vA, v16i8:$vB)))]>;
+                      [(set v16i8:$vD, (vmrgew_shuffle v16i8:$vA, v16i8:$vB))]>;
 def VMRGOW : VXForm_1<1676, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB),
                       "vmrgow $vD, $vA, $vB", IIC_VecFP,
-                      [(set v16i8:$vD,
-                            (v16i8 (vmrgow_shuffle v16i8:$vA, v16i8:$vB)))]>;
+                      [(set v16i8:$vD, (vmrgow_shuffle v16i8:$vA, v16i8:$vB))]>;
 
 // Match vmrgew(x,x) and vmrgow(x,x)
 def:Pat<(vmrgew_unary_shuffle v16i8:$vA, undef),
@@ -1167,32 +1064,18 @@ def:Pat<(vmrgew_swapped_shuffle v16i8:$vA, v16i8:$vB),
 def:Pat<(vmrgow_swapped_shuffle v16i8:$vA, v16i8:$vB),
         (VMRGOW $vB, $vA)>;
 
-// Vector rotates.
-def VRLD : VX1_Int_Ty<196, "vrld", int_ppc_altivec_vrld, v2i64>;
-
-def : Pat<(v2i64 (rotl v2i64:$vA, v2i64:$vB)),
-          (v2i64 (VRLD v2i64:$vA, v2i64:$vB))>;
 
 // Vector shifts
+def VRLD : VX1_Int_Ty<196, "vrld", int_ppc_altivec_vrld, v2i64>;
 def VSLD : VXForm_1<1476, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB),
-                    "vsld $vD, $vA, $vB", IIC_VecGeneral, []>;
+                    "vsld $vD, $vA, $vB", IIC_VecGeneral,
+                    [(set v2i64:$vD, (shl v2i64:$vA, v2i64:$vB))]>;
 def VSRD : VXForm_1<1732, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB),
-                   "vsrd $vD, $vA, $vB", IIC_VecGeneral, []>;
+                   "vsrd $vD, $vA, $vB", IIC_VecGeneral,
+                   [(set v2i64:$vD, (srl v2i64:$vA, v2i64:$vB))]>;
 def VSRAD : VXForm_1<964, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB),
-                    "vsrad $vD, $vA, $vB", IIC_VecGeneral, []>;
-
-def : Pat<(v2i64 (shl v2i64:$vA, v2i64:$vB)),
-          (v2i64 (VSLD $vA, $vB))>;
-def : Pat<(v2i64 (PPCshl v2i64:$vA, v2i64:$vB)),
-          (v2i64 (VSLD $vA, $vB))>;
-def : Pat<(v2i64 (srl v2i64:$vA, v2i64:$vB)),
-          (v2i64 (VSRD $vA, $vB))>;
-def : Pat<(v2i64 (PPCsrl v2i64:$vA, v2i64:$vB)),
-          (v2i64 (VSRD $vA, $vB))>;
-def : Pat<(v2i64 (sra v2i64:$vA, v2i64:$vB)),
-          (v2i64 (VSRAD $vA, $vB))>;
-def : Pat<(v2i64 (PPCsra v2i64:$vA, v2i64:$vB)),
-          (v2i64 (VSRAD $vA, $vB))>;
+                    "vsrad $vD, $vA, $vB", IIC_VecGeneral,
+                    [(set v2i64:$vD, (sra v2i64:$vA, v2i64:$vB))]>;
 
 // Vector Integer Arithmetic Instructions
 let isCommutable = 1 in {
@@ -1276,11 +1159,11 @@ def VORC : VXForm_1<1348, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB),
 
 // i64 element comparisons.
 def VCMPEQUD  : VCMP <199, "vcmpequd $vD, $vA, $vB" , v2i64>;
-def VCMPEQUD_rec : VCMPo<199, "vcmpequd. $vD, $vA, $vB", v2i64>;
+def VCMPEQUDo : VCMPo<199, "vcmpequd. $vD, $vA, $vB", v2i64>;
 def VCMPGTSD  : VCMP <967, "vcmpgtsd $vD, $vA, $vB" , v2i64>;
-def VCMPGTSD_rec : VCMPo<967, "vcmpgtsd. $vD, $vA, $vB", v2i64>;
+def VCMPGTSDo : VCMPo<967, "vcmpgtsd. $vD, $vA, $vB", v2i64>;
 def VCMPGTUD  : VCMP <711, "vcmpgtud $vD, $vA, $vB" , v2i64>;
-def VCMPGTUD_rec : VCMPo<711, "vcmpgtud. $vD, $vA, $vB", v2i64>;
+def VCMPGTUDo : VCMPo<711, "vcmpgtud. $vD, $vA, $vB", v2i64>;
 
 // The cryptography instructions that do not require Category:Vector.Crypto
 def VPMSUMB : VX1_Int_Ty<1032, "vpmsumb",
@@ -1342,27 +1225,23 @@ def VSBOX : VXBX_Int_Ty<1480, "vsbox", int_ppc_altivec_crypto_vsbox, v2i64>;
 def HasP9Altivec : Predicate<"PPCSubTarget->hasP9Altivec()">;
 let Predicates = [HasP9Altivec] in {
 
-// Vector Multiply-Sum
-def VMSUMUDM : VA1a_Int_Ty3<35, "vmsumudm", int_ppc_altivec_vmsumudm,
-                            v1i128, v2i64, v1i128>;
-
 // i8 element comparisons.
 def VCMPNEB   : VCMP   <  7, "vcmpneb $vD, $vA, $vB"  , v16i8>;
-def VCMPNEB_rec  : VCMPo  <  7, "vcmpneb. $vD, $vA, $vB" , v16i8>;
+def VCMPNEBo  : VCMPo  <  7, "vcmpneb. $vD, $vA, $vB" , v16i8>;
 def VCMPNEZB  : VCMP <263, "vcmpnezb $vD, $vA, $vB" , v16i8>;
-def VCMPNEZB_rec : VCMPo<263, "vcmpnezb. $vD, $vA, $vB", v16i8>;
+def VCMPNEZBo : VCMPo<263, "vcmpnezb. $vD, $vA, $vB", v16i8>;
 
 // i16 element comparisons.
 def VCMPNEH   : VCMP < 71, "vcmpneh $vD, $vA, $vB"  , v8i16>;
-def VCMPNEH_rec  : VCMPo< 71, "vcmpneh. $vD, $vA, $vB" , v8i16>;
+def VCMPNEHo  : VCMPo< 71, "vcmpneh. $vD, $vA, $vB" , v8i16>;
 def VCMPNEZH  : VCMP <327, "vcmpnezh $vD, $vA, $vB" , v8i16>;
-def VCMPNEZH_rec : VCMPo<327, "vcmpnezh. $vD, $vA, $vB", v8i16>;
+def VCMPNEZHo : VCMPo<327, "vcmpnezh. $vD, $vA, $vB", v8i16>;
 
 // i32 element comparisons.
 def VCMPNEW   : VCMP <135, "vcmpnew $vD, $vA, $vB"  , v4i32>;
-def VCMPNEW_rec  : VCMPo<135, "vcmpnew. $vD, $vA, $vB" , v4i32>;
+def VCMPNEWo  : VCMPo<135, "vcmpnew. $vD, $vA, $vB" , v4i32>;
 def VCMPNEZW  : VCMP <391, "vcmpnezw $vD, $vA, $vB" , v4i32>;
-def VCMPNEZW_rec : VCMPo<391, "vcmpnezw. $vD, $vA, $vB", v4i32>;
+def VCMPNEZWo : VCMPo<391, "vcmpnezw. $vD, $vA, $vB", v4i32>;
 
 // VX-Form: [PO VRT / UIM VRB XO].
 // We use VXForm_1 to implement it, that is, we use "VRA" (5 bit) to represent
@@ -1382,28 +1261,16 @@ def VEXTRACTUW : VX1_VT5_UIM5_VB5<653, "vextractuw", []>;
 def VEXTRACTD  : VX1_VT5_UIM5_VB5<717, "vextractd" , []>;
 
 // Vector Extract Unsigned Byte/Halfword/Word Left/Right-Indexed
-let hasSideEffects = 0 in {
 def VEXTUBLX : VX1_RT5_RA5_VB5<1549, "vextublx", []>;
 def VEXTUBRX : VX1_RT5_RA5_VB5<1805, "vextubrx", []>;
 def VEXTUHLX : VX1_RT5_RA5_VB5<1613, "vextuhlx", []>;
 def VEXTUHRX : VX1_RT5_RA5_VB5<1869, "vextuhrx", []>;
 def VEXTUWLX : VX1_RT5_RA5_VB5<1677, "vextuwlx", []>;
 def VEXTUWRX : VX1_RT5_RA5_VB5<1933, "vextuwrx", []>;
-}
 
 // Vector Insert Element Instructions
-def VINSERTB : VXForm_1<781, (outs vrrc:$vD),
-                        (ins vrrc:$vDi, u4imm:$UIM, vrrc:$vB),
-                        "vinsertb $vD, $vB, $UIM", IIC_VecGeneral,
-                        [(set v16i8:$vD, (PPCvecinsert v16i8:$vDi, v16i8:$vB,
-                                                      imm32SExt16:$UIM))]>,
-                        RegConstraint<"$vDi = $vD">, NoEncode<"$vDi">;
-def VINSERTH : VXForm_1<845, (outs vrrc:$vD),
-                        (ins vrrc:$vDi, u4imm:$UIM, vrrc:$vB),
-                        "vinserth $vD, $vB, $UIM", IIC_VecGeneral,
-                        [(set v8i16:$vD, (PPCvecinsert v8i16:$vDi, v8i16:$vB,
-                                                      imm32SExt16:$UIM))]>,
-                        RegConstraint<"$vDi = $vD">, NoEncode<"$vDi">;
+def VINSERTB : VX1_VT5_UIM5_VB5<781, "vinsertb", []>;
+def VINSERTH : VX1_VT5_UIM5_VB5<845, "vinserth", []>;
 def VINSERTW : VX1_VT5_UIM5_VB5<909, "vinsertw", []>;
 def VINSERTD : VX1_VT5_UIM5_VB5<973, "vinsertd", []>;
 
@@ -1446,12 +1313,6 @@ let isCodeGenOnly = 1 in {
   def VEXTSH2Ds : VX_VT5_EO5_VB5s<1538, 25, "vextsh2d", []>;
   def VEXTSW2Ds : VX_VT5_EO5_VB5s<1538, 26, "vextsw2d", []>;
 }
-
-def : Pat<(v4i32 (sext_inreg v4i32:$VRB, v4i8)), (v4i32 (VEXTSB2W $VRB))>;
-def : Pat<(v4i32 (sext_inreg v4i32:$VRB, v4i16)), (v4i32 (VEXTSH2W $VRB))>;
-def : Pat<(v2i64 (sext_inreg v2i64:$VRB, v2i8)), (v2i64 (VEXTSB2D $VRB))>;
-def : Pat<(v2i64 (sext_inreg v2i64:$VRB, v2i16)), (v2i64 (VEXTSH2D $VRB))>;
-def : Pat<(v2i64 (sext_inreg v2i64:$VRB, v2i32)), (v2i64 (VEXTSW2D $VRB))>;
 
 // Vector Integer Negate
 def VNEGW : VX_VT5_EO5_VB5<1538, 6, "vnegw",
@@ -1539,18 +1400,18 @@ class VX_VT5_EO5_VB5_XO9_o<bits<5> eo, bits<9> xo, string opc,
 }
 
 // Decimal Convert From/to National/Zoned/Signed-QWord
-def BCDCFN_rec  : VX_VT5_EO5_VB5_PS1_XO9_o<7, 385, "bcdcfn." , []>;
-def BCDCFZ_rec  : VX_VT5_EO5_VB5_PS1_XO9_o<6, 385, "bcdcfz." , []>;
-def BCDCTN_rec  : VX_VT5_EO5_VB5_XO9_o    <5, 385, "bcdctn." , []>;
-def BCDCTZ_rec  : VX_VT5_EO5_VB5_PS1_XO9_o<4, 385, "bcdctz." , []>;
-def BCDCFSQ_rec : VX_VT5_EO5_VB5_PS1_XO9_o<2, 385, "bcdcfsq.", []>;
-def BCDCTSQ_rec : VX_VT5_EO5_VB5_XO9_o    <0, 385, "bcdctsq.", []>;
+def BCDCFNo  : VX_VT5_EO5_VB5_PS1_XO9_o<7, 385, "bcdcfn." , []>;
+def BCDCFZo  : VX_VT5_EO5_VB5_PS1_XO9_o<6, 385, "bcdcfz." , []>;
+def BCDCTNo  : VX_VT5_EO5_VB5_XO9_o    <5, 385, "bcdctn." , []>;
+def BCDCTZo  : VX_VT5_EO5_VB5_PS1_XO9_o<4, 385, "bcdctz." , []>;
+def BCDCFSQo : VX_VT5_EO5_VB5_PS1_XO9_o<2, 385, "bcdcfsq.", []>;
+def BCDCTSQo : VX_VT5_EO5_VB5_XO9_o    <0, 385, "bcdctsq.", []>;
 
 // Decimal Copy-Sign/Set-Sign
 let Defs = [CR6] in
-def BCDCPSGN_rec : VX1_VT5_VA5_VB5<833, "bcdcpsgn.", []>;
+def BCDCPSGNo : VX1_VT5_VA5_VB5<833, "bcdcpsgn.", []>;
 
-def BCDSETSGN_rec : VX_VT5_EO5_VB5_PS1_XO9_o<31, 385, "bcdsetsgn.", []>;
+def BCDSETSGNo : VX_VT5_EO5_VB5_PS1_XO9_o<31, 385, "bcdsetsgn.", []>;
 
 // [PO VRT VRA VRB 1 PS XO], "_o" means CR6 is set.
 class VX_VT5_VA5_VB5_PS1_XO9_o<bits<9> xo, string opc, list<dag> pattern>
@@ -1569,13 +1430,13 @@ class VX_VT5_VA5_VB5_XO9_o<bits<9> xo, string opc, list<dag> pattern>
 }
 
 // Decimal Shift/Unsigned-Shift/Shift-and-Round
-def BCDS_rec :  VX_VT5_VA5_VB5_PS1_XO9_o<193, "bcds." , []>;
-def BCDUS_rec : VX_VT5_VA5_VB5_XO9_o    <129, "bcdus.", []>;
-def BCDSR_rec : VX_VT5_VA5_VB5_PS1_XO9_o<449, "bcdsr.", []>;
+def BCDSo :  VX_VT5_VA5_VB5_PS1_XO9_o<193, "bcds." , []>;
+def BCDUSo : VX_VT5_VA5_VB5_XO9_o    <129, "bcdus.", []>;
+def BCDSRo : VX_VT5_VA5_VB5_PS1_XO9_o<449, "bcdsr.", []>;
 
 // Decimal (Unsigned) Truncate
-def BCDTRUNC_rec :  VX_VT5_VA5_VB5_PS1_XO9_o<257, "bcdtrunc." , []>;
-def BCDUTRUNC_rec : VX_VT5_VA5_VB5_XO9_o    <321, "bcdutrunc.", []>;
+def BCDTRUNCo :  VX_VT5_VA5_VB5_PS1_XO9_o<257, "bcdtrunc." , []>;
+def BCDUTRUNCo : VX_VT5_VA5_VB5_XO9_o    <321, "bcdutrunc.", []>;
 
 // Absolute Difference
 def VABSDUB : VXForm_1<1027, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB),
@@ -1587,5 +1448,4 @@ def VABSDUH : VXForm_1<1091, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB),
 def VABSDUW : VXForm_1<1155, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB),
                        "vabsduw $vD, $vA, $vB", IIC_VecGeneral,
                        [(set v4i32:$vD, (int_ppc_altivec_vabsduw v4i32:$vA, v4i32:$vB))]>;
-
 } // end HasP9Altivec

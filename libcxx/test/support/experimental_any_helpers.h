@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 #ifndef EXPERIMENTAL_ANY_HELPERS_H
@@ -21,13 +22,13 @@
 #define RTTI_ASSERT(X)
 #endif
 
-template <class T>
+template <class _Tp>
   struct IsSmallObject
     : public std::integral_constant<bool
-        , sizeof(T) <= (sizeof(void*)*3)
+        , sizeof(_Tp) <= (sizeof(void*)*3)
           && std::alignment_of<void*>::value
-             % std::alignment_of<T>::value == 0
-          && std::is_nothrow_move_constructible<T>::value
+             % std::alignment_of<_Tp>::value == 0
+          && std::is_nothrow_move_constructible<_Tp>::value
         >
   {};
 
@@ -54,7 +55,6 @@ void assertEmpty(std::experimental::any const& a) {
 
 // Assert that an 'any' object stores the specified 'Type' and 'value'.
 template <class Type>
-_LIBCPP_AVAILABILITY_THROW_BAD_ANY_CAST
 void assertContains(std::experimental::any const& a, int value = 1) {
     assert(!a.empty());
     RTTI_ASSERT(a.type() == typeid(Type));
@@ -64,7 +64,6 @@ void assertContains(std::experimental::any const& a, int value = 1) {
 // Modify the value of a "test type" stored within an any to the specified
 // 'value'.
 template <class Type>
-_LIBCPP_AVAILABILITY_THROW_BAD_ANY_CAST
 void modifyValue(std::experimental::any& a, int value) {
     assert(!a.empty());
     RTTI_ASSERT(a.type() == typeid(Type));

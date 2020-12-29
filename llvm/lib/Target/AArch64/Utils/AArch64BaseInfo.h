@@ -1,8 +1,9 @@
 //===-- AArch64BaseInfo.h - Top level definitions for AArch64 ---*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -185,49 +186,6 @@ static inline unsigned getDRegFromBReg(unsigned Reg) {
   return Reg;
 }
 
-static inline bool atomicBarrierDroppedOnZero(unsigned Opcode) {
-  switch (Opcode) {
-  case AArch64::LDADDAB:   case AArch64::LDADDAH:
-  case AArch64::LDADDAW:   case AArch64::LDADDAX:
-  case AArch64::LDADDALB:  case AArch64::LDADDALH:
-  case AArch64::LDADDALW:  case AArch64::LDADDALX:
-  case AArch64::LDCLRAB:   case AArch64::LDCLRAH:
-  case AArch64::LDCLRAW:   case AArch64::LDCLRAX:
-  case AArch64::LDCLRALB:  case AArch64::LDCLRALH:
-  case AArch64::LDCLRALW:  case AArch64::LDCLRALX:
-  case AArch64::LDEORAB:   case AArch64::LDEORAH:
-  case AArch64::LDEORAW:   case AArch64::LDEORAX:
-  case AArch64::LDEORALB:  case AArch64::LDEORALH:
-  case AArch64::LDEORALW:  case AArch64::LDEORALX:
-  case AArch64::LDSETAB:   case AArch64::LDSETAH:
-  case AArch64::LDSETAW:   case AArch64::LDSETAX:
-  case AArch64::LDSETALB:  case AArch64::LDSETALH:
-  case AArch64::LDSETALW:  case AArch64::LDSETALX:
-  case AArch64::LDSMAXAB:  case AArch64::LDSMAXAH:
-  case AArch64::LDSMAXAW:  case AArch64::LDSMAXAX:
-  case AArch64::LDSMAXALB: case AArch64::LDSMAXALH:
-  case AArch64::LDSMAXALW: case AArch64::LDSMAXALX:
-  case AArch64::LDSMINAB:  case AArch64::LDSMINAH:
-  case AArch64::LDSMINAW:  case AArch64::LDSMINAX:
-  case AArch64::LDSMINALB: case AArch64::LDSMINALH:
-  case AArch64::LDSMINALW: case AArch64::LDSMINALX:
-  case AArch64::LDUMAXAB:  case AArch64::LDUMAXAH:
-  case AArch64::LDUMAXAW:  case AArch64::LDUMAXAX:
-  case AArch64::LDUMAXALB: case AArch64::LDUMAXALH:
-  case AArch64::LDUMAXALW: case AArch64::LDUMAXALX:
-  case AArch64::LDUMINAB:  case AArch64::LDUMINAH:
-  case AArch64::LDUMINAW:  case AArch64::LDUMINAX:
-  case AArch64::LDUMINALB: case AArch64::LDUMINALH:
-  case AArch64::LDUMINALW: case AArch64::LDUMINALX:
-  case AArch64::SWPAB:     case AArch64::SWPAH:
-  case AArch64::SWPAW:     case AArch64::SWPAX:
-  case AArch64::SWPALB:    case AArch64::SWPALH:
-  case AArch64::SWPALW:    case AArch64::SWPALX:
-    return true;
-  }
-  return false;
-}
-
 namespace AArch64CC {
 
 // The CondCodes constants map directly to the 4-bit encoding of the condition
@@ -250,13 +208,7 @@ enum CondCode {  // Meaning (integer)          Meaning (floating-point)
   AL = 0xe,      // Always (unconditional)     Always (unconditional)
   NV = 0xf,      // Always (unconditional)     Always (unconditional)
   // Note the NV exists purely to disassemble 0b1111. Execution is "always".
-  Invalid,
-
-  // Common aliases used for SVE.
-  ANY_ACTIVE   = NE, // (!Z)
-  FIRST_ACTIVE = MI, // ( N)
-  LAST_ACTIVE  = LO, // (!C)
-  NONE_ACTIVE  = EQ  // ( Z)
+  Invalid
 };
 
 inline static const char *getCondCodeName(CondCode Code) {
@@ -314,134 +266,84 @@ inline static unsigned getNZCVToSatisfyCondCode(CondCode Code) {
 }
 } // end namespace AArch64CC
 
-struct SysAlias {
-  const char *Name;
-  uint16_t Encoding;
-  FeatureBitset FeaturesRequired;
-
-  constexpr SysAlias(const char *N, uint16_t E) : Name(N), Encoding(E) {}
-  constexpr SysAlias(const char *N, uint16_t E, FeatureBitset F)
-      : Name(N), Encoding(E), FeaturesRequired(F) {}
-
-  bool haveFeatures(FeatureBitset ActiveFeatures) const {
-    return (FeaturesRequired & ActiveFeatures) == FeaturesRequired;
-  }
-
-  FeatureBitset getRequiredFeatures() const { return FeaturesRequired; }
-};
-
-struct SysAliasReg : SysAlias {
-  bool NeedsReg;
-  constexpr SysAliasReg(const char *N, uint16_t E, bool R)
-      : SysAlias(N, E), NeedsReg(R) {}
-  constexpr SysAliasReg(const char *N, uint16_t E, bool R, FeatureBitset F)
-      : SysAlias(N, E, F), NeedsReg(R) {}
-};
-
 namespace AArch64AT{
-  struct AT : SysAlias {
-    using SysAlias::SysAlias;
+  struct AT {
+    const char *Name;
+    uint16_t Encoding;
   };
+
   #define GET_AT_DECL
   #include "AArch64GenSystemOperands.inc"
-}
 
+}
 namespace AArch64DB {
-  struct DB : SysAlias {
-    using SysAlias::SysAlias;
+  struct DB {
+    const char *Name;
+    uint16_t Encoding;
   };
+
   #define GET_DB_DECL
   #include "AArch64GenSystemOperands.inc"
 }
 
 namespace  AArch64DC {
-  struct DC : SysAlias {
-    using SysAlias::SysAlias;
+  struct DC {
+    const char *Name;
+    uint16_t Encoding;
   };
+
   #define GET_DC_DECL
   #include "AArch64GenSystemOperands.inc"
 }
 
 namespace  AArch64IC {
-  struct IC : SysAliasReg {
-    using SysAliasReg::SysAliasReg;
+  struct IC {
+    const char *Name;
+    uint16_t Encoding;
+    bool NeedsReg;
   };
   #define GET_IC_DECL
   #include "AArch64GenSystemOperands.inc"
 }
 
 namespace  AArch64ISB {
-  struct ISB : SysAlias {
-    using SysAlias::SysAlias;
+  struct ISB {
+    const char *Name;
+    uint16_t Encoding;
   };
   #define GET_ISB_DECL
   #include "AArch64GenSystemOperands.inc"
 }
 
-namespace  AArch64TSB {
-  struct TSB : SysAlias {
-    using SysAlias::SysAlias;
-  };
-  #define GET_TSB_DECL
-  #include "AArch64GenSystemOperands.inc"
-}
-
 namespace AArch64PRFM {
-  struct PRFM : SysAlias {
-    using SysAlias::SysAlias;
+  struct PRFM {
+    const char *Name;
+    uint16_t Encoding;
   };
   #define GET_PRFM_DECL
   #include "AArch64GenSystemOperands.inc"
 }
 
-namespace AArch64SVEPRFM {
-  struct SVEPRFM : SysAlias {
-    using SysAlias::SysAlias;
-  };
-#define GET_SVEPRFM_DECL
-#include "AArch64GenSystemOperands.inc"
-}
-
-namespace AArch64SVEPredPattern {
-  struct SVEPREDPAT {
+namespace AArch64PState {
+  struct PState {
     const char *Name;
     uint16_t Encoding;
-  };
-#define GET_SVEPREDPAT_DECL
-#include "AArch64GenSystemOperands.inc"
-}
+    FeatureBitset FeaturesRequired;
 
-namespace AArch64ExactFPImm {
-  struct ExactFPImm {
-    const char *Name;
-    int Enum;
-    const char *Repr;
-  };
-#define GET_EXACTFPIMM_DECL
-#include "AArch64GenSystemOperands.inc"
-}
-
-namespace AArch64PState {
-  struct PState : SysAlias{
-    using SysAlias::SysAlias;
+    bool haveFeatures(FeatureBitset ActiveFeatures) const {
+      return (FeaturesRequired & ActiveFeatures) == FeaturesRequired;
+    }
   };
   #define GET_PSTATE_DECL
   #include "AArch64GenSystemOperands.inc"
 }
 
 namespace AArch64PSBHint {
-  struct PSB : SysAlias {
-    using SysAlias::SysAlias;
+  struct PSB {
+    const char *Name;
+    uint16_t Encoding;
   };
   #define GET_PSB_DECL
-  #include "AArch64GenSystemOperands.inc"
-}
-
-namespace AArch64BTIHint {
-  struct BTI : SysAlias {
-    using SysAlias::SysAlias;
-  };
-  #define GET_BTI_DECL
   #include "AArch64GenSystemOperands.inc"
 }
 
@@ -549,18 +451,12 @@ namespace AArch64SysReg {
 }
 
 namespace AArch64TLBI {
-  struct TLBI : SysAliasReg {
-    using SysAliasReg::SysAliasReg;
+  struct TLBI {
+    const char *Name;
+    uint16_t Encoding;
+    bool NeedsReg;
   };
   #define GET_TLBI_DECL
-  #include "AArch64GenSystemOperands.inc"
-}
-
-namespace AArch64PRCTX {
-  struct PRCTX : SysAliasReg {
-    using SysAliasReg::SysAliasReg;
-  };
-  #define GET_PRCTX_DECL
   #include "AArch64GenSystemOperands.inc"
 }
 
@@ -572,7 +468,7 @@ namespace AArch64II {
 
     MO_NO_FLAG,
 
-    MO_FRAGMENT = 0x7,
+    MO_FRAGMENT = 0xf,
 
     /// MO_PAGE - A symbol operand with this flag represents the pc-relative
     /// offset of the 4K page containing the symbol.  This is used with the
@@ -605,11 +501,6 @@ namespace AArch64II {
     /// by-12-bits instruction.
     MO_HI12 = 7,
 
-    /// MO_COFFSTUB - On a symbol operand "FOO", this indicates that the
-    /// reference is actually to the ".refptrp.FOO" symbol.  This is used for
-    /// stub symbols on windows.
-    MO_COFFSTUB = 0x8,
-
     /// MO_GOT - This flag indicates that a symbol operand represents the
     /// address of the GOT entry for the symbol, rather than the address of
     /// the symbol itself.
@@ -624,42 +515,10 @@ namespace AArch64II {
     /// thread-local symbol. On Darwin, only one type of thread-local access
     /// exists (pre linker-relaxation), but on ELF the TLSModel used for the
     /// referee will affect interpretation.
-    MO_TLS = 0x40,
-
-    /// MO_DLLIMPORT - On a symbol operand, this represents that the reference
-    /// to the symbol is for an import stub.  This is used for DLL import
-    /// storage class indication on Windows.
-    MO_DLLIMPORT = 0x80,
-
-    /// MO_S - Indicates that the bits of the symbol operand represented by
-    /// MO_G0 etc are signed.
-    MO_S = 0x100,
-
-    /// MO_PREL - Indicates that the bits of the symbol operand represented by
-    /// MO_G0 etc are PC relative.
-    MO_PREL = 0x200,
-
-    /// MO_TAGGED - With MO_PAGE, indicates that the page includes a memory tag
-    /// in bits 56-63.
-    /// On a FrameIndex operand, indicates that the underlying memory is tagged
-    /// with an unknown tag value (MTE); this needs to be lowered either to an
-    /// SP-relative load or store instruction (which do not check tags), or to
-    /// an LDG instruction to obtain the tag value.
-    MO_TAGGED = 0x400,
+    MO_TLS = 0x40
   };
 } // end namespace AArch64II
 
-namespace AArch64 {
-// The number of bits in a SVE register is architecturally defined
-// to be a multiple of this value.  If <M x t> has this number of bits,
-// a <n x M x t> vector can be stored in a SVE register without any
-// redundant bits.  If <M x t> has this number of bits divided by P,
-// a <n x M x t> vector is stored in a SVE register by placing index i
-// in index i*P of a <n x (M*P) x t> vector.  The other elements of the
-// <n x (M*P) x t> vector (such as index 1) are undefined.
-static constexpr unsigned SVEBitsPerBlock = 128;
-const unsigned NeonBitsPerVector = 128;
-} // end namespace AArch64
 } // end namespace llvm
 
 #endif

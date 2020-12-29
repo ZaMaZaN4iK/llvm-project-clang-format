@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fcxx-exceptions -fexceptions -fsyntax-only -verify -std=c++11 -Wc++14-compat -Wc++14-extensions -Wc++17-extensions %s
+// RUN: %clang_cc1 -fcxx-exceptions -fexceptions -fsyntax-only -verify -std=c++11 -Wc++14-compat -Wc++14-extensions -Wc++1z-extensions %s
 
 // Need std::initializer_list
 namespace std {
@@ -64,13 +64,6 @@ struct MemberFnOrder {
 struct [[]] struct_attr;
 class [[]] class_attr {};
 union [[]] union_attr;
-enum [[]] E { };
-namespace test_misplacement {
-[[]] struct struct_attr2;  //expected-error{{misplaced attributes}}
-[[]] class class_attr2; //expected-error{{misplaced attributes}}
-[[]] union union_attr2; //expected-error{{misplaced attributes}}
-[[]] enum  E2 { }; //expected-error{{misplaced attributes}}
-}
 
 // Checks attributes placed at wrong syntactic locations of class specifiers.
 class [[]] [[]]
@@ -98,7 +91,7 @@ class C final [[deprecated(l]] {}); // expected-error {{use of undeclared identi
 class D final alignas ([l) {}]{}); // expected-error {{expected ',' or ']' in lambda capture list}} expected-error {{an attribute list cannot appear here}}
 
 [[]] struct with_init_declarators {} init_declarator;
-[[]] struct no_init_declarators; // expected-error {{misplaced attributes}}
+[[]] struct no_init_declarators; // expected-error {{an attribute list cannot appear here}}
 template<typename> [[]] struct no_init_declarators_template; // expected-error {{an attribute list cannot appear here}}
 void fn_with_structs() {
   [[]] struct with_init_declarators {} init_declarator;
@@ -106,13 +99,11 @@ void fn_with_structs() {
 }
 [[]];
 struct ctordtor {
-  [[]] ctordtor [[]] () [[]];
-  ctordtor (C) [[]];
-  [[]] ~ctordtor [[]] () [[]];
+  [[]] ctordtor();
+  [[]] ~ctordtor();
 };
-[[]] ctordtor::ctordtor [[]] () [[]] {}
-[[]] ctordtor::ctordtor (C) [[]] try {} catch (...) {}
-[[]] ctordtor::~ctordtor [[]] () [[]] {}
+[[]] ctordtor::ctordtor() {}
+[[]] ctordtor::~ctordtor() {}
 extern "C++" [[]] int extern_attr;
 template <typename T> [[]] void template_attr ();
 [[]] [[]] int [[]] [[]] multi_attr [[]] [[]];
@@ -134,7 +125,7 @@ extern "C++" [[]] { } // expected-error {{an attribute list cannot appear here}}
 [[]] using ns::i; // expected-error {{an attribute list cannot appear here}}
 [[unknown]] using namespace ns; // expected-warning {{unknown attribute 'unknown' ignored}}
 [[noreturn]] using namespace ns; // expected-error {{'noreturn' attribute only applies to functions}}
-namespace [[]] ns2 {} // expected-warning {{attributes on a namespace declaration are a C++17 extension}}
+namespace [[]] ns2 {} // expected-warning {{attributes on a namespace declaration are incompatible with C++ standards before C++1z}}
 
 using [[]] alignas(4) [[]] ns::i; // expected-error {{an attribute list cannot appear here}}
 using [[]] alignas(4) [[]] foobar = int; // expected-error {{an attribute list cannot appear here}} expected-error {{'alignas' attribute only applies to}}
@@ -186,7 +177,7 @@ enum [[]] E2; // expected-error {{forbids forward references}}
 enum [[]] E1;
 enum [[]] E3 : int;
 enum [[]] {
-  k_123 [[]] = 123 // expected-warning {{attributes on an enumerator declaration are a C++17 extension}}
+  k_123 [[]] = 123 // expected-warning {{attributes on an enumerator declaration are incompatible with C++ standards before C++1z}}
 };
 enum [[]] E1 e; // expected-error {{an attribute list cannot appear here}}
 enum [[]] class E4 { }; // expected-error {{an attribute list cannot appear here}}
@@ -314,7 +305,7 @@ int v5()[[gnu::unused]]; // expected-warning {{attribute 'unused' ignored}}
 
 [[attribute_declaration]]; // expected-warning {{unknown attribute 'attribute_declaration' ignored}}
 [[noreturn]]; // expected-error {{'noreturn' attribute only applies to functions}}
-[[carries_dependency]]; // expected-error {{'carries_dependency' attribute only applies to parameters, Objective-C methods, and functions}}
+[[carries_dependency]]; // expected-error {{'carries_dependency' attribute only applies to functions, methods, and parameters}}
 
 class A {
   A([[gnu::unused]] int a);
@@ -359,7 +350,7 @@ int fallthru(int n) {
   switch (n) {
   case 0:
     n += 5;
-    [[fallthrough]]; // expected-warning {{use of the 'fallthrough' attribute is a C++17 extension}}
+    [[fallthrough]]; // expected-warning {{use of the 'fallthrough' attribute is a C++1z extension}}
   case 1:
     n *= 2;
     break;
@@ -373,11 +364,3 @@ int fallthru(int n) {
 [[attr_name, attr_name_2(bitor), attr_name_3(com, pl)]] int macro_attrs; // expected-warning {{unknown attribute 'compl' ignored}} \
    expected-warning {{unknown attribute 'bitor' ignored}} \
    expected-warning {{unknown attribute 'bitand' ignored}}
-
-// Check that we can parse an attribute in our vendor namespace.
-[[clang::annotate("test")]] void annotate1();
-[[_Clang::annotate("test")]] void annotate2();
-// Note: __clang__ is a predefined macro, which is why _Clang is the
-// prefered "protected" vendor namespace. We support __clang__ only for
-// people expecting it to behave the same as __gnu__.
-[[__clang__::annotate("test")]] void annotate3();  // expected-warning {{'__clang__' is a predefined macro name, not an attribute scope specifier; did you mean '_Clang' instead?}}

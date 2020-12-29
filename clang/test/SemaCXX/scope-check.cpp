@@ -193,8 +193,7 @@ namespace PR10462 {
 
   bool recurse() {
     MyEnum K;
-    switch (K) { // do not warn that 'something_invalid' is not listed;
-                 // 'what_am_i_thinking' might have been intended to be that case.
+    switch (K) { // expected-warning {{enumeration value 'something_invalid' not handled in switch}}
     case something_valid:
     case what_am_i_thinking: // expected-error {{use of undeclared identifier}}
       int *X = 0;

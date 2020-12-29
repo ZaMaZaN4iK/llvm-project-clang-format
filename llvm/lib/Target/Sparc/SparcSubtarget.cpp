@@ -1,8 +1,9 @@
 //===-- SparcSubtarget.cpp - SPARC Subtarget Information ------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -27,27 +28,23 @@ void SparcSubtarget::anchor() { }
 
 SparcSubtarget &SparcSubtarget::initializeSubtargetDependencies(StringRef CPU,
                                                                 StringRef FS) {
-  UseSoftMulDiv = false;
   IsV9 = false;
   IsLeon = false;
   V8DeprecatedInsts = false;
   IsVIS = false;
-  IsVIS2 = false;
-  IsVIS3 = false;
   HasHardQuad = false;
   UsePopc = false;
   UseSoftFloat = false;
-  HasNoFSMULD = false;
-  HasNoFMULS = false;
 
   // Leon features
   HasLeonCasa = false;
   HasUmacSmac = false;
-  HasPWRPSR = false;
+  PerformSDIVReplace = false;
   InsertNOPLoad = false;
+  FixFSMULD = false;
+  ReplaceFMULS = false;
   FixAllFDIVSQRT = false;
   DetectRoundChange = false;
-  HasLeonCycleCounter = false;
 
   // Determine default and user specified characteristics
   std::string CPUName = CPU;

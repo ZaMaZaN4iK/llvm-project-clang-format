@@ -1,8 +1,9 @@
 //===-- StringPool.cpp - Interned string pool -----------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -25,10 +26,10 @@ PooledStringPtr StringPool::intern(StringRef Key) {
   table_t::iterator I = InternTable.find(Key);
   if (I != InternTable.end())
     return PooledStringPtr(&*I);
-
+  
   entry_t *S = entry_t::Create(Key);
   S->getValue().Pool = this;
   InternTable.insert(S);
-
+  
   return PooledStringPtr(S);
 }

@@ -1,8 +1,9 @@
 //==- HexagonMCExpr.h - Hexagon specific MC expression classes --*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -28,8 +29,8 @@ public:
   bool mustExtend() const;
   void setMustNotExtend(bool Val = true);
   bool mustNotExtend() const;
-  void setS27_2_reloc(bool Val = true);
-  bool s27_2_reloc() const;
+  void setS23_2_reloc(bool Val = true);
+  bool s23_2_reloc() const;
   void setSignMismatch(bool Val = true);
   bool signMismatch() const;
 
@@ -38,7 +39,7 @@ private:
   MCExpr const *Expr;
   bool MustNotExtend;
   bool MustExtend;
-  bool S27_2_reloc;
+  bool S23_2_reloc;
   bool SignMismatch;
 };
 } // end namespace llvm

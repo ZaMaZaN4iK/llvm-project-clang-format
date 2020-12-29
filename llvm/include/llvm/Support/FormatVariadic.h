@@ -1,8 +1,9 @@
 //===- FormatVariadic.h - Efficient type-safe string formatting --*- C++-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -26,8 +27,8 @@
 #define LLVM_SUPPORT_FORMATVARIADIC_H
 
 #include "llvm/ADT/Optional.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/FormatCommon.h"
 #include "llvm/Support/FormatProviders.h"
@@ -57,7 +58,7 @@ struct ReplacementItem {
   size_t Index = 0;
   size_t Align = 0;
   AlignStyle Where = AlignStyle::Right;
-  char Pad = 0;
+  char Pad;
   StringRef Options;
 };
 
@@ -93,15 +94,6 @@ public:
     Adapters.reserve(ParamCount);
   }
 
-  formatv_object_base(formatv_object_base const &rhs) = delete;
-
-  formatv_object_base(formatv_object_base &&rhs)
-      : Fmt(std::move(rhs.Fmt)),
-        Adapters(), // Adapters are initialized by formatv_object
-        Replacements(std::move(rhs.Replacements)) {
-    Adapters.reserve(rhs.Adapters.size());
-  };
-
   void format(raw_ostream &S) const {
     for (auto &R : Replacements) {
       if (R.Type == ReplacementType::Empty)
@@ -117,7 +109,7 @@ public:
 
       auto W = Adapters[R.Index];
 
-      FmtAlign Align(*W, R.Where, R.Align, R.Pad);
+      FmtAlign Align(*W, R.Where, R.Align);
       Align.format(S, R.Options);
     }
   }
@@ -157,17 +149,9 @@ public:
         Parameters(std::move(Params)) {
     Adapters = apply_tuple(create_adapters(), Parameters);
   }
-
-  formatv_object(formatv_object const &rhs) = delete;
-
-  formatv_object(formatv_object &&rhs)
-      : formatv_object_base(std::move(rhs)),
-        Parameters(std::move(rhs.Parameters)) {
-    Adapters = apply_tuple(create_adapters(), Parameters);
-  }
 };
 
-// Format text given a format string and replacement parameters.
+// \brief Format text given a format string and replacement parameters.
 //
 // ===General Description===
 //
@@ -212,7 +196,7 @@ public:
 // "}}" to print a literal '}'.
 //
 // ===Parameter Indexing===
-// `index` specifies the index of the parameter in the parameter pack to format
+// `index` specifies the index of the paramter in the parameter pack to format
 // into the output.  Note that it is possible to refer to the same parameter
 // index multiple times in a given format string.  This makes it possible to
 // output the same value multiple times without passing it multiple times to the
@@ -229,15 +213,14 @@ public:
 // For a given parameter of type T, the following steps are executed in order
 // until a match is found:
 //
-//   1. If the parameter is of class type, and inherits from format_adapter,
-//      Then format() is invoked on it to produce the formatted output.  The
+//   1. If the parameter is of class type, and contains a method
+//      void format(raw_ostream &Stream, StringRef Options)
+//      Then this method is invoked to produce the formatted output.  The
 //      implementation should write the formatted text into `Stream`.
 //   2. If there is a suitable template specialization of format_provider<>
 //      for type T containing a method whose signature is:
 //      void format(const T &Obj, raw_ostream &Stream, StringRef Options)
 //      Then this method is invoked as described in Step 1.
-//   3. If an appropriate operator<< for raw_ostream exists, it will be used.
-//      For this to work, (raw_ostream& << const T&) must return raw_ostream&.
 //
 // If a match cannot be found through either of the above methods, a compiler
 // error is generated.

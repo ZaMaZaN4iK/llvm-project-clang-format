@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,8 +19,6 @@
 #include <codecvt>
 #include <fstream>
 #include <cassert>
-
-#include "test_macros.h"
 
 struct test_buf
     : public std::wbuffer_convert<std::codecvt_utf8<wchar_t> >
@@ -39,7 +38,7 @@ struct test_buf
     virtual int_type overflow(int_type c = traits_type::eof()) {return base::overflow(c);}
 };
 
-int main(int, char**)
+int main()
 {
     {
         std::ofstream bs("overflow.dat");
@@ -98,6 +97,4 @@ int main(int, char**)
         assert(f.get() == -1);
     }
     std::remove("overflow.dat");
-
-  return 0;
 }

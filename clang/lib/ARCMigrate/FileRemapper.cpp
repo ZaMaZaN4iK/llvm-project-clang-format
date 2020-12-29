@@ -1,8 +1,9 @@
 //===--- FileRemapper.cpp - File Remapping Helper -------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -66,7 +67,7 @@ bool FileRemapper::initFromFile(StringRef filePath, DiagnosticsEngine &Diag,
       llvm::MemoryBuffer::getFile(infoFile);
   if (!fileBuf)
     return report("Error opening file: " + infoFile, Diag);
-
+  
   SmallVector<StringRef, 64> lines;
   fileBuf.get()->getBuffer().split(lines, "\n");
 
@@ -77,27 +78,27 @@ bool FileRemapper::initFromFile(StringRef filePath, DiagnosticsEngine &Diag,
       return report("Invalid file data: '" + lines[idx+1] + "' not a number",
                     Diag);
     StringRef toFilename = lines[idx+2];
-
-    llvm::ErrorOr<const FileEntry *> origFE = FileMgr->getFile(fromFilename);
+    
+    const FileEntry *origFE = FileMgr->getFile(fromFilename);
     if (!origFE) {
       if (ignoreIfFilesChanged)
         continue;
       return report("File does not exist: " + fromFilename, Diag);
     }
-    llvm::ErrorOr<const FileEntry *> newFE = FileMgr->getFile(toFilename);
+    const FileEntry *newFE = FileMgr->getFile(toFilename);
     if (!newFE) {
       if (ignoreIfFilesChanged)
         continue;
       return report("File does not exist: " + toFilename, Diag);
     }
 
-    if ((uint64_t)(*origFE)->getModificationTime() != timeModified) {
+    if ((uint64_t)origFE->getModificationTime() != timeModified) {
       if (ignoreIfFilesChanged)
         continue;
       return report("File was modified: " + fromFilename, Diag);
     }
 
-    pairs.push_back(std::make_pair(*origFE, *newFE));
+    pairs.push_back(std::make_pair(origFE, newFE));
   }
 
   for (unsigned i = 0, e = pairs.size(); i != e; ++i)
@@ -121,7 +122,7 @@ bool FileRemapper::flushToFile(StringRef outputPath, DiagnosticsEngine &Diag) {
 
   std::error_code EC;
   std::string infoFile = outputPath;
-  llvm::raw_fd_ostream infoOut(infoFile, EC, llvm::sys::fs::OF_None);
+  llvm::raw_fd_ostream infoOut(infoFile, EC, llvm::sys::fs::F_None);
   if (EC)
     return report(EC.message(), Diag);
 
@@ -151,12 +152,10 @@ bool FileRemapper::flushToFile(StringRef outputPath, DiagnosticsEngine &Diag) {
       llvm::MemoryBuffer *mem = I->second.get<llvm::MemoryBuffer *>();
       newOut.write(mem->getBufferStart(), mem->getBufferSize());
       newOut.close();
-
-      auto newE = FileMgr->getFile(tempPath);
-      if (newE) {
-        remap(origFE, *newE);
-        infoOut << (*newE)->getName() << '\n';
-      }
+      
+      const FileEntry *newE = FileMgr->getFile(tempPath);
+      remap(origFE, newE);
+      infoOut << newE->getName() << '\n';
     }
   }
 
@@ -177,7 +176,7 @@ bool FileRemapper::overwriteOriginal(DiagnosticsEngine &Diag,
                     Diag);
 
     std::error_code EC;
-    llvm::raw_fd_ostream Out(origFE->getName(), EC, llvm::sys::fs::OF_None);
+    llvm::raw_fd_ostream Out(origFE->getName(), EC, llvm::sys::fs::F_None);
     if (EC)
       return report(EC.message(), Diag);
 
@@ -226,10 +225,8 @@ void FileRemapper::remap(const FileEntry *file, const FileEntry *newfile) {
 }
 
 const FileEntry *FileRemapper::getOriginalFile(StringRef filePath) {
-  const FileEntry *file = nullptr;
-  if (auto fileOrErr = FileMgr->getFile(filePath))
-    file = *fileOrErr;
-  // If we are updating a file that overridden an original file,
+  const FileEntry *file = FileMgr->getFile(filePath);
+  // If we are updating a file that overriden an original file,
   // actually update the original file.
   llvm::DenseMap<const FileEntry *, const FileEntry *>::iterator
     I = ToFromMappings.find(file);

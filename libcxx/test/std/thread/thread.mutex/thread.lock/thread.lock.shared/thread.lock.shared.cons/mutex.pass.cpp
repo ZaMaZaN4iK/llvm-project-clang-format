@@ -1,14 +1,14 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: libcpp-has-no-threads
 // UNSUPPORTED: c++98, c++03, c++11
-// XFAIL: dylib-has-no-shared_mutex
 
 // FLAKY_TEST.
 
@@ -17,9 +17,6 @@
 // template <class Mutex> class shared_lock;
 
 // explicit shared_lock(mutex_type& m);
-
-// template<class _Mutex> shared_lock(shared_lock<_Mutex>)
-//     -> shared_lock<_Mutex>;  // C++17
 
 #include <shared_mutex>
 #include <thread>
@@ -72,7 +69,7 @@ void g()
     assert(d < Tolerance);  // within tolerance
 }
 
-int main(int, char**)
+int main()
 {
     std::vector<std::thread> v;
     {
@@ -95,11 +92,4 @@ int main(int, char**)
             t.join();
         q.join();
     }
-
-#ifdef __cpp_deduction_guides
-    std::shared_lock sl(m);
-    static_assert((std::is_same<decltype(sl), std::shared_lock<decltype(m)>>::value), "" );
-#endif
-
-  return 0;
 }

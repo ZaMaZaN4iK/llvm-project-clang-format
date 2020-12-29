@@ -1,18 +1,22 @@
 //===-- OptionValueLanguage.cpp ---------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Interpreter/OptionValueLanguage.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/Stream.h"
 #include "lldb/DataFormatters/FormatManager.h"
+#include "lldb/Interpreter/Args.h"
 #include "lldb/Target/Language.h"
-#include "lldb/Symbol/TypeSystem.h"
-#include "lldb/Utility/Args.h"
-#include "lldb/Utility/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -24,14 +28,13 @@ void OptionValueLanguage::DumpValue(const ExecutionContext *exe_ctx,
   if (dump_mask & eDumpOptionValue) {
     if (dump_mask & eDumpOptionType)
       strm.PutCString(" = ");
-    if (m_current_value != eLanguageTypeUnknown)
-      strm.PutCString(Language::GetNameForLanguageType(m_current_value));
+    strm.PutCString(Language::GetNameForLanguageType(m_current_value));
   }
 }
 
-Status OptionValueLanguage::SetValueFromString(llvm::StringRef value,
-                                               VarSetOperationType op) {
-  Status error;
+Error OptionValueLanguage::SetValueFromString(llvm::StringRef value,
+                                              VarSetOperationType op) {
+  Error error;
   switch (op) {
   case eVarSetOperationClear:
     Clear();
@@ -40,20 +43,23 @@ Status OptionValueLanguage::SetValueFromString(llvm::StringRef value,
   case eVarSetOperationReplace:
   case eVarSetOperationAssign: {
     ConstString lang_name(value.trim());
-    LanguageSet languages_for_types = Language::GetLanguagesSupportingTypeSystems();
+    std::set<lldb::LanguageType> languages_for_types;
+    std::set<lldb::LanguageType> languages_for_expressions;
+    Language::GetLanguagesSupportingTypeSystems(languages_for_types,
+                                                languages_for_expressions);
+
     LanguageType new_type =
         Language::GetLanguageTypeFromString(lang_name.GetStringRef());
-    if (new_type && languages_for_types[new_type]) {
+    if (new_type && languages_for_types.count(new_type)) {
       m_value_was_set = true;
       m_current_value = new_type;
     } else {
       StreamString error_strm;
       error_strm.Printf("invalid language type '%s', ", value.str().c_str());
       error_strm.Printf("valid values are:\n");
-      for (int bit : languages_for_types.bitvector.set_bits()) {
-        auto language = (LanguageType)bit;
-        error_strm.Printf("    %s\n",
-                          Language::GetNameForLanguageType(language));
+      for (lldb::LanguageType language : languages_for_types) {
+        error_strm.Printf("%s%s%s", "    ",
+                          Language::GetNameForLanguageType(language), "\n");
       }
       error.SetErrorString(error_strm.GetString());
     }

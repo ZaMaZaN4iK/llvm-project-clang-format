@@ -1,8 +1,9 @@
 //==--- ImmutableList.h - Immutable (functional) list interface --*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -30,9 +31,8 @@ class ImmutableListImpl : public FoldingSetNode {
   T Head;
   const ImmutableListImpl* Tail;
 
-  template <typename ElemT>
-  ImmutableListImpl(ElemT &&head, const ImmutableListImpl *tail = nullptr)
-    : Head(std::forward<ElemT>(head)), Tail(tail) {}
+  ImmutableListImpl(const T& head, const ImmutableListImpl* tail = nullptr)
+    : Head(head), Tail(tail) {}
 
 public:
   ImmutableListImpl(const ImmutableListImpl &) = delete;
@@ -63,11 +63,8 @@ public:
 template <typename T>
 class ImmutableList {
 public:
-  using value_type = T;
-  using Factory = ImmutableListFactory<T>;
-
-  static_assert(std::is_trivially_destructible<T>::value,
-                "T must be trivially destructible!");
+  typedef T value_type;
+  typedef ImmutableListFactory<T> Factory;
 
 private:
   const ImmutableListImpl<T>* X;
@@ -93,9 +90,6 @@ public:
     bool operator==(const iterator& I) const { return L == I.L; }
     bool operator!=(const iterator& I) const { return L != I.L; }
     const value_type& operator*() const { return L->getHead(); }
-    const typename std::remove_reference<value_type>::type* operator->() const {
-      return &L->getHead();
-    }
 
     ImmutableList getList() const { return L; }
   };
@@ -129,14 +123,14 @@ public:
   bool operator==(const ImmutableList& L) const { return isEqual(L); }
 
   /// getHead - Returns the head of the list.
-  const T& getHead() const {
+  const T& getHead() {
     assert(!isEmpty() && "Cannot get the head of an empty list.");
     return X->getHead();
   }
 
   /// getTail - Returns the tail of the list, which is another (possibly empty)
   ///  ImmutableList.
-  ImmutableList getTail() const {
+  ImmutableList getTail() {
     return X ? X->getTail() : nullptr;
   }
 
@@ -147,8 +141,8 @@ public:
 
 template <typename T>
 class ImmutableListFactory {
-  using ListTy = ImmutableListImpl<T>;
-  using CacheTy = FoldingSet<ListTy>;
+  typedef ImmutableListImpl<T> ListTy;
+  typedef FoldingSet<ListTy>   CacheTy;
 
   CacheTy Cache;
   uintptr_t Allocator;
@@ -172,8 +166,7 @@ public:
     if (ownsAllocator()) delete &getAllocator();
   }
 
-  template <typename ElemT>
-  LLVM_NODISCARD ImmutableList<T> concat(ElemT &&Head, ImmutableList<T> Tail) {
+  ImmutableList<T> concat(const T& Head, ImmutableList<T> Tail) {
     // Profile the new list to see if it already exists in our cache.
     FoldingSetNodeID ID;
     void* InsertPos;
@@ -186,7 +179,7 @@ public:
       // The list does not exist in our cache.  Create it.
       BumpPtrAllocator& A = getAllocator();
       L = (ListTy*) A.Allocate<ListTy>();
-      new (L) ListTy(std::forward<ElemT>(Head), TailImpl);
+      new (L) ListTy(Head, TailImpl);
 
       // Insert the new list into the cache.
       Cache.InsertNode(L, InsertPos);
@@ -195,24 +188,16 @@ public:
     return L;
   }
 
-  template <typename ElemT>
-  LLVM_NODISCARD ImmutableList<T> add(ElemT &&Data, ImmutableList<T> L) {
-    return concat(std::forward<ElemT>(Data), L);
-  }
-
-  template <typename ...CtorArgs>
-  LLVM_NODISCARD ImmutableList<T> emplace(ImmutableList<T> Tail,
-                                          CtorArgs &&...Args) {
-    return concat(T(std::forward<CtorArgs>(Args)...), Tail);
+  ImmutableList<T> add(const T& D, ImmutableList<T> L) {
+    return concat(D, L);
   }
 
   ImmutableList<T> getEmptyList() const {
     return ImmutableList<T>(nullptr);
   }
 
-  template <typename ElemT>
-  ImmutableList<T> create(ElemT &&Data) {
-    return concat(std::forward<ElemT>(Data), getEmptyList());
+  ImmutableList<T> create(const T& X) {
+    return Concat(X, getEmptyList());
   }
 };
 
@@ -240,6 +225,10 @@ template<typename T> struct DenseMapInfo<ImmutableList<T>> {
     return X1 == X2;
   }
 };
+
+template <typename T> struct isPodLike;
+template <typename T>
+struct isPodLike<ImmutableList<T>> { static const bool value = true; };
 
 } // end namespace llvm
 

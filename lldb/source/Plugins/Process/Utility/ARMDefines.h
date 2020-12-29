@@ -1,15 +1,14 @@
-//===-- ARMDefines.h --------------------------------------------*- C++ -*-===//
+//===-- lldb_ARMDefines.h ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef lldb_ARMDefines_h_
 #define lldb_ARMDefines_h_
-
-#include "llvm/Support/ErrorHandling.h"
 
 #include <cassert>
 #include <cstdint>
@@ -19,14 +18,14 @@
 namespace lldb_private {
 
 // ARM shifter types
-enum ARM_ShifterType {
+typedef enum {
   SRType_LSL,
   SRType_LSR,
   SRType_ASR,
   SRType_ROR,
   SRType_RRX,
   SRType_Invalid
-};
+} ARM_ShifterType;
 
 // ARM conditions          // Meaning (integer)         Meaning (floating-point)
 // Condition flags
@@ -70,6 +69,8 @@ enum ARM_ShifterType {
 
 static inline const char *ARMCondCodeToString(uint32_t CC) {
   switch (CC) {
+  default:
+    assert(0 && "Unknown condition code");
   case COND_EQ:
     return "eq";
   case COND_NE:
@@ -101,7 +102,6 @@ static inline const char *ARMCondCodeToString(uint32_t CC) {
   case COND_AL:
     return "al";
   }
-  llvm_unreachable("Unknown condition code");
 }
 
 static inline bool ARMConditionPassed(const uint32_t condition,

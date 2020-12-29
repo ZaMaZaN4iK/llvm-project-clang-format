@@ -36,13 +36,13 @@ void unavail(void) {
 
 // rdar://10201690
 enum foo {
-    a = 1,
+    a = 1, // expected-note {{'a' has been explicitly marked deprecated here}}
     b __attribute__((deprecated())) = 2, // expected-note {{'b' has been explicitly marked deprecated here}}
     c = 3
-}__attribute__((deprecated())); // expected-note {{'foo' has been explicitly marked deprecated here}}
+}__attribute__((deprecated()));
 
-enum fee { // expected-note 2 {{'fee' has been explicitly marked unavailable here}}
-    r = 1,
+enum fee { // expected-note {{'fee' has been explicitly marked unavailable here}}
+    r = 1, // expected-note {{'r' has been explicitly marked unavailable here}}
     s = 2,
     t = 3
 }__attribute__((unavailable()));

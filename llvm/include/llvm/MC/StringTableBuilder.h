@@ -1,8 +1,9 @@
-//===- StringTableBuilder.h - String table building utility -----*- C++ -*-===//
+//===-- StringTableBuilder.h - String table building utility ------*- C++ -*-=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,18 +12,15 @@
 
 #include "llvm/ADT/CachedHashString.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/StringRef.h"
-#include <cstddef>
-#include <cstdint>
+#include <cassert>
 
 namespace llvm {
-
 class raw_ostream;
 
-/// Utility for building string tables with deduplicated suffixes.
+/// \brief Utility for building string tables with deduplicated suffixes.
 class StringTableBuilder {
 public:
-  enum Kind { ELF, WinCOFF, MachO, RAW, DWARF, XCOFF };
+  enum Kind { ELF, WinCOFF, MachO, RAW };
 
 private:
   DenseMap<CachedHashStringRef, size_t> StringIndexMap;
@@ -38,13 +36,13 @@ public:
   StringTableBuilder(Kind K, unsigned Alignment = 1);
   ~StringTableBuilder();
 
-  /// Add a string to the builder. Returns the position of S in the
+  /// \brief Add a string to the builder. Returns the position of S in the
   /// table. The position will be changed if finalize is used.
   /// Can only be used before the table is finalized.
   size_t add(CachedHashStringRef S);
   size_t add(StringRef S) { return add(CachedHashStringRef(S)); }
 
-  /// Analyze the strings and build the final table. No more strings can
+  /// \brief Analyze the strings and build the final table. No more strings can
   /// be added after this point.
   void finalize();
 
@@ -52,7 +50,7 @@ public:
   /// returned by add will still be valid.
   void finalizeInOrder();
 
-  /// Get the offest of a string in the string table. Can only be used
+  /// \brief Get the offest of a string in the string table. Can only be used
   /// after the table is finalized.
   size_t getOffset(CachedHashStringRef S) const;
   size_t getOffset(StringRef S) const {
@@ -69,6 +67,6 @@ private:
   bool isFinalized() const { return Finalized; }
 };
 
-} // end namespace llvm
+} // end llvm namespace
 
-#endif // LLVM_MC_STRINGTABLEBUILDER_H
+#endif

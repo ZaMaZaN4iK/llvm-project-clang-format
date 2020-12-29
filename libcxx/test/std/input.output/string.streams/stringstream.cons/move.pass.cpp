@@ -1,12 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// UNSUPPORTED: c++98, c++03
 
 // <sstream>
 
@@ -18,10 +17,9 @@
 #include <sstream>
 #include <cassert>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
     {
         std::stringstream ss0(" 123 456 ");
         std::stringstream ss(std::move(ss0));
@@ -50,6 +48,5 @@ int main(int, char**)
         ss << i << ' ' << 123;
         assert(ss.str() == L"456 1236 ");
     }
-
-  return 0;
+#endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
 }

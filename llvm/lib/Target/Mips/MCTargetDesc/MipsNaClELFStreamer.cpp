@@ -1,8 +1,9 @@
 //===-- MipsNaClELFStreamer.cpp - ELF Object Output for Mips NaCl ---------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -19,14 +20,7 @@
 #include "Mips.h"
 #include "MipsELFStreamer.h"
 #include "MipsMCNaCl.h"
-#include "llvm/MC/MCAsmBackend.h"
-#include "llvm/MC/MCAssembler.h"
-#include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCELFStreamer.h"
-#include "llvm/MC/MCInst.h"
-#include "llvm/MC/MCObjectWriter.h"
-#include "llvm/Support/ErrorHandling.h"
-#include <cassert>
 
 using namespace llvm;
 
@@ -42,18 +36,16 @@ const unsigned LoadStoreStackMaskReg = Mips::T7;
 
 class MipsNaClELFStreamer : public MipsELFStreamer {
 public:
-  MipsNaClELFStreamer(MCContext &Context, std::unique_ptr<MCAsmBackend> TAB,
-                      std::unique_ptr<MCObjectWriter> OW,
-                      std::unique_ptr<MCCodeEmitter> Emitter)
-      : MipsELFStreamer(Context, std::move(TAB), std::move(OW),
-                        std::move(Emitter)) {}
+  MipsNaClELFStreamer(MCContext &Context, MCAsmBackend &TAB,
+                      raw_pwrite_stream &OS, MCCodeEmitter *Emitter)
+      : MipsELFStreamer(Context, TAB, OS, Emitter), PendingCall(false) {}
 
-  ~MipsNaClELFStreamer() override = default;
+  ~MipsNaClELFStreamer() override {}
 
 private:
   // Whether we started the sandboxing sequence for calls.  Calls are bundled
   // with branch delays and aligned to the bundle end.
-  bool PendingCall = false;
+  bool PendingCall;
 
   bool isIndirectJump(const MCInst &MI) {
     if (MI.getOpcode() == Mips::JALR) {
@@ -154,8 +146,8 @@ public:
     }
 
     // Sandbox loads, stores and SP changes.
-    unsigned AddrIdx = 0;
-    bool IsStore = false;
+    unsigned AddrIdx;
+    bool IsStore;
     bool IsMemAccess = isBasePlusOffsetMemoryAccess(Inst.getOpcode(), &AddrIdx,
                                                     &IsStore);
     bool IsSPFirstOperand = isStackPointerFirstOperand(Inst);
@@ -259,20 +251,18 @@ bool baseRegNeedsLoadStoreMask(unsigned Reg) {
   return Reg != Mips::SP && Reg != Mips::T8;
 }
 
-MCELFStreamer *createMipsNaClELFStreamer(MCContext &Context,
-                                         std::unique_ptr<MCAsmBackend> TAB,
-                                         std::unique_ptr<MCObjectWriter> OW,
-                                         std::unique_ptr<MCCodeEmitter> Emitter,
+MCELFStreamer *createMipsNaClELFStreamer(MCContext &Context, MCAsmBackend &TAB,
+                                         raw_pwrite_stream &OS,
+                                         MCCodeEmitter *Emitter,
                                          bool RelaxAll) {
-  MipsNaClELFStreamer *S = new MipsNaClELFStreamer(
-      Context, std::move(TAB), std::move(OW), std::move(Emitter));
+  MipsNaClELFStreamer *S = new MipsNaClELFStreamer(Context, TAB, OS, Emitter);
   if (RelaxAll)
     S->getAssembler().setRelaxAll(true);
 
   // Set bundle-alignment as required by the NaCl ABI for the target.
-  S->EmitBundleAlignMode(Log2(MIPS_NACL_BUNDLE_ALIGN));
+  S->EmitBundleAlignMode(MIPS_NACL_BUNDLE_ALIGN);
 
   return S;
 }
 
-} // end namespace llvm
+}

@@ -1,15 +1,10 @@
 set(LLVM_LINK_COMPONENTS
-  AllTargetsAsmParsers
-  AllTargetsCodeGens
-  AllTargetsDescs
-  AllTargetsInfos
-  BitReader
+  ${LLVM_TARGETS_TO_BUILD}
   Core
   Linker
   LTO
   MC
   Object
-  Passes
   Support
   Target
   )

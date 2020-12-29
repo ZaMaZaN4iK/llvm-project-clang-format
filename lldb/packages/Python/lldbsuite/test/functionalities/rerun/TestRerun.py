@@ -1,9 +1,12 @@
 """
 Test that argdumper is a viable launching strategy.
 """
+from __future__ import print_function
 
 
 import lldb
+import os
+import time
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
@@ -15,7 +18,7 @@ class TestRerun(TestBase):
 
     def test(self):
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         self.runCmd("target create %s" % exe)
 

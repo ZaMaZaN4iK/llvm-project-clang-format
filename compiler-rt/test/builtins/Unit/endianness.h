@@ -1,8 +1,9 @@
 /* ===-- endianness.h - configuration header for libgcc replacement --------===
  *
- * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
- * See https://llvm.org/LICENSE.txt for license information.
- * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+ *		       The LLVM Compiler Infrastructure
+ *
+ * This file is dual licensed under the MIT and the University of Illinois Open
+ * Source Licenses. See LICENSE.TXT for details.
  *
  * ===----------------------------------------------------------------------===
  *
@@ -50,7 +51,7 @@
 
 /* .. */
 
-#if defined(__OpenBSD__)
+#if defined(__OpenBSD__) || defined(__Bitrig__)
 #include <machine/endian.h>
 
 #if _BYTE_ORDER == _BIG_ENDIAN
@@ -61,7 +62,7 @@
 #define _YUGA_BIG_ENDIAN    0
 #endif /* _BYTE_ORDER */
 
-#endif /* OpenBSD */
+#endif /* OpenBSD and Bitrig. */
 
 /* .. */
 

@@ -9,9 +9,9 @@
 ; Test f32
 define float @f1(float %a, float %b, float %f) {
 ; CHECK-LABEL: f1:
-; CHECK: ltebr
+; CHECK: lcebr
 ; CHECK-NEXT: ber %r14
-  %neg = fneg float %f
+  %neg = fsub float -0.0, %f
   %cond = fcmp oeq float %neg, 0.0
   %res = select i1 %cond, float %a, float %b
   ret float %res
@@ -20,9 +20,9 @@ define float @f1(float %a, float %b, float %f) {
 ; Test f64
 define double @f2(double %a, double %b, double %f) {
 ; CHECK-LABEL: f2:
-; CHECK: ltdbr
+; CHECK: lcdbr
 ; CHECK-NEXT: ber %r14
-  %neg = fneg double %f
+  %neg = fsub double -0.0, %f
   %cond = fcmp oeq double %neg, 0.0
   %res = select i1 %cond, double %a, double %b
   ret double %res
@@ -33,10 +33,10 @@ define double @f2(double %a, double %b, double %f) {
 declare float @llvm.fabs.f32(float %f)
 define float @f3(float %a, float %b, float %f) {
 ; CHECK-LABEL: f3:
-; CHECK: lpebr
+; CHECK: lnebr
 ; CHECK-NEXT: ber %r14
   %abs = call float @llvm.fabs.f32(float %f)
-  %neg = fneg float %abs
+  %neg = fsub float -0.0, %abs
   %cond = fcmp oeq float %neg, 0.0
   %res = select i1 %cond, float %a, float %b
   ret float %res
@@ -46,10 +46,10 @@ define float @f3(float %a, float %b, float %f) {
 declare double @llvm.fabs.f64(double %f)
 define double @f4(double %a, double %b, double %f) {
 ; CHECK-LABEL: f4:
-; CHECK: lpdbr
+; CHECK: lndbr
 ; CHECK-NEXT: ber %r14
   %abs = call double @llvm.fabs.f64(double %f)
-  %neg = fneg double %abs
+  %neg = fsub double -0.0, %abs
   %cond = fcmp oeq double %neg, 0.0
   %res = select i1 %cond, double %a, double %b
   ret double %res

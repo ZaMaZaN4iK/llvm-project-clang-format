@@ -1,8 +1,9 @@
 //===---- MipsOs16.cpp for Mips Option -Os16                       --------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Mips.h"
 #include "llvm/IR/Instructions.h"
+#include "Mips.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -56,7 +57,7 @@ static  bool needsFPFromSig(Function &F) {
     ;
   }
   if (F.arg_size() >=1) {
-    Argument &Arg = *F.arg_begin();
+    Argument &Arg = F.getArgumentList().front();
     switch (Arg.getType()->getTypeID()) {
     case Type::FloatTyID:
     case Type::DoubleTyID:
@@ -95,8 +96,7 @@ static bool needsFP(Function &F) {
         ;
       }
       if (const CallInst *CI = dyn_cast<CallInst>(I)) {
-        LLVM_DEBUG(dbgs() << "Working on call"
-                          << "\n");
+        DEBUG(dbgs() << "Working on call" << "\n");
         Function &F_ =  *CI->getCalledFunction();
         if (needsFPFromSig(F_))
           return true;
@@ -110,10 +110,9 @@ bool MipsOs16::runOnModule(Module &M) {
   bool usingMask = Mips32FunctionMask.length() > 0;
   bool doneUsingMask = false; // this will make it stop repeating
 
-  LLVM_DEBUG(dbgs() << "Run on Module MipsOs16 \n"
-                    << Mips32FunctionMask << "\n");
+  DEBUG(dbgs() << "Run on Module MipsOs16 \n" << Mips32FunctionMask << "\n");
   if (usingMask)
-    LLVM_DEBUG(dbgs() << "using mask \n" << Mips32FunctionMask << "\n");
+    DEBUG(dbgs() << "using mask \n" << Mips32FunctionMask << "\n");
 
   unsigned int functionIndex = 0;
   bool modified = false;
@@ -122,14 +121,14 @@ bool MipsOs16::runOnModule(Module &M) {
     if (F.isDeclaration())
       continue;
 
-    LLVM_DEBUG(dbgs() << "Working on " << F.getName() << "\n");
+    DEBUG(dbgs() << "Working on " << F.getName() << "\n");
     if (usingMask) {
       if (!doneUsingMask) {
         if (functionIndex == Mips32FunctionMask.length())
           functionIndex = 0;
         switch (Mips32FunctionMask[functionIndex]) {
         case '1':
-          LLVM_DEBUG(dbgs() << "mask forced mips32: " << F.getName() << "\n");
+          DEBUG(dbgs() << "mask forced mips32: " << F.getName() << "\n");
           F.addFnAttr("nomips16");
           break;
         case '.':
@@ -143,11 +142,11 @@ bool MipsOs16::runOnModule(Module &M) {
     }
     else {
       if (needsFP(F)) {
-        LLVM_DEBUG(dbgs() << "os16 forced mips32: " << F.getName() << "\n");
+        DEBUG(dbgs() << "os16 forced mips32: " << F.getName() << "\n");
         F.addFnAttr("nomips16");
       }
       else {
-        LLVM_DEBUG(dbgs() << "os16 forced mips16: " << F.getName() << "\n");
+        DEBUG(dbgs() << "os16 forced mips16: " << F.getName() << "\n");
         F.addFnAttr("mips16");
       }
     }
@@ -156,4 +155,6 @@ bool MipsOs16::runOnModule(Module &M) {
   return modified;
 }
 
-ModulePass *llvm::createMipsOs16Pass() { return new MipsOs16(); }
+ModulePass *llvm::createMipsOs16Pass(MipsTargetMachine &TM) {
+  return new MipsOs16;
+}

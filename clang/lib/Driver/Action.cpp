@@ -1,21 +1,23 @@
-//===- Action.cpp - Abstract compilation steps ----------------------------===//
+//===--- Action.cpp - Abstract compilation steps --------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "clang/Driver/Action.h"
+#include "clang/Driver/ToolChain.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/Regex.h"
 #include <cassert>
-#include <string>
-
-using namespace clang;
-using namespace driver;
+using namespace clang::driver;
 using namespace llvm::opt;
 
-Action::~Action() = default;
+Action::~Action() {}
 
 const char *Action::getClassName(ActionClass AC) {
   switch (AC) {
@@ -25,13 +27,11 @@ const char *Action::getClassName(ActionClass AC) {
     return "offload";
   case PreprocessJobClass: return "preprocessor";
   case PrecompileJobClass: return "precompiler";
-  case HeaderModulePrecompileJobClass: return "header-module-precompiler";
   case AnalyzeJobClass: return "analyzer";
   case MigrateJobClass: return "migrator";
   case CompileJobClass: return "compiler";
   case BackendJobClass: return "backend";
   case AssembleJobClass: return "assembler";
-  case IfsMergeJobClass: return "interface-stub-merger";
   case LinkJobClass: return "linker";
   case LipoJobClass: return "lipo";
   case DsymutilJobClass: return "dsymutil";
@@ -41,8 +41,6 @@ const char *Action::getClassName(ActionClass AC) {
     return "clang-offload-bundler";
   case OffloadUnbundlingJobClass:
     return "clang-offload-unbundler";
-  case OffloadWrapperJobClass:
-    return "clang-offload-wrapper";
   }
 
   llvm_unreachable("invalid class");
@@ -99,23 +97,16 @@ std::string Action::getOffloadingKindPrefix() const {
     return "device-cuda";
   case OFK_OpenMP:
     return "device-openmp";
-  case OFK_HIP:
-    return "device-hip";
 
     // TODO: Add other programming models here.
   }
 
   if (!ActiveOffloadKindMask)
-    return {};
+    return "";
 
   std::string Res("host");
-  assert(!((ActiveOffloadKindMask & OFK_Cuda) &&
-           (ActiveOffloadKindMask & OFK_HIP)) &&
-         "Cannot offload CUDA and HIP at the same time");
   if (ActiveOffloadKindMask & OFK_Cuda)
     Res += "-cuda";
-  if (ActiveOffloadKindMask & OFK_HIP)
-    Res += "-hip";
   if (ActiveOffloadKindMask & OFK_OpenMP)
     Res += "-openmp";
 
@@ -128,11 +119,11 @@ std::string Action::getOffloadingKindPrefix() const {
 /// for each offloading kind.
 std::string
 Action::GetOffloadingFileNamePrefix(OffloadKind Kind,
-                                    StringRef NormalizedTriple,
+                                    llvm::StringRef NormalizedTriple,
                                     bool CreatePrefixForHost) {
   // Don't generate prefix for host actions unless required.
   if (!CreatePrefixForHost && (Kind == OFK_None || Kind == OFK_Host))
-    return {};
+    return "";
 
   std::string Res("-");
   Res += GetOffloadKindName(Kind);
@@ -143,7 +134,7 @@ Action::GetOffloadingFileNamePrefix(OffloadKind Kind,
 
 /// Return a string with the offload kind name. If that is not defined, we
 /// assume 'host'.
-StringRef Action::GetOffloadKindName(OffloadKind Kind) {
+llvm::StringRef Action::GetOffloadKindName(OffloadKind Kind) {
   switch (Kind) {
   case OFK_None:
   case OFK_Host:
@@ -152,8 +143,6 @@ StringRef Action::GetOffloadKindName(OffloadKind Kind) {
     return "cuda";
   case OFK_OpenMP:
     return "openmp";
-  case OFK_HIP:
-    return "hip";
 
     // TODO: Add other programming models here.
   }
@@ -164,11 +153,12 @@ StringRef Action::GetOffloadKindName(OffloadKind Kind) {
 void InputAction::anchor() {}
 
 InputAction::InputAction(const Arg &_Input, types::ID _Type)
-    : Action(InputClass, _Type), Input(_Input) {}
+  : Action(InputClass, _Type), Input(_Input) {
+}
 
 void BindArchAction::anchor() {}
 
-BindArchAction::BindArchAction(Action *Input, StringRef ArchName)
+BindArchAction::BindArchAction(Action *Input, llvm::StringRef ArchName)
     : Action(BindArchClass, Input), ArchName(ArchName) {}
 
 void OffloadAction::anchor() {}
@@ -310,7 +300,8 @@ JobAction::JobAction(ActionClass Kind, Action *Input, types::ID Type)
     : Action(Kind, Input, Type) {}
 
 JobAction::JobAction(ActionClass Kind, const ActionList &Inputs, types::ID Type)
-    : Action(Kind, Inputs, Type) {}
+  : Action(Kind, Inputs, Type) {
+}
 
 void PreprocessJobAction::anchor() {}
 
@@ -321,19 +312,6 @@ void PrecompileJobAction::anchor() {}
 
 PrecompileJobAction::PrecompileJobAction(Action *Input, types::ID OutputType)
     : JobAction(PrecompileJobClass, Input, OutputType) {}
-
-PrecompileJobAction::PrecompileJobAction(ActionClass Kind, Action *Input,
-                                         types::ID OutputType)
-    : JobAction(Kind, Input, OutputType) {
-  assert(isa<PrecompileJobAction>((Action*)this) && "invalid action kind");
-}
-
-void HeaderModulePrecompileJobAction::anchor() {}
-
-HeaderModulePrecompileJobAction::HeaderModulePrecompileJobAction(
-    Action *Input, types::ID OutputType, const char *ModuleName)
-    : PrecompileJobAction(HeaderModulePrecompileJobClass, Input, OutputType),
-      ModuleName(ModuleName) {}
 
 void AnalyzeJobAction::anchor() {}
 
@@ -360,25 +338,23 @@ void AssembleJobAction::anchor() {}
 AssembleJobAction::AssembleJobAction(Action *Input, types::ID OutputType)
     : JobAction(AssembleJobClass, Input, OutputType) {}
 
-void IfsMergeJobAction::anchor() {}
-
-IfsMergeJobAction::IfsMergeJobAction(ActionList &Inputs, types::ID Type)
-    : JobAction(IfsMergeJobClass, Inputs, Type) {}
-
 void LinkJobAction::anchor() {}
 
 LinkJobAction::LinkJobAction(ActionList &Inputs, types::ID Type)
-    : JobAction(LinkJobClass, Inputs, Type) {}
+  : JobAction(LinkJobClass, Inputs, Type) {
+}
 
 void LipoJobAction::anchor() {}
 
 LipoJobAction::LipoJobAction(ActionList &Inputs, types::ID Type)
-    : JobAction(LipoJobClass, Inputs, Type) {}
+  : JobAction(LipoJobClass, Inputs, Type) {
+}
 
 void DsymutilJobAction::anchor() {}
 
 DsymutilJobAction::DsymutilJobAction(ActionList &Inputs, types::ID Type)
-    : JobAction(DsymutilJobClass, Inputs, Type) {}
+  : JobAction(DsymutilJobClass, Inputs, Type) {
+}
 
 void VerifyJobAction::anchor() {}
 
@@ -403,15 +379,9 @@ VerifyPCHJobAction::VerifyPCHJobAction(Action *Input, types::ID Type)
 void OffloadBundlingJobAction::anchor() {}
 
 OffloadBundlingJobAction::OffloadBundlingJobAction(ActionList &Inputs)
-    : JobAction(OffloadBundlingJobClass, Inputs, Inputs.back()->getType()) {}
+    : JobAction(OffloadBundlingJobClass, Inputs, Inputs.front()->getType()) {}
 
 void OffloadUnbundlingJobAction::anchor() {}
 
 OffloadUnbundlingJobAction::OffloadUnbundlingJobAction(Action *Input)
     : JobAction(OffloadUnbundlingJobClass, Input, Input->getType()) {}
-
-void OffloadWrapperJobAction::anchor() {}
-
-OffloadWrapperJobAction::OffloadWrapperJobAction(ActionList &Inputs,
-                                                 types::ID Type)
-  : JobAction(OffloadWrapperJobClass, Inputs, Type) {}

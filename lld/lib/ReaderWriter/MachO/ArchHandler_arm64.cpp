@@ -1,8 +1,9 @@
 //===- lib/FileFormat/MachO/ArchHandler_arm64.cpp -------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -50,7 +51,11 @@ public:
       canBypassGOT = true;
       return true;
     case delta32ToGOT:
+      canBypassGOT = false;
+      return true;
     case unwindCIEToPersonalityFunction:
+      canBypassGOT = false;
+      return true;
     case imageOffsetGot:
       canBypassGOT = false;
       return true;
@@ -124,10 +129,6 @@ public:
 
   Reference::KindValue pointerKind() override {
     return pointer64;
-  }
-
-  Reference::KindValue lazyImmediateLocationKind() override {
-    return lazyImmediateLocation;
   }
 
   uint32_t dwarfCompactUnwindType() override {

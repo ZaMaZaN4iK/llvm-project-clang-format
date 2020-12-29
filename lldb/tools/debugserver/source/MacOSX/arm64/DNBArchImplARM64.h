@@ -1,8 +1,9 @@
-//===-- DNBArchImplARM64.h --------------------------------------*- C++ -*-===//
+//===-- DNBArchMachARM64.h --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -75,14 +76,14 @@ protected:
   kern_return_t EnableHardwareSingleStep(bool enable);
   static bool FixGenericRegisterNumber(uint32_t &set, uint32_t &reg);
 
-  enum RegisterSet {
+  typedef enum RegisterSetTag {
     e_regSetALL = REGISTER_SET_ALL,
     e_regSetGPR, // ARM_THREAD_STATE64,
     e_regSetVFP, // ARM_NEON_STATE64,
     e_regSetEXC, // ARM_EXCEPTION_STATE64,
     e_regSetDBG, // ARM_DEBUG_STATE64,
     kNumRegisterSets
-  };
+  } RegisterSet;
 
   enum {
     e_regSetGPRCount = ARM_THREAD_STATE64_COUNT,

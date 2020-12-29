@@ -1,8 +1,9 @@
 //===- ForceFunctionAttrs.cpp - Force function attrs for debugging --------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,8 +12,6 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
@@ -43,10 +42,8 @@ static Attribute::AttrKind parseAttrKind(StringRef Kind) {
       .Case("nonlazybind", Attribute::NonLazyBind)
       .Case("noredzone", Attribute::NoRedZone)
       .Case("noreturn", Attribute::NoReturn)
-      .Case("nocf_check", Attribute::NoCfCheck)
       .Case("norecurse", Attribute::NoRecurse)
       .Case("nounwind", Attribute::NoUnwind)
-      .Case("optforfuzzing", Attribute::OptForFuzzing)
       .Case("optnone", Attribute::OptimizeNone)
       .Case("optsize", Attribute::OptimizeForSize)
       .Case("readnone", Attribute::ReadNone)
@@ -54,17 +51,12 @@ static Attribute::AttrKind parseAttrKind(StringRef Kind) {
       .Case("argmemonly", Attribute::ArgMemOnly)
       .Case("returns_twice", Attribute::ReturnsTwice)
       .Case("safestack", Attribute::SafeStack)
-      .Case("shadowcallstack", Attribute::ShadowCallStack)
       .Case("sanitize_address", Attribute::SanitizeAddress)
-      .Case("sanitize_hwaddress", Attribute::SanitizeHWAddress)
       .Case("sanitize_memory", Attribute::SanitizeMemory)
       .Case("sanitize_thread", Attribute::SanitizeThread)
-      .Case("sanitize_memtag", Attribute::SanitizeMemTag)
-      .Case("speculative_load_hardening", Attribute::SpeculativeLoadHardening)
       .Case("ssp", Attribute::StackProtect)
       .Case("sspreq", Attribute::StackProtectReq)
       .Case("sspstrong", Attribute::StackProtectStrong)
-      .Case("strictfp", Attribute::StrictFP)
       .Case("uwtable", Attribute::UWTable)
       .Default(Attribute::None);
 }
@@ -78,8 +70,8 @@ static void addForcedAttributes(Function &F) {
 
     auto Kind = parseAttrKind(KV.second);
     if (Kind == Attribute::None) {
-      LLVM_DEBUG(dbgs() << "ForcedAttribute: " << KV.second
-                        << " unknown or not handled!\n");
+      DEBUG(dbgs() << "ForcedAttribute: " << KV.second
+                   << " unknown or not handled!\n");
       continue;
     }
     if (F.hasFnAttribute(Kind))

@@ -2,13 +2,9 @@
 // RUN: %run %t %t.profraw 1 1
 // RUN: llvm-profdata show --all-functions --counts %t.profraw  | FileCheck %s
 
-// FIXME: llvm-profdata exits with "Malformed instrumentation profile data"
-// XFAIL: msvc
-
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "profile_test.h"
 
 int __llvm_profile_runtime = 0;
 uint64_t __llvm_profile_get_size_for_buffer(void);
@@ -42,7 +38,7 @@ int main(int argc, const char *argv[]) {
     return 1;
 
   const uint64_t MaxSize = 10000;
-  static ALIGNED(sizeof(uint64_t)) char Buffer[MaxSize];
+  static char Buffer[MaxSize];
 
   uint64_t Size = __llvm_profile_get_size_for_buffer();
   if (Size > MaxSize)
@@ -90,8 +86,8 @@ int main(int argc, const char *argv[]) {
 // Not profiled
 // CHECK-LABEL:  bar:
 // CHECK:         Counters: 1
-// CHECK-NEXT:    Function count: 0
-// CHECK-NEXT:    Block counts: []
+// CHECK-NEXT     Function count: 0
+// CHECK-NEXT     Block counts: []
 
 // Not profiled
 // CHECK-LABEL:  main:

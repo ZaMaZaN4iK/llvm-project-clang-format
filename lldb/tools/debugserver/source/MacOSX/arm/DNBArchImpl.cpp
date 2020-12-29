@@ -1,8 +1,9 @@
 //===-- DNBArchImpl.cpp -----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -695,14 +696,14 @@ kern_return_t DNBArchMachARM::EnableHardwareSingleStep(bool enable) {
 
   if (err.Fail()) {
     err.LogThreaded("%s: failed to read the GPR registers", __FUNCTION__);
-    return err.Status();
+    return err.Error();
   }
 
   err = GetDBGState(false);
 
   if (err.Fail()) {
     err.LogThreaded("%s: failed to read the DBG registers", __FUNCTION__);
-    return err.Status();
+    return err.Error();
   }
 
 // The use of __arm64__ here is not ideal.  If debugserver is running on
@@ -1423,7 +1424,9 @@ nub_addr_t DNBArchMachARM::GetWatchAddress(const DBG &debug_state,
   return bits(debug_state.__wvr[hw_index], 31, 0);
 }
 
+//----------------------------------------------------------------------
 // Register information definitions for 32 bit ARMV7.
+//----------------------------------------------------------------------
 enum gpr_regnums {
   gpr_r0 = 0,
   gpr_r1,
@@ -1774,9 +1777,11 @@ const size_t DNBArchMachARM::k_num_exc_registers =
 const size_t DNBArchMachARM::k_num_all_registers =
     k_num_gpr_registers + k_num_vfp_registers + k_num_exc_registers;
 
+//----------------------------------------------------------------------
 // Register set definitions. The first definitions at register set index
 // of zero is for all registers, followed by other registers sets. The
 // register information for the all register set need not be filled in.
+//----------------------------------------------------------------------
 const DNBRegisterSetInfo DNBArchMachARM::g_reg_sets[] = {
     {"ARM Registers", NULL, k_num_all_registers},
     {"General Purpose Registers", g_gpr_registers, k_num_gpr_registers},

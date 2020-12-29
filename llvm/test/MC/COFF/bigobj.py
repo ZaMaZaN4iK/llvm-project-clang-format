@@ -1,7 +1,5 @@
 # RUN: python %s | llvm-mc -filetype=obj -triple i686-pc-win32 - | llvm-readobj -h | FileCheck %s
 
-from __future__ import print_function
-
 # This test checks that the COFF object emitter can produce objects with
 # more than 65279 sections.
 

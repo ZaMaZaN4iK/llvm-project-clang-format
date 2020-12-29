@@ -26,7 +26,7 @@ for.cond:                                         ; preds = %for.cond.outer.oute
   ]
 
 _LZMA_C_RDBD:                                     ; preds = %for.cond
-  ret void
+  unreachable
 
 sw.bb.956:                                        ; preds = %for.cond
   %_s.sroa.294.0.ph519.lcssa2388 = phi i32 [ undef, %for.cond ]
@@ -42,19 +42,19 @@ if.else.969:                                      ; preds = %sw.bb.956
 
 for.cond.981:                                     ; preds = %if.else.969, %if.then.960, %for.cond
   %_s.sroa.343.0.ph5161118 = phi i32 [ %_s.sroa.343.0.ph516.lcssa2357, %if.then.960 ], [ %_s.sroa.343.0.ph516.lcssa2357, %if.else.969 ], [ undef, %for.cond ]
-  ret void
+  unreachable
 
 for.cond.outer.outer.outer:                       ; preds = %entry
   br label %for.cond
 
 saveStateAndReturn:                               ; preds = %for.cond
-  ret void
+  unreachable
 
 cleanup.1072:                                     ; preds = %for.cond
   ret void
 }
 
-attributes #0 = { nounwind uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "frame-pointer"="none" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+mmx,+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { nounwind uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+mmx,+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
 
 !llvm.ident = !{!0}
 

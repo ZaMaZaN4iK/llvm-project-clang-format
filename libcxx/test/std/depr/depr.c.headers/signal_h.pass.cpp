@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,8 +11,6 @@
 
 #include <signal.h>
 #include <type_traits>
-
-#include "test_macros.h"
 
 #ifndef SIG_DFL
 #error SIG_DFL not defined
@@ -49,12 +48,10 @@
 #error SIGTERM not defined
 #endif
 
-int main(int, char**)
+int main()
 {
     sig_atomic_t sig; ((void)sig);
     typedef void (*func)(int);
     static_assert((std::is_same<decltype(signal(0, (func)0)), func>::value), "");
     static_assert((std::is_same<decltype(raise(0)), int>::value), "");
-
-  return 0;
 }

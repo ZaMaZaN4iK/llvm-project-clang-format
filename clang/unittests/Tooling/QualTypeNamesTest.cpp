@@ -1,12 +1,13 @@
 //===- unittest/Tooling/QualTypeNameTest.cpp ------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/AST/QualTypeNames.h"
+#include "clang/Tooling/Core/QualTypeNames.h"
 #include "TestVisitor.h"
 using namespace clang;
 
@@ -25,13 +26,9 @@ struct TypeNameVisitor : TestVisitor<TypeNameVisitor> {
     std::string ExpectedName =
         ExpectedQualTypeNames.lookup(VD->getNameAsString());
     if (ExpectedName != "") {
-      PrintingPolicy Policy(Context->getPrintingPolicy());
-      Policy.SuppressScope = false;
-      Policy.AnonymousTagLocations = true;
-      Policy.PolishForDeclaration = true;
-      Policy.SuppressUnwrittenScope = true;
-      std::string ActualName = TypeName::getFullyQualifiedName(
-          VD->getType(), *Context, Policy, WithGlobalNsPrefix);
+      std::string ActualName =
+          TypeName::getFullyQualifiedName(VD->getType(), *Context,
+                                          WithGlobalNsPrefix);
       if (ExpectedName != ActualName) {
         // A custom message makes it much easier to see what declaration
         // failed compared to EXPECT_EQ.
@@ -194,7 +191,6 @@ TEST(QualTypeNameTest, getFullyQualifiedName) {
   GlobalNsPrefix.ExpectedQualTypeNames["ZVal"] = "::A::B::Y::Z";
   GlobalNsPrefix.ExpectedQualTypeNames["GlobalZVal"] = "::Z";
   GlobalNsPrefix.ExpectedQualTypeNames["CheckK"] = "D::aStruct";
-  GlobalNsPrefix.ExpectedQualTypeNames["YZMPtr"] = "::A::B::X ::A::B::Y::Z::*";
   GlobalNsPrefix.runOver(
       "namespace A {\n"
       "  namespace B {\n"
@@ -206,9 +202,8 @@ TEST(QualTypeNameTest, getFullyQualifiedName) {
       "    template <typename T>\n"
       "    using Alias = CCC<T>;\n"
       "    Alias<int> IntAliasVal;\n"
-      "    struct Y { struct Z { X YZIPtr; }; };\n"
+      "    struct Y { struct Z {}; };\n"
       "    Y::Z ZVal;\n"
-      "    X Y::Z::*YZMPtr;\n"
       "  }\n"
       "}\n"
       "struct Z {};\n"
@@ -222,37 +217,6 @@ TEST(QualTypeNameTest, getFullyQualifiedName) {
       "  }\n"
       "}\n"
   );
-
-  TypeNameVisitor InlineNamespace;
-  InlineNamespace.ExpectedQualTypeNames["c"] = "B::C";
-  InlineNamespace.runOver("inline namespace A {\n"
-                          "  namespace B {\n"
-                          "    class C {};\n"
-                          "  }\n"
-                          "}\n"
-                          "using namespace A::B;\n"
-                          "C c;\n",
-                          TypeNameVisitor::Lang_CXX11);
-
-  TypeNameVisitor AnonStrucs;
-  AnonStrucs.ExpectedQualTypeNames["a"] = "short";
-  AnonStrucs.ExpectedQualTypeNames["un_in_st_1"] =
-      "union (anonymous struct at input.cc:1:1)::(anonymous union at "
-      "input.cc:2:27)";
-  AnonStrucs.ExpectedQualTypeNames["b"] = "short";
-  AnonStrucs.ExpectedQualTypeNames["un_in_st_2"] =
-      "union (anonymous struct at input.cc:1:1)::(anonymous union at "
-      "input.cc:5:27)";
-  AnonStrucs.ExpectedQualTypeNames["anon_st"] =
-      "struct (anonymous struct at input.cc:1:1)";
-  AnonStrucs.runOver(R"(struct {
-                          union {
-                            short a;
-                          } un_in_st_1;
-                          union {
-                            short b;
-                          } un_in_st_2;
-                        } anon_st;)");
 }
 
 }  // end anonymous namespace

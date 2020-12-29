@@ -1,8 +1,9 @@
 //===-- PPCFrameLowering.h - Define frame lowering for PowerPC --*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,8 +13,9 @@
 #ifndef LLVM_LIB_TARGET_POWERPC_PPCFRAMELOWERING_H
 #define LLVM_LIB_TARGET_POWERPC_PPCFRAMELOWERING_H
 
+#include "PPC.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/CodeGen/TargetFrameLowering.h"
+#include "llvm/Target/TargetFrameLowering.h"
 #include "llvm/Target/TargetMachine.h"
 
 namespace llvm {
@@ -26,10 +28,9 @@ class PPCFrameLowering: public TargetFrameLowering {
   const unsigned FramePointerSaveOffset;
   const unsigned LinkageSize;
   const unsigned BasePointerSaveOffset;
-  const unsigned CRSaveOffset;
 
   /**
-   * Find register[s] that can be used in function prologue and epilogue
+   * \brief Find register[s] that can be used in function prologue and epilogue
    *
    * Find register[s] that can be use as scratch register[s] in function
    * prologue and epilogue to save various registers (Link Register, Base
@@ -66,35 +67,18 @@ class PPCFrameLowering: public TargetFrameLowering {
   bool twoUniqueScratchRegsRequired(MachineBasicBlock *MBB) const;
 
   /**
-   * Create branch instruction for PPC::TCRETURN* (tail call return)
+   * \brief Create branch instruction for PPC::TCRETURN* (tail call return)
    *
    * \param[in] MBB that is terminated by PPC::TCRETURN*
    */
   void createTailCallBranchInstr(MachineBasicBlock &MBB) const;
 
-  /**
-    * Check if the conditions are correct to allow for the stack update
-    * to be moved past the CSR save/restore code.
-    */
-  bool stackUpdateCanBeMoved(MachineFunction &MF) const;
-
 public:
   PPCFrameLowering(const PPCSubtarget &STI);
 
-  /**
-   * Determine the frame layout and update the machine function.
-   */
-  unsigned determineFrameLayoutAndUpdate(MachineFunction &MF,
-                                         bool UseEstimate = false) const;
-
-  /**
-   * Determine the frame layout but do not update the machine function.
-   * The MachineFunction object can be const in this case as it is not
-   * modified.
-   */
-  unsigned determineFrameLayout(const MachineFunction &MF,
-                                bool UseEstimate = false,
-                                unsigned *NewMaxCallFrameSize = nullptr) const;
+  unsigned determineFrameLayout(MachineFunction &MF,
+                                bool UpdateMF = true,
+                                bool UseEstimate = false) const;
 
   /// emitProlog/emitEpilog - These methods insert prolog and epilog code into
   /// the function.
@@ -115,13 +99,6 @@ public:
                                  MachineBasicBlock::iterator MI,
                                  const std::vector<CalleeSavedInfo> &CSI,
                                  const TargetRegisterInfo *TRI) const override;
-  /// This function will assign callee saved gprs to volatile vector registers
-  /// for prologue spills when applicable. It returns false if there are any
-  /// registers which were not spilled to volatile vector registers.
-  bool
-  assignCalleeSavedSpillSlots(MachineFunction &MF,
-                              const TargetRegisterInfo *TRI,
-                              std::vector<CalleeSavedInfo> &CSI) const override;
 
   MachineBasicBlock::iterator
   eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
@@ -129,7 +106,7 @@ public:
 
   bool restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
                                   MachineBasicBlock::iterator MI,
-                                  std::vector<CalleeSavedInfo> &CSI,
+                                  const std::vector<CalleeSavedInfo> &CSI,
                                   const TargetRegisterInfo *TRI) const override;
 
   /// targetHandlesStackFrameRounding - Returns true if the target is
@@ -143,19 +120,15 @@ public:
 
   /// getTOCSaveOffset - Return the previous frame offset to save the
   /// TOC register -- 64-bit SVR4 ABI only.
-  unsigned getTOCSaveOffset() const;
+  unsigned getTOCSaveOffset() const { return TOCSaveOffset; }
 
   /// getFramePointerSaveOffset - Return the previous frame offset to save the
   /// frame pointer.
-  unsigned getFramePointerSaveOffset() const;
+  unsigned getFramePointerSaveOffset() const { return FramePointerSaveOffset; }
 
   /// getBasePointerSaveOffset - Return the previous frame offset to save the
   /// base pointer.
-  unsigned getBasePointerSaveOffset() const;
-
-  /// getCRSaveOffset - Return the previous frame offset to save the
-  /// CR register.
-  unsigned getCRSaveOffset() const { return CRSaveOffset; }
+  unsigned getBasePointerSaveOffset() const { return BasePointerSaveOffset; }
 
   /// getLinkageSize - Return the size of the PowerPC ABI linkage area.
   ///

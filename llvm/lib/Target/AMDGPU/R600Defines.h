@@ -1,8 +1,9 @@
 //===-- R600Defines.h - R600 Helper Macros ----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 /// \file
 //===----------------------------------------------------------------------===//
@@ -22,7 +23,7 @@
 #define MO_FLAG_LAST  (1 << 6)
 #define NUM_MO_FLAGS 7
 
-/// Helper for getting the operand index for the instruction flags
+/// \brief Helper for getting the operand index for the instruction flags
 /// operand.
 #define GET_FLAG_OPERAND_IDX(Flags) (((Flags) >> 7) & 0x3)
 
@@ -51,7 +52,7 @@ namespace R600_InstFlag {
 
 #define HAS_NATIVE_OPERANDS(Flags) ((Flags) & R600_InstFlag::NATIVE_OPERANDS)
 
-/// Defines for extracting register information from register encoding
+/// \brief Defines for extracting register information from register encoding
 #define HW_REG_MASK 0x1ff
 #define HW_CHAN_SHIFT 9
 

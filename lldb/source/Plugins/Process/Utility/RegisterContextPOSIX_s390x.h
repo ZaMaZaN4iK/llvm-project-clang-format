@@ -1,19 +1,24 @@
 //===-- RegisterContextPOSIX_s390x.h ----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_RegisterContextPOSIX_s390x_h_
 #define liblldb_RegisterContextPOSIX_s390x_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "RegisterContext_s390x.h"
 #include "RegisterInfoInterface.h"
 #include "lldb-s390x-register-enums.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Target/RegisterContext.h"
-#include "lldb/Utility/Log.h"
 
 class ProcessMonitor;
 
@@ -58,7 +63,7 @@ protected:
   };
 
   RegInfo m_reg_info;
-  std::unique_ptr<lldb_private::RegisterInfoInterface> m_register_info_up;
+  std::unique_ptr<lldb_private::RegisterInfoInterface> m_register_info_ap;
 
   virtual bool IsRegisterSetAvailable(size_t set_index);
 

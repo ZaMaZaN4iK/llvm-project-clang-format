@@ -1,12 +1,12 @@
-(* RUN: rm -rf %t && mkdir -p %t && cp %s %t/core.ml
- * RUN: %ocamlc -g -w +A -package llvm.analysis -package llvm.bitwriter -linkpkg %t/core.ml -o %t/executable
- * RUN: %t/executable %t/bitcode.bc
- * RUN: %ocamlopt -g -w +A -package llvm.analysis -package llvm.bitwriter -linkpkg %t/core.ml -o %t/executable
- * RUN: %t/executable %t/bitcode.bc
- * RUN: llvm-dis < %t/bitcode.bc > %t/dis.ll
- * RUN: FileCheck %s < %t/dis.ll
+(* RUN: cp %s %T/core.ml
+ * RUN: %ocamlc -g -w +A -package llvm.analysis -package llvm.bitwriter -linkpkg %T/core.ml -o %t
+ * RUN: %t %t.bc
+ * RUN: %ocamlopt -g -w +A -package llvm.analysis -package llvm.bitwriter -linkpkg %T/core.ml -o %t
+ * RUN: %t %t.bc
+ * RUN: llvm-dis < %t.bc > %t.ll
+ * RUN: FileCheck %s < %t.ll
  * Do a second pass for things that shouldn't be anywhere.
- * RUN: FileCheck -check-prefix=CHECK-NOWHERE %s < %t/dis.ll
+ * RUN: FileCheck -check-prefix=CHECK-NOWHERE %s < %t.ll
  * XFAIL: vg_leak
  *)
 
@@ -65,16 +65,6 @@ let suite name f =
 
 let filename = Sys.argv.(1)
 let m = create_module context filename
-
-(*===-- Contained types  --------------------------------------------------===*)
-
-let test_contained_types () =
-  let pointer_i32 = pointer_type i32_type in
-  insist (i32_type = (Array.get (subtypes pointer_i32) 0));
-
-  let ar = struct_type context [| i32_type; i8_type |] in
-  insist (i32_type = (Array.get (subtypes ar)) 0);
-  insist (i8_type = (Array.get (subtypes ar)) 1)
 
 
 (*===-- Conversion --------------------------------------------------------===*)
@@ -266,7 +256,7 @@ let test_constants () =
   (* CHECK: @const_neg = global i64 sub
    * CHECK: @const_nsw_neg = global i64 sub nsw
    * CHECK: @const_nuw_neg = global i64 sub nuw
-   * CHECK: @const_fneg = global double fneg
+   * CHECK: @const_fneg = global double fsub
    * CHECK: @const_not = global i64 xor
    * CHECK: @const_add = global i64 add
    * CHECK: @const_nsw_add = global i64 add nsw
@@ -1368,9 +1358,8 @@ let test_builder () =
      * CHECK: %build_neg = sub i32 0, %P1
      * CHECK: %build_nsw_neg = sub nsw i32 0, %P1
      * CHECK: %build_nuw_neg = sub nuw i32 0, %P1
-     * CHECK: %build_fneg = fneg float %F1
+     * CHECK: %build_fneg = fsub float {{.*}}0{{.*}}, %F1
      * CHECK: %build_not = xor i32 %P1, -1
-     * CHECK: %build_freeze = freeze i32 %P1
      *)
     ignore (build_add p1 p2 "build_add" b);
     ignore (build_nsw_add p1 p2 "build_nsw_add" b);
@@ -1402,7 +1391,6 @@ let test_builder () =
     ignore (build_nuw_neg p1 "build_nuw_neg" b);
     ignore (build_fneg f1 "build_fneg" b);
     ignore (build_not p1 "build_not" b);
-    ignore (build_freeze p1 "build_freeze" b);
     ignore (build_unreachable b)
   end;
 
@@ -1545,7 +1533,6 @@ let test_writer () =
 (*===-- Driver ------------------------------------------------------------===*)
 
 let _ =
-  suite "contained types"  test_contained_types;
   suite "conversion"       test_conversion;
   suite "target"           test_target;
   suite "constants"        test_constants;

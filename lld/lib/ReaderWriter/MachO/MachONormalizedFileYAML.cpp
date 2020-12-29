@@ -1,8 +1,9 @@
 //===- lib/ReaderWriter/MachO/MachONormalizedFileYAML.cpp -----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,22 +16,23 @@
 ///                  +------------+         +------+
 
 #include "MachONormalizedFile.h"
-#include "lld/Common/LLVM.h"
 #include "lld/Core/Error.h"
+#include "lld/Core/LLVM.h"
 #include "lld/ReaderWriter/YamlContext.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/MachO.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/YAMLTraits.h"
 #include "llvm/Support/raw_ostream.h"
 #include <system_error>
+
 
 using llvm::StringRef;
 using namespace llvm::yaml;
@@ -43,6 +45,7 @@ LLVM_YAML_IS_SEQUENCE_VECTOR(DependentDylib)
 LLVM_YAML_IS_SEQUENCE_VECTOR(RebaseLocation)
 LLVM_YAML_IS_SEQUENCE_VECTOR(BindLocation)
 LLVM_YAML_IS_SEQUENCE_VECTOR(Export)
+LLVM_YAML_IS_SEQUENCE_VECTOR(StringRef)
 LLVM_YAML_IS_SEQUENCE_VECTOR(DataInCode)
 
 
@@ -256,7 +259,7 @@ template <> struct ScalarTraits<SectionAlignment> {
     return StringRef(); // returning empty string means success
   }
 
-  static QuotingType mustQuote(StringRef) { return QuotingType::None; }
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template <>
@@ -521,7 +524,7 @@ struct ScalarTraits<VMProtect> {
     // Return the empty string on success,
     return StringRef();
   }
-  static QuotingType mustQuote(StringRef) { return QuotingType::None; }
+  static bool mustQuote(StringRef) { return false; }
 };
 
 
@@ -705,7 +708,7 @@ struct ScalarTraits<PackedVersion> {
     // Return the empty string on success,
     return StringRef();
   }
-  static QuotingType mustQuote(StringRef) { return QuotingType::None; }
+  static bool mustQuote(StringRef) { return false; }
 };
 
 template <>

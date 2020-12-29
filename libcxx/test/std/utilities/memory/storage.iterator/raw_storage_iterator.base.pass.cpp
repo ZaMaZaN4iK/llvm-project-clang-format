@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,13 +14,6 @@
 #include <cassert>
 
 #include "test_macros.h"
-
-#if TEST_STD_VER >= 11
-#define DELETE_FUNCTION = delete
-#else
-#define DELETE_FUNCTION
-#endif
-
 
 int A_constructed = 0;
 
@@ -33,10 +27,9 @@ public:
     ~A() {--A_constructed; data_ = 0;}
 
     bool operator==(int i) const {return data_ == i;}
-    A* operator& () DELETE_FUNCTION;
 };
 
-int main(int, char**)
+int main()
 {
 #if TEST_STD_VER >= 14
     typedef std::aligned_storage<3*sizeof(A), std::alignment_of<A>::value>::type
@@ -54,6 +47,4 @@ int main(int, char**)
         assert(it.base() == ap + 1);  // next place to write
     }
 #endif
-
-  return 0;
 }

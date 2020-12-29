@@ -23,10 +23,8 @@
 @import DebugObjC;
 #endif
 
-// CHECK: distinct !DICompileUnit(language: DW_LANG_ObjC, file: ![[FILE:[0-9]+]],
-// CHECK-SAME:                    isOptimized: false
-
-// CHECK: ![[FILE]] = !DIFile(filename: "{{DebugObjC|.*DebugObjC.h}}"
+// CHECK: distinct !DICompileUnit(language: DW_LANG_ObjC
+// CHECK-SAME:                    isOptimized: false,
 
 // CHECK: !DICompositeType(tag: DW_TAG_enumeration_type,
 // CHECK-SAME:             scope: ![[MODULE:[0-9]+]],

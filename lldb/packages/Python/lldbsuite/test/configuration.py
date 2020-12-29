@@ -1,7 +1,8 @@
 """
-Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-See https://llvm.org/LICENSE.txt for license information.
-SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+                     The LLVM Compiler Infrastructure
+
+This file is distributed under the University of Illinois Open Source
+License. See LICENSE.TXT for details.
 
 Provides the configuration class, which holds all information related to
 how this invocation of the test suite should be run.
@@ -12,6 +13,8 @@ from __future__ import print_function
 
 # System modules
 import os
+import platform
+import subprocess
 
 
 # Third-party modules
@@ -21,39 +24,63 @@ import unittest2
 import lldbsuite
 
 
+def __setCrashInfoHook_Mac(text):
+    from . import crashinfo
+    crashinfo.setCrashReporterDescription(text)
+
+
+def setupCrashInfoHook():
+    if platform.system() == "Darwin":
+        from . import lock
+        test_dir = os.environ['LLDB_TEST']
+        if not test_dir or not os.path.exists(test_dir):
+            return
+        dylib_lock = os.path.join(test_dir, "crashinfo.lock")
+        dylib_src = os.path.join(test_dir, "crashinfo.c")
+        dylib_dst = os.path.join(test_dir, "crashinfo.so")
+        try:
+            compile_lock = lock.Lock(dylib_lock)
+            compile_lock.acquire()
+            if not os.path.isfile(dylib_dst) or os.path.getmtime(
+                    dylib_dst) < os.path.getmtime(dylib_src):
+                # we need to compile
+                cmd = "SDKROOT= xcrun clang %s -o %s -framework Python -Xlinker -dylib -iframework /System/Library/Frameworks/ -Xlinker -F /System/Library/Frameworks/" % (
+                    dylib_src, dylib_dst)
+                if subprocess.call(
+                        cmd, shell=True) != 0 or not os.path.isfile(dylib_dst):
+                    raise Exception('command failed: "{}"'.format(cmd))
+        finally:
+            compile_lock.release()
+            del compile_lock
+
+        setCrashInfoHook = __setCrashInfoHook_Mac
+
+    else:
+        pass
+
 # The test suite.
 suite = unittest2.TestSuite()
 
 # The list of categories we said we care about
-categories_list = None
+categoriesList = None
 # set to true if we are going to use categories for cherry-picking test cases
-use_categories = False
+useCategories = False
 # Categories we want to skip
-skip_categories = ["darwin-log"]
-# Categories we expect to fail
-xfail_categories = []
+skipCategories = []
 # use this to track per-category failures
-failures_per_category = {}
+failuresPerCategory = {}
 
 # The path to LLDB.framework is optional.
-lldb_framework_path = None
+lldbFrameworkPath = None
 
 # Test suite repeat count.  Can be overwritten with '-# count'.
 count = 1
 
-# The 'arch' and 'compiler' can be specified via command line.
-arch = None        # Must be initialized after option parsing
-compiler = None    # Must be initialized after option parsing
-
-# The overriden dwarf verison.
-dwarf_version = 0
-
-# Any overridden settings.
-# Always disable default dynamic types for testing purposes.
-settings = [('target.prefer-dynamic-value', 'no-dynamic-values')]
-
-# Path to the FileCheck testing tool. Not optional.
-filecheck = None
+# The 'archs' and 'compilers' can be specified via command line.  The corresponding
+# options can be specified more than once. For example, "-A x86_64 -A i386"
+# => archs=['x86_64', 'i386'] and "-C gcc -C clang" => compilers=['gcc', 'clang'].
+archs = None        # Must be initialized after option parsing
+compilers = None    # Must be initialized after option parsing
 
 # The arch might dictate some specific CFLAGS to be passed to the toolchain to build
 # the inferior programs.  The global variable cflags_extras provides a hook to do
@@ -62,6 +89,13 @@ cflags_extras = ''
 
 # The filters (testclass.testmethod) used to admit tests into our test suite.
 filters = []
+
+# By default, we skip long running test case.  Use '-l' option to override.
+skip_long_running_test = True
+
+# Parsable mode silences headers, and any other output this script might generate, and instead
+# prints machine-readable output similar to what clang tests produce.
+parsable = False
 
 # The regular expression pattern to match against eligible filenames as
 # our test cases.
@@ -109,21 +143,16 @@ lldb_platform_name = None
 lldb_platform_url = None
 lldb_platform_working_dir = None
 
-# The base directory in which the tests are being built.
-test_build_dir = None
-
-# The clang module cache directory used by lldb.
-lldb_module_cache_dir = None
-# The clang module cache directory used by clang.
-clang_module_cache_dir = None
-
-# The only directory to scan for tests. If multiple test directories are
-# specified, and an exclusive test subdirectory is specified, the latter option
-# takes precedence.
-exclusive_test_subdir = None
+# Parallel execution settings
+is_inferior_test_runner = False
+multiprocess_test_subdir = None
+num_threads = None
+no_multiprocess_test_runner = False
+test_runner_name = None
 
 # Test results handling globals
 results_filename = None
+results_port = None
 results_formatter_name = None
 results_formatter_object = None
 results_formatter_options = None
@@ -131,58 +160,24 @@ test_result = None
 
 # Test rerun configuration vars
 rerun_all_issues = False
+rerun_max_file_threhold = 0
 
 # The names of all tests. Used to assert we don't have two tests with the
 # same base name.
 all_tests = set()
 
+# safe default
+setCrashInfoHook = lambda x: None
+
+
 def shouldSkipBecauseOfCategories(test_categories):
-    if use_categories:
+    if useCategories:
         if len(test_categories) == 0 or len(
-                categories_list & set(test_categories)) == 0:
+                categoriesList & set(test_categories)) == 0:
             return True
 
-    for category in skip_categories:
+    for category in skipCategories:
         if category in test_categories:
             return True
 
     return False
-
-
-def get_absolute_path_to_exclusive_test_subdir():
-    """
-    If an exclusive test subdirectory is specified, return its absolute path.
-    Otherwise return None.
-    """
-    test_directory = os.path.dirname(os.path.realpath(__file__))
-
-    if not exclusive_test_subdir:
-        return
-
-    if len(exclusive_test_subdir) > 0:
-        test_subdir = os.path.join(test_directory, exclusive_test_subdir)
-        if os.path.isdir(test_subdir):
-            return test_subdir
-
-        print('specified test subdirectory {} is not a valid directory\n'
-                .format(test_subdir))
-
-
-def get_absolute_path_to_root_test_dir():
-    """
-    If an exclusive test subdirectory is specified, return its absolute path.
-    Otherwise, return the absolute path of the root test directory.
-    """
-    test_subdir = get_absolute_path_to_exclusive_test_subdir()
-    if test_subdir:
-        return test_subdir
-
-    return os.path.dirname(os.path.realpath(__file__))
-
-
-def get_filecheck_path():
-    """
-    Get the path to the FileCheck testing tool.
-    """
-    if filecheck and os.path.lexists(filecheck):
-        return filecheck

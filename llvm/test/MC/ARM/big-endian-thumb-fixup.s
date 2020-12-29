@@ -4,7 +4,6 @@
 	.text
 	.align	2
 	.code 16
-	.thumb_func
 
 @ARM::fixup_arm_thumb_bl
 .section s_thumb_bl,"ax",%progbits

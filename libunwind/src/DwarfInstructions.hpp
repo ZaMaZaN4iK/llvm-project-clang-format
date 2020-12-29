@@ -1,8 +1,9 @@
 //===-------------------------- DwarfInstructions.hpp ---------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //
 //  Processor specific interpretation of DWARF unwind info.
@@ -17,6 +18,7 @@
 #include <stdlib.h>
 
 #include "dwarf2.h"
+#include "AddressSpace.hpp"
 #include "Registers.hpp"
 #include "DwarfParser.hpp"
 #include "config.h"
@@ -34,7 +36,7 @@ public:
   typedef typename A::sint_t sint_t;
 
   static int stepWithDwarf(A &addressSpace, pint_t pc, pint_t fdeStart,
-                           R &registers, bool &isSignalFrame);
+                           R &registers);
 
 private:
 
@@ -81,11 +83,12 @@ typename A::pint_t DwarfInstructions<A, R>::getSavedRegister(
     const RegisterLocation &savedReg) {
   switch (savedReg.location) {
   case CFI_Parser<A>::kRegisterInCFA:
-    return (pint_t)addressSpace.getRegister(cfa + (pint_t)savedReg.value);
+    return addressSpace.getP(cfa + (pint_t)savedReg.value);
 
   case CFI_Parser<A>::kRegisterAtExpression:
-    return (pint_t)addressSpace.getRegister(evaluateExpression(
-        (pint_t)savedReg.value, addressSpace, registers, cfa));
+    return addressSpace.getP(
+        evaluateExpression((pint_t)savedReg.value, addressSpace,
+                            registers, cfa));
 
   case CFI_Parser<A>::kRegisterIsExpression:
     return evaluateExpression((pint_t)savedReg.value, addressSpace,
@@ -150,15 +153,14 @@ v128 DwarfInstructions<A, R>::getSavedVectorRegister(
 
 template <typename A, typename R>
 int DwarfInstructions<A, R>::stepWithDwarf(A &addressSpace, pint_t pc,
-                                           pint_t fdeStart, R &registers,
-                                           bool &isSignalFrame) {
+                                           pint_t fdeStart, R &registers) {
   FDE_Info fdeInfo;
   CIE_Info cieInfo;
   if (CFI_Parser<A>::decodeFDE(addressSpace, fdeStart, &fdeInfo,
                                &cieInfo) == NULL) {
     PrologInfo prolog;
     if (CFI_Parser<A>::parseFDEInstructions(addressSpace, fdeInfo, cieInfo, pc,
-                                            R::getArch(), &prolog)) {
+                                            &prolog)) {
       // get pointer to cfa (architecture specific)
       pint_t cfa = getCFA(addressSpace, prolog, registers);
 
@@ -166,7 +168,7 @@ int DwarfInstructions<A, R>::stepWithDwarf(A &addressSpace, pint_t pc,
       R newRegisters = registers;
       pint_t returnAddress = 0;
       const int lastReg = R::lastDwarfRegNum();
-      assert(static_cast<int>(CFI_Parser<A>::kMaxRegisterNumber) >= lastReg &&
+      assert((int)CFI_Parser<A>::kMaxRegisterNumber > lastReg &&
              "register range too large");
       assert(lastReg >= (int)cieInfo.returnAddressRegister &&
              "register range does not contain return address register");
@@ -196,69 +198,6 @@ int DwarfInstructions<A, R>::stepWithDwarf(A &addressSpace, pint_t pc,
       // By definition, the CFA is the stack pointer at the call site, so
       // restoring SP means setting it to CFA.
       newRegisters.setSP(cfa);
-
-      isSignalFrame = cieInfo.isSignalFrame;
-
-#if defined(_LIBUNWIND_TARGET_AARCH64)
-      // If the target is aarch64 then the return address may have been signed
-      // using the v8.3 pointer authentication extensions. The original
-      // return address needs to be authenticated before the return address is
-      // restored. autia1716 is used instead of autia as autia1716 assembles
-      // to a NOP on pre-v8.3a architectures.
-      if ((R::getArch() == REGISTERS_ARM64) &&
-          prolog.savedRegisters[UNW_ARM64_RA_SIGN_STATE].value) {
-#if !defined(_LIBUNWIND_IS_NATIVE_ONLY)
-        return UNW_ECROSSRASIGNING;
-#else
-        register unsigned long long x17 __asm("x17") = returnAddress;
-        register unsigned long long x16 __asm("x16") = cfa;
-
-        // These are the autia1716/autib1716 instructions. The hint instructions
-        // are used here as gcc does not assemble autia1716/autib1716 for pre
-        // armv8.3a targets.
-        if (cieInfo.addressesSignedWithBKey)
-          asm("hint 0xe" : "+r"(x17) : "r"(x16)); // autib1716
-        else
-          asm("hint 0xc" : "+r"(x17) : "r"(x16)); // autia1716
-        returnAddress = x17;
-#endif
-      }
-#endif
-
-#if defined(_LIBUNWIND_TARGET_SPARC)
-      if (R::getArch() == REGISTERS_SPARC) {
-        // Skip call site instruction and delay slot
-        returnAddress += 8;
-        // Skip unimp instruction if function returns a struct
-        if ((addressSpace.get32(returnAddress) & 0xC1C00000) == 0)
-          returnAddress += 4;
-      }
-#endif
-
-#if defined(_LIBUNWIND_TARGET_PPC64)
-#define PPC64_ELFV1_R2_LOAD_INST_ENCODING 0xe8410028u // ld r2,40(r1)
-#define PPC64_ELFV1_R2_OFFSET 40
-#define PPC64_ELFV2_R2_LOAD_INST_ENCODING 0xe8410018u // ld r2,24(r1)
-#define PPC64_ELFV2_R2_OFFSET 24
-      // If the instruction at return address is a TOC (r2) restore,
-      // then r2 was saved and needs to be restored.
-      // ELFv2 ABI specifies that the TOC Pointer must be saved at SP + 24,
-      // while in ELFv1 ABI it is saved at SP + 40.
-      if (R::getArch() == REGISTERS_PPC64 && returnAddress != 0) {
-        pint_t sp = newRegisters.getRegister(UNW_REG_SP);
-        pint_t r2 = 0;
-        switch (addressSpace.get32(returnAddress)) {
-        case PPC64_ELFV1_R2_LOAD_INST_ENCODING:
-          r2 = addressSpace.get64(sp + PPC64_ELFV1_R2_OFFSET);
-          break;
-        case PPC64_ELFV2_R2_LOAD_INST_ENCODING:
-          r2 = addressSpace.get64(sp + PPC64_ELFV2_R2_OFFSET);
-          break;
-        }
-        if (r2)
-          newRegisters.setRegister(UNW_PPC64_R2, r2);
-      }
-#endif
 
       // Return address is address after call site instruction, so setting IP to
       // that does simualates a return.
@@ -433,7 +372,7 @@ DwarfInstructions<A, R>::evaluateExpression(pint_t expression, A &addressSpace,
       // pick from
       reg = addressSpace.get8(p);
       p += 1;
-      value = sp[-(int)reg];
+      value = sp[-reg];
       *(++sp) = value;
       if (log)
         fprintf(stderr, "duplicate %d in stack\n", reg);
@@ -541,7 +480,7 @@ DwarfInstructions<A, R>::evaluateExpression(pint_t expression, A &addressSpace,
 
     case DW_OP_plus_uconst:
       // pop stack, add uelb128 constant, push result
-      *sp += static_cast<pint_t>(addressSpace.getULEB128(p, expressionEnd));
+      *sp += addressSpace.getULEB128(p, expressionEnd);
       if (log)
         fprintf(stderr, "add constant\n");
       break;

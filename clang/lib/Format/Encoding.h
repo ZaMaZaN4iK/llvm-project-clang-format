@@ -1,13 +1,14 @@
-//===--- Encoding.h - Format C++ code ---------------------------*- C++ -*-===//
+//===--- Encoding.h - Format C++ code -------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Contains functions for text encoding manipulation. Supports UTF-8,
+/// \brief Contains functions for text encoding manipulation. Supports UTF-8,
 /// 8-bit encodings and escape sequences in C++ string literals.
 ///
 //===----------------------------------------------------------------------===//
@@ -29,7 +30,7 @@ enum Encoding {
   Encoding_Unknown // We treat all other encodings as 8-bit encodings.
 };
 
-/// Detects encoding of the Text. If the Text can be decoded using UTF-8,
+/// \brief Detects encoding of the Text. If the Text can be decoded using UTF-8,
 /// it is considered UTF8, otherwise we treat it as some 8-bit encoding.
 inline Encoding detectEncoding(StringRef Text) {
   const llvm::UTF8 *Ptr = reinterpret_cast<const llvm::UTF8 *>(Text.begin());
@@ -39,7 +40,7 @@ inline Encoding detectEncoding(StringRef Text) {
   return Encoding_Unknown;
 }
 
-/// Returns the number of columns required to display the \p Text on a
+/// \brief Returns the number of columns required to display the \p Text on a
 /// generic Unicode-capable terminal. Text is assumed to use the specified
 /// \p Encoding.
 inline unsigned columnWidth(StringRef Text, Encoding Encoding) {
@@ -55,7 +56,7 @@ inline unsigned columnWidth(StringRef Text, Encoding Encoding) {
   return Text.size();
 }
 
-/// Returns the number of columns required to display the \p Text,
+/// \brief Returns the number of columns required to display the \p Text,
 /// starting from the \p StartColumn on a terminal with the \p TabWidth. The
 /// text is assumed to use the specified \p Encoding.
 inline unsigned columnWidthWithTabs(StringRef Text, unsigned StartColumn,
@@ -67,13 +68,12 @@ inline unsigned columnWidthWithTabs(StringRef Text, unsigned StartColumn,
     if (TabPos == StringRef::npos)
       return TotalWidth + columnWidth(Tail, Encoding);
     TotalWidth += columnWidth(Tail.substr(0, TabPos), Encoding);
-    if (TabWidth)
-      TotalWidth += TabWidth - (TotalWidth + StartColumn) % TabWidth;
+    TotalWidth += TabWidth - (TotalWidth + StartColumn) % TabWidth;
     Tail = Tail.substr(TabPos + 1);
   }
 }
 
-/// Gets the number of bytes in a sequence representing a single
+/// \brief Gets the number of bytes in a sequence representing a single
 /// codepoint and starting with FirstChar in the specified Encoding.
 inline unsigned getCodePointNumBytes(char FirstChar, Encoding Encoding) {
   switch (Encoding) {
@@ -91,7 +91,7 @@ inline bool isHexDigit(char c) {
          ('A' <= c && c <= 'F');
 }
 
-/// Gets the length of an escape sequence inside a C++ string literal.
+/// \brief Gets the length of an escape sequence inside a C++ string literal.
 /// Text should span from the beginning of the escape sequence (starting with a
 /// backslash) to the end of the string literal.
 inline unsigned getEscapeSequenceLength(StringRef Text) {

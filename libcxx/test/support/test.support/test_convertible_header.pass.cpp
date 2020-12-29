@@ -1,18 +1,17 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03
 
-// "support/test_convertible.h"
+// "support/test_convertible.hpp"
 
-#include "test_convertible.h"
-
-#include "test_macros.h"
+#include "test_convertible.hpp"
 
 struct ImplicitDefault {
   ImplicitDefault() {}
@@ -64,8 +63,6 @@ struct ExplicitArgs {
 };
 static_assert(!test_convertible<ExplicitArgs, int, int, int>(), "Must not be convertible");
 
-int main(int, char**) {
+int main() {
     // Nothing to do
-
-  return 0;
 }

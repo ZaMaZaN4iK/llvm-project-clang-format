@@ -1,6 +1,6 @@
 
 #include "polly/Support/SCEVValidator.h"
-#include "polly/ScopDetection.h"
+#include "polly/ScopInfo.h"
 #include "llvm/Analysis/RegionInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
@@ -117,17 +117,6 @@ raw_ostream &operator<<(raw_ostream &OS, class ValidatorResult &VR) {
   return OS;
 }
 
-bool polly::isConstCall(llvm::CallInst *Call) {
-  if (Call->mayReadOrWriteMemory())
-    return false;
-
-  for (auto &Operand : Call->arg_operands())
-    if (!isa<ConstantInt>(&Operand))
-      return false;
-
-  return true;
-}
-
 /// Check if a SCEV is valid in a SCoP.
 struct SCEVValidator
     : public SCEVVisitor<SCEVValidator, class ValidatorResult> {
@@ -205,12 +194,11 @@ public:
       }
 
       if ((Op.isIV() || Op.isPARAM()) && !Return.isINT()) {
-        LLVM_DEBUG(
-            dbgs() << "INVALID: More than one non-int operand in MulExpr\n"
-                   << "\tExpr: " << *Expr << "\n"
-                   << "\tPrevious expression type: " << Return << "\n"
-                   << "\tNext operand (" << Op << "): " << *Expr->getOperand(i)
-                   << "\n");
+        DEBUG(dbgs() << "INVALID: More than one non-int operand in MulExpr\n"
+                     << "\tExpr: " << *Expr << "\n"
+                     << "\tPrevious expression type: " << Return << "\n"
+                     << "\tNext operand (" << Op
+                     << "): " << *Expr->getOperand(i) << "\n");
 
         return ValidatorResult(SCEVType::INVALID);
       }
@@ -226,7 +214,7 @@ public:
 
   class ValidatorResult visitAddRecExpr(const SCEVAddRecExpr *Expr) {
     if (!Expr->isAffine()) {
-      LLVM_DEBUG(dbgs() << "INVALID: AddRec is not affine");
+      DEBUG(dbgs() << "INVALID: AddRec is not affine");
       return ValidatorResult(SCEVType::INVALID);
     }
 
@@ -241,10 +229,9 @@ public:
 
     auto *L = Expr->getLoop();
     if (R->contains(L) && (!Scope || !L->contains(Scope))) {
-      LLVM_DEBUG(
-          dbgs() << "INVALID: Loop of AddRec expression boxed in an a "
-                    "non-affine subregion or has a non-synthesizable exit "
-                    "value.");
+      DEBUG(dbgs() << "INVALID: Loop of AddRec expression boxed in an a "
+                      "non-affine subregion or has a non-synthesizable exit "
+                      "value.");
       return ValidatorResult(SCEVType::INVALID);
     }
 
@@ -255,8 +242,8 @@ public:
         return Result;
       }
 
-      LLVM_DEBUG(dbgs() << "INVALID: AddRec within scop has non-int"
-                           "recurrence part");
+      DEBUG(dbgs() << "INVALID: AddRec within scop has non-int"
+                      "recurrence part");
       return ValidatorResult(SCEVType::INVALID);
     }
 
@@ -294,21 +281,6 @@ public:
     return Return;
   }
 
-  class ValidatorResult visitSMinExpr(const SCEVSMinExpr *Expr) {
-    ValidatorResult Return(SCEVType::INT);
-
-    for (int i = 0, e = Expr->getNumOperands(); i < e; ++i) {
-      ValidatorResult Op = visit(Expr->getOperand(i));
-
-      if (!Op.isValid())
-        return Op;
-
-      Return.merge(Op);
-    }
-
-    return Return;
-  }
-
   class ValidatorResult visitUMaxExpr(const SCEVUMaxExpr *Expr) {
     // We do not support unsigned max operations. If 'Expr' is constant during
     // Scop execution we treat this as a parameter, otherwise we bail out.
@@ -316,22 +288,7 @@ public:
       ValidatorResult Op = visit(Expr->getOperand(i));
 
       if (!Op.isConstant()) {
-        LLVM_DEBUG(dbgs() << "INVALID: UMaxExpr has a non-constant operand");
-        return ValidatorResult(SCEVType::INVALID);
-      }
-    }
-
-    return ValidatorResult(SCEVType::PARAM, Expr);
-  }
-
-  class ValidatorResult visitUMinExpr(const SCEVUMinExpr *Expr) {
-    // We do not support unsigned min operations. If 'Expr' is constant during
-    // Scop execution we treat this as a parameter, otherwise we bail out.
-    for (int i = 0, e = Expr->getNumOperands(); i < e; ++i) {
-      ValidatorResult Op = visit(Expr->getOperand(i));
-
-      if (!Op.isConstant()) {
-        LLVM_DEBUG(dbgs() << "INVALID: UMinExpr has a non-constant operand");
+        DEBUG(dbgs() << "INVALID: UMaxExpr has a non-constant operand");
         return ValidatorResult(SCEVType::INVALID);
       }
     }
@@ -341,23 +298,11 @@ public:
 
   ValidatorResult visitGenericInst(Instruction *I, const SCEV *S) {
     if (R->contains(I)) {
-      LLVM_DEBUG(dbgs() << "INVALID: UnknownExpr references an instruction "
-                           "within the region\n");
+      DEBUG(dbgs() << "INVALID: UnknownExpr references an instruction "
+                      "within the region\n");
       return ValidatorResult(SCEVType::INVALID);
     }
 
-    return ValidatorResult(SCEVType::PARAM, S);
-  }
-
-  ValidatorResult visitCallInstruction(Instruction *I, const SCEV *S) {
-    assert(I->getOpcode() == Instruction::Call && "Call instruction expected");
-
-    if (R->contains(I)) {
-      auto Call = cast<CallInst>(I);
-
-      if (!isConstCall(Call))
-        return ValidatorResult(SCEVType::INVALID, S);
-    }
     return ValidatorResult(SCEVType::PARAM, S);
   }
 
@@ -390,8 +335,7 @@ public:
     if (LHS.isConstant() && RHS.isConstant())
       return ValidatorResult(SCEVType::PARAM, DivExpr);
 
-    LLVM_DEBUG(
-        dbgs() << "INVALID: unsigned division of non-constant expressions");
+    DEBUG(dbgs() << "INVALID: unsigned division of non-constant expressions");
     return ValidatorResult(SCEVType::INVALID);
   }
 
@@ -431,12 +375,12 @@ public:
     Value *V = Expr->getValue();
 
     if (!Expr->getType()->isIntegerTy() && !Expr->getType()->isPointerTy()) {
-      LLVM_DEBUG(dbgs() << "INVALID: UnknownExpr is not an integer or pointer");
+      DEBUG(dbgs() << "INVALID: UnknownExpr is not an integer or pointer");
       return ValidatorResult(SCEVType::INVALID);
     }
 
     if (isa<UndefValue>(V)) {
-      LLVM_DEBUG(dbgs() << "INVALID: UnknownExpr references an undef value");
+      DEBUG(dbgs() << "INVALID: UnknownExpr references an undef value");
       return ValidatorResult(SCEVType::INVALID);
     }
 
@@ -452,8 +396,6 @@ public:
         return visitSDivInstruction(I, Expr);
       case Instruction::SRem:
         return visitSRemInstruction(I, Expr);
-      case Instruction::Call:
-        return visitCallInstruction(I, Expr);
       default:
         return visitGenericInst(I, Expr);
       }
@@ -463,69 +405,20 @@ public:
   }
 };
 
-class SCEVHasIVParams {
-  bool HasIVParams = false;
-
-public:
-  SCEVHasIVParams() {}
-
-  bool follow(const SCEV *S) {
-    const SCEVUnknown *Unknown = dyn_cast<SCEVUnknown>(S);
-    if (!Unknown)
-      return true;
-
-    CallInst *Call = dyn_cast<CallInst>(Unknown->getValue());
-
-    if (!Call)
-      return true;
-
-    if (isConstCall(Call)) {
-      HasIVParams = true;
-      return false;
-    }
-
-    return true;
-  }
-
-  bool isDone() { return HasIVParams; }
-  bool hasIVParams() { return HasIVParams; }
-};
-
 /// Check whether a SCEV refers to an SSA name defined inside a region.
 class SCEVInRegionDependences {
   const Region *R;
   Loop *Scope;
-  const InvariantLoadsSetTy &ILS;
   bool AllowLoops;
   bool HasInRegionDeps = false;
 
 public:
-  SCEVInRegionDependences(const Region *R, Loop *Scope, bool AllowLoops,
-                          const InvariantLoadsSetTy &ILS)
-      : R(R), Scope(Scope), ILS(ILS), AllowLoops(AllowLoops) {}
+  SCEVInRegionDependences(const Region *R, Loop *Scope, bool AllowLoops)
+      : R(R), Scope(Scope), AllowLoops(AllowLoops) {}
 
   bool follow(const SCEV *S) {
     if (auto Unknown = dyn_cast<SCEVUnknown>(S)) {
       Instruction *Inst = dyn_cast<Instruction>(Unknown->getValue());
-
-      CallInst *Call = dyn_cast<CallInst>(Unknown->getValue());
-
-      if (Call && isConstCall(Call))
-        return false;
-
-      if (Inst) {
-        // When we invariant load hoist a load, we first make sure that there
-        // can be no dependences created by it in the Scop region. So, we should
-        // not consider scalar dependences to `LoadInst`s that are invariant
-        // load hoisted.
-        //
-        // If this check is not present, then we create data dependences which
-        // are strictly not necessary by tracking the invariant load as a
-        // scalar.
-        LoadInst *LI = dyn_cast<LoadInst>(Inst);
-        if (LI && ILS.count(LI) > 0)
-          return false;
-      }
 
       // Return true when Inst is defined inside the region R.
       if (!Inst || !R->contains(Inst))
@@ -539,6 +432,10 @@ public:
       if (AllowLoops)
         return true;
 
+      if (!Scope) {
+        HasInRegionDeps = true;
+        return false;
+      }
       auto *L = AddRec->getLoop();
       if (R->contains(L) && !L->contains(Scope)) {
         HasInRegionDeps = true;
@@ -616,17 +513,9 @@ void findValues(const SCEV *Expr, ScalarEvolution &SE,
   ST.visitAll(Expr);
 }
 
-bool hasIVParams(const SCEV *Expr) {
-  SCEVHasIVParams HasIVParams;
-  SCEVTraversal<SCEVHasIVParams> ST(HasIVParams);
-  ST.visitAll(Expr);
-  return HasIVParams.hasIVParams();
-}
-
 bool hasScalarDepsInsideRegion(const SCEV *Expr, const Region *R,
-                               llvm::Loop *Scope, bool AllowLoops,
-                               const InvariantLoadsSetTy &ILS) {
-  SCEVInRegionDependences InRegionDeps(R, Scope, AllowLoops, ILS);
+                               llvm::Loop *Scope, bool AllowLoops) {
+  SCEVInRegionDependences InRegionDeps(R, Scope, AllowLoops);
   SCEVTraversal<SCEVInRegionDependences> ST(InRegionDeps);
   ST.visitAll(Expr);
   return InRegionDeps.hasDependences();
@@ -638,7 +527,7 @@ bool isAffineExpr(const Region *R, llvm::Loop *Scope, const SCEV *Expr,
     return false;
 
   SCEVValidator Validator(R, Scope, SE, ILS);
-  LLVM_DEBUG({
+  DEBUG({
     dbgs() << "\n";
     dbgs() << "Expr: " << *Expr << "\n";
     dbgs() << "Region: " << R->getNameStr() << "\n";
@@ -647,7 +536,7 @@ bool isAffineExpr(const Region *R, llvm::Loop *Scope, const SCEV *Expr,
 
   ValidatorResult Result = Validator.visit(Expr);
 
-  LLVM_DEBUG({
+  DEBUG({
     if (Result.isValid())
       dbgs() << "VALID\n";
     dbgs() << "\n";
@@ -767,46 +656,5 @@ extractConstantFactor(const SCEV *S, ScalarEvolution &SE) {
       LeftOvers.push_back(Op);
 
   return std::make_pair(ConstPart, SE.getMulExpr(LeftOvers));
-}
-
-const SCEV *tryForwardThroughPHI(const SCEV *Expr, Region &R,
-                                 ScalarEvolution &SE, LoopInfo &LI,
-                                 const DominatorTree &DT) {
-  if (auto *Unknown = dyn_cast<SCEVUnknown>(Expr)) {
-    Value *V = Unknown->getValue();
-    auto *PHI = dyn_cast<PHINode>(V);
-    if (!PHI)
-      return Expr;
-
-    Value *Final = nullptr;
-
-    for (unsigned i = 0; i < PHI->getNumIncomingValues(); i++) {
-      BasicBlock *Incoming = PHI->getIncomingBlock(i);
-      if (isErrorBlock(*Incoming, R, LI, DT) && R.contains(Incoming))
-        continue;
-      if (Final)
-        return Expr;
-      Final = PHI->getIncomingValue(i);
-    }
-
-    if (Final)
-      return SE.getSCEV(Final);
-  }
-  return Expr;
-}
-
-Value *getUniqueNonErrorValue(PHINode *PHI, Region *R, LoopInfo &LI,
-                              const DominatorTree &DT) {
-  Value *V = nullptr;
-  for (unsigned i = 0; i < PHI->getNumIncomingValues(); i++) {
-    BasicBlock *BB = PHI->getIncomingBlock(i);
-    if (!isErrorBlock(*BB, *R, LI, DT)) {
-      if (V)
-        return nullptr;
-      V = PHI->getIncomingValue(i);
-    }
-  }
-
-  return V;
 }
 } // namespace polly

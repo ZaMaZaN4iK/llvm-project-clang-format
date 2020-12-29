@@ -1,8 +1,9 @@
-//===- Replacement.cpp - Framework for clang refactoring tools ------------===//
+//===--- Replacement.cpp - Framework for clang refactoring tools ----------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,34 +12,21 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Tooling/Core/Replacement.h"
+
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticIDs.h"
 #include "clang/Basic/DiagnosticOptions.h"
 #include "clang/Basic/FileManager.h"
-#include "clang/Basic/FileSystemOptions.h"
-#include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
-#include "clang/Rewrite/Core/RewriteBuffer.h"
 #include "clang/Rewrite/Core/Rewriter.h"
-#include "llvm/ADT/IntrusiveRefCntPtr.h"
 #include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Support/Error.h"
-#include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/VirtualFileSystem.h"
-#include "llvm/Support/raw_ostream.h"
-#include <algorithm>
-#include <cassert>
-#include <limits>
-#include <map>
-#include <string>
-#include <utility>
-#include <vector>
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Support/raw_os_ostream.h"
 
-using namespace clang;
-using namespace tooling;
+namespace clang {
+namespace tooling {
 
 static const char * const InvalidLocation = "";
 
@@ -67,11 +55,11 @@ bool Replacement::isApplicable() const {
 
 bool Replacement::apply(Rewriter &Rewrite) const {
   SourceManager &SM = Rewrite.getSourceMgr();
-  auto Entry = SM.getFileManager().getFile(FilePath);
+  const FileEntry *Entry = SM.getFileManager().getFile(FilePath);
   if (!Entry)
     return false;
 
-  FileID ID = SM.getOrCreateFileID(*Entry, SrcMgr::C_User);
+  FileID ID = SM.getOrCreateFileID(Entry, SrcMgr::C_User);
   const SourceLocation Start =
     SM.getLocForStartOfFile(ID).
     getLocWithOffset(ReplacementRange.getOffset());
@@ -92,9 +80,6 @@ std::string Replacement::toString() const {
   return Stream.str();
 }
 
-namespace clang {
-namespace tooling {
-
 bool operator<(const Replacement &LHS, const Replacement &RHS) {
   if (LHS.getOffset() != RHS.getOffset())
     return LHS.getOffset() < RHS.getOffset();
@@ -113,9 +98,6 @@ bool operator==(const Replacement &LHS, const Replacement &RHS) {
          LHS.getFilePath() == RHS.getFilePath() &&
          LHS.getReplacementText() == RHS.getReplacementText();
 }
-
-} // namespace tooling
-} // namespace clang
 
 void Replacement::setFromSourceLocation(const SourceManager &Sources,
                                         SourceLocation Start, unsigned Length,
@@ -219,7 +201,7 @@ Replacements Replacements::getCanonicalReplacements() const {
 llvm::Expected<Replacements>
 Replacements::mergeIfOrderIndependent(const Replacement &R) const {
   Replacements Rs(R);
-  // A Replacements set containing a single replacement that is `R` referring to
+  // A Replacements set containg a single replacement that is `R` referring to
   // the code after the existing replacements `Replaces` are applied.
   Replacements RsShiftedByReplaces(getReplacementInChangedCode(R));
   // A Replacements set that is `Replaces` referring to the code after `R` is
@@ -249,7 +231,7 @@ llvm::Error Replacements::add(const Replacement &R) {
         replacement_error::wrong_file_path, R, *Replaces.begin());
 
   // Special-case header insertions.
-  if (R.getOffset() == std::numeric_limits<unsigned>::max()) {
+  if (R.getOffset() == UINT_MAX) {
     Replaces.insert(R);
     return llvm::Error::success();
   }
@@ -414,7 +396,6 @@ public:
 
   // Returns 'true' if an element from the second set should be merged next.
   bool mergeSecond() const { return MergeSecond; }
-
   int deltaFirst() const { return DeltaFirst; }
   Replacement asReplacement() const { return {FilePath, Offset, Length, Text}; }
 
@@ -482,11 +463,12 @@ Replacements Replacements::merge(const Replacements &ReplacesToMerge) const {
 // Returns a set of non-overlapping and sorted ranges that is equivalent to
 // \p Ranges.
 static std::vector<Range> combineAndSortRanges(std::vector<Range> Ranges) {
-  llvm::sort(Ranges, [](const Range &LHS, const Range &RHS) {
-    if (LHS.getOffset() != RHS.getOffset())
-      return LHS.getOffset() < RHS.getOffset();
-    return LHS.getLength() < RHS.getLength();
-  });
+  std::sort(Ranges.begin(), Ranges.end(),
+            [](const Range &LHS, const Range &RHS) {
+              if (LHS.getOffset() != RHS.getOffset())
+                return LHS.getOffset() < RHS.getOffset();
+              return LHS.getLength() < RHS.getLength();
+            });
   std::vector<Range> Result;
   for (const auto &R : Ranges) {
     if (Result.empty() ||
@@ -503,9 +485,6 @@ static std::vector<Range> combineAndSortRanges(std::vector<Range> Ranges) {
   return Result;
 }
 
-namespace clang {
-namespace tooling {
-
 std::vector<Range>
 calculateRangesAfterReplacements(const Replacements &Replaces,
                                  const std::vector<Range> &Ranges) {
@@ -519,22 +498,20 @@ calculateRangesAfterReplacements(const Replacements &Replaces,
     return MergedRanges;
   tooling::Replacements FakeReplaces;
   for (const auto &R : MergedRanges) {
-    llvm::cantFail(
-        FakeReplaces.add(Replacement(Replaces.begin()->getFilePath(),
-                                     R.getOffset(), R.getLength(),
-                                     std::string(R.getLength(), ' '))),
-        "Replacements must not conflict since ranges have been merged.");
+    auto Err = FakeReplaces.add(Replacement(Replaces.begin()->getFilePath(),
+                                            R.getOffset(), R.getLength(),
+                                            std::string(R.getLength(), ' ')));
+    assert(!Err &&
+           "Replacements must not conflict since ranges have been merged.");
+    (void)Err;
   }
   return FakeReplaces.merge(Replaces).getAffectedRanges();
 }
 
-} // namespace tooling
-} // namespace clang
-
 std::vector<Range> Replacements::getAffectedRanges() const {
   std::vector<Range> ChangedRanges;
   int Shift = 0;
-  for (const auto &R : Replaces) {
+  for (const Replacement &R : Replaces) {
     unsigned Offset = R.getOffset() + Shift;
     unsigned Length = R.getReplacementText().size();
     Shift += Length - R.getLength();
@@ -545,7 +522,7 @@ std::vector<Range> Replacements::getAffectedRanges() const {
 
 unsigned Replacements::getShiftedCodePosition(unsigned Position) const {
   unsigned Offset = 0;
-  for (const auto &R : Replaces) {
+  for (const auto& R : Replaces) {
     if (R.getOffset() + R.getLength() <= Position) {
       Offset += R.getReplacementText().size() - R.getLength();
       continue;
@@ -553,16 +530,13 @@ unsigned Replacements::getShiftedCodePosition(unsigned Position) const {
     if (R.getOffset() < Position &&
         R.getOffset() + R.getReplacementText().size() <= Position) {
       Position = R.getOffset() + R.getReplacementText().size();
-      if (!R.getReplacementText().empty())
+      if (R.getReplacementText().size() > 0)
         Position--;
     }
     break;
   }
   return Position + Offset;
 }
-
-namespace clang {
-namespace tooling {
 
 bool applyAllReplacements(const Replacements &Replaces, Rewriter &Rewrite) {
   bool Result = true;
@@ -581,8 +555,8 @@ llvm::Expected<std::string> applyAllReplacements(StringRef Code,
   if (Replaces.empty())
     return Code.str();
 
-  IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> InMemoryFileSystem(
-      new llvm::vfs::InMemoryFileSystem);
+  IntrusiveRefCntPtr<vfs::InMemoryFileSystem> InMemoryFileSystem(
+      new vfs::InMemoryFileSystem);
   FileManager Files(FileSystemOptions(), InMemoryFileSystem);
   DiagnosticsEngine Diagnostics(
       IntrusiveRefCntPtr<DiagnosticIDs>(new DiagnosticIDs),
@@ -591,8 +565,7 @@ llvm::Expected<std::string> applyAllReplacements(StringRef Code,
   Rewriter Rewrite(SourceMgr, LangOptions());
   InMemoryFileSystem->addFile(
       "<stdin>", 0, llvm::MemoryBuffer::getMemBuffer(Code, "<stdin>"));
-  FileID ID = SourceMgr.createFileID(*Files.getFile("<stdin>"),
-                                     SourceLocation(),
+  FileID ID = SourceMgr.createFileID(Files.getFile("<stdin>"), SourceLocation(),
                                      clang::SrcMgr::C_User);
   for (auto I = Replaces.rbegin(), E = Replaces.rend(); I != E; ++I) {
     Replacement Replace("<stdin>", I->getOffset(), I->getLength(),
@@ -614,14 +587,14 @@ std::map<std::string, Replacements> groupReplacementsByFile(
   std::map<std::string, Replacements> Result;
   llvm::SmallPtrSet<const FileEntry *, 16> ProcessedFileEntries;
   for (const auto &Entry : FileToReplaces) {
-    auto FE = FileMgr.getFile(Entry.first);
+    const FileEntry *FE = FileMgr.getFile(Entry.first);
     if (!FE)
       llvm::errs() << "File path " << Entry.first << " is invalid.\n";
-    else if (ProcessedFileEntries.insert(*FE).second)
+    else if (ProcessedFileEntries.insert(FE).second)
       Result[Entry.first] = std::move(Entry.second);
   }
   return Result;
 }
 
-} // namespace tooling
-} // namespace clang
+} // end namespace tooling
+} // end namespace clang

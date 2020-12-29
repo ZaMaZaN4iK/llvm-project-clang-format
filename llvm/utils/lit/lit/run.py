@@ -1,176 +1,305 @@
-import multiprocessing
 import os
+import threading
 import time
+import traceback
+try:
+    import Queue as queue
+except ImportError:
+    import queue
+
+try:
+    import win32api
+except ImportError:
+    win32api = None
+
+try:
+    import multiprocessing
+except ImportError:
+    multiprocessing = None
 
 import lit.Test
-import lit.util
-import lit.worker
 
+###
+# Test Execution Implementation
 
-# No-operation semaphore for supporting `None` for parallelism_groups.
-#   lit_config.parallelism_groups['my_group'] = None
-class NopSemaphore(object):
-    def acquire(self): pass
-    def release(self): pass
+class LockedValue(object):
+    def __init__(self, value):
+        self.lock = threading.Lock()
+        self._value = value
 
+    def _get_value(self):
+        self.lock.acquire()
+        try:
+            return self._value
+        finally:
+            self.lock.release()
 
-def create_run(tests, lit_config, workers, progress_callback, max_failures,
-               timeout):
-    assert workers > 0
-    if workers == 1:
-        return SerialRun(tests, lit_config, progress_callback, max_failures, timeout)
-    return ParallelRun(tests, lit_config, progress_callback, max_failures, timeout, workers)
+    def _set_value(self, value):
+        self.lock.acquire()
+        try:
+            self._value = value
+        finally:
+            self.lock.release()
 
+    value = property(_get_value, _set_value)
+
+class TestProvider(object):
+    def __init__(self, queue_impl, canceled_flag):
+        self.canceled_flag = canceled_flag
+
+        # Create a shared queue to provide the test indices.
+        self.queue = queue_impl()
+
+    def queue_tests(self, tests, num_jobs):
+        for i in range(len(tests)):
+            self.queue.put(i)
+        for i in range(num_jobs):
+            self.queue.put(None)
+
+    def cancel(self):
+        self.canceled_flag.value = 1
+
+    def get(self):
+        # Check if we are canceled.
+        if self.canceled_flag.value:
+          return None
+
+        # Otherwise take the next test.
+        return self.queue.get()
+
+class Tester(object):
+    def __init__(self, run_instance, provider, consumer):
+        self.run_instance = run_instance
+        self.provider = provider
+        self.consumer = consumer
+
+    def run(self):
+        while True:
+            item = self.provider.get()
+            if item is None:
+                break
+            self.run_test(item)
+        self.consumer.task_finished()
+
+    def run_test(self, test_index):
+        test = self.run_instance.tests[test_index]
+        try:
+            self.run_instance.execute_test(test)
+        except KeyboardInterrupt:
+            # This is a sad hack. Unfortunately subprocess goes
+            # bonkers with ctrl-c and we start forking merrily.
+            print('\nCtrl-C detected, goodbye.')
+            os.kill(0,9)
+        self.consumer.update(test_index, test)
+
+class ThreadResultsConsumer(object):
+    def __init__(self, display):
+        self.display = display
+        self.lock = threading.Lock()
+
+    def update(self, test_index, test):
+        self.lock.acquire()
+        try:
+            self.display.update(test)
+        finally:
+            self.lock.release()
+
+    def task_finished(self):
+        pass
+
+    def handle_results(self):
+        pass
+
+class MultiprocessResultsConsumer(object):
+    def __init__(self, run, display, num_jobs):
+        self.run = run
+        self.display = display
+        self.num_jobs = num_jobs
+        self.queue = multiprocessing.Queue()
+
+    def update(self, test_index, test):
+        # This method is called in the child processes, and communicates the
+        # results to the actual display implementation via an output queue.
+        self.queue.put((test_index, test.result))
+
+    def task_finished(self):
+        # This method is called in the child processes, and communicates that
+        # individual tasks are complete.
+        self.queue.put(None)
+
+    def handle_results(self):
+        # This method is called in the parent, and consumes the results from the
+        # output queue and dispatches to the actual display. The method will
+        # complete after each of num_jobs tasks has signalled completion.
+        completed = 0
+        while completed != self.num_jobs:
+            # Wait for a result item.
+            item = self.queue.get()
+            if item is None:
+                completed += 1
+                continue
+
+            # Update the test result in the parent process.
+            index,result = item
+            test = self.run.tests[index]
+            test.result = result
+
+            self.display.update(test)
+
+def run_one_tester(run, provider, display):
+    tester = Tester(run, provider, display)
+    tester.run()
+
+###
+
+class _Display(object):
+    def __init__(self, display, provider, maxFailures):
+        self.display = display
+        self.provider = provider
+        self.maxFailures = maxFailures or object()
+        self.failedCount = 0
+    def update(self, test):
+        self.display.update(test)
+        self.failedCount += (test.result.code == lit.Test.FAIL)
+        if self.failedCount == self.maxFailures:
+            self.provider.cancel()
+
+def handleFailures(provider, consumer, maxFailures):
+    consumer.display = _Display(consumer.display, provider, maxFailures)
 
 class Run(object):
-    """A concrete, configured testing run."""
+    """
+    This class represents a concrete, configured testing run.
+    """
 
-    def __init__(self, tests, lit_config, progress_callback, max_failures, timeout):
-        self.tests = tests
+    def __init__(self, lit_config, tests):
         self.lit_config = lit_config
-        self.progress_callback = progress_callback
-        self.max_failures = max_failures
-        self.timeout = timeout
+        self.tests = tests
 
-    def execute(self):
+    def execute_test(self, test):
+        result = None
+        start_time = time.time()
+        try:
+            result = test.config.test_format.execute(test, self.lit_config)
+
+            # Support deprecated result from execute() which returned the result
+            # code and additional output as a tuple.
+            if isinstance(result, tuple):
+                code, output = result
+                result = lit.Test.Result(code, output)
+            elif not isinstance(result, lit.Test.Result):
+                raise ValueError("unexpected result from test execution")
+        except KeyboardInterrupt:
+            raise
+        except:
+            if self.lit_config.debug:
+                raise
+            output = 'Exception during script execution:\n'
+            output += traceback.format_exc()
+            output += '\n'
+            result = lit.Test.Result(lit.Test.UNRESOLVED, output)
+        result.elapsed = time.time() - start_time
+
+        test.setResult(result)
+
+    def execute_tests(self, display, jobs, max_time=None,
+                      use_processes=False):
         """
-        Execute the tests in the run using up to the specified number of
-        parallel tasks, and inform the caller of each individual result. The
+        execute_tests(display, jobs, [max_time])
+
+        Execute each of the tests in the run, using up to jobs number of
+        parallel tasks, and inform the display of each individual result. The
         provided tests should be a subset of the tests available in this run
         object.
 
-        The progress_callback will be invoked for each completed test.
-
-        If timeout is non-None, it should be a time in seconds after which to
+        If max_time is non-None, it should be a time in seconds after which to
         stop executing tests.
 
-        Returns the elapsed testing time.
+        The display object will have its update method called with each test as
+        it is completed. The calls are guaranteed to be locked with respect to
+        one another, but are *not* guaranteed to be called on the same thread as
+        this method was invoked on.
 
         Upon completion, each test in the run will have its result
         computed. Tests which were not actually executed (for any reason) will
         be given an UNRESOLVED result.
         """
-        self.failure_count = 0
-        self.hit_max_failures = False
 
-        # Larger timeouts (one year, positive infinity) don't work on Windows.
-        one_week = 7 * 24 * 60 * 60  # days * hours * minutes * seconds
-        timeout = self.timeout or one_week
-        deadline = time.time() + timeout
+        # Choose the appropriate parallel execution implementation.
+        consumer = None
+        if jobs != 1 and use_processes and multiprocessing:
+            try:
+                task_impl = multiprocessing.Process
+                queue_impl = multiprocessing.Queue
+                canceled_flag =  multiprocessing.Value('i', 0)
+                consumer = MultiprocessResultsConsumer(self, display, jobs)
+            except:
+                # multiprocessing fails to initialize with certain OpenBSD and
+                # FreeBSD Python versions: http://bugs.python.org/issue3770
+                # Unfortunately the error raised also varies by platform.
+                self.lit_config.note('failed to initialize multiprocessing')
+                consumer = None
+        if not consumer:
+            task_impl = threading.Thread
+            queue_impl = queue.Queue
+            canceled_flag = LockedValue(0)
+            consumer = ThreadResultsConsumer(display)
 
-        self._execute(deadline)
+        # Create the test provider.
+        provider = TestProvider(queue_impl, canceled_flag)
+        handleFailures(provider, consumer, self.lit_config.maxFailures)
 
-        # Mark any tests that weren't run as UNRESOLVED.
+        # Queue the tests outside the main thread because we can't guarantee
+        # that we can put() all the tests without blocking:
+        # https://docs.python.org/2/library/multiprocessing.html
+        # e.g: On Mac OS X, we will hang if we put 2^15 elements in the queue
+        # without taking any out.
+        queuer = task_impl(target=provider.queue_tests, args=(self.tests, jobs))
+        queuer.start()
+
+        # Install a console-control signal handler on Windows.
+        if win32api is not None:
+            def console_ctrl_handler(type):
+                provider.cancel()
+                return True
+            win32api.SetConsoleCtrlHandler(console_ctrl_handler, True)
+
+        # Install a timeout handler, if requested.
+        if max_time is not None:
+            def timeout_handler():
+                provider.cancel()
+            timeout_timer = threading.Timer(max_time, timeout_handler)
+            timeout_timer.start()
+
+        # If not using multiple tasks, just run the tests directly.
+        if jobs == 1:
+            run_one_tester(self, provider, consumer)
+        else:
+            # Otherwise, execute the tests in parallel
+            self._execute_tests_in_parallel(task_impl, provider, consumer, jobs)
+
+        queuer.join()
+
+        # Cancel the timeout handler.
+        if max_time is not None:
+            timeout_timer.cancel()
+
+        # Update results for any tests which weren't run.
         for test in self.tests:
             if test.result is None:
                 test.setResult(lit.Test.Result(lit.Test.UNRESOLVED, '', 0.0))
 
-    # TODO(yln): as the comment says.. this is racing with the main thread waiting
-    # for results
-    def _process_result(self, test, result):
-        # Don't add any more test results after we've hit the maximum failure
-        # count.  Otherwise we're racing with the main thread, which is going
-        # to terminate the process pool soon.
-        if self.hit_max_failures:
-            return
+    def _execute_tests_in_parallel(self, task_impl, provider, consumer, jobs):
+        # Start all of the tasks.
+        tasks = [task_impl(target=run_one_tester,
+                           args=(self, provider, consumer))
+                 for i in range(jobs)]
+        for t in tasks:
+            t.start()
 
-        test.setResult(result)
+        # Allow the consumer to handle results, if necessary.
+        consumer.handle_results()
 
-        # Use test.isFailure() for correct XFAIL and XPASS handling
-        if test.isFailure():
-            self.failure_count += 1
-            if self.failure_count == self.max_failures:
-                self.hit_max_failures = True
-
-        self.progress_callback(test)
-
-
-class SerialRun(Run):
-    def __init__(self, tests, lit_config, progress_callback, max_failures, timeout):
-        super(SerialRun, self).__init__(tests, lit_config, progress_callback, max_failures, timeout)
-
-    def _execute(self, deadline):
-        # TODO(yln): ignores deadline
-        for test in self.tests:
-            result = lit.worker._execute(test, self.lit_config)
-            self._process_result(test, result)
-            if self.hit_max_failures:
-                break
-
-
-class ParallelRun(Run):
-    def __init__(self, tests, lit_config, progress_callback, max_failures, timeout, workers):
-        super(ParallelRun, self).__init__(tests, lit_config, progress_callback, max_failures, timeout)
-        self.workers = workers
-
-    def _execute(self, deadline):
-        semaphores = {
-            k: NopSemaphore() if v is None else
-            multiprocessing.BoundedSemaphore(v) for k, v in
-            self.lit_config.parallelism_groups.items()}
-
-        self._increase_process_limit()
-
-        # Start a process pool. Copy over the data shared between all test runs.
-        # FIXME: Find a way to capture the worker process stderr. If the user
-        # interrupts the workers before we make it into our task callback, they
-        # will each raise a KeyboardInterrupt exception and print to stderr at
-        # the same time.
-        pool = multiprocessing.Pool(self.workers, lit.worker.initialize,
-                                    (self.lit_config, semaphores))
-
-        self._install_win32_signal_handler(pool)
-
-        async_results = [
-            pool.apply_async(lit.worker.execute, args=[test],
-                callback=lambda r, t=test: self._process_result(t, r))
-            for test in self.tests]
-        pool.close()
-
-        for ar in async_results:
-            timeout = deadline - time.time()
-            try:
-                ar.get(timeout)
-            except multiprocessing.TimeoutError:
-                # TODO(yln): print timeout error
-                pool.terminate()
-                break
-            if self.hit_max_failures:
-                pool.terminate()
-                break
-        pool.join()
-
-    # TODO(yln): interferes with progress bar
-    # Some tests use threads internally, and at least on Linux each of these
-    # threads counts toward the current process limit. Try to raise the (soft)
-    # process limit so that tests don't fail due to resource exhaustion.
-    def _increase_process_limit(self):
-        ncpus = lit.util.detectCPUs()
-        desired_limit = self.workers * ncpus * 2 # the 2 is a safety factor
-
-        # Importing the resource module will likely fail on Windows.
-        try:
-            import resource
-            NPROC = resource.RLIMIT_NPROC
-
-            soft_limit, hard_limit = resource.getrlimit(NPROC)
-            desired_limit = min(desired_limit, hard_limit)
-
-            if soft_limit < desired_limit:
-                resource.setrlimit(NPROC, (desired_limit, hard_limit))
-                self.lit_config.note('Raised process limit from %d to %d' % \
-                                        (soft_limit, desired_limit))
-        except Exception as ex:
-            # Warn, unless this is Windows, in which case this is expected.
-            if os.name != 'nt':
-                self.lit_config.warning('Failed to raise process limit: %s' % ex)
-
-    def _install_win32_signal_handler(self, pool):
-        if lit.util.win32api is not None:
-            def console_ctrl_handler(type):
-                print('\nCtrl-C detected, terminating.')
-                pool.terminate()
-                pool.join()
-                lit.util.abort_now()
-                return True
-            lit.util.win32api.SetConsoleCtrlHandler(console_ctrl_handler, True)
+        # Wait for all the tasks to complete.
+        for t in tasks:
+            t.join()

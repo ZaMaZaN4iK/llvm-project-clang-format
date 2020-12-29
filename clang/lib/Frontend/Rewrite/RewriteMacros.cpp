@@ -1,8 +1,9 @@
 //===--- RewriteMacros.cpp - Rewrite macros into their expansions ---------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -75,7 +76,7 @@ static void LexRawTokensFromMainFile(Preprocessor &PP,
     RawLex.LexFromRawLexer(RawTok);
 
     // If we have an identifier with no identifier info for our raw token, look
-    // up the identifier info.  This is important for equality comparison of
+    // up the indentifier info.  This is important for equality comparison of
     // identifier tokens.
     if (RawTok.is(tok::raw_identifier))
       PP.LookUpIdentifierInfo(RawTok);

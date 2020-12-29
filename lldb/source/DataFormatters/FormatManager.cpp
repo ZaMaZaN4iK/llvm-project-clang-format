@@ -1,8 +1,9 @@
 //===-- FormatManager.cpp ----------------------------------------*- C++-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,13 +11,17 @@
 
 #include "llvm/ADT/STLExtras.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 
 #include "lldb/Core/Debugger.h"
+#include "lldb/Core/Log.h"
 #include "lldb/DataFormatters/FormattersHelpers.h"
 #include "lldb/DataFormatters/LanguageCategory.h"
 #include "lldb/Target/ExecutionContext.h"
 #include "lldb/Target/Language.h"
-#include "lldb/Utility/Log.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -30,7 +35,7 @@ struct FormatInfo {
                            // current format
 };
 
-static constexpr FormatInfo g_format_infos[] = {
+static FormatInfo g_format_infos[] = {
     {eFormatDefault, '\0', "default"},
     {eFormatBoolean, 'B', "boolean"},
     {eFormatBinary, 'b', "binary"},
@@ -69,13 +74,7 @@ static constexpr FormatInfo g_format_infos[] = {
     {eFormatAddressInfo, 'A', "address"},
     {eFormatHexFloat, '\0', "hex float"},
     {eFormatInstruction, 'i', "instruction"},
-    {eFormatVoid, 'v', "void"},
-    {eFormatUnicode8, 'u', "unicode8"},
-};
-
-static_assert((sizeof(g_format_infos) / sizeof(g_format_infos[0])) ==
-                  kNumFormats,
-              "All formats must have a corresponding info entry.");
+    {eFormatVoid, 'v', "void"}};
 
 static uint32_t g_num_format_infos = llvm::array_lengthof(g_format_infos);
 
@@ -152,7 +151,7 @@ char FormatManager::GetFormatAsFormatChar(lldb::Format format) {
 const char *FormatManager::GetFormatAsCString(Format format) {
   if (format >= eFormatDefault && format < kNumFormats)
     return g_format_infos[format].format_name;
-  return nullptr;
+  return NULL;
 }
 
 void FormatManager::EnableAllCategories() {
@@ -230,38 +229,15 @@ void FormatManager::GetPossibleMatches(
     if (non_ptr_type.IsTypedefType()) {
       CompilerType deffed_pointed_type =
           non_ptr_type.GetTypedefedType().GetPointerType();
-      const bool stripped_typedef = true;
       GetPossibleMatches(
           valobj, deffed_pointed_type,
           reason | lldb_private::eFormatterChoiceCriterionNavigatedTypedefs,
           use_dynamic, entries, did_strip_ptr, did_strip_ref,
-          stripped_typedef); // this is not exactly the usual meaning of
-                             // stripping typedefs
+          true); // this is not exactly the usual meaning of stripping typedefs
     }
   }
 
-  // For arrays with typedef-ed elements, we add a candidate with the typedef
-  // stripped.
-  uint64_t array_size;
-  if (compiler_type.IsArrayType(nullptr, &array_size, nullptr)) {
-    CompilerType element_type = compiler_type.GetArrayElementType();
-    if (element_type.IsTypedefType()) {
-      // Get the stripped element type and compute the stripped array type
-      // from it.
-      CompilerType deffed_array_type =
-          element_type.GetTypedefedType().GetArrayType(array_size);
-      const bool stripped_typedef = true;
-      GetPossibleMatches(
-          valobj, deffed_array_type,
-          reason | lldb_private::eFormatterChoiceCriterionNavigatedTypedefs,
-          use_dynamic, entries, did_strip_ptr, did_strip_ref,
-          stripped_typedef); // this is not exactly the usual meaning of
-                             // stripping typedefs
-    }
-  }
-
-  for (lldb::LanguageType language_type :
-       GetCandidateLanguages(valobj.GetObjectRuntimeLanguage())) {
+  for (lldb::LanguageType language_type : GetCandidateLanguages(valobj)) {
     if (Language *language = Language::FindPlugin(language_type)) {
       for (ConstString candidate :
            language->GetPossibleFormattersMatches(valobj, use_dynamic)) {
@@ -321,12 +297,12 @@ FormatManager::GetFormatForType(lldb::TypeNameSpecifierImplSP type_sp) {
   uint32_t prio_category = UINT32_MAX;
   for (uint32_t category_id = 0; category_id < num_categories; category_id++) {
     category_sp = GetCategoryAtIndex(category_id);
-    if (!category_sp->IsEnabled())
+    if (category_sp->IsEnabled() == false)
       continue;
     lldb::TypeFormatImplSP format_current_sp =
         category_sp->GetFormatForType(type_sp);
     if (format_current_sp &&
-        (format_chosen_sp.get() == nullptr ||
+        (format_chosen_sp.get() == NULL ||
          (prio_category > category_sp->GetEnabledPosition()))) {
       prio_category = category_sp->GetEnabledPosition();
       format_chosen_sp = format_current_sp;
@@ -345,12 +321,12 @@ FormatManager::GetSummaryForType(lldb::TypeNameSpecifierImplSP type_sp) {
   uint32_t prio_category = UINT32_MAX;
   for (uint32_t category_id = 0; category_id < num_categories; category_id++) {
     category_sp = GetCategoryAtIndex(category_id);
-    if (!category_sp->IsEnabled())
+    if (category_sp->IsEnabled() == false)
       continue;
     lldb::TypeSummaryImplSP summary_current_sp =
         category_sp->GetSummaryForType(type_sp);
     if (summary_current_sp &&
-        (summary_chosen_sp.get() == nullptr ||
+        (summary_chosen_sp.get() == NULL ||
          (prio_category > category_sp->GetEnabledPosition()))) {
       prio_category = category_sp->GetEnabledPosition();
       summary_chosen_sp = summary_current_sp;
@@ -369,12 +345,12 @@ FormatManager::GetFilterForType(lldb::TypeNameSpecifierImplSP type_sp) {
   uint32_t prio_category = UINT32_MAX;
   for (uint32_t category_id = 0; category_id < num_categories; category_id++) {
     category_sp = GetCategoryAtIndex(category_id);
-    if (!category_sp->IsEnabled())
+    if (category_sp->IsEnabled() == false)
       continue;
     lldb::TypeFilterImplSP filter_current_sp(
         (TypeFilterImpl *)category_sp->GetFilterForType(type_sp).get());
     if (filter_current_sp &&
-        (filter_chosen_sp.get() == nullptr ||
+        (filter_chosen_sp.get() == NULL ||
          (prio_category > category_sp->GetEnabledPosition()))) {
       prio_category = category_sp->GetEnabledPosition();
       filter_chosen_sp = filter_current_sp;
@@ -383,6 +359,7 @@ FormatManager::GetFilterForType(lldb::TypeNameSpecifierImplSP type_sp) {
   return filter_chosen_sp;
 }
 
+#ifndef LLDB_DISABLE_PYTHON
 lldb::ScriptedSyntheticChildrenSP
 FormatManager::GetSyntheticForType(lldb::TypeNameSpecifierImplSP type_sp) {
   if (!type_sp)
@@ -393,19 +370,58 @@ FormatManager::GetSyntheticForType(lldb::TypeNameSpecifierImplSP type_sp) {
   uint32_t prio_category = UINT32_MAX;
   for (uint32_t category_id = 0; category_id < num_categories; category_id++) {
     category_sp = GetCategoryAtIndex(category_id);
-    if (!category_sp->IsEnabled())
+    if (category_sp->IsEnabled() == false)
       continue;
     lldb::ScriptedSyntheticChildrenSP synth_current_sp(
         (ScriptedSyntheticChildren *)category_sp->GetSyntheticForType(type_sp)
             .get());
     if (synth_current_sp &&
-        (synth_chosen_sp.get() == nullptr ||
+        (synth_chosen_sp.get() == NULL ||
          (prio_category > category_sp->GetEnabledPosition()))) {
       prio_category = category_sp->GetEnabledPosition();
       synth_chosen_sp = synth_current_sp;
     }
   }
   return synth_chosen_sp;
+}
+#endif
+
+#ifndef LLDB_DISABLE_PYTHON
+lldb::SyntheticChildrenSP FormatManager::GetSyntheticChildrenForType(
+    lldb::TypeNameSpecifierImplSP type_sp) {
+  if (!type_sp)
+    return lldb::SyntheticChildrenSP();
+  lldb::TypeFilterImplSP filter_sp = GetFilterForType(type_sp);
+  lldb::ScriptedSyntheticChildrenSP synth_sp = GetSyntheticForType(type_sp);
+  if (filter_sp->GetRevision() > synth_sp->GetRevision())
+    return lldb::SyntheticChildrenSP(filter_sp.get());
+  else
+    return lldb::SyntheticChildrenSP(synth_sp.get());
+}
+#endif
+
+lldb::TypeValidatorImplSP
+FormatManager::GetValidatorForType(lldb::TypeNameSpecifierImplSP type_sp) {
+  if (!type_sp)
+    return lldb::TypeValidatorImplSP();
+  lldb::TypeValidatorImplSP validator_chosen_sp;
+  uint32_t num_categories = m_categories_map.GetCount();
+  lldb::TypeCategoryImplSP category_sp;
+  uint32_t prio_category = UINT32_MAX;
+  for (uint32_t category_id = 0; category_id < num_categories; category_id++) {
+    category_sp = GetCategoryAtIndex(category_id);
+    if (category_sp->IsEnabled() == false)
+      continue;
+    lldb::TypeValidatorImplSP validator_current_sp(
+        category_sp->GetValidatorForType(type_sp).get());
+    if (validator_current_sp &&
+        (validator_chosen_sp.get() == NULL ||
+         (prio_category > category_sp->GetEnabledPosition()))) {
+      prio_category = category_sp->GetEnabledPosition();
+      validator_chosen_sp = validator_current_sp;
+    }
+  }
+  return validator_chosen_sp;
 }
 
 void FormatManager::ForEachCategory(TypeCategoryMap::ForEachCallback callback) {
@@ -420,7 +436,7 @@ void FormatManager::ForEachCategory(TypeCategoryMap::ForEachCallback callback) {
 }
 
 lldb::TypeCategoryImplSP
-FormatManager::GetCategory(ConstString category_name, bool can_create) {
+FormatManager::GetCategory(const ConstString &category_name, bool can_create) {
   if (!category_name)
     return GetCategory(m_default_category_name);
   lldb::TypeCategoryImplSP category;
@@ -467,7 +483,7 @@ lldb::Format FormatManager::GetSingleItemFormat(lldb::Format vector_format) {
 bool FormatManager::ShouldPrintAsOneLiner(ValueObject &valobj) {
   // if settings say no oneline whatsoever
   if (valobj.GetTargetSP().get() &&
-      !valobj.GetTargetSP()->GetDebugger().GetAutoOneLineSummaries())
+      valobj.GetTargetSP()->GetDebugger().GetAutoOneLineSummaries() == false)
     return false; // then don't oneline
 
   // if this object has a summary, then ask the summary
@@ -478,8 +494,8 @@ bool FormatManager::ShouldPrintAsOneLiner(ValueObject &valobj) {
   if (valobj.GetNumChildren() == 0)
     return false;
 
-  // ask the type if it has any opinion about this eLazyBoolCalculate == no
-  // opinion; other values should be self explanatory
+  // ask the type if it has any opinion about this
+  // eLazyBoolCalculate == no opinion; other values should be self explanatory
   CompilerType compiler_type(valobj.GetCompilerType());
   if (compiler_type.IsValid()) {
     switch (compiler_type.ShouldPrintAsOneLiner(&valobj)) {
@@ -516,14 +532,15 @@ bool FormatManager::ShouldPrintAsOneLiner(ValueObject &valobj) {
     }
 
     // if we decided to define synthetic children for a type, we probably care
-    // enough to show them, but avoid nesting children in children
+    // enough
+    // to show them, but avoid nesting children in children
     if (child_sp->GetSyntheticChildren().get() != nullptr) {
       ValueObjectSP synth_sp(child_sp->GetSyntheticValue());
       // wait.. wat? just get out of here..
       if (!synth_sp)
         return false;
       // but if we only have them to provide a value, keep going
-      if (!synth_sp->MightHaveChildren() &&
+      if (synth_sp->MightHaveChildren() == false &&
           synth_sp->DoesProvideSyntheticValue())
         is_synth_val = true;
       else
@@ -562,7 +579,7 @@ bool FormatManager::ShouldPrintAsOneLiner(ValueObject &valobj) {
   return true;
 }
 
-ConstString FormatManager::GetValidTypeName(ConstString type) {
+ConstString FormatManager::GetValidTypeName(const ConstString &type) {
   return ::GetValidTypeName_Impl(type);
 }
 
@@ -575,6 +592,12 @@ ConstString FormatManager::GetTypeForCache(ValueObject &valobj,
       return valobj_sp->GetQualifiedTypeName();
   }
   return ConstString();
+}
+
+std::vector<lldb::LanguageType>
+FormatManager::GetCandidateLanguages(ValueObject &valobj) {
+  lldb::LanguageType lang_type = valobj.GetObjectRuntimeLanguage();
+  return GetCandidateLanguages(lang_type);
 }
 
 std::vector<lldb::LanguageType>
@@ -592,7 +615,6 @@ FormatManager::GetCandidateLanguages(lldb::LanguageType lang_type) {
   default:
     return {lang_type};
   }
-  llvm_unreachable("Fully covered switch");
 }
 
 LanguageCategory *
@@ -608,93 +630,335 @@ FormatManager::GetCategoryForLanguage(lldb::LanguageType lang_type) {
   return lang_category;
 }
 
-template <typename ImplSP>
-ImplSP FormatManager::GetHardcoded(FormattersMatchData &match_data) {
-  ImplSP retval_sp;
+lldb::TypeFormatImplSP
+FormatManager::GetHardcodedFormat(FormattersMatchData &match_data) {
+  TypeFormatImplSP retval_sp;
+
   for (lldb::LanguageType lang_type : match_data.GetCandidateLanguages()) {
     if (LanguageCategory *lang_category = GetCategoryForLanguage(lang_type)) {
       if (lang_category->GetHardcoded(*this, match_data, retval_sp))
-        return retval_sp;
-    }
-  }
-  return retval_sp;
-}
-
-template <typename ImplSP>
-ImplSP FormatManager::Get(ValueObject &valobj,
-                          lldb::DynamicValueType use_dynamic) {
-  FormattersMatchData match_data(valobj, use_dynamic);
-  if (ImplSP retval_sp = GetCached<ImplSP>(match_data))
-    return retval_sp;
-
-  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_DATAFORMATTERS));
-
-  LLDB_LOGF(log, "[%s] Search failed. Giving language a chance.", __FUNCTION__);
-  for (lldb::LanguageType lang_type : match_data.GetCandidateLanguages()) {
-    if (LanguageCategory *lang_category = GetCategoryForLanguage(lang_type)) {
-      ImplSP retval_sp;
-      if (lang_category->Get(match_data, retval_sp))
-        if (retval_sp) {
-          LLDB_LOGF(log, "[%s] Language search success. Returning.",
-                    __FUNCTION__);
-          return retval_sp;
-        }
+        break;
     }
   }
 
-  LLDB_LOGF(log, "[%s] Search failed. Giving hardcoded a chance.",
-            __FUNCTION__);
-  return GetHardcoded<ImplSP>(match_data);
-}
-
-template <typename ImplSP>
-ImplSP FormatManager::GetCached(FormattersMatchData &match_data) {
-  ImplSP retval_sp;
-  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_DATAFORMATTERS));
-  if (match_data.GetTypeForCache()) {
-    LLDB_LOGF(log, "\n\n[%s] Looking into cache for type %s", __FUNCTION__,
-              match_data.GetTypeForCache().AsCString("<invalid>"));
-    if (m_format_cache.Get(match_data.GetTypeForCache(), retval_sp)) {
-      if (log) {
-        LLDB_LOGF(log, "[%s] Cache search success. Returning.", __FUNCTION__);
-        LLDB_LOGV(log, "Cache hits: {0} - Cache Misses: {1}",
-                  m_format_cache.GetCacheHits(),
-                  m_format_cache.GetCacheMisses());
-      }
-      return retval_sp;
-    }
-    LLDB_LOGF(log, "[%s] Cache search failed. Going normal route",
-              __FUNCTION__);
-  }
-
-  m_categories_map.Get(match_data, retval_sp);
-  if (match_data.GetTypeForCache() && (!retval_sp || !retval_sp->NonCacheable())) {
-    LLDB_LOGF(log, "[%s] Caching %p for type %s", __FUNCTION__,
-              static_cast<void *>(retval_sp.get()),
-              match_data.GetTypeForCache().AsCString("<invalid>"));
-    m_format_cache.Set(match_data.GetTypeForCache(), retval_sp);
-  }
-  LLDB_LOGV(log, "Cache hits: {0} - Cache Misses: {1}",
-            m_format_cache.GetCacheHits(), m_format_cache.GetCacheMisses());
   return retval_sp;
 }
 
 lldb::TypeFormatImplSP
 FormatManager::GetFormat(ValueObject &valobj,
                          lldb::DynamicValueType use_dynamic) {
-  return Get<lldb::TypeFormatImplSP>(valobj, use_dynamic);
+  FormattersMatchData match_data(valobj, use_dynamic);
+
+  TypeFormatImplSP retval;
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_DATAFORMATTERS));
+  if (match_data.GetTypeForCache()) {
+    if (log)
+      log->Printf(
+          "\n\n[FormatManager::GetFormat] Looking into cache for type %s",
+          match_data.GetTypeForCache().AsCString("<invalid>"));
+    if (m_format_cache.GetFormat(match_data.GetTypeForCache(), retval)) {
+      if (log) {
+        log->Printf(
+            "[FormatManager::GetFormat] Cache search success. Returning.");
+        if (log->GetDebug())
+          log->Printf("[FormatManager::GetFormat] Cache hits: %" PRIu64
+                      " - Cache Misses: %" PRIu64,
+                      m_format_cache.GetCacheHits(),
+                      m_format_cache.GetCacheMisses());
+      }
+      return retval;
+    }
+    if (log)
+      log->Printf(
+          "[FormatManager::GetFormat] Cache search failed. Going normal route");
+  }
+
+  retval = m_categories_map.GetFormat(match_data);
+  if (!retval) {
+    if (log)
+      log->Printf("[FormatManager::GetFormat] Search failed. Giving language a "
+                  "chance.");
+    for (lldb::LanguageType lang_type : match_data.GetCandidateLanguages()) {
+      if (LanguageCategory *lang_category = GetCategoryForLanguage(lang_type)) {
+        if (lang_category->Get(match_data, retval))
+          break;
+      }
+    }
+    if (retval) {
+      if (log)
+        log->Printf(
+            "[FormatManager::GetFormat] Language search success. Returning.");
+      return retval;
+    }
+  }
+  if (!retval) {
+    if (log)
+      log->Printf("[FormatManager::GetFormat] Search failed. Giving hardcoded "
+                  "a chance.");
+    retval = GetHardcodedFormat(match_data);
+  }
+
+  if (match_data.GetTypeForCache() && (!retval || !retval->NonCacheable())) {
+    if (log)
+      log->Printf("[FormatManager::GetFormat] Caching %p for type %s",
+                  static_cast<void *>(retval.get()),
+                  match_data.GetTypeForCache().AsCString("<invalid>"));
+    m_format_cache.SetFormat(match_data.GetTypeForCache(), retval);
+  }
+  if (log && log->GetDebug())
+    log->Printf("[FormatManager::GetFormat] Cache hits: %" PRIu64
+                " - Cache Misses: %" PRIu64,
+                m_format_cache.GetCacheHits(), m_format_cache.GetCacheMisses());
+  return retval;
+}
+
+lldb::TypeSummaryImplSP
+FormatManager::GetHardcodedSummaryFormat(FormattersMatchData &match_data) {
+  TypeSummaryImplSP retval_sp;
+
+  for (lldb::LanguageType lang_type : match_data.GetCandidateLanguages()) {
+    if (LanguageCategory *lang_category = GetCategoryForLanguage(lang_type)) {
+      if (lang_category->GetHardcoded(*this, match_data, retval_sp))
+        break;
+    }
+  }
+
+  return retval_sp;
 }
 
 lldb::TypeSummaryImplSP
 FormatManager::GetSummaryFormat(ValueObject &valobj,
                                 lldb::DynamicValueType use_dynamic) {
-  return Get<lldb::TypeSummaryImplSP>(valobj, use_dynamic);
+  FormattersMatchData match_data(valobj, use_dynamic);
+
+  TypeSummaryImplSP retval;
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_DATAFORMATTERS));
+  if (match_data.GetTypeForCache()) {
+    if (log)
+      log->Printf("\n\n[FormatManager::GetSummaryFormat] Looking into cache "
+                  "for type %s",
+                  match_data.GetTypeForCache().AsCString("<invalid>"));
+    if (m_format_cache.GetSummary(match_data.GetTypeForCache(), retval)) {
+      if (log) {
+        log->Printf("[FormatManager::GetSummaryFormat] Cache search success. "
+                    "Returning.");
+        if (log->GetDebug())
+          log->Printf("[FormatManager::GetSummaryFormat] Cache hits: %" PRIu64
+                      " - Cache Misses: %" PRIu64,
+                      m_format_cache.GetCacheHits(),
+                      m_format_cache.GetCacheMisses());
+      }
+      return retval;
+    }
+    if (log)
+      log->Printf("[FormatManager::GetSummaryFormat] Cache search failed. "
+                  "Going normal route");
+  }
+
+  retval = m_categories_map.GetSummaryFormat(match_data);
+  if (!retval) {
+    if (log)
+      log->Printf("[FormatManager::GetSummaryFormat] Search failed. Giving "
+                  "language a chance.");
+    for (lldb::LanguageType lang_type : match_data.GetCandidateLanguages()) {
+      if (LanguageCategory *lang_category = GetCategoryForLanguage(lang_type)) {
+        if (lang_category->Get(match_data, retval))
+          break;
+      }
+    }
+    if (retval) {
+      if (log)
+        log->Printf("[FormatManager::GetSummaryFormat] Language search "
+                    "success. Returning.");
+      return retval;
+    }
+  }
+  if (!retval) {
+    if (log)
+      log->Printf("[FormatManager::GetSummaryFormat] Search failed. Giving "
+                  "hardcoded a chance.");
+    retval = GetHardcodedSummaryFormat(match_data);
+  }
+
+  if (match_data.GetTypeForCache() && (!retval || !retval->NonCacheable())) {
+    if (log)
+      log->Printf("[FormatManager::GetSummaryFormat] Caching %p for type %s",
+                  static_cast<void *>(retval.get()),
+                  match_data.GetTypeForCache().AsCString("<invalid>"));
+    m_format_cache.SetSummary(match_data.GetTypeForCache(), retval);
+  }
+  if (log && log->GetDebug())
+    log->Printf("[FormatManager::GetSummaryFormat] Cache hits: %" PRIu64
+                " - Cache Misses: %" PRIu64,
+                m_format_cache.GetCacheHits(), m_format_cache.GetCacheMisses());
+  return retval;
+}
+
+#ifndef LLDB_DISABLE_PYTHON
+lldb::SyntheticChildrenSP
+FormatManager::GetHardcodedSyntheticChildren(FormattersMatchData &match_data) {
+  SyntheticChildrenSP retval_sp;
+
+  for (lldb::LanguageType lang_type : match_data.GetCandidateLanguages()) {
+    if (LanguageCategory *lang_category = GetCategoryForLanguage(lang_type)) {
+      if (lang_category->GetHardcoded(*this, match_data, retval_sp))
+        break;
+    }
+  }
+
+  return retval_sp;
 }
 
 lldb::SyntheticChildrenSP
 FormatManager::GetSyntheticChildren(ValueObject &valobj,
                                     lldb::DynamicValueType use_dynamic) {
-  return Get<lldb::SyntheticChildrenSP>(valobj, use_dynamic);
+  FormattersMatchData match_data(valobj, use_dynamic);
+
+  SyntheticChildrenSP retval;
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_DATAFORMATTERS));
+  if (match_data.GetTypeForCache()) {
+    if (log)
+      log->Printf("\n\n[FormatManager::GetSyntheticChildren] Looking into "
+                  "cache for type %s",
+                  match_data.GetTypeForCache().AsCString("<invalid>"));
+    if (m_format_cache.GetSynthetic(match_data.GetTypeForCache(), retval)) {
+      if (log) {
+        log->Printf("[FormatManager::GetSyntheticChildren] Cache search "
+                    "success. Returning.");
+        if (log->GetDebug())
+          log->Printf(
+              "[FormatManager::GetSyntheticChildren] Cache hits: %" PRIu64
+              " - Cache Misses: %" PRIu64,
+              m_format_cache.GetCacheHits(), m_format_cache.GetCacheMisses());
+      }
+      return retval;
+    }
+    if (log)
+      log->Printf("[FormatManager::GetSyntheticChildren] Cache search failed. "
+                  "Going normal route");
+  }
+
+  retval = m_categories_map.GetSyntheticChildren(match_data);
+  if (!retval) {
+    if (log)
+      log->Printf("[FormatManager::GetSyntheticChildren] Search failed. Giving "
+                  "language a chance.");
+    for (lldb::LanguageType lang_type : match_data.GetCandidateLanguages()) {
+      if (LanguageCategory *lang_category = GetCategoryForLanguage(lang_type)) {
+        if (lang_category->Get(match_data, retval))
+          break;
+      }
+    }
+    if (retval) {
+      if (log)
+        log->Printf("[FormatManager::GetSyntheticChildren] Language search "
+                    "success. Returning.");
+      return retval;
+    }
+  }
+  if (!retval) {
+    if (log)
+      log->Printf("[FormatManager::GetSyntheticChildren] Search failed. Giving "
+                  "hardcoded a chance.");
+    retval = GetHardcodedSyntheticChildren(match_data);
+  }
+
+  if (match_data.GetTypeForCache() && (!retval || !retval->NonCacheable())) {
+    if (log)
+      log->Printf(
+          "[FormatManager::GetSyntheticChildren] Caching %p for type %s",
+          static_cast<void *>(retval.get()),
+          match_data.GetTypeForCache().AsCString("<invalid>"));
+    m_format_cache.SetSynthetic(match_data.GetTypeForCache(), retval);
+  }
+  if (log && log->GetDebug())
+    log->Printf("[FormatManager::GetSyntheticChildren] Cache hits: %" PRIu64
+                " - Cache Misses: %" PRIu64,
+                m_format_cache.GetCacheHits(), m_format_cache.GetCacheMisses());
+  return retval;
+}
+#endif
+
+lldb::TypeValidatorImplSP
+FormatManager::GetValidator(ValueObject &valobj,
+                            lldb::DynamicValueType use_dynamic) {
+  FormattersMatchData match_data(valobj, use_dynamic);
+
+  TypeValidatorImplSP retval;
+  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_DATAFORMATTERS));
+  if (match_data.GetTypeForCache()) {
+    if (log)
+      log->Printf(
+          "\n\n[FormatManager::GetValidator] Looking into cache for type %s",
+          match_data.GetTypeForCache().AsCString("<invalid>"));
+    if (m_format_cache.GetValidator(match_data.GetTypeForCache(), retval)) {
+      if (log) {
+        log->Printf(
+            "[FormatManager::GetValidator] Cache search success. Returning.");
+        if (log->GetDebug())
+          log->Printf("[FormatManager::GetValidator] Cache hits: %" PRIu64
+                      " - Cache Misses: %" PRIu64,
+                      m_format_cache.GetCacheHits(),
+                      m_format_cache.GetCacheMisses());
+      }
+      return retval;
+    }
+    if (log)
+      log->Printf("[FormatManager::GetValidator] Cache search failed. Going "
+                  "normal route");
+  }
+
+  retval = m_categories_map.GetValidator(match_data);
+  if (!retval) {
+    if (log)
+      log->Printf("[FormatManager::GetValidator] Search failed. Giving "
+                  "language a chance.");
+    for (lldb::LanguageType lang_type : match_data.GetCandidateLanguages()) {
+      if (LanguageCategory *lang_category = GetCategoryForLanguage(lang_type)) {
+        if (lang_category->Get(match_data, retval))
+          break;
+      }
+    }
+    if (retval) {
+      if (log)
+        log->Printf("[FormatManager::GetValidator] Language search success. "
+                    "Returning.");
+      return retval;
+    }
+  }
+  if (!retval) {
+    if (log)
+      log->Printf("[FormatManager::GetValidator] Search failed. Giving "
+                  "hardcoded a chance.");
+    retval = GetHardcodedValidator(match_data);
+  }
+
+  if (match_data.GetTypeForCache() && (!retval || !retval->NonCacheable())) {
+    if (log)
+      log->Printf("[FormatManager::GetValidator] Caching %p for type %s",
+                  static_cast<void *>(retval.get()),
+                  match_data.GetTypeForCache().AsCString("<invalid>"));
+    m_format_cache.SetValidator(match_data.GetTypeForCache(), retval);
+  }
+  if (log && log->GetDebug())
+    log->Printf("[FormatManager::GetValidator] Cache hits: %" PRIu64
+                " - Cache Misses: %" PRIu64,
+                m_format_cache.GetCacheHits(), m_format_cache.GetCacheMisses());
+  return retval;
+}
+
+lldb::TypeValidatorImplSP
+FormatManager::GetHardcodedValidator(FormattersMatchData &match_data) {
+  TypeValidatorImplSP retval_sp;
+
+  for (lldb::LanguageType lang_type : match_data.GetCandidateLanguages()) {
+    if (LanguageCategory *lang_category = GetCategoryForLanguage(lang_type)) {
+      if (lang_category->GetHardcoded(*this, match_data, retval_sp))
+        break;
+    }
+  }
+
+  return retval_sp;
 }
 
 FormatManager::FormatManager()
@@ -737,7 +1001,10 @@ void FormatManager::LoadSystemFormatters() {
   lldb::TypeSummaryImplSP string_array_format(
       new StringSummaryFormat(string_array_flags, "${var%s}"));
 
-  RegularExpression any_size_char_arr(llvm::StringRef("char \\[[0-9]+\\]"));
+  lldb::RegularExpressionSP any_size_char_arr(
+      new RegularExpression(llvm::StringRef("char \\[[0-9]+\\]")));
+  lldb::RegularExpressionSP any_size_wchar_arr(
+      new RegularExpression(llvm::StringRef("wchar_t \\[[0-9]+\\]")));
 
   TypeCategoryImpl::SharedPointer sys_category_sp =
       GetCategory(m_system_category_name);
@@ -746,8 +1013,8 @@ void FormatManager::LoadSystemFormatters() {
                                                     string_format);
   sys_category_sp->GetTypeSummariesContainer()->Add(
       ConstString("unsigned char *"), string_format);
-  sys_category_sp->GetRegexTypeSummariesContainer()->Add(
-      std::move(any_size_char_arr), string_array_format);
+  sys_category_sp->GetRegexTypeSummariesContainer()->Add(any_size_char_arr,
+                                                         string_array_format);
 
   lldb::TypeSummaryImplSP ostype_summary(
       new StringSummaryFormat(TypeSummaryImpl::Flags()
@@ -763,12 +1030,14 @@ void FormatManager::LoadSystemFormatters() {
   sys_category_sp->GetTypeSummariesContainer()->Add(ConstString("OSType"),
                                                     ostype_summary);
 
+#ifndef LLDB_DISABLE_PYTHON
   TypeFormatImpl::Flags fourchar_flags;
   fourchar_flags.SetCascades(true).SetSkipPointers(true).SetSkipReferences(
       true);
 
   AddFormat(sys_category_sp, lldb::eFormatOSType, ConstString("FourCharCode"),
             fourchar_flags);
+#endif
 }
 
 void FormatManager::LoadVectorFormatters() {

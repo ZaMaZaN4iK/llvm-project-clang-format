@@ -1,16 +1,21 @@
 //===-- HostProcessPosix.h --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef lldb_Host_HostProcesPosix_h_
 #define lldb_Host_HostProcesPosix_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/Error.h"
 #include "lldb/Host/HostNativeProcessBase.h"
-#include "lldb/Utility/Status.h"
 #include "lldb/lldb-types.h"
 
 namespace lldb_private {
@@ -23,18 +28,17 @@ public:
   HostProcessPosix(lldb::process_t process);
   ~HostProcessPosix() override;
 
-  virtual Status Signal(int signo) const;
-  static Status Signal(lldb::process_t process, int signo);
+  virtual Error Signal(int signo) const;
+  static Error Signal(lldb::process_t process, int signo);
 
-  Status Terminate() override;
-  Status GetMainModule(FileSpec &file_spec) const override;
+  Error Terminate() override;
+  Error GetMainModule(FileSpec &file_spec) const override;
 
   lldb::pid_t GetProcessId() const override;
   bool IsRunning() const override;
 
-  llvm::Expected<HostThread>
-  StartMonitoring(const Host::MonitorChildProcessCallback &callback,
-                  bool monitor_signals) override;
+  HostThread StartMonitoring(const Host::MonitorChildProcessCallback &callback,
+                             bool monitor_signals) override;
 };
 
 } // namespace lldb_private

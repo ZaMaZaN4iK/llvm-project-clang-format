@@ -1,28 +1,31 @@
 //===-- ABI.cpp -------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Target/ABI.h"
+#include "Plugins/ExpressionParser/Clang/ClangPersistentVariables.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Core/Value.h"
 #include "lldb/Core/ValueObjectConstResult.h"
-#include "lldb/Expression/ExpressionVariable.h"
 #include "lldb/Symbol/CompilerType.h"
 #include "lldb/Symbol/TypeSystem.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Utility/Log.h"
-#include "llvm/Support/TargetRegistry.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
 ABISP
-ABI::FindPlugin(lldb::ProcessSP process_sp, const ArchSpec &arch) {
+ABI::FindPlugin(const ArchSpec &arch) {
   ABISP abi_sp;
   ABICreateInstance create_callback;
 
@@ -30,7 +33,7 @@ ABI::FindPlugin(lldb::ProcessSP process_sp, const ArchSpec &arch) {
        (create_callback = PluginManager::GetABICreateCallbackAtIndex(idx)) !=
        nullptr;
        ++idx) {
-    abi_sp = create_callback(process_sp, arch);
+    abi_sp = create_callback(arch);
 
     if (abi_sp)
       return abi_sp;
@@ -39,9 +42,11 @@ ABI::FindPlugin(lldb::ProcessSP process_sp, const ArchSpec &arch) {
   return abi_sp;
 }
 
+ABI::ABI() = default;
+
 ABI::~ABI() = default;
 
-bool ABI::GetRegisterInfoByName(ConstString name, RegisterInfo &info) {
+bool ABI::GetRegisterInfoByName(const ConstString &name, RegisterInfo &info) {
   uint32_t count = 0;
   const RegisterInfo *register_info_array = GetRegisterInfoArray(count);
   if (register_info_array) {
@@ -55,6 +60,24 @@ bool ABI::GetRegisterInfoByName(ConstString name, RegisterInfo &info) {
     }
     for (i = 0; i < count; ++i) {
       if (register_info_array[i].alt_name == unique_name_cstr) {
+        info = register_info_array[i];
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool ABI::GetRegisterInfoByKind(RegisterKind reg_kind, uint32_t reg_num,
+                                RegisterInfo &info) {
+  if (reg_kind < eRegisterKindEHFrame || reg_kind >= kNumRegisterKinds)
+    return false;
+
+  uint32_t count = 0;
+  const RegisterInfo *register_info_array = GetRegisterInfoArray(count);
+  if (register_info_array) {
+    for (uint32_t i = 0; i < count; ++i) {
+      if (register_info_array[i].kinds[reg_kind] == reg_num) {
         info = register_info_array[i];
         return true;
       }
@@ -81,18 +104,15 @@ ValueObjectSP ABI::GetReturnValueObject(Thread &thread, CompilerType &ast_type,
   // work.
 
   if (persistent) {
-    Target &target = *thread.CalculateTarget();
     PersistentExpressionState *persistent_expression_state =
-        target.GetPersistentExpressionStateForLanguage(
+        thread.CalculateTarget()->GetPersistentExpressionStateForLanguage(
             ast_type.GetMinimumLanguage());
 
     if (!persistent_expression_state)
-      return {};
+      return ValueObjectSP();
 
-    auto prefix = persistent_expression_state->GetPersistentVariablePrefix();
-    ConstString persistent_variable_name =
-        persistent_expression_state->GetNextPersistentVariableName(target,
-                                                                   prefix);
+    ConstString persistent_variable_name(
+        persistent_expression_state->GetNextPersistentVariableName());
 
     lldb::ValueObjectSP const_valobj_sp;
 
@@ -108,11 +128,11 @@ ValueObjectSP ABI::GetReturnValueObject(Thread &thread, CompilerType &ast_type,
 
     return_valobj_sp = const_valobj_sp;
 
-    ExpressionVariableSP expr_variable_sp(
+    ExpressionVariableSP clang_expr_variable_sp(
         persistent_expression_state->CreatePersistentVariable(
             return_valobj_sp));
 
-    assert(expr_variable_sp);
+    assert(clang_expr_variable_sp);
 
     // Set flags and live data as appropriate
 
@@ -125,21 +145,21 @@ ValueObjectSP ABI::GetReturnValueObject(Thread &thread, CompilerType &ast_type,
       break;
     case Value::eValueTypeScalar:
     case Value::eValueTypeVector:
-      expr_variable_sp->m_flags |=
-          ExpressionVariable::EVIsFreezeDried;
-      expr_variable_sp->m_flags |=
-          ExpressionVariable::EVIsLLDBAllocated;
-      expr_variable_sp->m_flags |=
-          ExpressionVariable::EVNeedsAllocation;
+      clang_expr_variable_sp->m_flags |=
+          ClangExpressionVariable::EVIsFreezeDried;
+      clang_expr_variable_sp->m_flags |=
+          ClangExpressionVariable::EVIsLLDBAllocated;
+      clang_expr_variable_sp->m_flags |=
+          ClangExpressionVariable::EVNeedsAllocation;
       break;
     case Value::eValueTypeLoadAddress:
-      expr_variable_sp->m_live_sp = live_valobj_sp;
-      expr_variable_sp->m_flags |=
-          ExpressionVariable::EVIsProgramReference;
+      clang_expr_variable_sp->m_live_sp = live_valobj_sp;
+      clang_expr_variable_sp->m_flags |=
+          ClangExpressionVariable::EVIsProgramReference;
       break;
     }
 
-    return_valobj_sp = expr_variable_sp->GetValueObject();
+    return_valobj_sp = clang_expr_variable_sp->GetValueObject();
   }
   return return_valobj_sp;
 }
@@ -175,56 +195,22 @@ bool ABI::PrepareTrivialCall(Thread &thread, lldb::addr_t sp,
 bool ABI::GetFallbackRegisterLocation(
     const RegisterInfo *reg_info,
     UnwindPlan::Row::RegisterLocation &unwind_regloc) {
-  // Did the UnwindPlan fail to give us the caller's stack pointer? The stack
-  // pointer is defined to be the same as THIS frame's CFA, so return the CFA
-  // value as the caller's stack pointer.  This is true on x86-32/x86-64 at
-  // least.
+  // Did the UnwindPlan fail to give us the caller's stack pointer?
+  // The stack pointer is defined to be the same as THIS frame's CFA, so return
+  // the CFA value as
+  // the caller's stack pointer.  This is true on x86-32/x86-64 at least.
   if (reg_info->kinds[eRegisterKindGeneric] == LLDB_REGNUM_GENERIC_SP) {
     unwind_regloc.SetIsCFAPlusOffset(0);
     return true;
   }
 
   // If a volatile register is being requested, we don't want to forward the
-  // next frame's register contents up the stack -- the register is not
-  // retrievable at this frame.
+  // next frame's register contents
+  // up the stack -- the register is not retrievable at this frame.
   if (RegisterIsVolatile(reg_info)) {
     unwind_regloc.SetUndefined();
     return true;
   }
 
   return false;
-}
-
-std::unique_ptr<llvm::MCRegisterInfo> ABI::MakeMCRegisterInfo(const ArchSpec &arch) {
-  std::string triple = arch.GetTriple().getTriple();
-  std::string lookup_error;
-  const llvm::Target *target =
-      llvm::TargetRegistry::lookupTarget(triple, lookup_error);
-  if (!target) {
-    LLDB_LOG(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS),
-             "Failed to create an llvm target for {0}: {1}", triple,
-             lookup_error);
-    return nullptr;
-  }
-  std::unique_ptr<llvm::MCRegisterInfo> info_up(
-      target->createMCRegInfo(triple));
-  assert(info_up);
-  return info_up;
-}
-
-void ABI::AugmentRegisterInfo(RegisterInfo &info) {
-  if (info.kinds[eRegisterKindEHFrame] != LLDB_INVALID_REGNUM &&
-      info.kinds[eRegisterKindDWARF] != LLDB_INVALID_REGNUM)
-    return;
-
-  RegisterInfo abi_info;
-  if (!GetRegisterInfoByName(ConstString(info.name), abi_info))
-    return;
-
-  if (info.kinds[eRegisterKindEHFrame] == LLDB_INVALID_REGNUM)
-    info.kinds[eRegisterKindEHFrame] = abi_info.kinds[eRegisterKindEHFrame];
-  if (info.kinds[eRegisterKindDWARF] == LLDB_INVALID_REGNUM)
-    info.kinds[eRegisterKindDWARF] = abi_info.kinds[eRegisterKindDWARF];
-  if (info.kinds[eRegisterKindGeneric] == LLDB_INVALID_REGNUM)
-    info.kinds[eRegisterKindGeneric] = abi_info.kinds[eRegisterKindGeneric];
 }

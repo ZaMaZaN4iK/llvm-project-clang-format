@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -74,7 +75,7 @@ void test_nullptr_conversions() {
 #endif
 
 
-int main(int, char**)
+int main()
 {
     static_assert(sizeof(std::nullptr_t) == sizeof(void*),
                   "sizeof(std::nullptr_t) == sizeof(void*)");
@@ -90,7 +91,7 @@ int main(int, char**)
     {
 #ifdef _LIBCPP_HAS_NO_NULLPTR
         static_assert(!has_less<std::nullptr_t>::value, "");
-        // FIXME: our C++03 nullptr emulation still allows for comparisons
+        // FIXME: our c++03 nullptr emulation still allows for comparisons
         // with other pointer types by way of the conversion operator.
         //static_assert(!has_less<void*>::value, "");
 #else
@@ -103,6 +104,4 @@ int main(int, char**)
         test_comparisons<void(*)()>();
     }
     test_nullptr_conversions();
-
-  return 0;
 }

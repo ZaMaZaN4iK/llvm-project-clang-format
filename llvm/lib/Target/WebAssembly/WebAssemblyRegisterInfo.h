@@ -1,13 +1,14 @@
 // WebAssemblyRegisterInfo.h - WebAssembly Register Information Impl -*- C++ -*-
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file contains the WebAssembly implementation of the
+/// \brief This file contains the WebAssembly implementation of the
 /// WebAssemblyRegisterInfo class.
 ///
 //===----------------------------------------------------------------------===//
@@ -39,13 +40,11 @@ public:
                            RegScavenger *RS = nullptr) const override;
 
   // Debug information queries.
-  Register getFrameRegister(const MachineFunction &MF) const override;
+  unsigned getFrameRegister(const MachineFunction &MF) const override;
 
   const TargetRegisterClass *
   getPointerRegClass(const MachineFunction &MF,
                      unsigned Kind = 0) const override;
-  // This does not apply to wasm.
-  const uint32_t *getNoPreservedMask() const override { return nullptr; }
 };
 
 } // end namespace llvm

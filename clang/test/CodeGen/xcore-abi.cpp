@@ -23,4 +23,5 @@ public:
 };
 C c;
 
-// CHECK: "frame-pointer"="none"
+// CHECK: "no-frame-pointer-elim"="false"
+// CHECK-NOT: "no-frame-pointer-elim-non-leaf"

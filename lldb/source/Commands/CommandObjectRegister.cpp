@@ -1,15 +1,25 @@
 //===-- CommandObjectRegister.cpp -------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+#include "llvm/ADT/STLExtras.h"
+
+// Project includes
 #include "CommandObjectRegister.h"
+#include "lldb/Core/DataExtractor.h"
 #include "lldb/Core/Debugger.h"
-#include "lldb/Core/DumpRegisterValue.h"
-#include "lldb/Host/OptionParser.h"
+#include "lldb/Core/RegisterValue.h"
+#include "lldb/Core/Scalar.h"
+#include "lldb/Interpreter/Args.h"
+#include "lldb/Interpreter/CommandInterpreter.h"
 #include "lldb/Interpreter/CommandReturnObject.h"
 #include "lldb/Interpreter/OptionGroupFormat.h"
 #include "lldb/Interpreter/OptionValueArray.h"
@@ -21,17 +31,21 @@
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/SectionLoadList.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Utility/Args.h"
-#include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/RegisterValue.h"
-#include "llvm/Support/Errno.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
+//----------------------------------------------------------------------
 // "register read"
-#define LLDB_OPTIONS_register_read
-#include "CommandOptions.inc"
+//----------------------------------------------------------------------
+
+static OptionDefinition g_register_read_options[] = {
+    // clang-format off
+  { LLDB_OPT_SET_ALL, false, "alternate", 'A', OptionParser::eNoArgument,       nullptr, nullptr, 0, eArgTypeNone,  "Display register names using the alternate register name if there is one." },
+  { LLDB_OPT_SET_1,   false, "set",       's', OptionParser::eRequiredArgument, nullptr, nullptr, 0, eArgTypeIndex, "Specify which register sets to dump by index." },
+  { LLDB_OPT_SET_2,   false, "all",       'a', OptionParser::eNoArgument,       nullptr, nullptr, 0, eArgTypeNone,  "Show all register sets." },
+    // clang-format on
+};
 
 class CommandObjectRegisterRead : public CommandObjectParsed {
 public:
@@ -82,8 +96,8 @@ public:
 
         bool prefix_with_altname = (bool)m_command_options.alternate_name;
         bool prefix_with_name = !prefix_with_altname;
-        DumpRegisterValue(reg_value, &strm, reg_info, prefix_with_name,
-                          prefix_with_altname, m_format_options.GetFormat(), 8);
+        reg_value.Dump(&strm, reg_info, prefix_with_name, prefix_with_altname,
+                       m_format_options.GetFormat(), 8);
         if ((reg_info->encoding == eEncodingUint) ||
             (reg_info->encoding == eEncodingSint)) {
           Process *process = exe_ctx.GetProcessPtr();
@@ -163,8 +177,8 @@ protected:
           if (set_idx < reg_ctx->GetRegisterSetCount()) {
             if (!DumpRegisterSet(m_exe_ctx, strm, reg_ctx, set_idx)) {
               if (errno)
-                result.AppendErrorWithFormatv("register read failed: {0}\n",
-                                              llvm::sys::StrError());
+                result.AppendErrorWithFormat("register read failed: %s\n",
+                                             strerror(errno));
               else
                 result.AppendError("unknown error while reading registers.\n");
               result.SetStatus(eReturnStatusFailed);
@@ -182,8 +196,8 @@ protected:
           num_register_sets = reg_ctx->GetRegisterSetCount();
 
         for (set_idx = 0; set_idx < num_register_sets; ++set_idx) {
-          // When dump_all_sets option is set, dump primitive as well as
-          // derived registers.
+          // When dump_all_sets option is set, dump primitive as well as derived
+          // registers.
           DumpRegisterSet(m_exe_ctx, strm, reg_ctx, set_idx,
                           !m_command_options.dump_all_sets.GetCurrentValue());
         }
@@ -199,12 +213,12 @@ protected:
         result.SetStatus(eReturnStatusFailed);
       } else {
         for (auto &entry : command) {
-          // in most LLDB commands we accept $rbx as the name for register RBX
-          // - and here we would reject it and non-existant. we should be more
+          // in most LLDB commands we accept $rbx as the name for register RBX -
+          // and here we would reject it and non-existant. we should be more
           // consistent towards the user and allow them to say reg read $rbx -
           // internally, however, we should be strict and not allow ourselves
           // to call our registers $rbx in our own API
-          auto arg_str = entry.ref();
+          auto arg_str = entry.ref;
           arg_str.consume_front("$");
 
           reg_info = reg_ctx->GetRegisterInfoByName(arg_str);
@@ -242,9 +256,9 @@ protected:
       alternate_name.Clear();
     }
 
-    Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
-                          ExecutionContext *execution_context) override {
-      Status error;
+    Error SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
+                         ExecutionContext *execution_context) override {
+      Error error;
       const int short_option = GetDefinitions()[option_idx].short_option;
       switch (short_option) {
       case 's': {
@@ -270,7 +284,9 @@ protected:
         break;
 
       default:
-        llvm_unreachable("Unimplemented option");
+        error.SetErrorStringWithFormat("unrecognized short option '%c'",
+                                       short_option);
+        break;
       }
       return error;
     }
@@ -286,7 +302,9 @@ protected:
   CommandOptions m_command_options;
 };
 
+//----------------------------------------------------------------------
 // "register write"
+//----------------------------------------------------------------------
 class CommandObjectRegisterWrite : public CommandObjectParsed {
 public:
   CommandObjectRegisterWrite(CommandInterpreter &interpreter)
@@ -333,14 +351,14 @@ protected:
           "register write takes exactly 2 arguments: <reg-name> <value>");
       result.SetStatus(eReturnStatusFailed);
     } else {
-      auto reg_name = command[0].ref();
-      auto value_str = command[1].ref();
+      auto reg_name = command[0].ref;
+      auto value_str = command[1].ref;
 
-      // in most LLDB commands we accept $rbx as the name for register RBX -
-      // and here we would reject it and non-existant. we should be more
-      // consistent towards the user and allow them to say reg write $rbx -
-      // internally, however, we should be strict and not allow ourselves to
-      // call our registers $rbx in our own API
+      // in most LLDB commands we accept $rbx as the name for register RBX - and
+      // here we would reject it and non-existant. we should be more consistent
+      // towards the user and allow them to say reg write $rbx - internally,
+      // however, we should be strict and not allow ourselves to call our
+      // registers $rbx in our own API
       reg_name.consume_front("$");
 
       const RegisterInfo *reg_info = reg_ctx->GetRegisterInfoByName(reg_name);
@@ -348,11 +366,11 @@ protected:
       if (reg_info) {
         RegisterValue reg_value;
 
-        Status error(reg_value.SetValueFromString(reg_info, value_str));
+        Error error(reg_value.SetValueFromString(reg_info, value_str));
         if (error.Success()) {
           if (reg_ctx->WriteRegister(reg_info, reg_value)) {
-            // Toss all frames and anything else in the thread after a register
-            // has been written.
+            // Toss all frames and anything else in the thread
+            // after a register has been written.
             m_exe_ctx.GetThreadRef().Flush();
             result.SetStatus(eReturnStatusSuccessFinishNoResult);
             return true;
@@ -379,7 +397,9 @@ protected:
   }
 };
 
+//----------------------------------------------------------------------
 // CommandObjectRegister constructor
+//----------------------------------------------------------------------
 CommandObjectRegister::CommandObjectRegister(CommandInterpreter &interpreter)
     : CommandObjectMultiword(interpreter, "register",
                              "Commands to access registers for the current "

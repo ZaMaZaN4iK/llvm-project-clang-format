@@ -1,8 +1,9 @@
 //===-- ConstantFolding.h - Fold instructions into constants ----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -22,7 +23,7 @@
 namespace llvm {
 class APInt;
 template <typename T> class ArrayRef;
-class CallBase;
+class CallSite;
 class Constant;
 class ConstantExpr;
 class ConstantVector;
@@ -71,25 +72,13 @@ ConstantFoldCompareInstOperands(unsigned Predicate, Constant *LHS,
                                 Constant *RHS, const DataLayout &DL,
                                 const TargetLibraryInfo *TLI = nullptr);
 
-/// Attempt to constant fold a unary operation with the specified
-/// operand. If it fails, it returns a constant expression of the specified
-/// operands.
-Constant *ConstantFoldUnaryOpOperand(unsigned Opcode, Constant *Op,
-                                     const DataLayout &DL);
-
-/// Attempt to constant fold a binary operation with the specified
+/// \brief Attempt to constant fold a binary operation with the specified
 /// operands.  If it fails, it returns a constant expression of the specified
 /// operands.
 Constant *ConstantFoldBinaryOpOperands(unsigned Opcode, Constant *LHS,
                                        Constant *RHS, const DataLayout &DL);
 
-/// Attempt to constant fold a select instruction with the specified
-/// operands. The constant result is returned if successful; if not, null is
-/// returned.
-Constant *ConstantFoldSelectInstruction(Constant *Cond, Constant *V1,
-                                        Constant *V2);
-
-/// Attempt to constant fold a cast with the specified operand.  If it
+/// \brief Attempt to constant fold a cast with the specified operand.  If it
 /// fails, it returns a constant expression of the specified operand.
 Constant *ConstantFoldCastOperand(unsigned Opcode, Constant *C, Type *DestTy,
                                   const DataLayout &DL);
@@ -100,29 +89,16 @@ Constant *ConstantFoldCastOperand(unsigned Opcode, Constant *C, Type *DestTy,
 Constant *ConstantFoldInsertValueInstruction(Constant *Agg, Constant *Val,
                                              ArrayRef<unsigned> Idxs);
 
-/// Attempt to constant fold an extractvalue instruction with the
+/// \brief Attempt to constant fold an extractvalue instruction with the
 /// specified operands and indices.  The constant result is returned if
 /// successful; if not, null is returned.
 Constant *ConstantFoldExtractValueInstruction(Constant *Agg,
                                               ArrayRef<unsigned> Idxs);
 
-/// Attempt to constant fold an insertelement instruction with the
-/// specified operands and indices.  The constant result is returned if
-/// successful; if not, null is returned.
-Constant *ConstantFoldInsertElementInstruction(Constant *Val,
-                                               Constant *Elt,
-                                               Constant *Idx);
-
-/// Attempt to constant fold an extractelement instruction with the
+/// \brief Attempt to constant fold an extractelement instruction with the
 /// specified operands and indices.  The constant result is returned if
 /// successful; if not, null is returned.
 Constant *ConstantFoldExtractElementInstruction(Constant *Val, Constant *Idx);
-
-/// Attempt to constant fold a shufflevector instruction with the
-/// specified operands and indices.  The constant result is returned if
-/// successful; if not, null is returned.
-Constant *ConstantFoldShuffleVectorInstruction(Constant *V1, Constant *V2,
-                                               Constant *Mask);
 
 /// ConstantFoldLoadFromConstPtr - Return the value that a load from C would
 /// produce if it is constant and determinable.  If this is not determinable,
@@ -143,23 +119,16 @@ Constant *ConstantFoldLoadThroughGEPIndices(Constant *C,
 
 /// canConstantFoldCallTo - Return true if its even possible to fold a call to
 /// the specified function.
-bool canConstantFoldCallTo(const CallBase *Call, const Function *F);
+bool canConstantFoldCallTo(const Function *F);
 
 /// ConstantFoldCall - Attempt to constant fold a call to the specified function
 /// with the specified arguments, returning null if unsuccessful.
-Constant *ConstantFoldCall(const CallBase *Call, Function *F,
-                           ArrayRef<Constant *> Operands,
+Constant *ConstantFoldCall(Function *F, ArrayRef<Constant *> Operands,
                            const TargetLibraryInfo *TLI = nullptr);
 
-/// ConstantFoldLoadThroughBitcast - try to cast constant to destination type
-/// returning null if unsuccessful. Can cast pointer to pointer or pointer to
-/// integer and vice versa if their sizes are equal.
-Constant *ConstantFoldLoadThroughBitcast(Constant *C, Type *DestTy,
-                                         const DataLayout &DL);
-
-/// Check whether the given call has no side-effects.
+/// \brief Check whether the given call has no side-effects.
 /// Specifically checks for math routimes which sometimes set errno.
-bool isMathLibCallNoop(const CallBase *Call, const TargetLibraryInfo *TLI);
+bool isMathLibCallNoop(CallSite CS, const TargetLibraryInfo *TLI);
 }
 
 #endif

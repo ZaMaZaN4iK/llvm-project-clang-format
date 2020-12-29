@@ -1,18 +1,28 @@
 //===-- ABISysV_ppc.cpp -----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "ABISysV_ppc.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Triple.h"
 
+// Project includes
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/DataExtractor.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/PluginManager.h"
+#include "lldb/Core/RegisterValue.h"
 #include "lldb/Core/Value.h"
 #include "lldb/Core/ValueObjectConstResult.h"
 #include "lldb/Core/ValueObjectMemory.h"
@@ -23,11 +33,6 @@
 #include "lldb/Target/StackFrame.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/RegisterValue.h"
-#include "lldb/Utility/Status.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -213,13 +218,17 @@ ABISysV_ppc::GetRegisterInfoArray(uint32_t &count) {
 
 size_t ABISysV_ppc::GetRedZoneSize() const { return 224; }
 
+//------------------------------------------------------------------
 // Static Functions
+//------------------------------------------------------------------
 
 ABISP
-ABISysV_ppc::CreateInstance(lldb::ProcessSP process_sp, const ArchSpec &arch) {
+ABISysV_ppc::CreateInstance(const ArchSpec &arch) {
+  static ABISP g_abi_sp;
   if (arch.GetTriple().getArch() == llvm::Triple::ppc) {
-    return ABISP(
-        new ABISysV_ppc(std::move(process_sp), MakeMCRegisterInfo(arch)));
+    if (!g_abi_sp)
+      g_abi_sp.reset(new ABISysV_ppc);
+    return g_abi_sp;
   }
   return ABISP();
 }
@@ -256,22 +265,24 @@ bool ABISysV_ppc::PrepareTrivialCall(Thread &thread, addr_t sp,
   for (size_t i = 0; i < args.size(); ++i) {
     reg_info = reg_ctx->GetRegisterInfo(eRegisterKindGeneric,
                                         LLDB_REGNUM_GENERIC_ARG1 + i);
-    LLDB_LOGF(log, "About to write arg%" PRIu64 " (0x%" PRIx64 ") into %s",
-              static_cast<uint64_t>(i + 1), args[i], reg_info->name);
+    if (log)
+      log->Printf("About to write arg%" PRIu64 " (0x%" PRIx64 ") into %s",
+                  static_cast<uint64_t>(i + 1), args[i], reg_info->name);
     if (!reg_ctx->WriteRegisterFromUnsigned(reg_info, args[i]))
       return false;
   }
 
   // First, align the SP
 
-  LLDB_LOGF(log, "16-byte aligning SP: 0x%" PRIx64 " to 0x%" PRIx64,
-            (uint64_t)sp, (uint64_t)(sp & ~0xfull));
+  if (log)
+    log->Printf("16-byte aligning SP: 0x%" PRIx64 " to 0x%" PRIx64,
+                (uint64_t)sp, (uint64_t)(sp & ~0xfull));
 
   sp &= ~(0xfull); // 16-byte alignment
 
   sp -= 8;
 
-  Status error;
+  Error error;
   const RegisterInfo *pc_reg_info =
       reg_ctx->GetRegisterInfo(eRegisterKindGeneric, LLDB_REGNUM_GENERIC_PC);
   const RegisterInfo *sp_reg_info =
@@ -280,10 +291,51 @@ bool ABISysV_ppc::PrepareTrivialCall(Thread &thread, addr_t sp,
 
   RegisterValue reg_value;
 
-  LLDB_LOGF(log,
-            "Pushing the return address onto the stack: 0x%" PRIx64
-            ": 0x%" PRIx64,
-            (uint64_t)sp, (uint64_t)return_addr);
+#if 0
+    // This code adds an extra frame so that we don't lose the function that we came from
+    // by pushing the PC and the FP and then writing the current FP to point to the FP value
+    // we just pushed. It is disabled for now until the stack backtracing code can be debugged.
+
+    // Save current PC
+    const RegisterInfo *fp_reg_info = reg_ctx->GetRegisterInfo (eRegisterKindGeneric, LLDB_REGNUM_GENERIC_FP);
+    if (reg_ctx->ReadRegister(pc_reg_info, reg_value))
+    {
+        if (log)
+            log->Printf("Pushing the current PC onto the stack: 0x%" PRIx64 ": 0x%" PRIx64, (uint64_t)sp, reg_value.GetAsUInt64());
+
+        if (!process_sp->WritePointerToMemory(sp, reg_value.GetAsUInt64(), error))
+            return false;
+
+        sp -= 8;
+
+        // Save current FP
+        if (reg_ctx->ReadRegister(fp_reg_info, reg_value))
+        {
+            if (log)
+                log->Printf("Pushing the current FP onto the stack: 0x%" PRIx64 ": 0x%" PRIx64, (uint64_t)sp, reg_value.GetAsUInt64());
+
+            if (!process_sp->WritePointerToMemory(sp, reg_value.GetAsUInt64(), error))
+                return false;
+        }
+        // Setup FP backchain
+        reg_value.SetUInt64 (sp);
+
+        if (log)
+            log->Printf("Writing FP:  0x%" PRIx64 " (for FP backchain)", reg_value.GetAsUInt64());
+
+        if (!reg_ctx->WriteRegister(fp_reg_info, reg_value))
+        {
+            return false;
+        }
+
+        sp -= 8;
+    }
+#endif
+
+  if (log)
+    log->Printf("Pushing the return address onto the stack: 0x%" PRIx64
+                ": 0x%" PRIx64,
+                (uint64_t)sp, (uint64_t)return_addr);
 
   // Save return address onto the stack
   if (!process_sp->WritePointerToMemory(sp, return_addr, error))
@@ -291,14 +343,16 @@ bool ABISysV_ppc::PrepareTrivialCall(Thread &thread, addr_t sp,
 
   // %r1 is set to the actual stack value.
 
-  LLDB_LOGF(log, "Writing SP: 0x%" PRIx64, (uint64_t)sp);
+  if (log)
+    log->Printf("Writing SP: 0x%" PRIx64, (uint64_t)sp);
 
   if (!reg_ctx->WriteRegisterFromUnsigned(sp_reg_info, sp))
     return false;
 
   // %pc is set to the address of the called function.
 
-  LLDB_LOGF(log, "Writing IP: 0x%" PRIx64, (uint64_t)func_addr);
+  if (log)
+    log->Printf("Writing IP: 0x%" PRIx64, (uint64_t)func_addr);
 
   if (!reg_ctx->WriteRegisterFromUnsigned(pc_reg_info, func_addr))
     return false;
@@ -322,7 +376,7 @@ static bool ReadIntegerArgument(Scalar &scalar, unsigned int bit_width,
       scalar.SignExtend(bit_width);
   } else {
     uint32_t byte_size = (bit_width + (8 - 1)) / 8;
-    Status error;
+    Error error;
     if (thread.GetProcess()->ReadScalarIntegerFromMemory(
             current_stack_argument, byte_size, is_signed, scalar, error)) {
       current_stack_argument += byte_size;
@@ -389,29 +443,30 @@ bool ABISysV_ppc::GetArgumentValues(Thread &thread, ValueList &values) const {
     if (!value)
       return false;
 
-    // We currently only support extracting values with Clang QualTypes. Do we
-    // care about others?
+    // We currently only support extracting values with Clang QualTypes.
+    // Do we care about others?
     CompilerType compiler_type = value->GetCompilerType();
-    llvm::Optional<uint64_t> bit_size = compiler_type.GetBitSize(&thread);
-    if (!bit_size)
+    if (!compiler_type)
       return false;
     bool is_signed;
-    if (compiler_type.IsIntegerOrEnumerationType(is_signed))
-      ReadIntegerArgument(value->GetScalar(), *bit_size, is_signed, thread,
-                          argument_register_ids, current_argument_register,
-                          current_stack_argument);
-    else if (compiler_type.IsPointerType())
-      ReadIntegerArgument(value->GetScalar(), *bit_size, false, thread,
-                          argument_register_ids, current_argument_register,
-                          current_stack_argument);
+
+    if (compiler_type.IsIntegerOrEnumerationType(is_signed)) {
+      ReadIntegerArgument(value->GetScalar(), compiler_type.GetBitSize(&thread),
+                          is_signed, thread, argument_register_ids,
+                          current_argument_register, current_stack_argument);
+    } else if (compiler_type.IsPointerType()) {
+      ReadIntegerArgument(value->GetScalar(), compiler_type.GetBitSize(&thread),
+                          false, thread, argument_register_ids,
+                          current_argument_register, current_stack_argument);
+    }
   }
 
   return true;
 }
 
-Status ABISysV_ppc::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
-                                         lldb::ValueObjectSP &new_value_sp) {
-  Status error;
+Error ABISysV_ppc::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
+                                        lldb::ValueObjectSP &new_value_sp) {
+  Error error;
   if (!new_value_sp) {
     error.SetErrorString("Empty value object for return value.");
     return error;
@@ -437,7 +492,7 @@ Status ABISysV_ppc::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
     const RegisterInfo *reg_info = reg_ctx->GetRegisterInfoByName("r3", 0);
 
     DataExtractor data;
-    Status data_error;
+    Error data_error;
     size_t num_bytes = new_value_sp->GetData(data, data_error);
     if (data_error.Fail()) {
       error.SetErrorStringWithFormat(
@@ -460,15 +515,10 @@ Status ABISysV_ppc::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
       error.SetErrorString(
           "We don't support returning complex values at present");
     else {
-      llvm::Optional<uint64_t> bit_width =
-          compiler_type.GetBitSize(frame_sp.get());
-      if (!bit_width) {
-        error.SetErrorString("can't get type size");
-        return error;
-      }
-      if (*bit_width <= 64) {
+      size_t bit_width = compiler_type.GetBitSize(frame_sp.get());
+      if (bit_width <= 64) {
         DataExtractor data;
-        Status data_error;
+        Error data_error;
         size_t num_bytes = new_value_sp->GetData(data, data_error);
         if (data_error.Fail()) {
           error.SetErrorStringWithFormat(
@@ -492,8 +542,8 @@ Status ABISysV_ppc::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
 
   if (!set_it_simple) {
     // Okay we've got a structure or something that doesn't fit in a simple
-    // register. We should figure out where it really goes, but we don't
-    // support this yet.
+    // register.
+    // We should figure out where it really goes, but we don't support this yet.
     error.SetErrorString("We only support setting simple integer and float "
                          "return types at present.");
   }
@@ -524,14 +574,11 @@ ValueObjectSP ABISysV_ppc::GetReturnValueObjectSimple(
     if (type_flags & eTypeIsInteger) {
       // Extract the register context so we can read arguments from registers
 
-      llvm::Optional<uint64_t> byte_size =
-          return_compiler_type.GetByteSize(nullptr);
-      if (!byte_size)
-        return return_valobj_sp;
+      const size_t byte_size = return_compiler_type.GetByteSize(nullptr);
       uint64_t raw_value = thread.GetRegisterContext()->ReadRegisterAsUnsigned(
           reg_ctx->GetRegisterInfoByName("r3", 0), 0);
       const bool is_signed = (type_flags & eTypeIsSigned) != 0;
-      switch (*byte_size) {
+      switch (byte_size) {
       default:
         break;
 
@@ -571,19 +618,18 @@ ValueObjectSP ABISysV_ppc::GetReturnValueObjectSimple(
       if (type_flags & eTypeIsComplex) {
         // Don't handle complex yet.
       } else {
-        llvm::Optional<uint64_t> byte_size =
-            return_compiler_type.GetByteSize(nullptr);
-        if (byte_size && *byte_size <= sizeof(long double)) {
+        const size_t byte_size = return_compiler_type.GetByteSize(nullptr);
+        if (byte_size <= sizeof(long double)) {
           const RegisterInfo *f1_info = reg_ctx->GetRegisterInfoByName("f1", 0);
           RegisterValue f1_value;
           if (reg_ctx->ReadRegister(f1_info, f1_value)) {
             DataExtractor data;
             if (f1_value.GetData(data)) {
               lldb::offset_t offset = 0;
-              if (*byte_size == sizeof(float)) {
+              if (byte_size == sizeof(float)) {
                 value.GetScalar() = (float)data.GetFloat(&offset);
                 success = true;
-              } else if (*byte_size == sizeof(double)) {
+              } else if (byte_size == sizeof(double)) {
                 value.GetScalar() = (double)data.GetDouble(&offset);
                 success = true;
               }
@@ -605,28 +651,26 @@ ValueObjectSP ABISysV_ppc::GetReturnValueObjectSimple(
     return_valobj_sp = ValueObjectConstResult::Create(
         thread.GetStackFrameAtIndex(0).get(), value, ConstString(""));
   } else if (type_flags & eTypeIsVector) {
-    llvm::Optional<uint64_t> byte_size =
-        return_compiler_type.GetByteSize(nullptr);
-    if (byte_size && *byte_size > 0) {
+    const size_t byte_size = return_compiler_type.GetByteSize(nullptr);
+    if (byte_size > 0) {
       const RegisterInfo *altivec_reg = reg_ctx->GetRegisterInfoByName("v2", 0);
       if (altivec_reg) {
-        if (*byte_size <= altivec_reg->byte_size) {
+        if (byte_size <= altivec_reg->byte_size) {
           ProcessSP process_sp(thread.GetProcess());
           if (process_sp) {
-            std::unique_ptr<DataBufferHeap> heap_data_up(
-                new DataBufferHeap(*byte_size, 0));
+            std::unique_ptr<DataBufferHeap> heap_data_ap(
+                new DataBufferHeap(byte_size, 0));
             const ByteOrder byte_order = process_sp->GetByteOrder();
             RegisterValue reg_value;
             if (reg_ctx->ReadRegister(altivec_reg, reg_value)) {
-              Status error;
+              Error error;
               if (reg_value.GetAsMemoryData(
-                      altivec_reg, heap_data_up->GetBytes(),
-                      heap_data_up->GetByteSize(), byte_order, error)) {
-                DataExtractor data(DataBufferSP(heap_data_up.release()),
-                                   byte_order,
-                                   process_sp->GetTarget()
-                                       .GetArchitecture()
-                                       .GetAddressByteSize());
+                      altivec_reg, heap_data_ap->GetBytes(),
+                      heap_data_ap->GetByteSize(), byte_order, error)) {
+                DataExtractor data(DataBufferSP(heap_data_ap.release()),
+                                   byte_order, process_sp->GetTarget()
+                                                   .GetArchitecture()
+                                                   .GetAddressByteSize());
                 return_valobj_sp = ValueObjectConstResult::Create(
                     &thread, return_compiler_type, ConstString(""), data);
               }
@@ -656,13 +700,11 @@ ValueObjectSP ABISysV_ppc::GetReturnValueObjectImpl(
   if (!reg_ctx_sp)
     return return_valobj_sp;
 
-  llvm::Optional<uint64_t> bit_width = return_compiler_type.GetBitSize(&thread);
-  if (!bit_width)
-    return return_valobj_sp;
+  const size_t bit_width = return_compiler_type.GetBitSize(&thread);
   if (return_compiler_type.IsAggregateType()) {
     Target *target = exe_ctx.GetTargetPtr();
     bool is_memory = true;
-    if (*bit_width <= 128) {
+    if (bit_width <= 128) {
       ByteOrder target_byte_order = target->GetArchitecture().GetByteOrder();
       DataBufferSP data_sp(new DataBufferHeap(16, 0));
       DataExtractor return_ext(data_sp, target_byte_order,
@@ -700,18 +742,15 @@ ValueObjectSP ABISysV_ppc::GetReturnValueObjectImpl(
 
         CompilerType field_compiler_type = return_compiler_type.GetFieldAtIndex(
             idx, name, &field_bit_offset, nullptr, nullptr);
-        llvm::Optional<uint64_t> field_bit_width =
-            field_compiler_type.GetBitSize(&thread);
-        if (!field_bit_width)
-          return return_valobj_sp;
+        const size_t field_bit_width = field_compiler_type.GetBitSize(&thread);
 
         // If there are any unaligned fields, this is stored in memory.
-        if (field_bit_offset % *field_bit_width != 0) {
+        if (field_bit_offset % field_bit_width != 0) {
           is_memory = true;
           break;
         }
 
-        uint32_t field_byte_width = *field_bit_width / 8;
+        uint32_t field_byte_width = field_bit_width / 8;
         uint32_t field_byte_offset = field_bit_offset / 8;
 
         DataExtractor *copy_from_extractor = nullptr;
@@ -737,24 +776,26 @@ ValueObjectSP ABISysV_ppc::GetReturnValueObjectImpl(
             copy_from_offset = integer_bytes - 8;
             integer_bytes += field_byte_width;
           } else {
-            // The last field didn't fit.  I can't see how that would happen
-            // w/o the overall size being greater than 16 bytes.  For now,
-            // return a nullptr return value object.
+            // The last field didn't fit.  I can't see how that would happen w/o
+            // the overall size being
+            // greater than 16 bytes.  For now, return a nullptr return value
+            // object.
             return return_valobj_sp;
           }
         } else if (field_compiler_type.IsFloatingPointType(count, is_complex)) {
           // Structs with long doubles are always passed in memory.
-          if (*field_bit_width == 128) {
+          if (field_bit_width == 128) {
             is_memory = true;
             break;
-          } else if (*field_bit_width == 64) {
+          } else if (field_bit_width == 64) {
             copy_from_offset = 0;
             fp_bytes += field_byte_width;
-          } else if (*field_bit_width == 32) {
+          } else if (field_bit_width == 32) {
             // This one is kind of complicated.  If we are in an "eightbyte"
-            // with another float, we'll be stuffed into an xmm register with
-            // it.  If we are in an "eightbyte" with one or more ints, then we
-            // will be stuffed into the appropriate GPR with them.
+            // with another float, we'll
+            // be stuffed into an xmm register with it.  If we are in an
+            // "eightbyte" with one or more ints,
+            // then we will be stuffed into the appropriate GPR with them.
             bool in_gpr;
             if (field_byte_offset % 8 == 0) {
               // We are at the beginning of one of the eightbytes, so check the
@@ -776,9 +817,9 @@ ValueObjectSP ABISysV_ppc::GetReturnValueObjectImpl(
                 }
               }
             } else if (field_byte_offset % 4 == 0) {
-              // We are inside of an eightbyte, so see if the field before us
-              // is floating point: This could happen if somebody put padding
-              // in the structure.
+              // We are inside of an eightbyte, so see if the field before us is
+              // floating point:
+              // This could happen if somebody put padding in the structure.
               if (idx == 0)
                 in_gpr = false;
               else {
@@ -819,9 +860,9 @@ ValueObjectSP ABISysV_ppc::GetReturnValueObjectImpl(
           }
         }
 
-        // These two tests are just sanity checks.  If I somehow get the type
-        // calculation wrong above it is better to just return nothing than to
-        // assert or crash.
+        // These two tests are just sanity checks.  If I somehow get the
+        // type calculation wrong above it is better to just return nothing
+        // than to assert or crash.
         if (!copy_from_extractor)
           return return_valobj_sp;
         if (copy_from_offset + field_byte_width >
@@ -845,8 +886,9 @@ ValueObjectSP ABISysV_ppc::GetReturnValueObjectImpl(
     // FIXME: This is just taking a guess, r3 may very well no longer hold the
     // return storage location.
     // If we are going to do this right, when we make a new frame we should
-    // check to see if it uses a memory return, and if we are at the first
-    // instruction and if so stash away the return location.  Then we would
+    // check to see if it uses a memory
+    // return, and if we are at the first instruction and if so stash away the
+    // return location.  Then we would
     // only return the memory return value if we know it is valid.
 
     if (is_memory) {
@@ -907,7 +949,6 @@ bool ABISysV_ppc::CreateDefaultUnwindPlan(UnwindPlan &unwind_plan) {
   unwind_plan.SetSourceName("ppc default unwind plan");
   unwind_plan.SetSourcedFromCompiler(eLazyBoolNo);
   unwind_plan.SetUnwindPlanValidAtAllInstructions(eLazyBoolNo);
-  unwind_plan.SetUnwindPlanForSignalTrap(eLazyBoolNo);
   unwind_plan.SetReturnAddressRegister(dwarf_lr);
   return true;
 }
@@ -918,9 +959,9 @@ bool ABISysV_ppc::RegisterIsVolatile(const RegisterInfo *reg_info) {
 
 // See "Register Usage" in the
 // "System V Application Binary Interface"
-// "64-bit PowerPC ELF Application Binary Interface Supplement" current version
-// is 1.9 released 2004 at http://refspecs.linuxfoundation.org/ELF/ppc/PPC-
-// elf64abi-1.9.pdf
+// "64-bit PowerPC ELF Application Binary Interface Supplement"
+// current version is 1.9 released 2004 at
+// http://refspecs.linuxfoundation.org/ELF/ppc/PPC-elf64abi-1.9.pdf
 
 bool ABISysV_ppc::RegisterIsCalleeSaved(const RegisterInfo *reg_info) {
   if (reg_info) {
@@ -971,7 +1012,9 @@ lldb_private::ConstString ABISysV_ppc::GetPluginNameStatic() {
   return g_name;
 }
 
+//------------------------------------------------------------------
 // PluginInterface protocol
+//------------------------------------------------------------------
 
 lldb_private::ConstString ABISysV_ppc::GetPluginName() {
   return GetPluginNameStatic();

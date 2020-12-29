@@ -1,8 +1,9 @@
 //===-- xray_flags.h -------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,7 +16,6 @@
 #define XRAY_FLAGS_H
 
 #include "sanitizer_common/sanitizer_flag_parser.h"
-#include "sanitizer_common/sanitizer_internal_defs.h"
 
 namespace __xray {
 
@@ -24,15 +24,13 @@ struct Flags {
 #include "xray_flags.inc"
 #undef XRAY_FLAG
 
-  void setDefaults();
+  void SetDefaults();
 };
 
 extern Flags xray_flags_dont_use_directly;
-extern void registerXRayFlags(FlagParser *P, Flags *F);
-const char *useCompilerDefinedFlags();
 inline Flags *flags() { return &xray_flags_dont_use_directly; }
 
-void initializeFlags();
+void InitializeFlags();
 
 } // namespace __xray
 

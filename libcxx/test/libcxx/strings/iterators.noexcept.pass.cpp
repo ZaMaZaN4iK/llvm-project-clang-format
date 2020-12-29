@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -19,7 +20,7 @@
 //
 
 // MODULES_DEFINES: _LIBCPP_NO_EXCEPTIONS
-#define _LIBCPP_NO_EXCEPTIONS
+#define	_LIBCPP_NO_EXCEPTIONS
 
 #include <iterator>
 #include <cassert>
@@ -27,10 +28,9 @@
 #include <vector>
 #include <initializer_list>
 
-#include "test_macros.h"
 #include "test_iterators.h"
 
-int main(int, char**)
+int main()
 {
 //  basic tests
     static_assert(( std::__libcpp_string_gets_noexcept_iterator<char *>::value), "");
@@ -72,11 +72,9 @@ int main(int, char**)
     static_assert(( std::__libcpp_string_gets_noexcept_iterator<std::basic_string<char>::reverse_iterator>      ::value), "");
     static_assert(( std::__libcpp_string_gets_noexcept_iterator<std::basic_string<char>::const_reverse_iterator>::value), "");
 
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_GENERALIZED_INITIALIZERS
 //  Initializer list  (which has no reverse iterators)
     static_assert(( std::__libcpp_string_gets_noexcept_iterator<std::initializer_list<char>::iterator>              ::value), "");
     static_assert(( std::__libcpp_string_gets_noexcept_iterator<std::initializer_list<char>::const_iterator>        ::value), "");
 #endif
-
-  return 0;
 }

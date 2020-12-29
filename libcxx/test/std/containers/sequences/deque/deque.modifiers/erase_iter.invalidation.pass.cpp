@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,8 +16,6 @@
 
 #include <deque>
 #include <cassert>
-
-#include "test_macros.h"
 
 template <typename C>
 void del_at_start(C c)
@@ -56,7 +55,7 @@ void del_at_end(C c)
     assert(&*it2 == &*it4);
 }
 
-int main(int, char**)
+int main()
 {
     std::deque<int> queue;
     for (int i = 0; i < 20; ++i)
@@ -68,6 +67,4 @@ int main(int, char**)
         del_at_end(queue);
         queue.pop_back();
     }
-
-  return 0;
 }

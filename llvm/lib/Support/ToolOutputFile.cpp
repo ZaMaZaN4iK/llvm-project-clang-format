@@ -1,12 +1,13 @@
-//===--- ToolOutputFile.cpp - Implement the ToolOutputFile class --------===//
+//===--- ToolOutputFile.cpp - Implement the tool_output_file class --------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
-// This implements the ToolOutputFile class.
+// This implements the tool_output_file class.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,14 +16,14 @@
 #include "llvm/Support/Signals.h"
 using namespace llvm;
 
-ToolOutputFile::CleanupInstaller::CleanupInstaller(StringRef Filename)
+tool_output_file::CleanupInstaller::CleanupInstaller(StringRef Filename)
     : Filename(Filename), Keep(false) {
   // Arrange for the file to be deleted if the process is killed.
   if (Filename != "-")
     sys::RemoveFileOnSignal(Filename);
 }
 
-ToolOutputFile::CleanupInstaller::~CleanupInstaller() {
+tool_output_file::CleanupInstaller::~CleanupInstaller() {
   // Delete the file if the client hasn't told us not to.
   if (!Keep && Filename != "-")
     sys::fs::remove(Filename);
@@ -33,13 +34,13 @@ ToolOutputFile::CleanupInstaller::~CleanupInstaller() {
     sys::DontRemoveFileOnSignal(Filename);
 }
 
-ToolOutputFile::ToolOutputFile(StringRef Filename, std::error_code &EC,
-                               sys::fs::OpenFlags Flags)
+tool_output_file::tool_output_file(StringRef Filename, std::error_code &EC,
+                                   sys::fs::OpenFlags Flags)
     : Installer(Filename), OS(Filename, EC, Flags) {
   // If open fails, no cleanup is needed.
   if (EC)
     Installer.Keep = true;
 }
 
-ToolOutputFile::ToolOutputFile(StringRef Filename, int FD)
+tool_output_file::tool_output_file(StringRef Filename, int FD)
     : Installer(Filename), OS(FD, true) {}

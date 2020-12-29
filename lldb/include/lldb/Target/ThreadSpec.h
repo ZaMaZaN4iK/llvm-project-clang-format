@@ -1,17 +1,22 @@
 //===-- ThreadSpec.h --------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ThreadSpec_h_
 #define liblldb_ThreadSpec_h_
 
-#include "lldb/Utility/StructuredData.h"
-#include "lldb/lldb-private.h"
+// C Includes
+// C++ Includes
 #include <string>
+
+// Other libraries and framework includes
+// Project includes
+#include "lldb/lldb-private.h"
 
 namespace lldb_private {
 
@@ -34,9 +39,13 @@ class ThreadSpec {
 public:
   ThreadSpec();
 
+  ThreadSpec(const ThreadSpec &rhs);
+
+  const ThreadSpec &operator=(const ThreadSpec &rhs);
+
   static std::unique_ptr<ThreadSpec>
   CreateFromStructuredData(const StructuredData::Dictionary &data_dict,
-                           Status &error);
+                           Error &error);
 
   StructuredData::ObjectSP SerializeToStructuredData();
 
@@ -46,9 +55,9 @@ public:
 
   void SetTID(lldb::tid_t tid) { m_tid = tid; }
 
-  void SetName(llvm::StringRef name) { m_name = name; }
+  void SetName(const char *name) { m_name = name; }
 
-  void SetQueueName(llvm::StringRef queue_name) { m_queue_name = queue_name; }
+  void SetQueueName(const char *queue_name) { m_queue_name = queue_name; }
 
   uint32_t GetIndex() const { return m_index; }
 

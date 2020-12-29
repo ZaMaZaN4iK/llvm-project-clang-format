@@ -1,8 +1,9 @@
 //===-- X86DisassemblerDecoderInternal.h - Disassembler decoder -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,13 +16,10 @@
 #ifndef LLVM_LIB_TARGET_X86_DISASSEMBLER_X86DISASSEMBLERDECODER_H
 #define LLVM_LIB_TARGET_X86_DISASSEMBLER_X86DISASSEMBLERDECODER_H
 
+#include "X86DisassemblerDecoderCommon.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/Support/X86DisassemblerDecoderCommon.h"
 
 namespace llvm {
-
-class MCInstrInfo;
-
 namespace X86Disassembler {
 
 // Accessor functions for various fields of an Intel instruction
@@ -327,12 +325,6 @@ namespace X86Disassembler {
   ENTRY(K6)        \
   ENTRY(K7)
 
-#define REGS_MASK_PAIRS \
-  ENTRY(K0_K1)     \
-  ENTRY(K2_K3)     \
-  ENTRY(K4_K5)     \
-  ENTRY(K6_K7)
-
 #define REGS_SEGMENT \
   ENTRY(ES)          \
   ENTRY(CS)          \
@@ -402,14 +394,13 @@ namespace X86Disassembler {
   REGS_YMM            \
   REGS_ZMM            \
   REGS_MASKS          \
-  REGS_MASK_PAIRS     \
   REGS_SEGMENT        \
   REGS_DEBUG          \
   REGS_CONTROL        \
   REGS_BOUND          \
   ENTRY(RIP)
 
-/// All possible values of the base field for effective-address
+/// \brief All possible values of the base field for effective-address
 /// computations, a.k.a. the Mod and R/M fields of the ModR/M byte.
 /// We distinguish between bases (EA_BASE_*) and registers that just happen
 /// to be referred to when Mod == 0b11 (EA_REG_*).
@@ -424,7 +415,7 @@ enum EABase {
   EA_max
 };
 
-/// All possible values of the SIB index field.
+/// \brief All possible values of the SIB index field.
 /// borrows entries from ALL_EA_BASES with the special case that
 /// sib is synonymous with NONE.
 /// Vector SIB: index can be XMM or YMM.
@@ -439,7 +430,7 @@ enum SIBIndex {
   SIB_INDEX_max
 };
 
-/// All possible values of the SIB base field.
+/// \brief All possible values of the SIB base field.
 enum SIBBase {
   SIB_BASE_NONE,
 #define ENTRY(x) SIB_BASE_##x,
@@ -448,15 +439,15 @@ enum SIBBase {
   SIB_BASE_max
 };
 
-/// Possible displacement types for effective-address computations.
-enum EADisplacement {
+/// \brief Possible displacement types for effective-address computations.
+typedef enum {
   EA_DISP_NONE,
   EA_DISP_8,
   EA_DISP_16,
   EA_DISP_32
-};
+} EADisplacement;
 
-/// All possible values of the reg field in the ModR/M byte.
+/// \brief All possible values of the reg field in the ModR/M byte.
 enum Reg {
 #define ENTRY(x) MODRM_REG_##x,
   ALL_REGS
@@ -464,7 +455,7 @@ enum Reg {
   MODRM_REG_max
 };
 
-/// All possible segment overrides.
+/// \brief All possible segment overrides.
 enum SegmentOverride {
   SEG_OVERRIDE_NONE,
   SEG_OVERRIDE_CS,
@@ -476,7 +467,7 @@ enum SegmentOverride {
   SEG_OVERRIDE_max
 };
 
-/// Possible values for the VEX.m-mmmm field
+/// \brief Possible values for the VEX.m-mmmm field
 enum VEXLeadingOpcodeByte {
   VEX_LOB_0F = 0x1,
   VEX_LOB_0F38 = 0x2,
@@ -489,7 +480,7 @@ enum XOPMapSelect {
   XOP_MAP_SELECT_A = 0xA
 };
 
-/// Possible values for the VEX.pp/EVEX.pp field
+/// \brief Possible values for the VEX.pp/EVEX.pp field
 enum VEXPrefixCode {
   VEX_PREFIX_NONE = 0x0,
   VEX_PREFIX_66 = 0x1,
@@ -505,6 +496,25 @@ enum VectorExtensionType {
   TYPE_XOP          = 0x4
 };
 
+/// \brief Type for the byte reader that the consumer must provide to
+/// the decoder. Reads a single byte from the instruction's address space.
+/// \param arg     A baton that the consumer can associate with any internal
+///                state that it needs.
+/// \param byte    A pointer to a single byte in memory that should be set to
+///                contain the value at address.
+/// \param address The address in the instruction's address space that should
+///                be read from.
+/// \return        -1 if the byte cannot be read for any reason; 0 otherwise.
+typedef int (*byteReader_t)(const void *arg, uint8_t *byte, uint64_t address);
+
+/// \brief Type for the logging function that the consumer can provide to
+/// get debugging output from the decoder.
+/// \param arg A baton that the consumer can associate with any internal
+///            state that it needs.
+/// \param log A string that contains the message.  Will be reused after
+///            the logger returns.
+typedef void (*dlog_t)(void *arg, const char *log);
+
 /// The specification for how to extract and interpret a full instruction and
 /// its operands.
 struct InstructionSpecifier {
@@ -513,10 +523,17 @@ struct InstructionSpecifier {
 
 /// The x86 internal instruction, which is produced by the decoder.
 struct InternalInstruction {
+  // Reader interface (C)
+  byteReader_t reader;
   // Opaque value passed to the reader
-  llvm::ArrayRef<uint8_t> bytes;
+  const void* readerArg;
   // The address of the next byte to read via the reader
   uint64_t readerCursor;
+
+  // Logger interface (C)
+  dlog_t dlog;
+  // Opaque value passed to the logger
+  void* dlogArg;
 
   // General instruction information
 
@@ -529,27 +546,23 @@ struct InternalInstruction {
 
   // Prefix state
 
-  // The possible mandatory prefix
-  uint8_t mandatoryPrefix;
+  // 1 if the prefix byte corresponding to the entry is present; 0 if not
+  uint8_t prefixPresent[0x100];
+  // contains the location (for use with the reader) of the prefix byte
+  uint64_t prefixLocations[0x100];
   // The value of the vector extension prefix(EVEX/VEX/XOP), if present
   uint8_t vectorExtensionPrefix[4];
   // The type of the vector extension prefix
   VectorExtensionType vectorExtensionType;
   // The value of the REX prefix, if present
   uint8_t rexPrefix;
+  // The location where a mandatory prefix would have to be (i.e., right before
+  // the opcode, or right before the REX prefix if one is present).
+  uint64_t necessaryPrefixLocation;
   // The segment override type
   SegmentOverride segmentOverride;
   // 1 if the prefix byte, 0xf2 or 0xf3 is xacquire or xrelease
   bool xAcquireRelease;
-
-  // Address-size override
-  bool hasAdSize;
-  // Operand-size override
-  bool hasOpSize;
-  // Lock prefix
-  bool hasLockPrefix;
-  // The repeat prefix if any
-  uint8_t repeatPrefix;
 
   // Sizes of various critical pieces of data, in bytes
   uint8_t registerSize;
@@ -593,9 +606,11 @@ struct InternalInstruction {
   uint8_t                       modRM;
 
   // The SIB byte, used for more complex 32- or 64-bit memory operands
+  bool                          consumedSIB;
   uint8_t                       sib;
 
   // The displacement, used for memory operands
+  bool                          consumedDisplacement;
   int32_t                       displacement;
 
   // Immediates.  There can be two in some cases
@@ -610,6 +625,7 @@ struct InternalInstruction {
 
   // These fields determine the allowable values for the ModR/M fields, which
   // depend on operand and address widths.
+  EABase                        eaBaseBase;
   EABase                        eaRegBase;
   Reg                           regBase;
 
@@ -621,16 +637,44 @@ struct InternalInstruction {
   Reg                           reg;
 
   // SIB state
-  SIBIndex                      sibIndexBase;
   SIBIndex                      sibIndex;
   uint8_t                       sibScale;
   SIBBase                       sibBase;
 
-  // Embedded rounding control.
-  uint8_t                       RC;
-
   ArrayRef<OperandSpecifier> operands;
 };
+
+/// \brief Decode one instruction and store the decoding results in
+/// a buffer provided by the consumer.
+/// \param insn      The buffer to store the instruction in.  Allocated by the
+///                  consumer.
+/// \param reader    The byteReader_t for the bytes to be read.
+/// \param readerArg An argument to pass to the reader for storing context
+///                  specific to the consumer.  May be NULL.
+/// \param logger    The dlog_t to be used in printing status messages from the
+///                  disassembler.  May be NULL.
+/// \param loggerArg An argument to pass to the logger for storing context
+///                  specific to the logger.  May be NULL.
+/// \param startLoc  The address (in the reader's address space) of the first
+///                  byte in the instruction.
+/// \param mode      The mode (16-bit, 32-bit, 64-bit) to decode in.
+/// \return          Nonzero if there was an error during decode, 0 otherwise.
+int decodeInstruction(InternalInstruction *insn,
+                      byteReader_t reader,
+                      const void *readerArg,
+                      dlog_t logger,
+                      void *loggerArg,
+                      const void *miiArg,
+                      uint64_t startLoc,
+                      DisassemblerMode mode);
+
+/// \brief Print a message to debugs()
+/// \param file The name of the file printing the debug message.
+/// \param line The line number that printed the debug message.
+/// \param s    The message to print.
+void Debug(const char *file, unsigned line, const char *s);
+
+StringRef GetInstrName(unsigned Opcode, const void *mii);
 
 } // namespace X86Disassembler
 } // namespace llvm

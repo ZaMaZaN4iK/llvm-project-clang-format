@@ -1,5 +1,4 @@
-; RUN: llc -march=mips -mattr=+msa,+fp64,+mips32r2 -relocation-model=pic < %s \
-; RUN:      | FileCheck %s -check-prefixes=CHECK,MSA32
+; RUN: llc -march=mips -mattr=+msa,+fp64 -relocation-model=pic < %s | FileCheck %s -check-prefixes=CHECK,MSA32
 ; RUN: llc -march=mips64 -mattr=+msa,+fp64 -relocation-model=pic -target-abi n32 < %s \
 ; RUN:      | FileCheck %s -check-prefixes=CHECK,MSA64,MSA64N32
 ; RUN: llc -march=mips64 -mattr=+msa,+fp64 -relocation-model=pic -target-abi n64 < %s \
@@ -292,6 +291,41 @@ entry:
   ret void
 }
 
+define void @ld_b(<16 x i8> * %ptr, i8 * %ldptr, i32 %offset) {
+entry:
+; CHECK-LABEL: ld_b
+; MSA32: addu $[[R0:[0-9]]], $5, $6
+
+; MSA64N32-DAG: sll $[[R2:[0-9]]], $6, 0
+; MSA64N32-DAG: sll $[[R1:[0-9]]], $5, 0
+; MSA64N32: addu $[[R0:[0-9]]], $[[R1]], $[[R2]]
+
+; MSA64N64: sll $[[R1:[0-9]]], $6, 0
+; MSA64N64: daddu $[[R0:[0-9]]], $5, $[[R1]]
+
+; CHECK:    ld.b $w{{[0-9]+}}, 0($[[R0]])
+  %a = call <16 x i8> @llvm.mips.ld.b(i8* %ldptr, i32 %offset)
+  store <16 x i8> %a, <16 x i8> * %ptr, align 16
+  ret void
+}
+
+define void @st_b(<16 x i8> * %ptr, i8 * %ldptr, i32 %offset, i8 * %stptr) {
+entry:
+; CHECK-LABEL: st_b
+; MSA32: addu $[[R0:[0-9]]], $7, $6
+
+; MSA64N32: sll $[[R1:[0-9]]], $6, 0
+; MSA64N32: sll $[[R2:[0-9]]], $7, 0
+; MSA64N32: addu $[[R0:[0-9]]], $[[R2]], $[[R1]]
+
+; MSA64N64: sll $[[R1:[0-9]]], $6, 0
+; MSA64N64: daddu $[[R0:[0-9]]], $7, $[[R1]]
+; CHECK: st.b $w{{[0-9]+}}, 0($[[R0]])
+  %a = call <16 x i8> @llvm.mips.ld.b(i8* %ldptr, i32 0)
+  call void @llvm.mips.st.b(<16 x i8> %a, i8* %stptr, i32 %offset)
+  ret void
+}
+
 define void @addvi_w(<4 x i32> * %ptr) {
 entry:
 ; CHECK-LABEL: addvi_w:
@@ -513,6 +547,38 @@ entry:
   ret void
 }
 
+define void @ld_w(<4 x i32> * %ptr, i8 * %ldptr, i32 %offset) {
+entry:
+; CHECK-LABEL: ld_w
+; MSA32: addu $[[R0:[0-9]]], $5, $6
+; MSA64N32: sll $[[R2:[0-9]]], $6, 0
+; MSA64N32: sll $[[R1:[0-9]]], $5, 0
+; MSA64N32: addu $[[R0:[0-9]]], $[[R1]], $[[R2]]
+; MSA64N64: sll $[[R1:[0-9]]], $6, 0
+; MSA64N64: daddu $[[R0:[0-9]]], $5, $[[R1]]
+; CHECK: ld.w $w{{[0-9]+}}, 0($[[R0]])
+  %a = call <4 x i32> @llvm.mips.ld.w(i8* %ldptr, i32 %offset)
+  store <4 x i32> %a, <4 x i32> * %ptr, align 16
+  ret void
+}
+
+define void @st_w(<8 x i16> * %ptr, i8 * %ldptr, i32 %offset, i8 * %stptr) {
+entry:
+; CHECK-LABEL: st_w
+; MSA32: addu $[[R0:[0-9]]], $7, $6
+
+; MSA64N32: sll $[[R1:[0-9]+]], $6, 0
+; MSA64N32: sll $[[R2:[0-9]+]], $7, 0
+; MSA64N32: addu $[[R0:[0-9]+]], $[[R2]], $[[R1]]
+
+; MSA64N64: sll $[[R1:[0-9]]], $6, 0
+; MSA64N64: daddu $[[R0:[0-9]]], $7, $[[R1]]
+; CHECK: st.w $w{{[0-9]+}}, 0($[[R0]])
+  %a = call <4 x i32> @llvm.mips.ld.w(i8* %ldptr, i32 0)
+  call void @llvm.mips.st.w(<4 x i32> %a, i8* %stptr, i32 %offset)
+  ret void
+}
+
 define void @addvi_h(<8 x i16> * %ptr) {
 entry:
 ; CHECK-LABEL: addvi_h:
@@ -550,7 +616,7 @@ entry:
 ; CHECK: binsri.h
   %a = load <8 x i16>, <8 x i16> * %ptr, align 16
   %b = load <8 x i16>, <8 x i16> * %ptr2, align 16
-  %r = call <8 x i16> @llvm.mips.binsri.h(<8 x i16> %a, <8 x i16> %b, i32 14)
+  %r = call <8 x i16> @llvm.mips.binsri.h(<8 x i16> %a, <8 x i16> %b, i32 15)
   store <8 x i16> %r, <8 x i16> * %ptr, align 16
   ret void
 }
@@ -734,6 +800,41 @@ entry:
   ret void
 }
 
+define void @ld_h(<8 x i16> * %ptr, i8 * %ldptr, i32 %offset) {
+entry:
+; CHECK-LABEL: ld_h
+; MSA32: addu $[[R0:[0-9]]], $5, $6
+
+; MSA64N32-DAG: sll $[[R2:[0-9]]], $6, 0
+; MSA64N32-DAG: sll $[[R1:[0-9]]], $5, 0
+; MSA64N32: addu $[[R0:[0-9]]], $[[R1]], $[[R2]]
+
+; MSA64N64: sll $[[R1:[0-9]]], $6, 0
+; MSA64N64: daddu $[[R0:[0-9]]], $5, $[[R1]]
+
+; CHECK:    ld.h $w{{[0-9]+}}, 0($[[R0]])
+  %a = call <8 x i16> @llvm.mips.ld.h(i8* %ldptr, i32 %offset)
+  store <8 x i16> %a, <8 x i16> * %ptr, align 16
+  ret void
+}
+
+define void @st_h(<8 x i16> * %ptr, i8 * %ldptr, i32 %offset, i8 * %stptr) {
+entry:
+; CHECK-LABEL: st_h
+; MSA32: addu $[[R0:[0-9]]], $7, $6
+
+; MSA64N32-DAG: sll $[[R1:[0-9]+]], $6, 0
+; MSA64N32-DAG: sll $[[R2:[0-9]+]], $7, 0
+; MSA64N32: addu $[[R0:[0-9]+]], $[[R2]], $[[R1]]
+
+; MSA64N64: sll $[[R1:[0-9]]], $6, 0
+; MSA64N64: daddu $[[R0:[0-9]]], $7, $[[R1]]
+; CHECK: st.h $w{{[0-9]+}}, 0($[[R0]])
+  %a = call <8 x i16> @llvm.mips.ld.h(i8* %ldptr, i32 0)
+  call void @llvm.mips.st.h(<8 x i16> %a, i8* %stptr, i32 %offset)
+  ret void
+}
+
 define i32 @copy_s_b(<16 x i8> * %ptr) {
 entry:
 ; CHECK-LABEL: copy_s_b:
@@ -819,7 +920,7 @@ entry:
 define void @bclri_d(<2 x i64> * %ptr) {
 entry:
 ; CHECK-LABEL: bclri_d:
-; CHECK: bclri.d
+; CHECK: and.v
   %a = load <2 x i64>, <2 x i64> * %ptr, align 16
   %r = call <2 x i64> @llvm.mips.bclri.d(<2 x i64> %a, i32 16)
   store <2 x i64> %r, <2 x i64> * %ptr, align 16
@@ -829,7 +930,7 @@ entry:
 define void @binsli_d(<2 x i64> * %ptr, <2 x i64> * %ptr2) {
 entry:
 ; CHECK-LABEL: binsli_d:
-; CHECK: binsli.d
+; CHECK: bsel.v
   %a = load <2 x i64>, <2 x i64> * %ptr, align 16
   %b = load <2 x i64>, <2 x i64> * %ptr2, align 16
   %r = call <2 x i64> @llvm.mips.binsli.d(<2 x i64> %a, <2 x i64> %b, i32 4)
@@ -851,7 +952,7 @@ entry:
 define void @bnegi_d(<2 x i64> * %ptr) {
 entry:
 ; CHECK-LABEL: bnegi_d:
-; CHECK: bnegi.d
+; CHECK: xor.v
   %a = load <2 x i64>, <2 x i64> * %ptr, align 16
   %r = call <2 x i64> @llvm.mips.bnegi.d(<2 x i64> %a, i32 9)
   store <2 x i64> %r, <2 x i64> * %ptr, align 16
@@ -861,7 +962,7 @@ entry:
 define void @bseti_d(<2 x i64> * %ptr) {
 entry:
 ; CHECK-LABEL: bseti_d:
-; CHECK: bseti.d
+; CHECK: or.v
   %a = load <2 x i64>, <2 x i64> * %ptr, align 16
   %r = call <2 x i64> @llvm.mips.bseti.d(<2 x i64> %a, i32 25)
   store <2 x i64> %r, <2 x i64> * %ptr, align 16
@@ -1017,6 +1118,21 @@ entry:
   ret void
 }
 
+define void @ld_d(<2 x i64> * %ptr, i8 * %ldptr, i32 %offset) {
+entry:
+; CHECK-LABEL: ld_d
+; MSA32: addu $[[R0:[0-9]]], $5, $6
+; MSA64N32: sll $[[R2:[0-9]]], $6, 0
+; MSA64N32: sll $[[R1:[0-9]]], $5, 0
+; MSA64N32: addu $[[R0:[0-9]]], $[[R1]], $[[R2]]
+; MSA64N64: sll $[[R1:[0-9]]], $6, 0
+; MSA64N64: daddu $[[R0:[0-9]]], $5, $[[R1]]
+; CHECK: ld.d $w{{[0-9]+}}, 0($[[R0]])
+  %a = call <2 x i64> @llvm.mips.ld.d(i8* %ldptr, i32 %offset)
+  store <2 x i64> %a, <2 x i64> * %ptr, align 16
+  ret void
+}
+
 define void @ld_d2(<2 x i64> * %ptr, i8 * %ldptr) {
 entry:
 ; CHECK-LABEL: ld_d2
@@ -1029,6 +1145,24 @@ entry:
   store <2 x i64> %a, <2 x i64> * %ptr, align 16
   ret void
 }
+
+define void @st_d(<2 x i64> * %ptr, i8 * %ldptr, i32 %offset, i8 * %stptr) {
+entry:
+; CHECK-LABEL: st_d
+; MSA32: addu $[[R0:[0-9]]], $7, $6
+
+; MSA64N32-DAG: sll $[[R1:[0-9]]], $6, 0
+; MSA64N32-DAG: sll $[[R2:[0-9]+]], $7, 0
+; MSA64N32: addu $[[R0:[0-9]+]], $[[R2]], $[[R1]]
+
+; MSA64N64: sll $[[R1:[0-9]]], $6, 0
+; MSA64N64: daddu $[[R0:[0-9]]], $7, $[[R1]]
+; CHECK: st.d $w{{[0-9]+}}, 0($[[R0]])
+  %a = call <2 x i64> @llvm.mips.ld.d(i8* %ldptr, i32 0)
+  call void @llvm.mips.st.d(<2 x i64> %a, i8* %stptr, i32 %offset)
+  ret void
+}
+
 
 declare <8 x i16> @llvm.mips.ldi.h(i32)
 declare <8 x i16> @llvm.mips.addvi.h(<8 x i16>, i32)

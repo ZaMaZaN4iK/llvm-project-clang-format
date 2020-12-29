@@ -1,8 +1,9 @@
 //===---- TargetInfo.h - Encapsulate target details -------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,11 +15,9 @@
 #ifndef LLVM_CLANG_LIB_CODEGEN_TARGETINFO_H
 #define LLVM_CLANG_LIB_CODEGEN_TARGETINFO_H
 
-#include "CodeGenModule.h"
 #include "CGValue.h"
 #include "clang/AST/Type.h"
 #include "clang/Basic/LLVM.h"
-#include "clang/Basic/SyncScope.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -35,8 +34,8 @@ class Decl;
 namespace CodeGen {
 class ABIInfo;
 class CallArgList;
+class CodeGenModule;
 class CodeGenFunction;
-class CGBlockInfo;
 class CGFunctionInfo;
 
 /// TargetCodeGenInfo - This class organizes various target-specific
@@ -156,12 +155,6 @@ public:
     return "";
   }
 
-  /// Determine whether a call to objc_retainAutoreleasedReturnValue should be
-  /// marked as 'notail'.
-  virtual bool shouldSuppressTailCallsOfRetainAutoreleasedReturnValue() const {
-    return false;
-  }
-
   /// Return a constant used by UBSan as a signature to identify functions
   /// possessing type information, or 0 if the platform is unsupported.
   virtual llvm::Constant *
@@ -236,85 +229,13 @@ public:
   virtual llvm::Constant *getNullPointer(const CodeGen::CodeGenModule &CGM,
       llvm::PointerType *T, QualType QT) const;
 
-  /// Get target favored AST address space of a global variable for languages
-  /// other than OpenCL and CUDA.
-  /// If \p D is nullptr, returns the default target favored address space
-  /// for global variable.
-  virtual LangAS getGlobalVarAddressSpace(CodeGenModule &CGM,
-                                          const VarDecl *D) const;
-
-  /// Get the AST address space for alloca.
-  virtual LangAS getASTAllocaAddressSpace() const { return LangAS::Default; }
-
   /// Perform address space cast of an expression of pointer type.
   /// \param V is the LLVM value to be casted to another address space.
-  /// \param SrcAddr is the language address space of \p V.
-  /// \param DestAddr is the targeted language address space.
-  /// \param DestTy is the destination LLVM pointer type.
-  /// \param IsNonNull is the flag indicating \p V is known to be non null.
+  /// \param SrcTy is the QualType of \p V.
+  /// \param DestTy is the destination QualType.
   virtual llvm::Value *performAddrSpaceCast(CodeGen::CodeGenFunction &CGF,
-                                            llvm::Value *V, LangAS SrcAddr,
-                                            LangAS DestAddr, llvm::Type *DestTy,
-                                            bool IsNonNull = false) const;
+      llvm::Value *V, QualType SrcTy, QualType DestTy) const;
 
-  /// Perform address space cast of a constant expression of pointer type.
-  /// \param V is the LLVM constant to be casted to another address space.
-  /// \param SrcAddr is the language address space of \p V.
-  /// \param DestAddr is the targeted language address space.
-  /// \param DestTy is the destination LLVM pointer type.
-  virtual llvm::Constant *performAddrSpaceCast(CodeGenModule &CGM,
-                                               llvm::Constant *V,
-                                               LangAS SrcAddr, LangAS DestAddr,
-                                               llvm::Type *DestTy) const;
-
-  /// Get address space of pointer parameter for __cxa_atexit.
-  virtual LangAS getAddrSpaceOfCxaAtexitPtrParam() const {
-    return LangAS::Default;
-  }
-
-  /// Get the syncscope used in LLVM IR.
-  virtual llvm::SyncScope::ID getLLVMSyncScopeID(const LangOptions &LangOpts,
-                                                 SyncScope Scope,
-                                                 llvm::AtomicOrdering Ordering,
-                                                 llvm::LLVMContext &Ctx) const;
-
-  /// Interface class for filling custom fields of a block literal for OpenCL.
-  class TargetOpenCLBlockHelper {
-  public:
-    typedef std::pair<llvm::Value *, StringRef> ValueTy;
-    TargetOpenCLBlockHelper() {}
-    virtual ~TargetOpenCLBlockHelper() {}
-    /// Get the custom field types for OpenCL blocks.
-    virtual llvm::SmallVector<llvm::Type *, 1> getCustomFieldTypes() = 0;
-    /// Get the custom field values for OpenCL blocks.
-    virtual llvm::SmallVector<ValueTy, 1>
-    getCustomFieldValues(CodeGenFunction &CGF, const CGBlockInfo &Info) = 0;
-    virtual bool areAllCustomFieldValuesConstant(const CGBlockInfo &Info) = 0;
-    /// Get the custom field values for OpenCL blocks if all values are LLVM
-    /// constants.
-    virtual llvm::SmallVector<llvm::Constant *, 1>
-    getCustomFieldValues(CodeGenModule &CGM, const CGBlockInfo &Info) = 0;
-  };
-  virtual TargetOpenCLBlockHelper *getTargetOpenCLBlockHelper() const {
-    return nullptr;
-  }
-
-  /// Create an OpenCL kernel for an enqueued block. The kernel function is
-  /// a wrapper for the block invoke function with target-specific calling
-  /// convention and ABI as an OpenCL kernel. The wrapper function accepts
-  /// block context and block arguments in target-specific way and calls
-  /// the original block invoke function.
-  virtual llvm::Function *
-  createEnqueuedBlockKernel(CodeGenFunction &CGF,
-                            llvm::Function *BlockInvokeFunc,
-                            llvm::Value *BlockLiteral) const;
-
-  /// \return true if the target supports alias from the unmangled name to the
-  /// mangled name of functions declared within an extern "C" region and marked
-  /// as 'used', and having internal linkage.
-  virtual bool shouldEmitStaticExternCAliases() const { return true; }
-
-  virtual void setCUDAKernelCallingConvention(const FunctionType *&FT) const {}
 };
 
 } // namespace CodeGen

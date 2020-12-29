@@ -173,7 +173,8 @@ namespace objects {
     // invalid
     H h1({1, 2}); // expected-error {{no matching constructor}}
     (void) new H({1, 2}); // expected-error {{no matching constructor}}
-    (void) H({1, 2}); // expected-error {{no matching constructor}}
+    // FIXME: Bad diagnostic, mentions void type instead of init list.
+    (void) H({1, 2}); // expected-error {{no matching conversion}}
 
     // valid (by copy constructor).
     H h2({1, nullptr});
@@ -266,7 +267,7 @@ namespace PR12120 {
   struct A { explicit A(int); A(float); }; // expected-note {{declared here}}
   A a = { 0 }; // expected-error {{constructor is explicit}}
 
-  struct B { explicit B(short); B(long); }; // expected-note 2{{candidate}}
+  struct B { explicit B(short); B(long); }; // expected-note 4{{candidate}}
   B b = { 0 }; // expected-error {{ambiguous}}
 
   struct C { explicit C(short); C(long); }; // expected-note 2{{candidate}}
@@ -406,6 +407,6 @@ namespace PR11410 {
     0, 1
   }; // expected-error {{ambiguous}} expected-note {{in implicit initialization of array element 2}}
   C c2[3] = {
-    [0] = 1, [2] = 3 // expected-warning {{C99}}
+    [0] = 1, [2] = 3
   }; // expected-error {{ambiguous}} expected-note {{in implicit initialization of array element 1}}
 }

@@ -1,8 +1,9 @@
 //===- IntervalPartition.h - Interval partition Calculation -----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -22,14 +23,11 @@
 #ifndef LLVM_ANALYSIS_INTERVALPARTITION_H
 #define LLVM_ANALYSIS_INTERVALPARTITION_H
 
+#include "llvm/Analysis/Interval.h"
 #include "llvm/Pass.h"
 #include <map>
-#include <vector>
 
 namespace llvm {
-
-class BasicBlock;
-class Interval;
 
 //===----------------------------------------------------------------------===//
 //
@@ -40,17 +38,19 @@ class Interval;
 // nodes following it.
 //
 class IntervalPartition : public FunctionPass {
-  using IntervalMapTy = std::map<BasicBlock *, Interval *>;
+  typedef std::map<BasicBlock*, Interval*> IntervalMapTy;
   IntervalMapTy IntervalMap;
 
-  using IntervalListTy = std::vector<Interval *>;
-  Interval *RootInterval = nullptr;
-  std::vector<Interval *> Intervals;
+  typedef std::vector<Interval*> IntervalListTy;
+  Interval *RootInterval;
+  std::vector<Interval*> Intervals;
 
 public:
   static char ID; // Pass identification, replacement for typeid
 
-  IntervalPartition();
+  IntervalPartition() : FunctionPass(ID), RootInterval(nullptr) {
+    initializeIntervalPartitionPass(*PassRegistry::getPassRegistry());
+  }
 
   // run - Calculate the interval partition for this function
   bool runOnFunction(Function &F) override;
@@ -58,6 +58,7 @@ public:
   // IntervalPartition ctor - Build a reduced interval partition from an
   // existing interval graph.  This takes an additional boolean parameter to
   // distinguish it from a copy constructor.  Always pass in false for now.
+  //
   IntervalPartition(IntervalPartition &I, bool);
 
   // print - Show contents in human readable format...
@@ -94,15 +95,17 @@ private:
   // addIntervalToPartition - Add an interval to the internal list of intervals,
   // and then add mappings from all of the basic blocks in the interval to the
   // interval itself (in the IntervalMap).
+  //
   void addIntervalToPartition(Interval *I);
 
   // updatePredecessors - Interval generation only sets the successor fields of
   // the interval data structures.  After interval generation is complete,
   // run through all of the intervals and propagate successor info as
   // predecessor info.
+  //
   void updatePredecessors(Interval *Int);
 };
 
-} // end namespace llvm
+} // End llvm namespace
 
-#endif // LLVM_ANALYSIS_INTERVALPARTITION_H
+#endif

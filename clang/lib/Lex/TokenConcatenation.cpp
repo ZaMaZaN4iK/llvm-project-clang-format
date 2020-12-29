@@ -1,8 +1,9 @@
 //===--- TokenConcatenation.cpp - Token Concatenation Avoidance -----------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -66,7 +67,7 @@ bool TokenConcatenation::IsIdentifierStringPrefix(const Token &Tok) const {
   return IsStringPrefix(StringRef(PP.getSpelling(Tok)), LangOpts.CPlusPlus11);
 }
 
-TokenConcatenation::TokenConcatenation(const Preprocessor &pp) : PP(pp) {
+TokenConcatenation::TokenConcatenation(Preprocessor &pp) : PP(pp) {
   memset(TokenInfo, 0, sizeof(TokenInfo));
 
   // These tokens have custom code in AvoidConcat.
@@ -98,13 +99,9 @@ TokenConcatenation::TokenConcatenation(const Preprocessor &pp) : PP(pp) {
     TokenInfo[tok::utf32_char_constant ] |= aci_custom;
   }
 
-  // These tokens have custom code in C++17 mode.
-  if (PP.getLangOpts().CPlusPlus17)
+  // These tokens have custom code in C++1z mode.
+  if (PP.getLangOpts().CPlusPlus1z)
     TokenInfo[tok::utf8_char_constant] |= aci_custom;
-
-  // These tokens have custom code in C++2a mode.
-  if (PP.getLangOpts().CPlusPlus2a)
-    TokenInfo[tok::lessequal ] |= aci_custom_firstchar;
 
   // These tokens change behavior if followed by an '='.
   TokenInfo[tok::amp         ] |= aci_avoid_equal;           // &=
@@ -125,7 +122,7 @@ TokenConcatenation::TokenConcatenation(const Preprocessor &pp) : PP(pp) {
 
 /// GetFirstChar - Get the first character of the token \arg Tok,
 /// avoiding calls to getSpelling where possible.
-static char GetFirstChar(const Preprocessor &PP, const Token &Tok) {
+static char GetFirstChar(Preprocessor &PP, const Token &Tok) {
   if (IdentifierInfo *II = Tok.getIdentifierInfo()) {
     // Avoid spelling identifiers, the most common form of token.
     return II->getNameStart()[0];
@@ -160,11 +157,6 @@ static char GetFirstChar(const Preprocessor &PP, const Token &Tok) {
 bool TokenConcatenation::AvoidConcat(const Token &PrevPrevTok,
                                      const Token &PrevTok,
                                      const Token &Tok) const {
-  // Conservatively assume that every annotation token that has a printable
-  // form requires whitespace.
-  if (PrevTok.isAnnotation())
-    return true;
-
   // First, check to see if the tokens were directly adjacent in the original
   // source.  If they were, it must be okay to stick them together: if there
   // were an issue, the tokens would have been lexed differently.
@@ -291,7 +283,5 @@ bool TokenConcatenation::AvoidConcat(const Token &PrevPrevTok,
     return FirstChar == '#' || FirstChar == '@' || FirstChar == '%';
   case tok::arrow:           // ->*
     return PP.getLangOpts().CPlusPlus && FirstChar == '*';
-  case tok::lessequal:       // <=> (C++2a)
-    return PP.getLangOpts().CPlusPlus2a && FirstChar == '>';
   }
 }

@@ -1,22 +1,20 @@
 //===-- ThreadMemory.cpp ----------------------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "Plugins/Process/Utility/ThreadMemory.h"
-
 #include "Plugins/Process/Utility/RegisterContextThreadMemory.h"
 #include "lldb/Target/OperatingSystem.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/StopInfo.h"
 #include "lldb/Target/Unwind.h"
-
-#include <memory>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -26,11 +24,15 @@ ThreadMemory::ThreadMemory(Process &process, tid_t tid,
     : Thread(process, tid), m_backing_thread_sp(),
       m_thread_info_valobj_sp(thread_info_valobj_sp), m_name(), m_queue() {}
 
-ThreadMemory::ThreadMemory(Process &process, lldb::tid_t tid,
-                           llvm::StringRef name, llvm::StringRef queue,
-                           lldb::addr_t register_data_addr)
+ThreadMemory::ThreadMemory(Process &process, lldb::tid_t tid, const char *name,
+                           const char *queue, lldb::addr_t register_data_addr)
     : Thread(process, tid), m_backing_thread_sp(), m_thread_info_valobj_sp(),
-      m_name(name), m_queue(queue), m_register_data_addr(register_data_addr) {}
+      m_name(), m_queue(), m_register_data_addr(register_data_addr) {
+  if (name)
+    m_name = name;
+  if (queue)
+    m_queue = queue;
+}
 
 ThreadMemory::~ThreadMemory() { DestroyThread(); }
 
@@ -47,8 +49,8 @@ void ThreadMemory::ClearStackFrames() {
 
 RegisterContextSP ThreadMemory::GetRegisterContext() {
   if (!m_reg_context_sp)
-    m_reg_context_sp = std::make_shared<RegisterContextThreadMemory>(
-        *this, m_register_data_addr);
+    m_reg_context_sp.reset(
+        new RegisterContextThreadMemory(*this, m_register_data_addr));
   return m_reg_context_sp;
 }
 
@@ -64,7 +66,7 @@ ThreadMemory::CreateRegisterContextForFrame(StackFrame *frame) {
     reg_ctx_sp = GetRegisterContext();
   } else {
     Unwind *unwinder = GetUnwinder();
-    if (unwinder != nullptr)
+    if (unwinder)
       reg_ctx_sp = unwinder->CreateRegisterContextForFrame(frame);
   }
   return reg_ctx_sp;

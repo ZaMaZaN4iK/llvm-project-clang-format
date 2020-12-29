@@ -6,7 +6,6 @@
 #define NUM_FRAMES_UPPER_BOUND 100
 
 _Unwind_Reason_Code callback(_Unwind_Context *context, void *cnt) {
-  (void)context;
   int *i = (int *)cnt;
   ++*i;
   if (*i > NUM_FRAMES_UPPER_BOUND) {

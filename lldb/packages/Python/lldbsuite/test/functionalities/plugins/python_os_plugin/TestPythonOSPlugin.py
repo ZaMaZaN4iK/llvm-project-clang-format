@@ -2,9 +2,12 @@
 Test that the Python operating system plugin works correctly
 """
 
+from __future__ import print_function
 
 
 import os
+import time
+import re
 import lldb
 from lldbsuite.test.lldbtest import *
 import lldbsuite.test.lldbutil as lldbutil
@@ -13,7 +16,6 @@ import lldbsuite.test.lldbutil as lldbutil
 class PluginPythonOSPlugin(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
-    NO_DEBUG_INFO_TESTCASE = True
 
     def test_python_os_plugin(self):
         """Test that the Python operating system plugin works correctly"""
@@ -42,9 +44,9 @@ class PluginPythonOSPlugin(TestBase):
         self.dbg.SetAsync(False)
 
         # Create a target by the debugger.
-        exe = self.getBuildArtifact("a.out")
-        python_os_plugin_path = os.path.join(self.getSourceDir(),
-                                             "operating_system.py")
+        cwd = os.getcwd()
+        exe = os.path.join(cwd, "a.out")
+        python_os_plugin_path = os.path.join(cwd, "operating_system.py")
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
 
@@ -126,9 +128,9 @@ class PluginPythonOSPlugin(TestBase):
         self.dbg.SetAsync(False)
 
         # Create a target by the debugger.
-        exe = self.getBuildArtifact("a.out")
-        python_os_plugin_path = os.path.join(self.getSourceDir(),
-                                             "operating_system2.py")
+        cwd = os.getcwd()
+        exe = os.path.join(cwd, "a.out")
+        python_os_plugin_path = os.path.join(cwd, "operating_system2.py")
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
 

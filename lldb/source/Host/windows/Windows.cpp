@@ -1,8 +1,9 @@
 //===-- Windows.cpp ---------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,6 +22,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// These prototypes are defined in <direct.h>, but it also defines chdir() and
+// getcwd(), giving multiply defined errors
+extern "C" {
+char *_getcwd(char *buffer, int maxlen);
+int _chdir(const char *path);
+}
 
 namespace {
 bool utf8ToWide(const char *utf8, wchar_t *buf, size_t bufSize) {
@@ -48,8 +56,13 @@ int vasprintf(char **ret, const char *fmt, va_list ap) {
   size_t buflen;
   va_list ap2;
 
+#if defined(_MSC_VER) || defined(__MINGW64)
+  ap2 = ap;
+  len = _vscprintf(fmt, ap2);
+#else
   va_copy(ap2, ap);
   len = vsnprintf(NULL, 0, fmt, ap2);
+#endif
 
   if (len >= 0 &&
       (buf = (char *)malloc((buflen = (size_t)(len + 1)))) != NULL) {
@@ -79,7 +92,7 @@ char *strcasestr(const char *s, const char *find) {
     } while (strncasecmp(s, find, len) != 0);
     s--;
   }
-  return const_cast<char *>(s);
+  return ((char *)s);
 }
 
 char *realpath(const char *name, char *resolved) {
@@ -177,6 +190,31 @@ char *basename(char *path) {
   return &l1[1];
 }
 
+// use _getcwd() instead of GetCurrentDirectory() because it updates errno
+char *getcwd(char *path, int max) {
+  assert(path == NULL || max <= PATH_MAX);
+  wchar_t wpath[PATH_MAX];
+  if (wchar_t *wresult = _wgetcwd(wpath, PATH_MAX)) {
+    // Caller is allowed to pass in NULL for `path`.
+    // In that case, we're supposed to allocate a
+    // buffer on the caller's behalf.
+    if (path == NULL) {
+      max = UNI_MAX_UTF8_BYTES_PER_CODE_POINT * wcslen(wresult) + 1;
+      path = (char *)malloc(max);
+      if (path == NULL) {
+        errno = ENOMEM;
+        return NULL;
+      }
+    }
+    if (wideToUtf8(wresult, path, max))
+      return path;
+  }
+  return NULL;
+}
+
+// use _chdir() instead of SetCurrentDirectory() because it updates errno
+int chdir(const char *path) { return _chdir(path); }
+
 char *dirname(char *path) {
   char *l1 = strrchr(path, '\\');
   char *l2 = strrchr(path, '/');
@@ -192,6 +230,11 @@ int strcasecmp(const char *s1, const char *s2) { return stricmp(s1, s2); }
 
 int strncasecmp(const char *s1, const char *s2, size_t n) {
   return strnicmp(s1, s2, n);
+}
+
+int usleep(uint32_t useconds) {
+  Sleep(useconds / 1000);
+  return 0;
 }
 
 #if _MSC_VER < 1900

@@ -1,28 +1,28 @@
 //===-- MCAsmParser.cpp - Abstract Asm Parser Interface -------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCParser/MCAsmParser.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/Config/llvm-config.h"
 #include "llvm/MC/MCParser/MCAsmLexer.h"
 #include "llvm/MC/MCParser/MCParsedAsmOperand.h"
 #include "llvm/MC/MCParser/MCTargetAsmParser.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/SMLoc.h"
+#include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
-#include <cassert>
-
 using namespace llvm;
 
-MCAsmParser::MCAsmParser() {}
+MCAsmParser::MCAsmParser()
+    : TargetParser(nullptr), ShowParsedOperands(0), HadError(false),
+      PendingErrors() {}
 
-MCAsmParser::~MCAsmParser() = default;
+MCAsmParser::~MCAsmParser() {
+}
 
 void MCAsmParser::setTargetParser(MCTargetAsmParser &P) {
   assert(!TargetParser && "Target parser is already initialized!");
@@ -40,6 +40,11 @@ bool MCAsmParser::parseTokenLoc(SMLoc &Loc) {
 }
 
 bool MCAsmParser::parseEOL(const Twine &Msg) {
+  if (getTok().getKind() == AsmToken::Hash) {
+    StringRef CommentStr = parseStringToEndOfStatement();
+    getLexer().Lex();
+    getLexer().UnLex(AsmToken(AsmToken::EndOfStatement, CommentStr));
+  }
   if (getTok().getKind() != AsmToken::EndOfStatement)
     return Error(getTok().getLoc(), Msg);
   Lex();
@@ -65,6 +70,9 @@ bool MCAsmParser::parseIntToken(int64_t &V, const Twine &Msg) {
 
 bool MCAsmParser::parseOptionalToken(AsmToken::TokenKind T) {
   bool Present = (getTok().getKind() == T);
+  // if token is EOL and current token is # this is an EOL comment.
+  if (getTok().getKind() == AsmToken::Hash && T == AsmToken::EndOfStatement)
+    Present = true;
   if (Present)
     parseToken(T);
   return Present;
@@ -85,6 +93,7 @@ bool MCAsmParser::TokError(const Twine &Msg, SMRange Range) {
 }
 
 bool MCAsmParser::Error(SMLoc L, const Twine &Msg, SMRange Range) {
+  HadError = true;
 
   MCPendingError PErr;
   PErr.Loc = L;
@@ -109,10 +118,10 @@ bool MCAsmParser::addErrorSuffix(const Twine &Suffix) {
   return true;
 }
 
-bool MCAsmParser::parseMany(function_ref<bool()> parseOne, bool hasComma) {
+bool MCAsmParser::parseMany(std::function<bool()> parseOne, bool hasComma) {
   if (parseOptionalToken(AsmToken::EndOfStatement))
     return false;
-  while (true) {
+  while (1) {
     if (parseOne())
       return true;
     if (parseOptionalToken(AsmToken::EndOfStatement))
@@ -128,9 +137,6 @@ bool MCAsmParser::parseExpression(const MCExpr *&Res) {
   return parseExpression(Res, L);
 }
 
-void MCParsedAsmOperand::dump() const {
-  // Cannot completely remove virtual function even in release mode.
-#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+LLVM_DUMP_METHOD void MCParsedAsmOperand::dump() const {
   dbgs() << "  " << *this;
-#endif
 }

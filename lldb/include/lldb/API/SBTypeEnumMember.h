@@ -1,9 +1,10 @@
 
 //===-- SBTypeEnumMember.h --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -23,8 +24,6 @@ public:
   ~SBTypeEnumMember();
 
   SBTypeEnumMember &operator=(const SBTypeEnumMember &rhs);
-
-  explicit operator bool() const;
 
   bool IsValid() const;
 
@@ -64,8 +63,6 @@ public:
 
   SBTypeEnumMemberList &operator=(const SBTypeEnumMemberList &rhs);
 
-  explicit operator bool() const;
-
   bool IsValid();
 
   void Append(SBTypeEnumMember entry);
@@ -75,7 +72,7 @@ public:
   uint32_t GetSize();
 
 private:
-  std::unique_ptr<lldb_private::TypeEnumMemberListImpl> m_opaque_up;
+  std::unique_ptr<lldb_private::TypeEnumMemberListImpl> m_opaque_ap;
 };
 
 } // namespace lldb

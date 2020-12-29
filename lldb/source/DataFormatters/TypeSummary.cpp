@@ -1,33 +1,48 @@
 //===-- TypeSummary.cpp ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/DataFormatters/TypeSummary.h"
 
+// C Includes
 
+// C++ Includes
 
+// Other libraries and framework includes
 
+// Project includes
 #include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-public.h"
 
 #include "lldb/Core/Debugger.h"
+#include "lldb/Core/StreamString.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/DataFormatters/ValueObjectPrinter.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
 #include "lldb/Symbol/CompilerType.h"
 #include "lldb/Target/StackFrame.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/StreamString.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
 TypeSummaryOptions::TypeSummaryOptions()
     : m_lang(eLanguageTypeUnknown), m_capping(eTypeSummaryCapped) {}
+
+TypeSummaryOptions::TypeSummaryOptions(const TypeSummaryOptions &rhs)
+    : m_lang(rhs.m_lang), m_capping(rhs.m_capping) {}
+
+TypeSummaryOptions &TypeSummaryOptions::
+operator=(const TypeSummaryOptions &rhs) {
+  m_lang = rhs.m_lang;
+  m_capping = rhs.m_capping;
+  return *this;
+}
 
 lldb::LanguageType TypeSummaryOptions::GetLanguage() const { return m_lang; }
 
@@ -124,7 +139,7 @@ bool CXXFunctionSummaryFormat::FormatObject(ValueObject *valobj,
                                             const TypeSummaryOptions &options) {
   dest.clear();
   StreamString stream;
-  if (!m_impl || !m_impl(*valobj, stream, options))
+  if (!m_impl || m_impl(*valobj, stream, options) == false)
     return false;
   dest = stream.GetString();
   return true;
@@ -167,7 +182,7 @@ bool ScriptSummaryFormat::FormatObject(ValueObject *valobj, std::string &retval,
   }
 
   ScriptInterpreter *script_interpreter =
-      target_sp->GetDebugger().GetScriptInterpreter();
+      target_sp->GetDebugger().GetCommandInterpreter().GetScriptInterpreter();
 
   if (!script_interpreter) {
     retval.assign("error: no ScriptInterpreter");

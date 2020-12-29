@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,7 +15,6 @@
 #include <cassert>
 #include <cstddef>
 
-#include "test_macros.h"
 #include "min_allocator.h"
 
 template <class C>
@@ -63,7 +63,7 @@ testN(int start, int N)
     test(c1, -10);
 }
 
-int main(int, char**)
+int main()
 {
     {
     int rng[] = {0, 1, 2, 3, 1023, 1024, 1025, 2047, 2048, 2049};
@@ -81,6 +81,4 @@ int main(int, char**)
             testN<std::deque<int, min_allocator<int>> >(rng[i], rng[j]);
     }
 #endif
-
-  return 0;
 }

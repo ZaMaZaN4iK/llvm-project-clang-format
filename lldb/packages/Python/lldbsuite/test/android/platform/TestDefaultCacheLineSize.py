@@ -2,8 +2,10 @@
 Verify the default cache line size for android targets
 """
 
+from __future__ import print_function
 
 
+import os
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -14,10 +16,10 @@ class DefaultCacheLineSizeTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
-    @skipUnlessTargetAndroid
+    @skipUnlessPlatform(['android'])
     def test_cache_line_size(self):
         self.build(dictionary=self.getBuildFlags())
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target and target.IsValid(), "Target is valid")
 

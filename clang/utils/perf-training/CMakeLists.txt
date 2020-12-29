@@ -10,10 +10,6 @@ endif ()
 
 string(REPLACE ${CMAKE_CFG_INTDIR} ${LLVM_BUILD_MODE} CLANG_TOOLS_DIR ${LLVM_RUNTIME_OUTPUT_INTDIR})
 
-set(CLANG_PGO_TRAINING_DATA "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH
-  "The path to a lit testsuite containing samples for PGO and order file generation"
-  )
-
 if(LLVM_BUILD_INSTRUMENTED)
   configure_lit_site_cfg(
     ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.in
@@ -34,13 +30,13 @@ if(LLVM_BUILD_INSTRUMENTED)
   endif()
 
   if(NOT LLVM_PROFDATA)
-    message(STATUS "To enable merging PGO data LLVM_PROFDATA has to point to llvm-profdata")
-  else()
-    add_custom_target(generate-profdata
-      COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/perf-helper.py merge ${LLVM_PROFDATA} ${CMAKE_CURRENT_BINARY_DIR}/clang.profdata ${CMAKE_CURRENT_BINARY_DIR}
-      COMMENT "Merging profdata"
-      DEPENDS generate-profraw)
+    message(FATAL_ERROR "Must set LLVM_PROFDATA to point to llvm-profdata to use for merging PGO data")
   endif()
+
+  add_custom_target(generate-profdata
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/perf-helper.py merge ${LLVM_PROFDATA} ${CMAKE_CURRENT_BINARY_DIR}/clang.profdata ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "Merging profdata"
+    DEPENDS generate-profraw)
 endif()
 
 find_program(DTRACE dtrace)

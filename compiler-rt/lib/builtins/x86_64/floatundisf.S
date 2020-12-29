@@ -1,6 +1,5 @@
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 
 #include "../assembly.h"
 
@@ -24,7 +23,7 @@ DEFINE_COMPILERRT_FUNCTION(__floatundisf)
 	js			1f
 	cvtsi2ssq	%rdi,		%xmm0
 	ret
-
+	
 1:	andq		%rdi,		%rsi
 	shrq		%rdi
 	orq			%rsi,		%rdi

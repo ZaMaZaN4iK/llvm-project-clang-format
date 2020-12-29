@@ -1,8 +1,9 @@
 //===- MSFBuilder.h - MSF Directory & Metadata Builder ----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,21 +12,21 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
+
 #include "llvm/DebugInfo/MSF/MSFCommon.h"
+
 #include "llvm/Support/Allocator.h"
+#include "llvm/Support/Endian.h"
 #include "llvm/Support/Error.h"
-#include <cstdint>
+
 #include <utility>
 #include <vector>
 
 namespace llvm {
-class FileBufferByteStream;
-class WritableBinaryStream;
 namespace msf {
-
 class MSFBuilder {
 public:
-  /// Create a new `MSFBuilder`.
+  /// \brief Create a new `MSFBuilder`.
   ///
   /// \param BlockSize The internal block size used by the PDB file.  See
   /// isValidBlockSize() for a list of valid block sizes.
@@ -110,10 +111,7 @@ public:
 
   /// Finalize the layout and build the headers and structures that describe the
   /// MSF layout and can be written directly to the MSF file.
-  Expected<MSFLayout> generateLayout();
-
-  /// Write the MSF layout to the underlying file.
-  Expected<FileBufferByteStream> commit(StringRef Path, MSFLayout &Layout);
+  Expected<MSFLayout> build();
 
   BumpPtrAllocator &getAllocator() { return Allocator; }
 
@@ -124,7 +122,7 @@ private:
   Error allocateBlocks(uint32_t NumBlocks, MutableArrayRef<uint32_t> Blocks);
   uint32_t computeDirectoryByteSize() const;
 
-  using BlockList = std::vector<uint32_t>;
+  typedef std::vector<uint32_t> BlockList;
 
   BumpPtrAllocator &Allocator;
 
@@ -132,13 +130,13 @@ private:
   uint32_t FreePageMap;
   uint32_t Unknown1 = 0;
   uint32_t BlockSize;
+  uint32_t MininumBlocks;
   uint32_t BlockMapAddr;
   BitVector FreeBlocks;
   std::vector<uint32_t> DirectoryBlocks;
   std::vector<std::pair<uint32_t, BlockList>> StreamData;
 };
-
-} // end namespace msf
-} // end namespace llvm
+} // namespace msf
+} // namespace llvm
 
 #endif // LLVM_DEBUGINFO_MSF_MSFBUILDER_H

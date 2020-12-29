@@ -5,6 +5,8 @@ Test lldb data formatter subsystem.
 from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -22,10 +24,13 @@ class DataFormatterSynthValueTestCase(TestBase):
         self.line = line_number('main.cpp', 'break here')
 
     @skipIfFreeBSD  # llvm.org/pr20545 bogus output confuses buildbot parser
+    @expectedFailureAll(
+        oslist=["windows"],
+        bugnumber="llvm.org/pr24462, Data formatters have problems on Windows")
     def test_with_run_command(self):
         """Test using Python synthetic children provider to provide a value."""
         self.build()
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(
             self, "main.cpp", self.line, num_expected_locations=1, loc_exact=True)
@@ -102,7 +107,7 @@ class DataFormatterSynthValueTestCase(TestBase):
         # check that an aptly defined synthetic provider does not affect
         # one-lining
         self.expect(
-            "expression struct Struct { myInt theInt{12}; }; Struct()",
+            "expression struct S { myInt theInt{12}; }; S()",
             substrs=['(theInt = 12)'])
 
         # check that we can use a synthetic value in a summary

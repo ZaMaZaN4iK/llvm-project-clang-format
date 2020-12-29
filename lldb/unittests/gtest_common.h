@@ -1,8 +1,9 @@
 //===-- gtest_common.h ------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,3 +15,12 @@
 
 // This header file is force included by all of LLDB's unittest compilation
 // units.  Be very leary about putting anything in this file.
+
+#if defined(_MSC_VER) && (_HAS_EXCEPTIONS == 0)
+// Due to a bug in <thread>, when _HAS_EXCEPTIONS == 0 the header will try to
+// call
+// uncaught_exception() without having a declaration for it.  The fix for this
+// is
+// to manually #include <eh.h>, which contains this declaration.
+#include <eh.h>
+#endif

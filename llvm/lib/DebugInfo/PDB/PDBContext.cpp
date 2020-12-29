@@ -1,8 +1,9 @@
 //===-- PDBContext.cpp ------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===/
 
@@ -11,8 +12,8 @@
 #include "llvm/DebugInfo/PDB/IPDBLineNumber.h"
 #include "llvm/DebugInfo/PDB/IPDBSourceFile.h"
 #include "llvm/DebugInfo/PDB/PDBSymbol.h"
-#include "llvm/DebugInfo/PDB/PDBSymbolData.h"
 #include "llvm/DebugInfo/PDB/PDBSymbolFunc.h"
+#include "llvm/DebugInfo/PDB/PDBSymbolData.h"
 #include "llvm/DebugInfo/PDB/PDBSymbolPublicSymbol.h"
 #include "llvm/Object/COFF.h"
 
@@ -28,16 +29,17 @@ PDBContext::PDBContext(const COFFObjectFile &Object,
     Session->setLoadAddress(ImageBase.get());
 }
 
-void PDBContext::dump(raw_ostream &OS, DIDumpOptions DumpOpts){}
+void PDBContext::dump(raw_ostream &OS, DIDumpType DumpType, bool DumpEH,
+                      bool SummarizeTypes) {}
 
-DILineInfo PDBContext::getLineInfoForAddress(object::SectionedAddress Address,
+DILineInfo PDBContext::getLineInfoForAddress(uint64_t Address,
                                              DILineInfoSpecifier Specifier) {
   DILineInfo Result;
-  Result.FunctionName = getFunctionName(Address.Address, Specifier.FNKind);
+  Result.FunctionName = getFunctionName(Address, Specifier.FNKind);
 
   uint32_t Length = 1;
   std::unique_ptr<PDBSymbol> Symbol =
-      Session->findSymbolByAddress(Address.Address, PDB_SymType::None);
+      Session->findSymbolByAddress(Address, PDB_SymType::None);
   if (auto Func = dyn_cast_or_null<PDBSymbolFunc>(Symbol.get())) {
     Length = Func->getLength();
   } else if (auto Data = dyn_cast_or_null<PDBSymbolData>(Symbol.get())) {
@@ -46,7 +48,7 @@ DILineInfo PDBContext::getLineInfoForAddress(object::SectionedAddress Address,
 
   // If we couldn't find a symbol, then just assume 1 byte, so that we get
   // only the line number of the first instruction.
-  auto LineNumbers = Session->findLineNumbersByAddress(Address.Address, Length);
+  auto LineNumbers = Session->findLineNumbersByAddress(Address, Length);
   if (!LineNumbers || LineNumbers->getChildCount() == 0)
     return Result;
 
@@ -63,37 +65,31 @@ DILineInfo PDBContext::getLineInfoForAddress(object::SectionedAddress Address,
 }
 
 DILineInfoTable
-PDBContext::getLineInfoForAddressRange(object::SectionedAddress Address,
-                                       uint64_t Size,
+PDBContext::getLineInfoForAddressRange(uint64_t Address, uint64_t Size,
                                        DILineInfoSpecifier Specifier) {
   if (Size == 0)
     return DILineInfoTable();
 
   DILineInfoTable Table;
-  auto LineNumbers = Session->findLineNumbersByAddress(Address.Address, Size);
+  auto LineNumbers = Session->findLineNumbersByAddress(Address, Size);
   if (!LineNumbers || LineNumbers->getChildCount() == 0)
     return Table;
 
   while (auto LineInfo = LineNumbers->getNext()) {
-    DILineInfo LineEntry = getLineInfoForAddress(
-        {LineInfo->getVirtualAddress(), Address.SectionIndex}, Specifier);
+    DILineInfo LineEntry =
+        getLineInfoForAddress(LineInfo->getVirtualAddress(), Specifier);
     Table.push_back(std::make_pair(LineInfo->getVirtualAddress(), LineEntry));
   }
   return Table;
 }
 
 DIInliningInfo
-PDBContext::getInliningInfoForAddress(object::SectionedAddress Address,
+PDBContext::getInliningInfoForAddress(uint64_t Address,
                                       DILineInfoSpecifier Specifier) {
   DIInliningInfo InlineInfo;
   DILineInfo Frame = getLineInfoForAddress(Address, Specifier);
   InlineInfo.addFrame(Frame);
   return InlineInfo;
-}
-
-std::vector<DILocal>
-PDBContext::getLocalsForAddress(object::SectionedAddress Address) {
-  return std::vector<DILocal>();
 }
 
 std::string PDBContext::getFunctionName(uint64_t Address,

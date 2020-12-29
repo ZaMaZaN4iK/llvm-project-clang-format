@@ -1,12 +1,19 @@
 //===-- ThreadPlanStepOverRange.cpp -----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Target/ThreadPlanStepOverRange.h"
+#include "lldb/Core/Log.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Symbol/Block.h"
 #include "lldb/Symbol/CompileUnit.h"
 #include "lldb/Symbol/Function.h"
@@ -17,16 +24,17 @@
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadPlanStepOut.h"
 #include "lldb/Target/ThreadPlanStepThrough.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Stream.h"
 
 using namespace lldb_private;
 using namespace lldb;
 
 uint32_t ThreadPlanStepOverRange::s_default_flag_values = 0;
 
+//----------------------------------------------------------------------
 // ThreadPlanStepOverRange: Step through a stack range, either stepping over or
-// into based on the value of \a type.
+// into
+// based on the value of \a type.
+//----------------------------------------------------------------------
 
 ThreadPlanStepOverRange::ThreadPlanStepOverRange(
     Thread &thread, const AddressRange &range,
@@ -44,18 +52,10 @@ ThreadPlanStepOverRange::~ThreadPlanStepOverRange() = default;
 
 void ThreadPlanStepOverRange::GetDescription(Stream *s,
                                              lldb::DescriptionLevel level) {
-  auto PrintFailureIfAny = [&]() {
-    if (m_status.Success())
-      return;
-    s->Printf(" failed (%s)", m_status.AsCString());
-  };
-
   if (level == lldb::eDescriptionLevelBrief) {
     s->Printf("step over");
-    PrintFailureIfAny();
     return;
   }
-
   s->Printf("Stepping over");
   bool printed_line_info = false;
   if (m_addr_context.line_entry.IsValid()) {
@@ -68,8 +68,6 @@ void ThreadPlanStepOverRange::GetDescription(Stream *s,
     s->Printf(" using ranges: ");
     DumpRanges(s);
   }
-
-  PrintFailureIfAny();
 
   s->PutChar('.');
 }
@@ -93,17 +91,21 @@ void ThreadPlanStepOverRange::SetupAvoidNoDebug(
   else
     GetFlags().Clear(ThreadPlanShouldStopHere::eStepOutAvoidNoDebug);
   // Step Over plans should always avoid no-debug on step in.  Seems like you
-  // shouldn't have to say this, but a tail call looks more like a step in that
-  // a step out, so we want to catch this case.
+  // shouldn't
+  // have to say this, but a tail call looks more like a step in that a step
+  // out, so
+  // we want to catch this case.
   GetFlags().Set(ThreadPlanShouldStopHere::eStepInAvoidNoDebug);
 }
 
 bool ThreadPlanStepOverRange::IsEquivalentContext(
     const SymbolContext &context) {
-  // Match as much as is specified in the m_addr_context: This is a fairly
-  // loose sanity check.  Note, sometimes the target doesn't get filled in so I
-  // left out the target check.  And sometimes the module comes in as the .o
-  // file from the inlined range, so I left that out too...
+  // Match as much as is specified in the m_addr_context:
+  // This is a fairly loose sanity check.  Note, sometimes the target doesn't
+  // get filled
+  // in so I left out the target check.  And sometimes the module comes in as
+  // the .o file from the
+  // inlined range, so I left that out too...
   if (m_addr_context.comp_unit) {
     if (m_addr_context.comp_unit != context.comp_unit)
       return false;
@@ -111,8 +113,8 @@ bool ThreadPlanStepOverRange::IsEquivalentContext(
       if (m_addr_context.function != context.function)
         return false;
       // It is okay to return to a different block of a straight function, we
-      // only have to be more careful if returning from one inlined block to
-      // another.
+      // only have to
+      // be more careful if returning from one inlined block to another.
       if (m_addr_context.block->GetInlinedFunctionInfo() == nullptr &&
           context.block->GetInlinedFunctionInfo() == nullptr)
         return true;
@@ -120,7 +122,10 @@ bool ThreadPlanStepOverRange::IsEquivalentContext(
     }
   }
   // Fall back to symbol if we have no decision from comp_unit/function/block.
-  return m_addr_context.symbol && m_addr_context.symbol == context.symbol;
+  if (m_addr_context.symbol && m_addr_context.symbol == context.symbol) {
+    return true;
+  }
+  return false;
 }
 
 bool ThreadPlanStepOverRange::ShouldStop(Event *event_ptr) {
@@ -128,15 +133,15 @@ bool ThreadPlanStepOverRange::ShouldStop(Event *event_ptr) {
 
   if (log) {
     StreamString s;
-    DumpAddress(
-        s.AsRawOstream(), m_thread.GetRegisterContext()->GetPC(),
+    s.Address(
+        m_thread.GetRegisterContext()->GetPC(),
         m_thread.CalculateTarget()->GetArchitecture().GetAddressByteSize());
-    LLDB_LOGF(log, "ThreadPlanStepOverRange reached %s.", s.GetData());
+    log->Printf("ThreadPlanStepOverRange reached %s.", s.GetData());
   }
 
   // If we're out of the range but in the same frame or in our caller's frame
-  // then we should stop. When stepping out we only stop others if we are
-  // forcing running one thread.
+  // then we should stop.
+  // When stepping out we only stop others if we are forcing running one thread.
   bool stop_others = (m_stop_others == lldb::eOnlyThisThread);
   ThreadPlanSP new_plan_sp;
   FrameComparison frame_order = CompareCurrentFrameToStartFrame();
@@ -147,19 +152,22 @@ bool ThreadPlanStepOverRange::ShouldStop(Event *event_ptr) {
     // A caveat to this is if we think the frame is older but we're actually in
     // a trampoline.
     // I'm going to make the assumption that you wouldn't RETURN to a
-    // trampoline.  So if we are in a trampoline we think the frame is older
-    // because the trampoline confused the backtracer. As below, we step
-    // through first, and then try to figure out how to get back out again.
+    // trampoline.  So if we are
+    // in a trampoline we think the frame is older because the trampoline
+    // confused the backtracer.
+    // As below, we step through first, and then try to figure out how to get
+    // back out again.
 
-    new_plan_sp = m_thread.QueueThreadPlanForStepThrough(m_stack_id, false,
-                                                         stop_others, m_status);
+    new_plan_sp =
+        m_thread.QueueThreadPlanForStepThrough(m_stack_id, false, stop_others);
 
     if (new_plan_sp && log)
-      LLDB_LOGF(log,
-                "Thought I stepped out, but in fact arrived at a trampoline.");
+      log->Printf(
+          "Thought I stepped out, but in fact arrived at a trampoline.");
   } else if (frame_order == eFrameCompareYounger) {
     // Make sure we really are in a new frame.  Do that by unwinding and seeing
-    // if the start function really is our start function...
+    // if the
+    // start function really is our start function...
     for (uint32_t i = 1;; ++i) {
       StackFrameSP older_frame_sp = m_thread.GetStackFrameAtIndex(i);
       if (!older_frame_sp) {
@@ -173,11 +181,11 @@ bool ThreadPlanStepOverRange::ShouldStop(Event *event_ptr) {
       if (IsEquivalentContext(older_context)) {
         new_plan_sp = m_thread.QueueThreadPlanForStepOutNoShouldStop(
             false, nullptr, true, stop_others, eVoteNo, eVoteNoOpinion, 0,
-            m_status, true);
+            true);
         break;
       } else {
-        new_plan_sp = m_thread.QueueThreadPlanForStepThrough(
-            m_stack_id, false, stop_others, m_status);
+        new_plan_sp = m_thread.QueueThreadPlanForStepThrough(m_stack_id, false,
+                                                             stop_others);
         // If we found a way through, then we should stop recursing.
         if (new_plan_sp)
           break;
@@ -192,23 +200,28 @@ bool ThreadPlanStepOverRange::ShouldStop(Event *event_ptr) {
 
     if (!InSymbol()) {
       // This one is a little tricky.  Sometimes we may be in a stub or
-      // something similar, in which case we need to get out of there.  But if
-      // we are in a stub then it's likely going to be hard to get out from
-      // here.  It is probably easiest to step into the stub, and then it will
-      // be straight-forward to step out.
-      new_plan_sp = m_thread.QueueThreadPlanForStepThrough(
-          m_stack_id, false, stop_others, m_status);
+      // something similar,
+      // in which case we need to get out of there.  But if we are in a stub
+      // then it's
+      // likely going to be hard to get out from here.  It is probably easiest
+      // to step into the
+      // stub, and then it will be straight-forward to step out.
+      new_plan_sp = m_thread.QueueThreadPlanForStepThrough(m_stack_id, false,
+                                                           stop_others);
     } else {
-      // The current clang (at least through 424) doesn't always get the
-      // address range for the DW_TAG_inlined_subroutines right, so that when
-      // you leave the inlined range the line table says you are still in the
-      // source file of the inlining function.  This is bad, because now you
-      // are missing the stack frame for the function containing the inlining,
-      // and if you sensibly do "finish" to get out of this function you will
-      // instead exit the containing function. To work around this, we check
-      // whether we are still in the source file we started in, and if not
-      // assume it is an error, and push a plan to get us out of this line and
-      // back to the containing file.
+      // The current clang (at least through 424) doesn't always get the address
+      // range for the
+      // DW_TAG_inlined_subroutines right, so that when you leave the inlined
+      // range the line table says
+      // you are still in the source file of the inlining function.  This is
+      // bad, because now you are missing
+      // the stack frame for the function containing the inlining, and if you
+      // sensibly do "finish" to get
+      // out of this function you will instead exit the containing function.
+      // To work around this, we check whether we are still in the source file
+      // we started in, and if not assume
+      // it is an error, and push a plan to get us out of this line and back to
+      // the containing file.
 
       if (m_addr_context.line_entry.IsValid()) {
         SymbolContext sc;
@@ -231,11 +244,14 @@ bool ThreadPlanStepOverRange::ShouldStop(Event *event_ptr) {
                 bool step_past_remaining_inline = false;
                 if (entry_idx > 0) {
                   // We require the previous line entry and the current line
-                  // entry come from the same file. The other requirement is
-                  // that the previous line table entry be part of an inlined
-                  // block, we don't want to step past cases where people have
-                  // inlined some code fragment by using #include <source-
-                  // fragment.c> directly.
+                  // entry come
+                  // from the same file.
+                  // The other requirement is that the previous line table entry
+                  // be part of an
+                  // inlined block, we don't want to step past cases where
+                  // people have inlined
+                  // some code fragment by using #include <source-fragment.c>
+                  // directly.
                   LineEntry prev_line_entry;
                   if (line_table->GetLineEntryAtIndex(entry_idx - 1,
                                                       prev_line_entry) &&
@@ -287,8 +303,8 @@ bool ThreadPlanStepOverRange::ShouldStop(Event *event_ptr) {
                               cur_pc);
 
                       new_plan_sp = m_thread.QueueThreadPlanForStepOverRange(
-                          abort_other_plans, step_range, sc, stop_other_threads,
-                          m_status);
+                          abort_other_plans, step_range, sc,
+                          stop_other_threads);
                       break;
                     }
                     look_ahead_step++;
@@ -309,7 +325,7 @@ bool ThreadPlanStepOverRange::ShouldStop(Event *event_ptr) {
   // If we haven't figured out something to do yet, then ask the ShouldStopHere
   // callback:
   if (!new_plan_sp) {
-    new_plan_sp = CheckShouldStopHereAndQueueStepOut(frame_order, m_status);
+    new_plan_sp = CheckShouldStopHereAndQueueStepOut(frame_order);
   }
 
   if (!new_plan_sp)
@@ -322,20 +338,25 @@ bool ThreadPlanStepOverRange::ShouldStop(Event *event_ptr) {
 
   if (!new_plan_sp) {
     // For efficiencies sake, we know we're done here so we don't have to do
-    // this calculation again in MischiefManaged.
-    SetPlanComplete(m_status.Success());
+    // this
+    // calculation again in MischiefManaged.
+    SetPlanComplete();
     return true;
   } else
     return false;
 }
 
 bool ThreadPlanStepOverRange::DoPlanExplainsStop(Event *event_ptr) {
-  // For crashes, breakpoint hits, signals, etc, let the base plan (or some
-  // plan above us) handle the stop.  That way the user can see the stop, step
-  // around, and then when they are done, continue and have their step
-  // complete.  The exception is if we've hit our "run to next branch"
-  // breakpoint. Note, unlike the step in range plan, we don't mark ourselves
-  // complete if we hit an unexplained breakpoint/crash.
+  // For crashes, breakpoint hits, signals, etc, let the base plan (or some plan
+  // above us)
+  // handle the stop.  That way the user can see the stop, step around, and then
+  // when they
+  // are done, continue and have their step complete.  The exception is if we've
+  // hit our
+  // "run to next branch" breakpoint.
+  // Note, unlike the step in range plan, we don't mark ourselves complete if we
+  // hit an
+  // unexplained breakpoint/crash.
 
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
   StopInfoSP stop_info_sp = GetPrivateStopInfo();
@@ -366,15 +387,15 @@ bool ThreadPlanStepOverRange::DoWillResume(lldb::StateType resume_state,
     m_first_resume = false;
     if (resume_state == eStateStepping && current_plan) {
       // See if we are about to step over an inlined call in the middle of the
-      // inlined stack, if so figure out its extents and reset our range to
-      // step over that.
+      // inlined stack, if so figure
+      // out its extents and reset our range to step over that.
       bool in_inlined_stack = m_thread.DecrementCurrentInlinedDepth();
       if (in_inlined_stack) {
         Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
-        LLDB_LOGF(log,
-                  "ThreadPlanStepInRange::DoWillResume: adjusting range to "
-                  "the frame at inlined depth %d.",
-                  m_thread.GetCurrentInlinedDepth());
+        if (log)
+          log->Printf("ThreadPlanStepInRange::DoWillResume: adjusting range to "
+                      "the frame at inlined depth %d.",
+                      m_thread.GetCurrentInlinedDepth());
         StackFrameSP stack_sp = m_thread.GetStackFrameAtIndex(0);
         if (stack_sp) {
           Block *frame_block = stack_sp->GetFrameBlock();

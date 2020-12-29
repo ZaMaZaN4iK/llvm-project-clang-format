@@ -2,8 +2,11 @@
 Test lldb data formatter subsystem.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.lldbtest import *
 import lldbsuite.test.lldbutil as lldbutil
@@ -22,7 +25,7 @@ class AdvDataFormatterTestCase(TestBase):
     def test_with_run_command(self):
         """Test that that file and class static variables display correctly."""
         self.build()
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(
             self, "main.cpp", self.line, num_expected_locations=1, loc_exact=True)
@@ -134,13 +137,6 @@ class AdvDataFormatterTestCase(TestBase):
 
         self.expect("frame variable int_array",
                     substrs=['1,2'])
-
-        # Test the patterns are matched in reverse-chronological order.
-        self.runCmd(
-            'type summary add --summary-string \"${var[2-3]}\" "int []"')
-
-        self.expect("frame variable int_array",
-                    substrs=['3,4'])
 
         self.runCmd("type summary clear")
 

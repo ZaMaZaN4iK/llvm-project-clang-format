@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,7 +32,7 @@
 
 struct DeletedDefault {
     // A class with a deleted default constructor. Used to test the SFINAE
-    // on std::pair's default constructor.
+    // on std::pairs default constructor.
     constexpr explicit DeletedDefault(int x) : value(x) {}
     constexpr DeletedDefault() = delete;
     int value;
@@ -139,7 +140,7 @@ void test_illformed_default()
 }
 
 
-int main(int, char**)
+int main()
 {
     {
         // Check that pair<T, U> can still be used even if
@@ -160,6 +161,4 @@ int main(int, char**)
         test_is_default_constructible<int>();
         test_is_default_constructible<DefaultSFINAES<int>>();
     }
-
-  return 0;
 }

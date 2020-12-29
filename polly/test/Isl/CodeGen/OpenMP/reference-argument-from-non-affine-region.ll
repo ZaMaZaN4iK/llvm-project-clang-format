@@ -1,24 +1,9 @@
 ; RUN: opt %loadPolly -polly-parallel \
-; RUN: -polly-parallel-force -polly-codegen \
-; RUN: -S -verify-dom-info < %s \
+; RUN: -polly-parallel-force -polly-codegen -S -verify-dom-info < %s \
 ; RUN: | FileCheck %s -check-prefix=IR
-
-; RUN: opt %loadPolly -polly-parallel \
-; RUN: -polly-parallel-force -polly-codegen -polly-scheduling=runtime \
-; RUN: -S -verify-dom-info < %s \
-; RUN: | FileCheck %s -check-prefix=IR
-
-; RUN: opt %loadPolly -polly-parallel \
-; RUN: -polly-parallel-force -polly-codegen -polly-omp-backend=LLVM \
-; RUN: -S -verify-dom-info < %s \
-; RUN: | FileCheck %s -check-prefix=LIBOMP-IR
+target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
 
 ; IR: @GOMP_parallel_loop_runtime_start
-
-; LIBOMP-IR: call void (%struct.ident_t*, i32, void (i32*, i32*, ...)*, ...) @__kmpc_fork_call
-; LIBOMP-IR: call void @__kmpc_dispatch_init_{{[4|8]}}
-
-target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
 
 @longLimit = external global [9 x [23 x i32]], align 16
 @shortLimit = external global [9 x [14 x i32]], align 16
@@ -31,7 +16,7 @@ for.cond.463.preheader:                           ; preds = %entry
   br label %for.cond.499.preheader
 
 for.cond.533.preheader:                           ; preds = %for.inc.530
-  ret void
+  unreachable
 
 for.cond.499.preheader:                           ; preds = %for.inc.530, %for.cond.463.preheader
   %indvars.iv140 = phi i64 [ 0, %for.cond.463.preheader ], [ %indvars.iv.next141, %for.inc.530 ]
@@ -63,7 +48,7 @@ for.inc.530:                                      ; preds = %for.inc.527
   br i1 %exitcond142, label %for.cond.499.preheader, label %for.cond.533.preheader
 }
 
-attributes #0 = { nounwind uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "frame-pointer"="none" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { nounwind uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
 
 !llvm.ident = !{!0}
 

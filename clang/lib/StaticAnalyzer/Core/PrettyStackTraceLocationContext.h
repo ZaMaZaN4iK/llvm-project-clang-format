@@ -1,15 +1,16 @@
 //==- PrettyStackTraceLocationContext.h - show analysis backtrace --*- C++ -*-//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_LIB_STATICANALYZER_CORE_PRETTYSTACKTRACELOCATIONCONTEXT_H
 #define LLVM_CLANG_LIB_STATICANALYZER_CORE_PRETTYSTACKTRACELOCATIONCONTEXT_H
 
-#include "clang/Analysis/AnalysisDeclContext.h"
+#include "clang/Analysis/AnalysisContext.h"
 
 namespace clang {
 namespace ento {
@@ -32,9 +33,9 @@ public:
     assert(LCtx);
   }
 
-  void print(raw_ostream &Out) const override {
-    Out << "While analyzing stack: \n";
-    LCtx->dumpStack(Out);
+  void print(raw_ostream &OS) const override {
+    OS << "While analyzing stack: \n";
+    LCtx->dumpStack(OS, "\t");
   }
 };
 

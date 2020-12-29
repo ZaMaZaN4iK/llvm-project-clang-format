@@ -1,8 +1,9 @@
 //===- Error.cpp - system_error extensions for Object -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -56,7 +57,6 @@ std::string _object_error_category::message(int EV) const {
                    "defined.");
 }
 
-void BinaryError::anchor() {}
 char BinaryError::ID = 0;
 char GenericBinaryError::ID = 0;
 
@@ -78,15 +78,18 @@ const std::error_category &object::object_category() {
 }
 
 llvm::Error llvm::object::isNotObjectErrorInvalidFileType(llvm::Error Err) {
-  return handleErrors(std::move(Err), [](std::unique_ptr<ECError> M) -> Error {
-    // Try to handle 'M'. If successful, return a success value from
-    // the handler.
-    if (M->convertToErrorCode() == object_error::invalid_file_type)
-      return Error::success();
+  if (auto Err2 =
+          handleErrors(std::move(Err), [](std::unique_ptr<ECError> M) -> Error {
+            // Try to handle 'M'. If successful, return a success value from
+            // the handler.
+            if (M->convertToErrorCode() == object_error::invalid_file_type)
+              return Error::success();
 
-    // We failed to handle 'M' - return it from the handler.
-    // This value will be passed back from catchErrors and
-    // wind up in Err2, where it will be returned from this function.
-    return Error(std::move(M));
-  });
+            // We failed to handle 'M' - return it from the handler.
+            // This value will be passed back from catchErrors and
+            // wind up in Err2, where it will be returned from this function.
+            return Error(std::move(M));
+          }))
+    return Err2;
+  return Err;
 }

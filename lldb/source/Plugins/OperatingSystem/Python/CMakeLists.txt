@@ -1,10 +1,3 @@
-add_lldb_library(lldbPluginOSPython PLUGIN
+add_lldb_library(lldbPluginOSPython
   OperatingSystemPython.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbInterpreter
-    lldbSymbol
-    lldbTarget
-    lldbPluginProcessUtility
   )

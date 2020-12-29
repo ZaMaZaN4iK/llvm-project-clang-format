@@ -1,15 +1,16 @@
 //===--- IdentifierNamingCheck.h - clang-tidy -------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_READABILITY_IDENTIFIERNAMINGCHECK_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANG_TIDY_READABILITY_IDENTIFIERNAMINGCHECK_H
 
-#include "../ClangTidyCheck.h"
+#include "../ClangTidy.h"
 
 namespace clang {
 
@@ -34,13 +35,11 @@ namespace readability {
 class IdentifierNamingCheck : public ClangTidyCheck {
 public:
   IdentifierNamingCheck(StringRef Name, ClangTidyContext *Context);
-  ~IdentifierNamingCheck();
 
   void storeOptions(ClangTidyOptions::OptionMap &Opts) override;
   void registerMatchers(ast_matchers::MatchFinder *Finder) override;
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
-  void registerPPCallbacks(const SourceManager &SM, Preprocessor *PP,
-                           Preprocessor *ModuleExpanderPP) override;
+  void registerPPCallbacks(CompilerInstance &Compiler) override;
   void onEndOfTranslationUnit() override;
 
   enum CaseType {
@@ -54,59 +53,39 @@ public:
   };
 
   struct NamingStyle {
-    NamingStyle() = default;
+    NamingStyle() : Case(CT_AnyCase) {}
 
-    NamingStyle(llvm::Optional<CaseType> Case, const std::string &Prefix,
+    NamingStyle(CaseType Case, const std::string &Prefix,
                 const std::string &Suffix)
         : Case(Case), Prefix(Prefix), Suffix(Suffix) {}
 
-    llvm::Optional<CaseType> Case;
+    CaseType Case;
     std::string Prefix;
     std::string Suffix;
+
+    bool isSet() const {
+      return !(Case == CT_AnyCase && Prefix.empty() && Suffix.empty());
+    }
   };
 
-  /// This enum will be used in %select of the diagnostic message.
-  /// Each value below IgnoreFailureThreshold should have an error message.
-  enum class ShouldFixStatus {
-    ShouldFix,
-    ConflictsWithKeyword, /// The fixup will conflict with a language keyword,
-                          /// so we can't fix it automatically.
-    ConflictsWithMacroDefinition, /// The fixup will conflict with a macro
-                                  /// definition, so we can't fix it
-                                  /// automatically.
-
-    /// Values pass this threshold will be ignored completely
-    /// i.e no message, no fixup.
-    IgnoreFailureThreshold,
-
-    InsideMacro, /// If the identifier was used or declared within a macro we
-                 /// won't offer a fixup for safety reasons.
-  };
-
-  /// Holds an identifier name check failure, tracking the kind of the
-  /// identifier, its possible fixup and the starting locations of all the
+  /// \brief Holds an identifier name check failure, tracking the kind of the
+  /// identifer, its possible fixup and the starting locations of all the
   /// identifier usages.
   struct NamingCheckFailure {
     std::string KindName;
     std::string Fixup;
 
-    /// Whether the failure should be fixed or not.
+    /// \brief Whether the failure should be fixed or not.
     ///
     /// ie: if the identifier was used or declared within a macro we won't offer
     /// a fixup for safety reasons.
-    bool ShouldFix() const { return FixStatus == ShouldFixStatus::ShouldFix; }
+    bool ShouldFix;
 
-    bool ShouldNotify() const {
-      return FixStatus < ShouldFixStatus::IgnoreFailureThreshold;
-    }
-
-    ShouldFixStatus FixStatus = ShouldFixStatus::ShouldFix;
-
-    /// A set of all the identifier usages starting SourceLocation, in
+    /// \brief A set of all the identifier usages starting SourceLocation, in
     /// their encoded form.
     llvm::DenseSet<unsigned> RawUsageLocs;
 
-    NamingCheckFailure() = default;
+    NamingCheckFailure() : ShouldFix(true) {}
   };
 
   typedef std::pair<SourceLocation, std::string> NamingCheckId;
@@ -122,7 +101,7 @@ public:
   void expandMacro(const Token &MacroNameTok, const MacroInfo *MI);
 
 private:
-  std::vector<llvm::Optional<NamingStyle>> NamingStyles;
+  std::vector<NamingStyle> NamingStyles;
   bool IgnoreFailedSplit;
   NamingCheckFailureMap NamingCheckFailures;
 };

@@ -1,8 +1,9 @@
 //===-- ScheduleDAGPrinter.cpp - Implement ScheduleDAG::viewGraph() -------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,15 +11,17 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/CodeGen/ScheduleDAG.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/ScheduleDAG.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetRegisterInfo.h"
+#include <fstream>
 using namespace llvm;
 
 namespace llvm {
@@ -60,7 +63,7 @@ namespace llvm {
     }
 
 
-    std::string getNodeLabel(const SUnit *SU, const ScheduleDAG *Graph);
+    std::string getNodeLabel(const SUnit *Node, const ScheduleDAG *Graph);
     static std::string getNodeAttributes(const SUnit *N,
                                          const ScheduleDAG *Graph) {
       return "shape=Mrecord";

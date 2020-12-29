@@ -1,8 +1,6 @@
-// RUN: %clang_analyze_cc1  -Wno-objc-literal-conversion -analyzer-checker=core,osx.cocoa.NonNilReturnValue,osx.cocoa.NilArg,osx.cocoa.Loops,debug.ExprInspection -verify -Wno-objc-root-class %s
+// RUN: %clang_cc1  -Wno-objc-literal-conversion -analyze -analyzer-checker=core,osx.cocoa.NonNilReturnValue,osx.cocoa.NilArg,osx.cocoa.Loops,debug.ExprInspection -verify -Wno-objc-root-class %s
 
 void clang_analyzer_eval(int);
-
-#define nil ((id)0)
 
 typedef unsigned long NSUInteger;
 typedef signed char BOOL;
@@ -311,15 +309,4 @@ void testNoReportWhenReceiverNil(NSMutableArray *array, int b) {
   // When view is nil, subviews is also nil so there should be no warning
   // here either.
   [subviews addObject:view]; // no-warning
-}
-
-NSString *getStringFromString(NSString *string) {
-  if (!string)
-    return nil;
-  return @"New String";
-}
-void testInlinedDefensiveCheck(NSMutableDictionary *dict, id obj) {
-  // The check in getStringFromString() is not a good indication
-  // that 'obj' can be nil in this context.
-  dict[obj] = getStringFromString(obj); // no-warning
 }

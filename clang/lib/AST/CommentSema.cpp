@@ -1,8 +1,9 @@
 //===--- CommentSema.cpp - Doxygen comment semantic analysis --------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -85,7 +86,7 @@ ParamCommandComment *Sema::actOnParamCommandStart(
       new (Allocator) ParamCommandComment(LocBegin, LocEnd, CommandID,
                                           CommandMarker);
 
-  if (!isFunctionDecl() && !isFunctionOrBlockPointerVarLikeDecl())
+  if (!isFunctionDecl())
     Diag(Command->getLocation(),
          diag::warn_doc_param_not_attached_to_a_function_decl)
       << CommandMarker
@@ -214,7 +215,7 @@ void Sema::checkContainerDecl(const BlockCommandComment *Comment) {
     << Comment->getSourceRange();
 }
 
-/// Turn a string into the corresponding PassDirection or -1 if it's not
+/// \brief Turn a string into the corresponding PassDirection or -1 if it's not
 /// valid.
 static int getParamPassDirection(StringRef Arg) {
   return llvm::StringSwitch<int>(Arg)
@@ -583,13 +584,7 @@ void Sema::checkReturnsCommand(const BlockCommandComment *Command) {
 
   assert(ThisDeclInfo && "should not call this check on a bare comment");
 
-  // We allow the return command for all @properties because it can be used
-  // to document the value that the property getter returns.
-  if (isObjCPropertyDecl())
-    return;
-  if (isFunctionDecl() || isFunctionOrBlockPointerVarLikeDecl()) {
-    assert(!ThisDeclInfo->ReturnType.isNull() &&
-           "should have a valid return type");
+  if (isFunctionDecl()) {
     if (ThisDeclInfo->ReturnType->isVoidType()) {
       unsigned DiagKind;
       switch (ThisDeclInfo->CommentDecl->getKind()) {
@@ -615,6 +610,8 @@ void Sema::checkReturnsCommand(const BlockCommandComment *Command) {
     }
     return;
   }
+  else if (isObjCPropertyDecl())
+    return;
 
   Diag(Command->getLocation(),
        diag::warn_doc_returns_not_attached_to_a_function_decl)
@@ -676,8 +673,9 @@ void Sema::checkDeprecatedCommand(const BlockCommandComment *Command) {
       D->hasAttr<UnavailableAttr>())
     return;
 
-  Diag(Command->getLocation(), diag::warn_doc_deprecated_not_sync)
-      << Command->getSourceRange() << Command->getCommandMarker();
+  Diag(Command->getLocation(),
+       diag::warn_doc_deprecated_not_sync)
+    << Command->getSourceRange();
 
   // Try to emit a fixit with a deprecation attribute.
   if (const FunctionDecl *FD = dyn_cast<FunctionDecl>(D)) {
@@ -688,41 +686,25 @@ void Sema::checkDeprecatedCommand(const BlockCommandComment *Command) {
         FD->doesThisDeclarationHaveABody())
       return;
 
-    const LangOptions &LO = FD->getASTContext().getLangOpts();
-    const bool DoubleSquareBracket = LO.CPlusPlus14 || LO.C2x;
-    StringRef AttributeSpelling =
-        DoubleSquareBracket ? "[[deprecated]]" : "__attribute__((deprecated))";
+    StringRef AttributeSpelling = "__attribute__((deprecated))";
     if (PP) {
-      // Try to find a replacement macro:
-      // - In C2x/C++14 we prefer [[deprecated]].
-      // - If not found or an older C/C++ look for __attribute__((deprecated)).
-      StringRef MacroName;
-      if (DoubleSquareBracket) {
-        TokenValue Tokens[] = {tok::l_square, tok::l_square,
-                               PP->getIdentifierInfo("deprecated"),
-                               tok::r_square, tok::r_square};
-        MacroName = PP->getLastMacroWithSpelling(FD->getLocation(), Tokens);
-        if (!MacroName.empty())
-          AttributeSpelling = MacroName;
-      }
-
-      if (MacroName.empty()) {
-        TokenValue Tokens[] = {
-            tok::kw___attribute, tok::l_paren,
-            tok::l_paren,        PP->getIdentifierInfo("deprecated"),
-            tok::r_paren,        tok::r_paren};
-        StringRef MacroName =
-            PP->getLastMacroWithSpelling(FD->getLocation(), Tokens);
-        if (!MacroName.empty())
-          AttributeSpelling = MacroName;
-      }
+      TokenValue Tokens[] = {
+        tok::kw___attribute, tok::l_paren, tok::l_paren,
+        PP->getIdentifierInfo("deprecated"),
+        tok::r_paren, tok::r_paren
+      };
+      StringRef MacroName = PP->getLastMacroWithSpelling(FD->getLocation(),
+                                                         Tokens);
+      if (!MacroName.empty())
+        AttributeSpelling = MacroName;
     }
 
-    SmallString<64> TextToInsert = AttributeSpelling;
-    TextToInsert += " ";
-    SourceLocation Loc = FD->getSourceRange().getBegin();
-    Diag(Loc, diag::note_add_deprecation_attr)
-        << FixItHint::CreateInsertion(Loc, TextToInsert);
+    SmallString<64> TextToInsert(" ");
+    TextToInsert += AttributeSpelling;
+    Diag(FD->getLocEnd(),
+         diag::note_add_deprecation_attr)
+      << FixItHint::CreateInsertion(FD->getLocEnd().getLocWithOffset(1),
+                                    TextToInsert);
   }
 }
 
@@ -829,7 +811,7 @@ bool Sema::isAnyFunctionDecl() {
 }
 
 bool Sema::isFunctionOrMethodVariadic() {
-  if (!isFunctionDecl() || !ThisDeclInfo->CurrentDecl)
+  if (!isAnyFunctionDecl() && !isObjCMethodDecl() && !isFunctionTemplateDecl())
     return false;
   if (const FunctionDecl *FD =
         dyn_cast<FunctionDecl>(ThisDeclInfo->CurrentDecl))
@@ -840,14 +822,6 @@ bool Sema::isFunctionOrMethodVariadic() {
   if (const ObjCMethodDecl *MD =
         dyn_cast<ObjCMethodDecl>(ThisDeclInfo->CurrentDecl))
     return MD->isVariadic();
-  if (const TypedefNameDecl *TD =
-          dyn_cast<TypedefNameDecl>(ThisDeclInfo->CurrentDecl)) {
-    QualType Type = TD->getUnderlyingType();
-    if (Type->isFunctionPointerType() || Type->isBlockPointerType())
-      Type = Type->getPointeeType();
-    if (const auto *FT = Type->getAs<FunctionProtoType>())
-      return FT->isVariadic();
-  }
   return false;
 }
 
@@ -868,36 +842,6 @@ bool Sema::isFunctionPointerVarDecl() {
     }
   }
   return false;
-}
-
-bool Sema::isFunctionOrBlockPointerVarLikeDecl() {
-  if (!ThisDeclInfo)
-    return false;
-  if (!ThisDeclInfo->IsFilled)
-    inspectThisDecl();
-  if (ThisDeclInfo->getKind() != DeclInfo::VariableKind ||
-      !ThisDeclInfo->CurrentDecl)
-    return false;
-  QualType QT;
-  if (const auto *VD = dyn_cast<DeclaratorDecl>(ThisDeclInfo->CurrentDecl))
-    QT = VD->getType();
-  else if (const auto *PD =
-               dyn_cast<ObjCPropertyDecl>(ThisDeclInfo->CurrentDecl))
-    QT = PD->getType();
-  else
-    return false;
-  // We would like to warn about the 'returns'/'param' commands for
-  // variables that don't directly specify the function type, so type aliases
-  // can be ignored.
-  if (QT->getAs<TypedefType>())
-    return false;
-  if (const auto *P = QT->getAs<PointerType>())
-    if (P->getPointeeType()->getAs<TypedefType>())
-      return false;
-  if (const auto *P = QT->getAs<BlockPointerType>())
-    if (P->getPointeeType()->getAs<TypedefType>())
-      return false;
-  return QT->isFunctionPointerType() || QT->isBlockPointerType();
 }
 
 bool Sema::isObjCPropertyDecl() {
@@ -1143,7 +1087,6 @@ Sema::getInlineCommandRenderKind(StringRef Name) const {
       .Case("b", InlineCommandComment::RenderBold)
       .Cases("c", "p", InlineCommandComment::RenderMonospaced)
       .Cases("a", "e", "em", InlineCommandComment::RenderEmphasized)
-      .Case("anchor", InlineCommandComment::RenderAnchor)
       .Default(InlineCommandComment::RenderNormal);
 }
 

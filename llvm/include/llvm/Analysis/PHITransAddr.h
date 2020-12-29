@@ -1,8 +1,9 @@
 //===- PHITransAddr.h - PHI Translation for Addresses -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -42,7 +43,7 @@ class PHITransAddr {
   /// TLI - The target library info if known, otherwise null.
   const TargetLibraryInfo *TLI;
 
-  /// A cache of \@llvm.assume calls used by SimplifyInstruction.
+  /// A cache of @llvm.assume calls used by SimplifyInstruction.
   AssumptionCache *AC;
 
   /// InstInputs - The inputs for our symbolic address.

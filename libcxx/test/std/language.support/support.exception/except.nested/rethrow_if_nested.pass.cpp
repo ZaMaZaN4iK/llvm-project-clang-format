@@ -1,16 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: libcpp-no-exceptions
-
-// This test fails due to a stack overflow
-// XFAIL: LIBCXX-WINDOWS-FIXME
-
 // <exception>
 
 // class nested_exception;
@@ -45,48 +42,17 @@ public:
 class C
 {
 public:
-    virtual ~C() {}
-    C * operator&() const { assert(false); return nullptr; } // should not be called
+	virtual ~C() {}
+	C * operator&() const { assert(false); } // should not be called
 };
 
-class D : private std::nested_exception {};
-
-
-class E1 : public std::nested_exception {};
-class E2 : public std::nested_exception {};
-class E : public E1, public E2 {};
-
-int main(int, char**)
+int main()
 {
     {
         try
         {
-            A a(3);  // not a polymorphic type --> no effect
+            A a(3);
             std::rethrow_if_nested(a);
-            assert(true);
-        }
-        catch (...)
-        {
-            assert(false);
-        }
-    }
-    {
-        try
-        {
-            D s;  // inaccessible base class --> no effect
-            std::rethrow_if_nested(s);
-            assert(true);
-        }
-        catch (...)
-        {
-            assert(false);
-        }
-    }
-    {
-        try
-        {
-            E s;  // ambiguous base class --> no effect
-            std::rethrow_if_nested(s);
             assert(true);
         }
         catch (...)
@@ -131,6 +97,4 @@ int main(int, char**)
         }
     }
 
-
-  return 0;
 }

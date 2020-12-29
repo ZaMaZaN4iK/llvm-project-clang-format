@@ -1,9 +1,14 @@
 """Test that we properly vend children for a single entry NSDictionary"""
 
+from __future__ import print_function
 
 
 import unittest2
+import os
+import time
+import platform
 
+from distutils.version import StrictVersion
 
 import lldb
 from lldbsuite.test.decorators import *
@@ -22,10 +27,9 @@ class ObjCSingleEntryDictionaryTestCase(TestBase):
         self.line = line_number('main.m', '// break here')
 
     @skipUnlessDarwin
-    @expectedFailureAll(oslist=['watchos'], bugnumber="rdar://problem/34642736") # bug in NSDictionary formatting on watchos
     def test_single_entry_dict(self):
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Break inside the foo function which takes a bar_ptr argument.

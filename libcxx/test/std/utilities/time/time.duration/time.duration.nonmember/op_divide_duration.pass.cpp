@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,10 +19,7 @@
 #include <chrono>
 #include <cassert>
 
-#include "test_macros.h"
-#include "truncate_fp.h"
-
-int main(int, char**)
+int main()
 {
     {
     std::chrono::nanoseconds ns1(15);
@@ -41,9 +39,9 @@ int main(int, char**)
     {
     std::chrono::duration<int, std::ratio<2, 3> > s1(30);
     std::chrono::duration<double, std::ratio<3, 5> > s2(5);
-    assert(s1 / s2 == truncate_fp(20./3));
+    assert(s1 / s2 == 20./3);
     }
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_CONSTEXPR
     {
     constexpr std::chrono::nanoseconds ns1(15);
     constexpr std::chrono::nanoseconds ns2(5);
@@ -65,6 +63,4 @@ int main(int, char**)
     static_assert(s1 / s2 == 20./3, "");
     }
 #endif
-
-  return 0;
 }

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,7 +18,6 @@
 #include <ios>
 #include <cassert>
 #include <streambuf>
-#include "test_macros.h"
 #include "test_iterators.h"
 
 typedef std::num_get<char, input_iterator<const char*> > F;
@@ -30,7 +30,7 @@ public:
         : F(refs) {}
 };
 
-int main(int, char**)
+int main()
 {
     const my_facet f(1);
     std::ios ios(0);
@@ -58,6 +58,4 @@ int main(int, char**)
         assert(err == ios.goodbit);
         assert(p == (void*)0x73);
     }
-
-  return 0;
 }

@@ -5,7 +5,6 @@
 # CHECK-NEXT:   Type:            SHT_RELA
 # CHECK-NEXT:    Link:            .symtab
 # CHECK-NEXT:    AddressAlign:    0x0000000000000008
-# CHECK-NEXT:    EntSize:         0x0000000000000018
 # CHECK-NEXT:    Info:            .text
 # CHECK-NEXT:    Relocations:     
 # CHECK-NEXT:      - Offset:          0x0000000000000000
@@ -43,11 +42,13 @@ Sections:
         Addend:          0
 
 Symbols:
-  - Name:            .text
-    Type:            STT_SECTION
-    Section:         .text
-  - Name:            main
-    Type:            STT_FUNC
-    Section:         .text
-    Size:            0x08
-    Binding:         STB_GLOBAL
+  Local:
+    - Name:            .text
+      Type:            STT_SECTION
+      Section:         .text
+
+  Global:
+    - Name:            main
+      Type:            STT_FUNC
+      Section:         .text
+      Size:            0x08

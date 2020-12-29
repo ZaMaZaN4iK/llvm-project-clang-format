@@ -1,20 +1,23 @@
 //===-- PlatformDarwin.h ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_PlatformDarwin_h_
 #define liblldb_PlatformDarwin_h_
 
+// C Includes
+// C++ Includes
 
+// Other libraries and framework includes
+// Project includes
 #include "Plugins/Platform/POSIX/PlatformPOSIX.h"
-#include "lldb/Host/FileSystem.h"
-#include "lldb/Utility/FileSpec.h"
+#include "lldb/Host/FileSpec.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/FileSystem.h"
 
 #include <string>
 #include <tuple>
@@ -25,8 +28,14 @@ public:
 
   ~PlatformDarwin() override;
 
+  //------------------------------------------------------------
   // lldb_private::Platform functions
-  lldb_private::Status
+  //------------------------------------------------------------
+  lldb_private::Error ResolveExecutable(
+      const lldb_private::ModuleSpec &module_spec, lldb::ModuleSP &module_sp,
+      const lldb_private::FileSpecList *module_search_paths_ptr) override;
+
+  lldb_private::Error
   ResolveSymbolFile(lldb_private::Target &target,
                     const lldb_private::ModuleSpec &sym_spec,
                     lldb_private::FileSpec &sym_file) override;
@@ -35,7 +44,7 @@ public:
       lldb_private::Target *target, lldb_private::Module &module,
       lldb_private::Stream *feedback_stream) override;
 
-  lldb_private::Status
+  lldb_private::Error
   GetSharedModule(const lldb_private::ModuleSpec &module_spec,
                   lldb_private::Process *process, lldb::ModuleSP &module_sp,
                   const lldb_private::FileSpecList *module_search_paths_ptr,
@@ -46,8 +55,15 @@ public:
       lldb_private::Target &target,
       lldb_private::BreakpointSite *bp_site) override;
 
+  bool GetProcessInfo(lldb::pid_t pid,
+                      lldb_private::ProcessInstanceInfo &proc_info) override;
+
   lldb::BreakpointSP
   SetThreadCreationBreakpoint(lldb_private::Target &target) override;
+
+  uint32_t
+  FindProcesses(const lldb_private::ProcessInstanceInfoMatch &match_info,
+                lldb_private::ProcessInstanceInfoList &process_infos) override;
 
   bool ModuleIsExcludedForUnconstrainedSearches(
       lldb_private::Target &target, const lldb::ModuleSP &module_sp) override;
@@ -63,8 +79,8 @@ public:
 
   void CalculateTrapHandlerSymbolNames() override;
 
-  llvm::VersionTuple
-  GetOSVersion(lldb_private::Process *process = nullptr) override;
+  bool GetOSVersion(uint32_t &major, uint32_t &minor, uint32_t &update,
+                    lldb_private::Process *process = nullptr) override;
 
   bool SupportsModules() override { return true; }
 
@@ -73,29 +89,30 @@ public:
 
   lldb_private::FileSpec LocateExecutable(const char *basename) override;
 
-  lldb_private::Status
+  lldb_private::Error
   LaunchProcess(lldb_private::ProcessLaunchInfo &launch_info) override;
 
-  static std::tuple<llvm::VersionTuple, llvm::StringRef>
+  static std::tuple<uint32_t, uint32_t, uint32_t, llvm::StringRef>
   ParseVersionBuildDir(llvm::StringRef str);
-
-  enum SDKType : unsigned {
-    MacOSX = 0,
-    iPhoneSimulator,
-    iPhoneOS,
-  };
 
 protected:
   void ReadLibdispatchOffsetsAddress(lldb_private::Process *process);
 
   void ReadLibdispatchOffsets(lldb_private::Process *process);
 
-  virtual lldb_private::Status GetSharedModuleWithLocalCache(
+  virtual lldb_private::Error GetSharedModuleWithLocalCache(
       const lldb_private::ModuleSpec &module_spec, lldb::ModuleSP &module_sp,
       const lldb_private::FileSpecList *module_search_paths_ptr,
       lldb::ModuleSP *old_module_sp_ptr, bool *did_create_ptr);
 
-  static bool SDKSupportsModules(SDKType sdk_type, llvm::VersionTuple version);
+  enum class SDKType {
+    MacOSX = 0,
+    iPhoneSimulator,
+    iPhoneOS,
+  };
+
+  static bool SDKSupportsModules(SDKType sdk_type, uint32_t major,
+                                 uint32_t minor, uint32_t micro);
 
   static bool SDKSupportsModules(SDKType desired_type,
                                  const lldb_private::FileSpec &sdk_path);
@@ -105,9 +122,9 @@ protected:
     SDKType sdk_type;
   };
 
-  static lldb_private::FileSystem::EnumerateDirectoryResult
-  DirectoryEnumerator(void *baton, llvm::sys::fs::file_type file_type,
-                      llvm::StringRef path);
+  static lldb_private::FileSpec::EnumerateDirectoryResult
+  DirectoryEnumerator(void *baton, lldb_private::FileSpec::FileType file_type,
+                      const lldb_private::FileSpec &spec);
 
   static lldb_private::FileSpec
   FindSDKInXcodeForModules(SDKType sdk_type,
@@ -121,15 +138,9 @@ protected:
                                              std::vector<std::string> &options,
                                              SDKType sdk_type);
 
-  const char *GetDeveloperDirectory();
-
-  lldb_private::Status
-  FindBundleBinaryInExecSearchPaths (const lldb_private::ModuleSpec &module_spec, lldb_private::Process *process,
-                                     lldb::ModuleSP &module_sp, const lldb_private::FileSpecList *module_search_paths_ptr, 
-                                     lldb::ModuleSP *old_module_sp_ptr, bool *did_create_ptr);
-
   std::string m_developer_directory;
 
+  const char *GetDeveloperDirectory();
 
 private:
   DISALLOW_COPY_AND_ASSIGN(PlatformDarwin);

@@ -1,8 +1,9 @@
 //===-- X86RegisterInfo.h - X86 Register Information Impl -------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,7 +14,7 @@
 #ifndef LLVM_LIB_TARGET_X86_X86REGISTERINFO_H
 #define LLVM_LIB_TARGET_X86_X86REGISTERINFO_H
 
-#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/Target/TargetRegisterInfo.h"
 
 #define GET_REGINFO_HEADER
 #include "X86GenRegisterInfo.inc"
@@ -49,7 +50,7 @@ private:
   unsigned BasePtr;
 
 public:
-  explicit X86RegisterInfo(const Triple &TT);
+  X86RegisterInfo(const Triple &TT);
 
   // FIXME: This should be tablegen'd like getDwarfRegNum is
   int getSEHRegNum(unsigned i) const;
@@ -73,11 +74,6 @@ public:
   const TargetRegisterClass *
   getLargestLegalSuperClass(const TargetRegisterClass *RC,
                             const MachineFunction &MF) const override;
-
-  bool shouldRewriteCopySrc(const TargetRegisterClass *DefRC,
-                            unsigned DefSubReg,
-                            const TargetRegisterClass *SrcRC,
-                            unsigned SrcSubReg) const override;
 
   /// getPointerRegClass - Returns a TargetRegisterClass used for pointer
   /// values.
@@ -133,16 +129,10 @@ public:
                            RegScavenger *RS = nullptr) const override;
 
   // Debug information queries.
-  Register getFrameRegister(const MachineFunction &MF) const override;
+  unsigned getFrameRegister(const MachineFunction &MF) const override;
   unsigned getPtrSizedFrameRegister(const MachineFunction &MF) const;
-  unsigned getPtrSizedStackRegister(const MachineFunction &MF) const;
-  Register getStackRegister() const { return StackPtr; }
-  Register getBaseRegister() const { return BasePtr; }
-  /// Returns physical register used as frame pointer.
-  /// This will always returns the frame pointer register, contrary to
-  /// getFrameRegister() which returns the "base pointer" in situations
-  /// involving a stack, frame and base pointer.
-  Register getFramePtr() const { return FramePtr; }
+  unsigned getStackRegister() const { return StackPtr; }
+  unsigned getBaseRegister() const { return BasePtr; }
   // FIXME: Move to FrameInfok
   unsigned getSlotSize() const { return SlotSize; }
 };

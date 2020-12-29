@@ -1,32 +1,19 @@
-//===- SafeStackColoring.cpp - SafeStack frame coloring -------------------===//
+//===-- SafeStackColoring.cpp - SafeStack frame coloring -------*- C++ -*--===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "SafeStackColoring.h"
-#include "llvm/ADT/BitVector.h"
-#include "llvm/ADT/DenseMap.h"
+
 #include "llvm/ADT/DepthFirstIterator.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/Config/llvm-config.h"
-#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
-#include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/User.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
-#include <cassert>
-#include <tuple>
-#include <utility>
 
 using namespace llvm;
 using namespace llvm::safestack;
@@ -45,10 +32,11 @@ const StackColoring::LiveRange &StackColoring::getLiveRange(AllocaInst *AI) {
 }
 
 bool StackColoring::readMarker(Instruction *I, bool *IsStart) {
-  if (!I->isLifetimeStartOrEnd())
+  auto *II = dyn_cast<IntrinsicInst>(I);
+  if (!II || (II->getIntrinsicID() != Intrinsic::lifetime_start &&
+              II->getIntrinsicID() != Intrinsic::lifetime_end))
     return false;
 
-  auto *II = cast<IntrinsicInst>(I);
   *IsStart = II->getIntrinsicID() == Intrinsic::lifetime_start;
   return true;
 }
@@ -100,10 +88,10 @@ void StackColoring::collectMarkers() {
   // For each basic block, compute
   // * the list of markers in the instruction order
   // * the sets of allocas whose lifetime starts or ends in this BB
-  LLVM_DEBUG(dbgs() << "Instructions:\n");
+  DEBUG(dbgs() << "Instructions:\n");
   unsigned InstNo = 0;
   for (BasicBlock *BB : depth_first(&F)) {
-    LLVM_DEBUG(dbgs() << "  " << InstNo << ": BB " << BB->getName() << "\n");
+    DEBUG(dbgs() << "  " << InstNo << ": BB " << BB->getName() << "\n");
     unsigned BBStart = InstNo++;
 
     BlockLifetimeInfo &BlockInfo = BlockLiveness[BB];
@@ -120,9 +108,9 @@ void StackColoring::collectMarkers() {
     }
 
     auto ProcessMarker = [&](Instruction *I, const Marker &M) {
-      LLVM_DEBUG(dbgs() << "  " << InstNo << ":  "
-                        << (M.IsStart ? "start " : "end   ") << M.AllocaNo
-                        << ", " << *I << "\n");
+      DEBUG(dbgs() << "  " << InstNo << ":  "
+                   << (M.IsStart ? "start " : "end   ") << M.AllocaNo << ", "
+                   << *I << "\n");
 
       BBMarkers[BB].push_back({InstNo, M});
 
@@ -170,9 +158,7 @@ void StackColoring::calculateLocalLiveness() {
       BitVector LocalLiveIn;
       for (auto *PredBB : predecessors(BB)) {
         LivenessMap::const_iterator I = BlockLiveness.find(PredBB);
-        // If a predecessor is unreachable, ignore it.
-        if (I == BlockLiveness.end())
-          continue;
+        assert(I != BlockLiveness.end() && "Predecessor not found");
         LocalLiveIn |= I->second.LiveOut;
       }
 
@@ -251,7 +237,6 @@ void StackColoring::calculateLiveIntervals() {
   }
 }
 
-#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
 LLVM_DUMP_METHOD void StackColoring::dumpAllocas() {
   dbgs() << "Allocas:\n";
   for (unsigned AllocaNo = 0; AllocaNo < NumAllocas; ++AllocaNo)
@@ -278,10 +263,9 @@ LLVM_DUMP_METHOD void StackColoring::dumpLiveRanges() {
     dbgs() << "  " << AllocaNo << ": " << Range << "\n";
   }
 }
-#endif
 
 void StackColoring::run() {
-  LLVM_DEBUG(dumpAllocas());
+  DEBUG(dumpAllocas());
 
   for (unsigned I = 0; I < NumAllocas; ++I)
     AllocaNumbering[Allocas[I]] = I;
@@ -304,7 +288,7 @@ void StackColoring::run() {
       LiveRanges[I] = getFullLiveRange();
 
   calculateLocalLiveness();
-  LLVM_DEBUG(dumpBlockLiveness());
+  DEBUG(dumpBlockLiveness());
   calculateLiveIntervals();
-  LLVM_DEBUG(dumpLiveRanges());
+  DEBUG(dumpLiveRanges());
 }

@@ -1,8 +1,9 @@
 //===-LTOBackend.h - LLVM Link Time Optimizer Backend ---------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -33,15 +34,14 @@ class Target;
 
 namespace lto {
 
-/// Runs a regular LTO backend. The regular LTO backend can also act as the
-/// regular LTO phase of ThinLTO, which may need to access the combined index.
-Error backend(const Config &C, AddStreamFn AddStream,
+/// Runs a regular LTO backend.
+Error backend(Config &C, AddStreamFn AddStream,
               unsigned ParallelCodeGenParallelismLevel,
-              std::unique_ptr<Module> M, ModuleSummaryIndex &CombinedIndex);
+              std::unique_ptr<Module> M);
 
 /// Runs a ThinLTO backend.
-Error thinBackend(const Config &C, unsigned Task, AddStreamFn AddStream,
-                  Module &M, const ModuleSummaryIndex &CombinedIndex,
+Error thinBackend(Config &C, unsigned Task, AddStreamFn AddStream, Module &M,
+                  ModuleSummaryIndex &CombinedIndex,
                   const FunctionImporter::ImportMapTy &ImportList,
                   const GVSummaryMapTy &DefinedGlobals,
                   MapVector<StringRef, BitcodeModule> &ModuleMap);

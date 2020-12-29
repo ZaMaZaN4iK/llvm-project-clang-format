@@ -1,8 +1,9 @@
 //===-- NVPTXImageOptimizer.cpp - Image optimization pass -----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source 
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,7 +19,6 @@
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/IntrinsicsNVPTX.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
 
@@ -96,7 +96,9 @@ bool NVPTXImageOptimizer::replaceIsTypePSampler(Instruction &I) {
     // This is an OpenCL sampler, so it must be a samplerref
     replaceWith(&I, ConstantInt::getTrue(I.getContext()));
     return true;
-  } else if (isImage(*TexHandle)) {
+  } else if (isImageWriteOnly(*TexHandle) ||
+             isImageReadWrite(*TexHandle) ||
+             isImageReadOnly(*TexHandle)) {
     // This is an OpenCL image, so it cannot be a samplerref
     replaceWith(&I, ConstantInt::getFalse(I.getContext()));
     return true;

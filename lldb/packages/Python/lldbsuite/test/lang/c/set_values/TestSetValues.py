@@ -1,7 +1,10 @@
 """Test settings and readings of program variables."""
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -25,7 +28,7 @@ class SetValuesTestCase(TestBase):
     def test(self):
         """Test settings and readings of program variables."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Set breakpoints on several places to set program variables.

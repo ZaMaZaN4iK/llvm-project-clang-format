@@ -1,10 +1,10 @@
 // RUN: not llvm-mc -arch=amdgcn -show-encoding %s | FileCheck %s --check-prefix=GCN --check-prefix=SI --check-prefix=SICI
-// RUN: not llvm-mc -arch=amdgcn -mcpu=tahiti -show-encoding %s | FileCheck %s --check-prefix=GCN --check-prefix=SI --check-prefix=SICI
+// RUN: not llvm-mc -arch=amdgcn -mcpu=SI -show-encoding %s | FileCheck %s --check-prefix=GCN --check-prefix=SI --check-prefix=SICI
 // RUN: not llvm-mc -arch=amdgcn -mcpu=bonaire -show-encoding %s | FileCheck %s --check-prefix=GCN --check-prefix=SICI --check-prefix=CIVI
 // RUN: not llvm-mc -arch=amdgcn -mcpu=tonga -show-encoding %s | FileCheck %s --check-prefix=GCN --check-prefix=CIVI --check-prefix=VI
 
 // RUN: not llvm-mc -arch=amdgcn -show-encoding %s 2>&1 | FileCheck %s --check-prefix=NOSI --check-prefix=NOSICI
-// RUN: not llvm-mc -arch=amdgcn -mcpu=tahiti -show-encoding %s 2>&1 | FileCheck %s --check-prefix=NOSI --check-prefix=NOSICI
+// RUN: not llvm-mc -arch=amdgcn -mcpu=SI -show-encoding %s 2>&1 | FileCheck %s --check-prefix=NOSI --check-prefix=NOSICI
 // RUN: not llvm-mc -arch=amdgcn -mcpu=bonaire -show-encoding %s 2>&1 | FileCheck %s --check-prefix=NOSICI
 // RUN: not llvm-mc -arch=amdgcn -mcpu=tonga -show-encoding %s 2>&1 | FileCheck %s -check-prefix=NOVI
 
@@ -56,7 +56,7 @@ v_cvt_u32_f32_e32 v1, v2
 v_cvt_i32_f32_e32 v1, v2
 
 // SICI: v_mov_fed_b32_e32 v1, v2 ; encoding: [0x02,0x13,0x02,0x7e]
-// VI:   v_mov_fed_b32_e32 v1, v2 ; encoding: [0x02,0x13,0x02,0x7e]
+// NOVI: error: instruction not supported on this GPU
 v_mov_fed_b32_e32 v1, v2
 
 // GCN: v_cvt_f16_f32_e32 v1, v2 ; encoding: [0x02,0x15,0x02,0x7e]
@@ -272,10 +272,6 @@ v_movrels_b32_e32 v1, v2
 // SICI: v_movrelsd_b32_e32 v1, v2 ; encoding: [0x02,0x89,0x02,0x7e]
 // VI:   v_movrelsd_b32_e32 v1, v2 ; encoding: [0x02,0x71,0x02,0x7e]
 v_movrelsd_b32_e32 v1, v2
-
-// NOSICI: error: invalid operand for instruction
-// NOVI: error: invalid operand for instruction
-v_movrelsd_b32_e32 v1, s2
 
 // NOSI: error: instruction not supported on this GPU
 // NOSI: v_log_legacy_f32 v1, v2

@@ -1,8 +1,9 @@
 //===--------------------------- cxxabi.h ---------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,7 +12,7 @@
 
 /*
  * This header provides the interface to the C++ ABI as defined at:
- *       https://itanium-cxx-abi.github.io/cxx-abi/
+ *       http://www.codesourcery.com/cxx-abi/
  */
 
 #include <stddef.h>
@@ -20,7 +21,7 @@
 #include <__cxxabi_config.h>
 
 #define _LIBCPPABI_VERSION 1002
-#define _LIBCXXABI_NORETURN  __attribute__((noreturn))
+#define LIBCXXABI_NORETURN  __attribute__((noreturn))
 
 #ifdef __cplusplus
 
@@ -44,7 +45,7 @@ extern _LIBCXXABI_FUNC_VIS void
 __cxa_free_exception(void *thrown_exception) throw();
 
 // 2.4.3 Throwing the Exception Object
-extern _LIBCXXABI_FUNC_VIS _LIBCXXABI_NORETURN void
+extern _LIBCXXABI_FUNC_VIS LIBCXXABI_NORETURN void
 __cxa_throw(void *thrown_exception, std::type_info *tinfo,
             void (*dest)(void *));
 
@@ -54,7 +55,7 @@ __cxa_get_exception_ptr(void *exceptionObject) throw();
 extern _LIBCXXABI_FUNC_VIS void *
 __cxa_begin_catch(void *exceptionObject) throw();
 extern _LIBCXXABI_FUNC_VIS void __cxa_end_catch();
-#if defined(_LIBCXXABI_ARM_EHABI)
+#if LIBCXXABI_ARM_EHABI
 extern _LIBCXXABI_FUNC_VIS bool
 __cxa_begin_cleanup(void *exceptionObject) throw();
 extern _LIBCXXABI_FUNC_VIS void __cxa_end_cleanup();
@@ -62,22 +63,22 @@ extern _LIBCXXABI_FUNC_VIS void __cxa_end_cleanup();
 extern _LIBCXXABI_FUNC_VIS std::type_info *__cxa_current_exception_type();
 
 // 2.5.4 Rethrowing Exceptions
-extern _LIBCXXABI_FUNC_VIS _LIBCXXABI_NORETURN void __cxa_rethrow();
+extern _LIBCXXABI_FUNC_VIS LIBCXXABI_NORETURN void __cxa_rethrow();
 
 // 2.6 Auxiliary Runtime APIs
-extern _LIBCXXABI_FUNC_VIS _LIBCXXABI_NORETURN void __cxa_bad_cast(void);
-extern _LIBCXXABI_FUNC_VIS _LIBCXXABI_NORETURN void __cxa_bad_typeid(void);
-extern _LIBCXXABI_FUNC_VIS _LIBCXXABI_NORETURN void
+extern _LIBCXXABI_FUNC_VIS LIBCXXABI_NORETURN void __cxa_bad_cast(void);
+extern _LIBCXXABI_FUNC_VIS LIBCXXABI_NORETURN void __cxa_bad_typeid(void);
+extern _LIBCXXABI_FUNC_VIS LIBCXXABI_NORETURN void
 __cxa_throw_bad_array_new_length(void);
 
 // 3.2.6 Pure Virtual Function API
-extern _LIBCXXABI_FUNC_VIS _LIBCXXABI_NORETURN void __cxa_pure_virtual(void);
+extern _LIBCXXABI_FUNC_VIS LIBCXXABI_NORETURN void __cxa_pure_virtual(void);
 
 // 3.2.7 Deleted Virtual Function API
-extern _LIBCXXABI_FUNC_VIS _LIBCXXABI_NORETURN void __cxa_deleted_virtual(void);
+extern _LIBCXXABI_FUNC_VIS LIBCXXABI_NORETURN void __cxa_deleted_virtual(void);
 
 // 3.3.2 One-time Construction API
-#if defined(_LIBCXXABI_GUARD_ABI_ARM)
+#ifdef __arm__
 extern _LIBCXXABI_FUNC_VIS int __cxa_guard_acquire(uint32_t *);
 extern _LIBCXXABI_FUNC_VIS void __cxa_guard_release(uint32_t *);
 extern _LIBCXXABI_FUNC_VIS void __cxa_guard_abort(uint32_t *);
@@ -159,8 +160,8 @@ __cxa_decrement_exception_refcount(void *primary_exception) throw();
 extern _LIBCXXABI_FUNC_VIS bool __cxa_uncaught_exception() throw();
 extern _LIBCXXABI_FUNC_VIS unsigned int __cxa_uncaught_exceptions() throw();
 
-#if defined(__linux__) || defined(__Fuchsia__)
-// Linux and Fuchsia TLS support. Not yet an official part of the Itanium ABI.
+#ifdef __linux__
+// Linux TLS support. Not yet an official part of the Itanium ABI.
 // https://sourceware.org/glibc/wiki/Destructor%20support%20for%20thread_local%20variables
 extern _LIBCXXABI_FUNC_VIS int __cxa_thread_atexit(void (*)(void *), void *,
                                                    void *) throw();

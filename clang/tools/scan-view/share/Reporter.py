@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """Methods for reporting bugs."""
 
 import subprocess, sys, os
@@ -16,7 +13,7 @@ class ReportFailure(Exception):
 
 # Collect information about a bug.
 
-class BugReport(object):
+class BugReport:
     def __init__(self, title, description, files):
         self.title = title
         self.description = description
@@ -37,7 +34,7 @@ from email.mime.text import MIMEText
 # ReporterParameter
 #===------------------------------------------------------------------------===#
 
-class ReporterParameter(object):
+class ReporterParameter:
   def __init__(self, n):
     self.name = n
   def getName(self):
@@ -75,12 +72,12 @@ class SelectionParameter (ReporterParameter):
 # Reporters
 #===------------------------------------------------------------------------===#
 
-class EmailReporter(object):
+class EmailReporter:
     def getName(self):
         return 'Email'
 
     def getParameters(self):
-        return [TextParameter(x) for x in ['To', 'From', 'SMTP Server', 'SMTP Port']]
+        return map(lambda x:TextParameter(x),['To', 'From', 'SMTP Server', 'SMTP Port'])
 
     # Lifted from python email module examples.
     def attachFile(self, outer, path):
@@ -143,12 +140,12 @@ Description: %s
 
         return "Message sent!"
 
-class BugzillaReporter(object):
+class BugzillaReporter:
     def getName(self):
         return 'Bugzilla'
     
     def getParameters(self):
-        return [TextParameter(x) for x in ['URL','Product']]
+        return map(lambda x:TextParameter(x),['URL','Product'])
 
     def fileReport(self, report, parameters):
         raise NotImplementedError
@@ -174,7 +171,7 @@ class RadarClassificationParameter(SelectionParameter):
     else:
       return '7'
 
-class RadarReporter(object):
+class RadarReporter:
     @staticmethod
     def isAvailable():
         # FIXME: Find this .scpt better
@@ -211,7 +208,7 @@ class RadarReporter(object):
 
         script = os.path.join(os.path.dirname(__file__),'../share/scan-view/FileRadar.scpt')
         args = ['osascript', script, component, componentVersion, classification, personID, report.title,
-                report.description, diagnosis, config] + [os.path.abspath(f) for f in report.files]
+                report.description, diagnosis, config] + map(os.path.abspath, report.files)
 #        print >>sys.stderr, args
         try:
           p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

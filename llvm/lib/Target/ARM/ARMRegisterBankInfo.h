@@ -1,8 +1,9 @@
 //===- ARMRegisterBankInfo ---------------------------------------*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -15,28 +16,26 @@
 
 #include "llvm/CodeGen/GlobalISel/RegisterBankInfo.h"
 
-#define GET_REGBANK_DECLARATIONS
-#include "ARMGenRegisterBank.inc"
-
 namespace llvm {
 
 class TargetRegisterInfo;
 
-class ARMGenRegisterBankInfo : public RegisterBankInfo {
-#define GET_TARGET_REGBANK_CLASS
-#include "ARMGenRegisterBank.inc"
+namespace ARM {
+enum {
+  GPRRegBankID = 0, // General purpose registers
+  NumRegisterBanks,
 };
+} // end namespace ARM
 
 /// This class provides the information for the target register banks.
-class ARMRegisterBankInfo final : public ARMGenRegisterBankInfo {
+class ARMRegisterBankInfo final : public RegisterBankInfo {
 public:
   ARMRegisterBankInfo(const TargetRegisterInfo &TRI);
 
-  const RegisterBank &getRegBankFromRegClass(const TargetRegisterClass &RC,
-                                             LLT) const override;
+  const RegisterBank &
+  getRegBankFromRegClass(const TargetRegisterClass &RC) const override;
 
-  const InstructionMapping &
-  getInstrMapping(const MachineInstr &MI) const override;
+  InstructionMapping getInstrMapping(const MachineInstr &MI) const override;
 };
 } // End llvm namespace.
 #endif

@@ -1,8 +1,9 @@
 //====- Internalize.h - Internalization API ---------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                      The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,11 +22,11 @@
 #ifndef LLVM_TRANSFORMS_IPO_INTERNALIZE_H
 #define LLVM_TRANSFORMS_IPO_INTERNALIZE_H
 
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/PassManager.h"
 #include <functional>
+#include <set>
 
 namespace llvm {
 class Module;
@@ -44,11 +45,11 @@ class InternalizePass : public PassInfoMixin<InternalizePass> {
   /// Internalize GV if it is possible to do so, i.e. it is not externally
   /// visible and is not a member of an externally visible comdat.
   bool maybeInternalize(GlobalValue &GV,
-                        const DenseSet<const Comdat *> &ExternalComdats);
+                        const std::set<const Comdat *> &ExternalComdats);
   /// If GV is part of a comdat and is externally visible, keep track of its
   /// comdat so that we don't internalize any of its members.
   void checkComdatVisibility(GlobalValue &GV,
-                             DenseSet<const Comdat *> &ExternalComdats);
+                             std::set<const Comdat *> &ExternalComdats);
 
 public:
   InternalizePass();

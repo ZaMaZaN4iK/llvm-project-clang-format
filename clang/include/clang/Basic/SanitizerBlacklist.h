@@ -1,8 +1,9 @@
 //===--- SanitizerBlacklist.h - Blacklist for sanitizers --------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,30 +15,29 @@
 #define LLVM_CLANG_BASIC_SANITIZERBLACKLIST_H
 
 #include "clang/Basic/LLVM.h"
-#include "clang/Basic/SanitizerSpecialCaseList.h"
-#include "clang/Basic/Sanitizers.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/SpecialCaseList.h"
 #include <memory>
 
 namespace clang {
 
 class SanitizerBlacklist {
-  std::unique_ptr<SanitizerSpecialCaseList> SSCL;
+  std::unique_ptr<llvm::SpecialCaseList> SCL;
   SourceManager &SM;
 
 public:
   SanitizerBlacklist(const std::vector<std::string> &BlacklistPaths,
                      SourceManager &SM);
-  bool isBlacklistedGlobal(SanitizerMask Mask, StringRef GlobalName,
+  bool isBlacklistedGlobal(StringRef GlobalName,
                            StringRef Category = StringRef()) const;
-  bool isBlacklistedType(SanitizerMask Mask, StringRef MangledTypeName,
+  bool isBlacklistedType(StringRef MangledTypeName,
                          StringRef Category = StringRef()) const;
-  bool isBlacklistedFunction(SanitizerMask Mask, StringRef FunctionName) const;
-  bool isBlacklistedFile(SanitizerMask Mask, StringRef FileName,
+  bool isBlacklistedFunction(StringRef FunctionName) const;
+  bool isBlacklistedFile(StringRef FileName,
                          StringRef Category = StringRef()) const;
-  bool isBlacklistedLocation(SanitizerMask Mask, SourceLocation Loc,
+  bool isBlacklistedLocation(SourceLocation Loc,
                              StringRef Category = StringRef()) const;
 };
 

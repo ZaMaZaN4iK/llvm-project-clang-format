@@ -1,15 +1,16 @@
 //===-- LockFileBase.h ------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_Host_LockFileBase_h_
 #define liblldb_Host_LockFileBase_h_
 
-#include "lldb/Utility/Status.h"
+#include "lldb/Core/Error.h"
 
 #include <functional>
 
@@ -21,30 +22,30 @@ public:
 
   bool IsLocked() const;
 
-  Status WriteLock(const uint64_t start, const uint64_t len);
-  Status TryWriteLock(const uint64_t start, const uint64_t len);
+  Error WriteLock(const uint64_t start, const uint64_t len);
+  Error TryWriteLock(const uint64_t start, const uint64_t len);
 
-  Status ReadLock(const uint64_t start, const uint64_t len);
-  Status TryReadLock(const uint64_t start, const uint64_t len);
+  Error ReadLock(const uint64_t start, const uint64_t len);
+  Error TryReadLock(const uint64_t start, const uint64_t len);
 
-  Status Unlock();
+  Error Unlock();
 
 protected:
-  using Locker = std::function<Status(const uint64_t, const uint64_t)>;
+  using Locker = std::function<Error(const uint64_t, const uint64_t)>;
 
   LockFileBase(int fd);
 
   virtual bool IsValidFile() const;
 
-  virtual Status DoWriteLock(const uint64_t start, const uint64_t len) = 0;
-  virtual Status DoTryWriteLock(const uint64_t start, const uint64_t len) = 0;
+  virtual Error DoWriteLock(const uint64_t start, const uint64_t len) = 0;
+  virtual Error DoTryWriteLock(const uint64_t start, const uint64_t len) = 0;
 
-  virtual Status DoReadLock(const uint64_t start, const uint64_t len) = 0;
-  virtual Status DoTryReadLock(const uint64_t start, const uint64_t len) = 0;
+  virtual Error DoReadLock(const uint64_t start, const uint64_t len) = 0;
+  virtual Error DoTryReadLock(const uint64_t start, const uint64_t len) = 0;
 
-  virtual Status DoUnlock() = 0;
+  virtual Error DoUnlock() = 0;
 
-  Status DoLock(const Locker &locker, const uint64_t start, const uint64_t len);
+  Error DoLock(const Locker &locker, const uint64_t start, const uint64_t len);
 
   int m_fd; // not owned.
   bool m_locked;

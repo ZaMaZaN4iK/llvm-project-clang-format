@@ -5,4 +5,4 @@ DummyData:
   foo:           0
 ...
 
-# CHECK: error: YAML Object File unsupported document type tag '!unsupported-tag'!
+#check error: YAML Object File unsupported document type tag '!unsupported-tag'!

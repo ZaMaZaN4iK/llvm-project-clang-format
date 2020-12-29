@@ -6,12 +6,6 @@
 // RUN:   -verify %s
 // RUN: %clang_cc1 -triple x86_64-pc-linux-gnux32 -DTEST_64BIT_X86 -fsyntax-only \
 // RUN:   -verify %s
-// RUN: %clang_cc1 -triple mips-linux-gnu -DTEST_MIPS_32 -fsyntax-only \
-// RUN:   -verify %s
-// RUN: %clang_cc1 -triple mips64-linux-gnuabin32 -DTEST_MIPS_N32 -fsyntax-only \
-// RUN:   -verify %s
-// RUN: %clang_cc1 -triple mips64-linux-gnu -DTEST_MIPS_64 -fsyntax-only \
-// RUN:   -verify %s
 
 typedef int i16_1 __attribute((mode(HI)));
 int i16_1_test[sizeof(i16_1) == 2 ? 1 : -1];
@@ -32,14 +26,14 @@ typedef unsigned unwind_word __attribute((mode(unwind_word)));
 
 int **__attribute((mode(QI)))* i32;  // expected-error{{mode attribute}}
 
-__attribute__((mode(QI))) int invalid_func() { return 1; } // expected-error{{'mode' attribute only applies to variables, enums, typedefs, and non-static data members}}
-enum invalid_enum { A1 __attribute__((mode(QI))) }; // expected-error{{'mode' attribute only applies to}}
+__attribute__((mode(QI))) int invalid_func() { return 1; } // expected-error{{'mode' attribute only applies to variables, enums, fields and typedefs}}
+enum invalid_enum { A1 __attribute__((mode(QI))) }; // expected-error{{'mode' attribute only applies to variables, enums, fields and typedefs}}
 
 typedef _Complex double c32 __attribute((mode(SC)));
 int c32_test[sizeof(c32) == 8 ? 1 : -1];
 typedef _Complex float c64 __attribute((mode(DC)));
 
-#if !defined(__ppc__) && !defined(__mips__) // Note, 'XC' mode is illegal for PPC64 and MIPS machines.
+#ifndef TEST_64BIT_PPC64 // Note, 'XC' mode is illegal for PPC64 machines.
 typedef _Complex float c80 __attribute((mode(XC)));
 #endif
 
@@ -90,15 +84,6 @@ void f_ft128_arg(long double *x);
 void f_ft128_complex_arg(_Complex long double *x);
 void test_TFtype(f128ibm *a) { f_ft128_arg (a); }
 void test_TCtype(c128ibm *a) { f_ft128_complex_arg (a); }
-#elif TEST_MIPS_32
-typedef unsigned int gcc_unwind_word __attribute__((mode(unwind_word)));
-int foo[sizeof(gcc_unwind_word) == 4 ? 1 : -1];
-#elif TEST_MIPS_N32
-typedef unsigned int gcc_unwind_word __attribute__((mode(unwind_word)));
-int foo[sizeof(gcc_unwind_word) == 8 ? 1 : -1];
-#elif TEST_MIPS_64
-typedef unsigned int gcc_unwind_word __attribute__((mode(unwind_word)));
-int foo[sizeof(gcc_unwind_word) == 8 ? 1 : -1];
 #else
 #error Unknown test architecture.
 #endif

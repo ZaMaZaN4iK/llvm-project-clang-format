@@ -1,7 +1,11 @@
 """Test stepping over and into inlined functions."""
 
+from __future__ import print_function
 
 
+import os
+import time
+import sys
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -16,9 +20,6 @@ class TestInlineStepping(TestBase):
     @expectedFailureAll(
         compiler="icc",
         bugnumber="# Not really a bug.  ICC combines two inlined functions.")
-    @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr32343")
-    @expectedFailureAll(archs=["aarch64"], oslist=["linux"],
-                        bugnumber="llvm.org/pr44057")
     def test_with_python_api(self):
         """Test stepping over and into inlined functions."""
         self.build()
@@ -31,7 +32,6 @@ class TestInlineStepping(TestBase):
         self.inline_stepping_step_over()
 
     @add_test_categories(['pyapi'])
-    @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr32343")
     def test_step_in_template_with_python_api(self):
         """Test stepping in to templated functions."""
         self.build()
@@ -145,7 +145,7 @@ class TestInlineStepping(TestBase):
 
     def inline_stepping(self):
         """Use Python APIs to test stepping over and hitting breakpoints."""
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
@@ -257,7 +257,7 @@ class TestInlineStepping(TestBase):
 
     def inline_stepping_step_over(self):
         """Use Python APIs to test stepping over and hitting breakpoints."""
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
@@ -288,7 +288,7 @@ class TestInlineStepping(TestBase):
 
     def step_in_template(self):
         """Use Python APIs to test stepping in to templated functions."""
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)

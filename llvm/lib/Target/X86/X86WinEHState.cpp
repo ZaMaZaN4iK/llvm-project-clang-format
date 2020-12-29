@@ -1,8 +1,9 @@
 //===-- X86WinEHState - Insert EH state updates for win32 exceptions ------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,10 +22,9 @@
 #include "llvm/CodeGen/WinEHFuncInfo.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/IntrinsicsX86.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
@@ -34,6 +34,10 @@ using namespace llvm;
 
 #define DEBUG_TYPE "winehstate"
 
+namespace llvm {
+void initializeWinEHStatePassPass(PassRegistry &);
+}
+
 namespace {
 const int OverdefinedState = INT_MIN;
 
@@ -41,7 +45,9 @@ class WinEHStatePass : public FunctionPass {
 public:
   static char ID; // Pass identification, replacement for typeid.
 
-  WinEHStatePass() : FunctionPass(ID) { }
+  WinEHStatePass() : FunctionPass(ID) {
+    initializeWinEHStatePassPass(*PassRegistry::getPassRegistry());
+  }
 
   bool runOnFunction(Function &Fn) override;
 
@@ -85,15 +91,15 @@ private:
   StructType *EHLinkRegistrationTy = nullptr;
   StructType *CXXEHRegistrationTy = nullptr;
   StructType *SEHRegistrationTy = nullptr;
-  FunctionCallee SetJmp3 = nullptr;
-  FunctionCallee CxxLongjmpUnwind = nullptr;
+  Constant *SetJmp3 = nullptr;
+  Constant *CxxLongjmpUnwind = nullptr;
 
   // Per-function state
   EHPersonality Personality = EHPersonality::Unknown;
   Function *PersonalityFn = nullptr;
   bool UseStackGuard = false;
-  int ParentBaseState = 0;
-  FunctionCallee SehLongjmpUnwind = nullptr;
+  int ParentBaseState;
+  Constant *SehLongjmpUnwind = nullptr;
   Constant *Cookie = nullptr;
 
   /// The stack allocation containing all EH data, including the link in the
@@ -143,12 +149,6 @@ void WinEHStatePass::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool WinEHStatePass::runOnFunction(Function &F) {
-  // Don't insert state stores or exception handler thunks for
-  // available_externally functions. The handler needs to reference the LSDA,
-  // which will not be emitted in this case.
-  if (F.hasAvailableExternallyLinkage())
-    return false;
-
   // Check the personality. Do nothing if this personality doesn't use funclets.
   if (!F.hasPersonalityFn())
     return false;
@@ -178,6 +178,11 @@ bool WinEHStatePass::runOnFunction(Function &F) {
                       Type::getInt32Ty(TheModule->getContext()),
                       {Int8PtrType, Type::getInt32Ty(TheModule->getContext())},
                       /*isVarArg=*/true));
+
+  // Disable frame pointer elimination in this function.
+  // FIXME: Do the nested handlers need to keep the parent ebp in ebp, or can we
+  // use an arbitrary register?
+  F.addFnAttr("no-frame-pointer-elim", "true");
 
   emitExceptionRegistrationRecord(&F);
 
@@ -297,7 +302,7 @@ void WinEHStatePass::emitExceptionRegistrationRecord(Function *F) {
     CxxLongjmpUnwind = TheModule->getOrInsertFunction(
         "__CxxLongjmpUnwind",
         FunctionType::get(VoidTy, Int8PtrType, /*isVarArg=*/false));
-    cast<Function>(CxxLongjmpUnwind.getCallee()->stripPointerCasts())
+    cast<Function>(CxxLongjmpUnwind->stripPointerCasts())
         ->setCallingConv(CallingConv::X86_StdCall);
   } else if (Personality == EHPersonality::MSVC_X86SEH) {
     // If _except_handler4 is in use, some additional guard checks and prologue
@@ -335,10 +340,7 @@ void WinEHStatePass::emitExceptionRegistrationRecord(Function *F) {
     if (UseStackGuard) {
       Value *Val = Builder.CreateLoad(Int32Ty, Cookie);
       Value *FrameAddr = Builder.CreateCall(
-          Intrinsic::getDeclaration(
-              TheModule, Intrinsic::frameaddress,
-              Builder.getInt8PtrTy(
-                  TheModule->getDataLayout().getAllocaAddrSpace())),
+          Intrinsic::getDeclaration(TheModule, Intrinsic::frameaddress),
           Builder.getInt32(0), "frameaddr");
       Value *FrameAddrI32 = Builder.CreatePtrToInt(FrameAddr, Int32Ty);
       FrameAddrI32 = Builder.CreateXor(FrameAddrI32, Val);
@@ -353,7 +355,7 @@ void WinEHStatePass::emitExceptionRegistrationRecord(Function *F) {
         UseStackGuard ? "_seh_longjmp_unwind4" : "_seh_longjmp_unwind",
         FunctionType::get(Type::getVoidTy(TheModule->getContext()), Int8PtrType,
                           /*isVarArg=*/false));
-    cast<Function>(SehLongjmpUnwind.getCallee()->stripPointerCasts())
+    cast<Function>(SehLongjmpUnwind->stripPointerCasts())
         ->setCallingConv(CallingConv::X86_StdCall);
   } else {
     llvm_unreachable("unexpected personality function");
@@ -361,7 +363,7 @@ void WinEHStatePass::emitExceptionRegistrationRecord(Function *F) {
 
   // Insert an unlink before all returns.
   for (BasicBlock &BB : *F) {
-    Instruction *T = BB.getTerminator();
+    TerminatorInst *T = BB.getTerminator();
     if (!isa<ReturnInst>(T))
       continue;
     Builder.SetInsertPoint(T);
@@ -396,11 +398,9 @@ Function *WinEHStatePass::generateLSDAInEAXThunk(Function *ParentFunc) {
                         /*isVarArg=*/false);
   Function *Trampoline =
       Function::Create(TrampolineTy, GlobalValue::InternalLinkage,
-                       Twine("__ehhandler$") + GlobalValue::dropLLVMManglingEscape(
+                       Twine("__ehhandler$") + GlobalValue::getRealLinkageName(
                                                    ParentFunc->getName()),
                        TheModule);
-  if (auto *C = ParentFunc->getComdat())
-    Trampoline->setComdat(C);
   BasicBlock *EntryBB = BasicBlock::Create(Context, "entry", Trampoline);
   IRBuilder<> Builder(EntryBB);
   Value *LSDA = emitEHLSDA(Builder, ParentFunc);
@@ -408,11 +408,11 @@ Function *WinEHStatePass::generateLSDAInEAXThunk(Function *ParentFunc) {
       Builder.CreateBitCast(PersonalityFn, TargetFuncTy->getPointerTo());
   auto AI = Trampoline->arg_begin();
   Value *Args[5] = {LSDA, &*AI++, &*AI++, &*AI++, &*AI++};
-  CallInst *Call = Builder.CreateCall(TargetFuncTy, CastPersonality, Args);
+  CallInst *Call = Builder.CreateCall(CastPersonality, Args);
   // Can't use musttail due to prototype mismatch, but we can use tail.
   Call->setTailCall(true);
   // Set inreg so we pass it in EAX.
-  Call->addParamAttr(0, Attribute::InReg);
+  Call->addAttribute(1, Attribute::InReg);
   Builder.CreateRet(Call);
   return Trampoline;
 }
@@ -429,7 +429,7 @@ void WinEHStatePass::linkExceptionRegistration(IRBuilder<> &Builder,
   // Next = [fs:00]
   Constant *FSZero =
       Constant::getNullValue(LinkTy->getPointerTo()->getPointerTo(257));
-  Value *Next = Builder.CreateLoad(LinkTy->getPointerTo(), FSZero);
+  Value *Next = Builder.CreateLoad(FSZero);
   Builder.CreateStore(Next, Builder.CreateStructGEP(LinkTy, Link, 0));
   // [fs:00] = Link
   Builder.CreateStore(Link, FSZero);
@@ -444,8 +444,8 @@ void WinEHStatePass::unlinkExceptionRegistration(IRBuilder<> &Builder) {
   }
   Type *LinkTy = getEHLinkRegistrationType();
   // [fs:00] = Link->Next
-  Value *Next = Builder.CreateLoad(LinkTy->getPointerTo(),
-                                   Builder.CreateStructGEP(LinkTy, Link, 0));
+  Value *Next =
+      Builder.CreateLoad(Builder.CreateStructGEP(LinkTy, Link, 0));
   Constant *FSZero =
       Constant::getNullValue(LinkTy->getPointerTo()->getPointerTo(257));
   Builder.CreateStore(Next, FSZero);
@@ -468,11 +468,11 @@ void WinEHStatePass::rewriteSetJmpCallSite(IRBuilder<> &Builder, Function &F,
 
   SmallVector<Value *, 3> OptionalArgs;
   if (Personality == EHPersonality::MSVC_CXX) {
-    OptionalArgs.push_back(CxxLongjmpUnwind.getCallee());
+    OptionalArgs.push_back(CxxLongjmpUnwind);
     OptionalArgs.push_back(State);
     OptionalArgs.push_back(emitEHLSDA(Builder, &F));
   } else if (Personality == EHPersonality::MSVC_X86SEH) {
-    OptionalArgs.push_back(SehLongjmpUnwind.getCallee());
+    OptionalArgs.push_back(SehLongjmpUnwind);
     OptionalArgs.push_back(State);
     if (UseStackGuard)
       OptionalArgs.push_back(Cookie);
@@ -687,10 +687,10 @@ void WinEHStatePass::addStateStores(Function &F, WinEHFuncInfo &FuncInfo) {
       Worklist.push_back(BB);
       continue;
     }
-    LLVM_DEBUG(dbgs() << "X86WinEHState: " << BB->getName()
-                      << " InitialState=" << InitialState << '\n');
-    LLVM_DEBUG(dbgs() << "X86WinEHState: " << BB->getName()
-                      << " FinalState=" << FinalState << '\n');
+    DEBUG(dbgs() << "X86WinEHState: " << BB->getName()
+                 << " InitialState=" << InitialState << '\n');
+    DEBUG(dbgs() << "X86WinEHState: " << BB->getName()
+                 << " FinalState=" << FinalState << '\n');
     InitialStates.insert({BB, InitialState});
     FinalStates.insert({BB, FinalState});
   }
@@ -735,8 +735,8 @@ void WinEHStatePass::addStateStores(Function &F, WinEHFuncInfo &FuncInfo) {
       continue;
 
     int PrevState = getPredState(FinalStates, F, ParentBaseState, BB);
-    LLVM_DEBUG(dbgs() << "X86WinEHState: " << BB->getName()
-                      << " PrevState=" << PrevState << '\n');
+    DEBUG(dbgs() << "X86WinEHState: " << BB->getName()
+                 << " PrevState=" << PrevState << '\n');
 
     for (Instruction &I : *BB) {
       CallSite CS(&I);
@@ -763,7 +763,7 @@ void WinEHStatePass::addStateStores(Function &F, WinEHFuncInfo &FuncInfo) {
       if (!CS)
         continue;
       if (CS.getCalledValue()->stripPointerCasts() !=
-          SetJmp3.getCallee()->stripPointerCasts())
+          SetJmp3->stripPointerCasts())
         continue;
 
       SetJmp3CallSites.push_back(CS);
@@ -778,9 +778,9 @@ void WinEHStatePass::addStateStores(Function &F, WinEHFuncInfo &FuncInfo) {
     IRBuilder<> Builder(CS.getInstruction());
     Value *State;
     if (InCleanup) {
-      Value *StateField = Builder.CreateStructGEP(RegNode->getAllocatedType(),
-                                                  RegNode, StateFieldIndex);
-      State = Builder.CreateLoad(Builder.getInt32Ty(), StateField);
+      Value *StateField =
+          Builder.CreateStructGEP(nullptr, RegNode, StateFieldIndex);
+      State = Builder.CreateLoad(StateField);
     } else {
       State = Builder.getInt32(getStateForCallSite(BlockColors, FuncInfo, CS));
     }
@@ -790,7 +790,7 @@ void WinEHStatePass::addStateStores(Function &F, WinEHFuncInfo &FuncInfo) {
 
 void WinEHStatePass::insertStateNumberStore(Instruction *IP, int State) {
   IRBuilder<> Builder(IP);
-  Value *StateField = Builder.CreateStructGEP(RegNode->getAllocatedType(),
-                                              RegNode, StateFieldIndex);
+  Value *StateField =
+      Builder.CreateStructGEP(nullptr, RegNode, StateFieldIndex);
   Builder.CreateStore(Builder.getInt32(State), StateField);
 }

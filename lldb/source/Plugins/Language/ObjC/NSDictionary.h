@@ -1,20 +1,21 @@
 //===-- NSDictionary.h ---------------------------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_NSDictionary_h_
 #define liblldb_NSDictionary_h_
 
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/DataFormatters/TypeSummary.h"
 #include "lldb/DataFormatters/TypeSynthetic.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/Stream.h"
 
 #include <map>
 #include <memory>
@@ -51,8 +52,8 @@ public:
     class Prefix : public Matcher {
     public:
       Prefix(ConstString p);
-      ~Prefix() override = default;
-      bool Match(ConstString class_name) override;
+      virtual ~Prefix() = default;
+      virtual bool Match(ConstString class_name) override;
 
     private:
       ConstString m_prefix;
@@ -60,18 +61,18 @@ public:
     class Full : public Matcher {
     public:
       Full(ConstString n);
-      ~Full() override = default;
-      bool Match(ConstString class_name) override;
+      virtual ~Full() = default;
+      virtual bool Match(ConstString class_name) override;
 
     private:
       ConstString m_name;
     };
     typedef Matcher::UP MatcherUP;
 
-    MatcherUP GetFullMatch(ConstString n) { return std::make_unique<Full>(n); }
+    MatcherUP GetFullMatch(ConstString n) { return llvm::make_unique<Full>(n); }
 
     MatcherUP GetPrefixMatch(ConstString p) {
-      return std::make_unique<Prefix>(p);
+      return llvm::make_unique<Prefix>(p);
     }
   };
 

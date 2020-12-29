@@ -1,4 +1,4 @@
 {
-  "repository.callsign" : "CRT",
+  "project_id" : "compiler-rt",
   "conduit_uri" : "https://reviews.llvm.org/"
 }

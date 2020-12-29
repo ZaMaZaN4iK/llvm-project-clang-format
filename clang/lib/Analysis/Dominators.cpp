@@ -1,19 +1,14 @@
-//===- Dominators.cpp - Implementation of dominators tree for Clang CFG ---===//
+//=- Dominators.cpp - Implementation of dominators tree for Clang CFG C++ -*-=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "clang/Analysis/Analyses/Dominators.h"
 
-namespace clang {
+using namespace clang;
 
-template <>
-void CFGDominatorTreeImpl</*IsPostDom=*/true>::anchor() {}
-
-template <>
-void CFGDominatorTreeImpl</*IsPostDom=*/false>::anchor() {}
-
-} // end of namespace clang
+void DominatorTree::anchor() { }

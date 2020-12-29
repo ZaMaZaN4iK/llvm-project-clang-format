@@ -1,8 +1,9 @@
 //===- GVN.h - Eliminate redundant values and loads -------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -17,49 +18,26 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
-#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SetVector.h"
-#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Analysis/InstructionPrecedenceTracking.h"
+#include "llvm/Analysis/AssumptionCache.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/MemoryDependenceAnalysis.h"
 #include "llvm/IR/Dominators.h"
-#include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/PassManager.h"
-#include "llvm/IR/ValueHandle.h"
-#include "llvm/Support/Allocator.h"
-#include "llvm/Support/Compiler.h"
-#include <cstdint>
-#include <utility>
-#include <vector>
 
 namespace llvm {
-
-class AssumptionCache;
-class BasicBlock;
-class BranchInst;
-class CallInst;
-class Constant;
-class ExtractValueInst;
-class Function;
-class FunctionPass;
-class IntrinsicInst;
-class LoadInst;
-class LoopInfo;
 class OptimizationRemarkEmitter;
-class PHINode;
-class TargetLibraryInfo;
-class Value;
 
 /// A private "module" namespace for types and utilities used by GVN. These
 /// are implementation details and should not be used by clients.
 namespace gvn LLVM_LIBRARY_VISIBILITY {
-
 struct AvailableValue;
 struct AvailableValueInBlock;
 class GVNLegacyPass;
-
-} // end namespace gvn
+}
 
 /// The core GVN pass object.
 ///
@@ -67,9 +45,8 @@ class GVNLegacyPass;
 /// this particular pass here.
 class GVN : public PassInfoMixin<GVN> {
 public:
-  struct Expression;
 
-  /// Run the pass over the function.
+  /// \brief Run the pass over the function.
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 
   /// This removes the specified instruction from
@@ -83,62 +60,36 @@ public:
   AliasAnalysis *getAliasAnalysis() const { return VN.getAliasAnalysis(); }
   MemoryDependenceResults &getMemDep() const { return *MD; }
 
+  struct Expression;
+
   /// This class holds the mapping between values and value numbers.  It is used
   /// as an efficient mechanism to determine the expression-wise equivalence of
   /// two values.
   class ValueTable {
     DenseMap<Value *, uint32_t> valueNumbering;
     DenseMap<Expression, uint32_t> expressionNumbering;
+    AliasAnalysis *AA;
+    MemoryDependenceResults *MD;
+    DominatorTree *DT;
 
-    // Expressions is the vector of Expression. ExprIdx is the mapping from
-    // value number to the index of Expression in Expressions. We use it
-    // instead of a DenseMap because filling such mapping is faster than
-    // filling a DenseMap and the compile time is a little better.
-    uint32_t nextExprNumber = 0;
-
-    std::vector<Expression> Expressions;
-    std::vector<uint32_t> ExprIdx;
-
-    // Value number to PHINode mapping. Used for phi-translate in scalarpre.
-    DenseMap<uint32_t, PHINode *> NumberingPhi;
-
-    // Cache for phi-translate in scalarpre.
-    using PhiTranslateMap =
-        DenseMap<std::pair<uint32_t, const BasicBlock *>, uint32_t>;
-    PhiTranslateMap PhiTranslateTable;
-
-    AliasAnalysis *AA = nullptr;
-    MemoryDependenceResults *MD = nullptr;
-    DominatorTree *DT = nullptr;
-
-    uint32_t nextValueNumber = 1;
+    uint32_t nextValueNumber;
 
     Expression createExpr(Instruction *I);
     Expression createCmpExpr(unsigned Opcode, CmpInst::Predicate Predicate,
                              Value *LHS, Value *RHS);
     Expression createExtractvalueExpr(ExtractValueInst *EI);
     uint32_t lookupOrAddCall(CallInst *C);
-    uint32_t phiTranslateImpl(const BasicBlock *BB, const BasicBlock *PhiBlock,
-                              uint32_t Num, GVN &Gvn);
-    bool areCallValsEqual(uint32_t Num, uint32_t NewNum, const BasicBlock *Pred,
-                          const BasicBlock *PhiBlock, GVN &Gvn);
-    std::pair<uint32_t, bool> assignExpNewValueNum(Expression &exp);
-    bool areAllValsInBB(uint32_t num, const BasicBlock *BB, GVN &Gvn);
 
   public:
     ValueTable();
     ValueTable(const ValueTable &Arg);
     ValueTable(ValueTable &&Arg);
     ~ValueTable();
-    ValueTable &operator=(const ValueTable &Arg);
 
     uint32_t lookupOrAdd(Value *V);
-    uint32_t lookup(Value *V, bool Verify = true) const;
+    uint32_t lookup(Value *V) const;
     uint32_t lookupOrAddCmp(unsigned Opcode, CmpInst::Predicate Pred,
                             Value *LHS, Value *RHS);
-    uint32_t phiTranslate(const BasicBlock *BB, const BasicBlock *PhiBlock,
-                          uint32_t Num, GVN &Gvn);
-    void eraseTranslateCacheEntry(uint32_t Num, const BasicBlock &CurrBlock);
     bool exists(Value *V) const;
     void add(Value *V, uint32_t num);
     void clear();
@@ -155,14 +106,12 @@ private:
   friend class gvn::GVNLegacyPass;
   friend struct DenseMapInfo<Expression>;
 
-  MemoryDependenceResults *MD = nullptr;
-  DominatorTree *DT = nullptr;
-  const TargetLibraryInfo *TLI = nullptr;
-  AssumptionCache *AC = nullptr;
+  MemoryDependenceResults *MD;
+  DominatorTree *DT;
+  const TargetLibraryInfo *TLI;
+  AssumptionCache *AC;
   SetVector<BasicBlock *> DeadBlocks;
-  OptimizationRemarkEmitter *ORE = nullptr;
-  ImplicitControlFlowTracking *ICF = nullptr;
-  LoopInfo *LI = nullptr;
+  OptimizationRemarkEmitter *ORE;
 
   ValueTable VN;
 
@@ -179,21 +128,12 @@ private:
   // Block-local map of equivalent values to their leader, does not
   // propagate to any successors. Entries added mid-block are applied
   // to the remaining instructions in the block.
-  SmallMapVector<Value *, Value *, 4> ReplaceOperandsWithMap;
+  SmallMapVector<llvm::Value *, llvm::Constant *, 4> ReplaceWithConstMap;
   SmallVector<Instruction *, 8> InstrsToErase;
 
-  // Map the block to reversed postorder traversal number. It is used to
-  // find back edge easily.
-  DenseMap<AssertingVH<BasicBlock>, uint32_t> BlockRPONumber;
-
-  // This is set 'true' initially and also when new blocks have been added to
-  // the function being analyzed. This boolean is used to control the updating
-  // of BlockRPONumber prior to accessing the contents of BlockRPONumber.
-  bool InvalidBlockRPONumbers = true;
-
-  using LoadDepVect = SmallVector<NonLocalDepResult, 64>;
-  using AvailValInBlkVect = SmallVector<gvn::AvailableValueInBlock, 64>;
-  using UnavailBlkVect = SmallVector<BasicBlock *, 64>;
+  typedef SmallVector<NonLocalDepResult, 64> LoadDepVect;
+  typedef SmallVector<gvn::AvailableValueInBlock, 64> AvailValInBlkVect;
+  typedef SmallVector<BasicBlock *, 64> UnavailBlkVect;
 
   bool runImpl(Function &F, AssumptionCache &RunAC, DominatorTree &RunDT,
                const TargetLibraryInfo &RunTLI, AAResults &RunAA,
@@ -246,71 +186,59 @@ private:
   }
 
   // List of critical edges to be split between iterations.
-  SmallVector<std::pair<Instruction *, unsigned>, 4> toSplit;
+  SmallVector<std::pair<TerminatorInst *, unsigned>, 4> toSplit;
 
   // Helper functions of redundant load elimination
   bool processLoad(LoadInst *L);
   bool processNonLocalLoad(LoadInst *L);
   bool processAssumeIntrinsic(IntrinsicInst *II);
-
   /// Given a local dependency (Def or Clobber) determine if a value is
   /// available for the load.  Returns true if an value is known to be
   /// available and populates Res.  Returns false otherwise.
   bool AnalyzeLoadAvailability(LoadInst *LI, MemDepResult DepInfo,
                                Value *Address, gvn::AvailableValue &Res);
-
   /// Given a list of non-local dependencies, determine if a value is
   /// available for the load in each specified block.  If it is, add it to
   /// ValuesPerBlock.  If not, add it to UnavailableBlocks.
   void AnalyzeLoadAvailability(LoadInst *LI, LoadDepVect &Deps,
                                AvailValInBlkVect &ValuesPerBlock,
                                UnavailBlkVect &UnavailableBlocks);
-
   bool PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
                       UnavailBlkVect &UnavailableBlocks);
 
   // Other helper routines
   bool processInstruction(Instruction *I);
   bool processBlock(BasicBlock *BB);
-  void dump(DenseMap<uint32_t, Value *> &d) const;
+  void dump(DenseMap<uint32_t, Value *> &d);
   bool iterateOnFunction(Function &F);
   bool performPRE(Function &F);
   bool performScalarPRE(Instruction *I);
   bool performScalarPREInsertion(Instruction *Instr, BasicBlock *Pred,
-                                 BasicBlock *Curr, unsigned int ValNo);
+                                 unsigned int ValNo);
   Value *findLeader(const BasicBlock *BB, uint32_t num);
   void cleanupGlobalSets();
-  void fillImplicitControlFlowInfo(BasicBlock *BB);
   void verifyRemoved(const Instruction *I) const;
   bool splitCriticalEdges();
   BasicBlock *splitCriticalEdges(BasicBlock *Pred, BasicBlock *Succ);
-  bool replaceOperandsForInBlockEquality(Instruction *I) const;
+  bool replaceOperandsWithConsts(Instruction *I) const;
   bool propagateEquality(Value *LHS, Value *RHS, const BasicBlockEdge &Root,
                          bool DominatesByEdge);
   bool processFoldableCondBr(BranchInst *BI);
   void addDeadBlock(BasicBlock *BB);
   void assignValNumForDeadCode();
-  void assignBlockRPONumber(Function &F);
 };
 
 /// Create a legacy GVN pass. This also allows parameterizing whether or not
-/// MemDep is enabled.
-FunctionPass *createGVNPass(bool NoMemDepAnalysis = false);
+/// loads are eliminated by the pass.
+FunctionPass *createGVNPass(bool NoLoads = false);
 
-/// A simple and fast domtree-based GVN pass to hoist common expressions
+/// \brief A simple and fast domtree-based GVN pass to hoist common expressions
 /// from sibling branches.
 struct GVNHoistPass : PassInfoMixin<GVNHoistPass> {
-  /// Run the pass over the function.
+  /// \brief Run the pass over the function.
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 
-/// Uses an "inverted" value numbering to decide the similarity of
-/// expressions and sinks similar expressions into successors.
-struct GVNSinkPass : PassInfoMixin<GVNSinkPass> {
-  /// Run the pass over the function.
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-};
+}
 
-} // end namespace llvm
-
-#endif // LLVM_TRANSFORMS_SCALAR_GVN_H
+#endif

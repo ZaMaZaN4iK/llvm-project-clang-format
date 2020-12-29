@@ -1,8 +1,9 @@
 //===-- BlockInCriticalSectionChecker.cpp -----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,7 +15,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
@@ -25,21 +26,12 @@ using namespace ento;
 
 namespace {
 
-class BlockInCriticalSectionChecker : public Checker<check::PostCall> {
+class BlockInCriticalSectionChecker : public Checker<check::PostCall,
+                                                     check::PreCall> {
 
-  mutable IdentifierInfo *IILockGuard, *IIUniqueLock;
-
-  CallDescription LockFn, UnlockFn, SleepFn, GetcFn, FgetsFn, ReadFn, RecvFn,
-                  PthreadLockFn, PthreadTryLockFn, PthreadUnlockFn,
-                  MtxLock, MtxTimedLock, MtxTryLock, MtxUnlock;
-
-  StringRef ClassLockGuard, ClassUniqueLock;
-
-  mutable bool IdentifierInfoInitialized;
+  CallDescription LockFn, UnlockFn, SleepFn, GetcFn, FgetsFn, ReadFn, RecvFn;
 
   std::unique_ptr<BugType> BlockInCritSectionBugType;
-
-  void initIdentifierInfo(ASTContext &Ctx) const;
 
   void reportBlockInCritSection(SymbolRef FileDescSym,
                                 const CallEvent &call,
@@ -48,14 +40,13 @@ class BlockInCriticalSectionChecker : public Checker<check::PostCall> {
 public:
   BlockInCriticalSectionChecker();
 
-  bool isBlockingFunction(const CallEvent &Call) const;
-  bool isLockFunction(const CallEvent &Call) const;
-  bool isUnlockFunction(const CallEvent &Call) const;
+  void checkPreCall(const CallEvent &Call, CheckerContext &C) const;
 
   /// Process unlock.
   /// Process lock.
   /// Process blocking functions (sleep, getc, fgets, read, recv)
   void checkPostCall(const CallEvent &Call, CheckerContext &C) const;
+
 };
 
 } // end anonymous namespace
@@ -63,98 +54,35 @@ public:
 REGISTER_TRAIT_WITH_PROGRAMSTATE(MutexCounter, unsigned)
 
 BlockInCriticalSectionChecker::BlockInCriticalSectionChecker()
-    : IILockGuard(nullptr), IIUniqueLock(nullptr),
-      LockFn("lock"), UnlockFn("unlock"), SleepFn("sleep"), GetcFn("getc"),
-      FgetsFn("fgets"), ReadFn("read"), RecvFn("recv"),
-      PthreadLockFn("pthread_mutex_lock"),
-      PthreadTryLockFn("pthread_mutex_trylock"),
-      PthreadUnlockFn("pthread_mutex_unlock"),
-      MtxLock("mtx_lock"),
-      MtxTimedLock("mtx_timedlock"),
-      MtxTryLock("mtx_trylock"),
-      MtxUnlock("mtx_unlock"),
-      ClassLockGuard("lock_guard"),
-      ClassUniqueLock("unique_lock"),
-      IdentifierInfoInitialized(false) {
+    : LockFn("lock"), UnlockFn("unlock"), SleepFn("sleep"), GetcFn("getc"),
+      FgetsFn("fgets"), ReadFn("read"), RecvFn("recv") {
   // Initialize the bug type.
   BlockInCritSectionBugType.reset(
       new BugType(this, "Call to blocking function in critical section",
                         "Blocking Error"));
 }
 
-void BlockInCriticalSectionChecker::initIdentifierInfo(ASTContext &Ctx) const {
-  if (!IdentifierInfoInitialized) {
-    /* In case of checking C code, or when the corresponding headers are not
-     * included, we might end up query the identifier table every time when this
-     * function is called instead of early returning it. To avoid this, a bool
-     * variable (IdentifierInfoInitialized) is used and the function will be run
-     * only once. */
-    IILockGuard  = &Ctx.Idents.get(ClassLockGuard);
-    IIUniqueLock = &Ctx.Idents.get(ClassUniqueLock);
-    IdentifierInfoInitialized = true;
-  }
-}
-
-bool BlockInCriticalSectionChecker::isBlockingFunction(const CallEvent &Call) const {
-  if (Call.isCalled(SleepFn)
-      || Call.isCalled(GetcFn)
-      || Call.isCalled(FgetsFn)
-      || Call.isCalled(ReadFn)
-      || Call.isCalled(RecvFn)) {
-    return true;
-  }
-  return false;
-}
-
-bool BlockInCriticalSectionChecker::isLockFunction(const CallEvent &Call) const {
-  if (const auto *Ctor = dyn_cast<CXXConstructorCall>(&Call)) {
-    auto IdentifierInfo = Ctor->getDecl()->getParent()->getIdentifier();
-    if (IdentifierInfo == IILockGuard || IdentifierInfo == IIUniqueLock)
-      return true;
-  }
-
-  if (Call.isCalled(LockFn)
-      || Call.isCalled(PthreadLockFn)
-      || Call.isCalled(PthreadTryLockFn)
-      || Call.isCalled(MtxLock)
-      || Call.isCalled(MtxTimedLock)
-      || Call.isCalled(MtxTryLock)) {
-    return true;
-  }
-  return false;
-}
-
-bool BlockInCriticalSectionChecker::isUnlockFunction(const CallEvent &Call) const {
-  if (const auto *Dtor = dyn_cast<CXXDestructorCall>(&Call)) {
-    const auto *DRecordDecl = cast<CXXRecordDecl>(Dtor->getDecl()->getParent());
-    auto IdentifierInfo = DRecordDecl->getIdentifier();
-    if (IdentifierInfo == IILockGuard || IdentifierInfo == IIUniqueLock)
-      return true;
-  }
-
-  if (Call.isCalled(UnlockFn)
-       || Call.isCalled(PthreadUnlockFn)
-       || Call.isCalled(MtxUnlock)) {
-    return true;
-  }
-  return false;
+void BlockInCriticalSectionChecker::checkPreCall(const CallEvent &Call,
+                                                 CheckerContext &C) const {
 }
 
 void BlockInCriticalSectionChecker::checkPostCall(const CallEvent &Call,
                                                   CheckerContext &C) const {
-  initIdentifierInfo(C.getASTContext());
-
-  if (!isBlockingFunction(Call)
-      && !isLockFunction(Call)
-      && !isUnlockFunction(Call))
+  if (!Call.isCalled(LockFn)
+      && !Call.isCalled(SleepFn)
+      && !Call.isCalled(GetcFn)
+      && !Call.isCalled(FgetsFn)
+      && !Call.isCalled(ReadFn)
+      && !Call.isCalled(RecvFn)
+      && !Call.isCalled(UnlockFn))
     return;
 
   ProgramStateRef State = C.getState();
   unsigned mutexCount = State->get<MutexCounter>();
-  if (isUnlockFunction(Call) && mutexCount > 0) {
+  if (Call.isCalled(UnlockFn) && mutexCount > 0) {
     State = State->set<MutexCounter>(--mutexCount);
     C.addTransition(State);
-  } else if (isLockFunction(Call)) {
+  } else if (Call.isCalled(LockFn)) {
     State = State->set<MutexCounter>(++mutexCount);
     C.addTransition(State);
   } else if (mutexCount > 0) {
@@ -169,12 +97,8 @@ void BlockInCriticalSectionChecker::reportBlockInCritSection(
   if (!ErrNode)
     return;
 
-  std::string msg;
-  llvm::raw_string_ostream os(msg);
-  os << "Call to blocking function '" << Call.getCalleeIdentifier()->getName()
-     << "' inside of critical section";
-  auto R = std::make_unique<PathSensitiveBugReport>(*BlockInCritSectionBugType,
-                                                    os.str(), ErrNode);
+  auto R = llvm::make_unique<BugReport>(*BlockInCritSectionBugType,
+      "A blocking function %s is called inside a critical section.", ErrNode);
   R->addRange(Call.getSourceRange());
   R->markInteresting(BlockDescSym);
   C.emitReport(std::move(R));
@@ -182,8 +106,4 @@ void BlockInCriticalSectionChecker::reportBlockInCritSection(
 
 void ento::registerBlockInCriticalSectionChecker(CheckerManager &mgr) {
   mgr.registerChecker<BlockInCriticalSectionChecker>();
-}
-
-bool ento::shouldRegisterBlockInCriticalSectionChecker(const LangOptions &LO) {
-  return true;
 }

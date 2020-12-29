@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,27 +11,13 @@
 
 // template<ForwardIterator Iter1, ForwardIterator Iter2>
 //   requires HasEqualTo<Iter1::value_type, Iter2::value_type>
-//   constexpr Iter1     // constexpr after C++17
+//   Iter1
 //   search(Iter1 first1, Iter1 last1, Iter2 first2, Iter2 last2);
 
 #include <algorithm>
 #include <cassert>
 
-#include "test_macros.h"
 #include "test_iterators.h"
-
-#if TEST_STD_VER > 17
-TEST_CONSTEXPR bool eq(int a, int b) { return a == b; }
-
-TEST_CONSTEXPR bool test_constexpr() {
-    int ia[] = {0, 1, 2, 3};
-    int ib[] = {0, 1, 5, 3};
-    int ic[] = {0, 1, 2, 0, 1, 2, 3, 0, 1, 2, 3, 4};
-    return    (std::search(std::begin(ic), std::end(ic), std::begin(ia), std::end(ia), eq) == ic+3)
-           && (std::search(std::begin(ic), std::end(ic), std::begin(ib), std::end(ib), eq) == std::end(ic))
-           ;
-    }
-#endif
 
 struct count_equal
 {
@@ -110,7 +97,7 @@ test()
     assert(count_equal::count <= sh*3);
 }
 
-int main(int, char**)
+int main()
 {
     test<forward_iterator<const int*>, forward_iterator<const int*> >();
     test<forward_iterator<const int*>, bidirectional_iterator<const int*> >();
@@ -121,10 +108,4 @@ int main(int, char**)
     test<random_access_iterator<const int*>, forward_iterator<const int*> >();
     test<random_access_iterator<const int*>, bidirectional_iterator<const int*> >();
     test<random_access_iterator<const int*>, random_access_iterator<const int*> >();
-
-#if TEST_STD_VER > 17
-    static_assert(test_constexpr());
-#endif
-
-  return 0;
 }

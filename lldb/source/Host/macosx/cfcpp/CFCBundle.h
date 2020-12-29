@@ -1,8 +1,9 @@
 //===-- CFCBundle.h ---------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,7 +14,9 @@
 
 class CFCBundle : public CFCReleaser<CFBundleRef> {
 public:
+  //------------------------------------------------------------------
   // Constructors and Destructors
+  //------------------------------------------------------------------
   CFCBundle(const char *path = NULL);
   CFCBundle(CFURLRef url);
 
@@ -31,9 +34,9 @@ public:
 
 private:
   // Disallow copy and assignment constructors
-  CFCBundle(const CFCBundle &) = delete;
+  CFCBundle(const CFCBundle &);
 
-  const CFCBundle &operator=(const CFCBundle &) = delete;
+  const CFCBundle &operator=(const CFCBundle &);
 };
 
 #endif // #ifndef CoreFoundationCPP_CFBundle_h_

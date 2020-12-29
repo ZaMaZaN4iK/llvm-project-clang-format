@@ -1,8 +1,9 @@
 //===-- AVRAsmPrinter.cpp - AVR LLVM assembly writer ----------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,14 +15,11 @@
 #include "AVR.h"
 #include "AVRMCInstLower.h"
 #include "AVRSubtarget.h"
-#include "MCTargetDesc/AVRInstPrinter.h"
-#include "TargetInfo/AVRTargetInfo.h"
+#include "InstPrinter/AVRInstPrinter.h"
 
 #include "llvm/CodeGen/AsmPrinter.h"
-#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/IR/Mangler.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCStreamer.h"
@@ -29,6 +27,8 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 
 #define DEBUG_TYPE "avr-asm-printer"
 
@@ -43,13 +43,16 @@ public:
 
   StringRef getPassName() const override { return "AVR Assembly Printer"; }
 
-  void printOperand(const MachineInstr *MI, unsigned OpNo, raw_ostream &O);
+  void printOperand(const MachineInstr *MI, unsigned OpNo, raw_ostream &O,
+                    const char *Modifier = 0);
 
   bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNum,
-                       const char *ExtraCode, raw_ostream &O) override;
+                       unsigned AsmVariant, const char *ExtraCode,
+                       raw_ostream &O) override;
 
   bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNum,
-                             const char *ExtraCode, raw_ostream &O) override;
+                             unsigned AsmVariant, const char *ExtraCode,
+                             raw_ostream &O) override;
 
   void EmitInstruction(const MachineInstr *MI) override;
 
@@ -58,7 +61,7 @@ private:
 };
 
 void AVRAsmPrinter::printOperand(const MachineInstr *MI, unsigned OpNo,
-                                 raw_ostream &O) {
+                                 raw_ostream &O, const char *Modifier) {
   const MachineOperand &MO = MI->getOperand(OpNo);
 
   switch (MO.getType()) {
@@ -83,10 +86,11 @@ void AVRAsmPrinter::printOperand(const MachineInstr *MI, unsigned OpNo,
 }
 
 bool AVRAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNum,
-                                    const char *ExtraCode, raw_ostream &O) {
+                                    unsigned AsmVariant, const char *ExtraCode,
+                                    raw_ostream &O) {
   // Default asm printer can only deal with some extra codes,
   // so try it first.
-  bool Error = AsmPrinter::PrintAsmOperand(MI, OpNum, ExtraCode, O);
+  bool Error = AsmPrinter::PrintAsmOperand(MI, OpNum, AsmVariant, ExtraCode, O);
 
   if (Error && ExtraCode && ExtraCode[0]) {
     if (ExtraCode[1] != 0)
@@ -97,7 +101,7 @@ bool AVRAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNum,
 
       assert(RegOp.isReg() && "Operand must be a register when you're"
                               "using 'A'..'Z' operand extracodes.");
-      Register Reg = RegOp.getReg();
+      unsigned Reg = RegOp.getReg();
 
       unsigned ByteNumber = ExtraCode[0] - 'A';
 
@@ -108,8 +112,7 @@ bool AVRAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNum,
       const AVRSubtarget &STI = MF->getSubtarget<AVRSubtarget>();
       const TargetRegisterInfo &TRI = *STI.getRegisterInfo();
 
-      const TargetRegisterClass *RC = TRI.getMinimalPhysRegClass(Reg);
-      unsigned BytesPerReg = TRI.getRegSizeInBits(*RC) / 8;
+      unsigned BytesPerReg = TRI.getMinimalPhysRegClass(Reg)->getSize();
       assert(BytesPerReg <= 2 && "Only 8 and 16 bit regs are supported.");
 
       unsigned RegIdx = ByteNumber / BytesPerReg;
@@ -127,14 +130,14 @@ bool AVRAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNum,
     }
   }
 
-  if (Error)
-    printOperand(MI, OpNum, O);
+  printOperand(MI, OpNum, O);
 
   return false;
 }
 
 bool AVRAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
-                                          unsigned OpNum, const char *ExtraCode,
+                                          unsigned OpNum, unsigned AsmVariant,
+                                          const char *ExtraCode,
                                           raw_ostream &O) {
   if (ExtraCode && ExtraCode[0]) {
     llvm_unreachable("This branch is not implemented yet");
@@ -144,10 +147,7 @@ bool AVRAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
   (void)MO;
   assert(MO.isReg() && "Unexpected inline asm memory operand");
 
-  // TODO: We should be able to look up the alternative name for
-  // the register if it's given.
-  // TableGen doesn't expose a way of getting retrieving names
-  // for registers.
+  // TODO: We can look up the alternative name for the register if it's given.
   if (MI->getOperand(OpNum).getReg() == AVR::R31R30) {
     O << "Z";
   } else {
@@ -178,7 +178,7 @@ void AVRAsmPrinter::EmitInstruction(const MachineInstr *MI) {
 
 } // end of namespace llvm
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAVRAsmPrinter() {
+extern "C" void LLVMInitializeAVRAsmPrinter() {
   llvm::RegisterAsmPrinter<llvm::AVRAsmPrinter> X(llvm::getTheAVRTarget());
 }
 

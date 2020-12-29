@@ -1,8 +1,9 @@
 //===-- GDBRemoteCommunicationServer.cpp ------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,11 +13,13 @@
 
 #include "GDBRemoteCommunicationServer.h"
 
+// C Includes
+// C++ Includes
 #include <cstring>
 
+// Project includes
 #include "ProcessGDBRemoteLog.h"
-#include "lldb/Utility/StreamString.h"
-#include "lldb/Utility/StringExtractorGDBRemote.h"
+#include "Utility/StringExtractorGDBRemote.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -24,12 +27,7 @@ using namespace lldb_private::process_gdb_remote;
 
 GDBRemoteCommunicationServer::GDBRemoteCommunicationServer(
     const char *comm_name, const char *listener_name)
-    : GDBRemoteCommunication(comm_name, listener_name), m_exit_now(false) {
-  RegisterPacketHandler(
-      StringExtractorGDBRemote::eServerPacketType_QEnableErrorStrings,
-      [this](StringExtractorGDBRemote packet, Status &error, bool &interrupt,
-             bool &quit) { return this->Handle_QErrorStringEnable(packet); });
-}
+    : GDBRemoteCommunication(comm_name, listener_name), m_exit_now(false) {}
 
 GDBRemoteCommunicationServer::~GDBRemoteCommunicationServer() {}
 
@@ -41,7 +39,7 @@ void GDBRemoteCommunicationServer::RegisterPacketHandler(
 
 GDBRemoteCommunication::PacketResult
 GDBRemoteCommunicationServer::GetPacketAndSendResponse(
-    Timeout<std::micro> timeout, Status &error, bool &interrupt, bool &quit) {
+    Timeout<std::micro> timeout, Error &error, bool &interrupt, bool &quit) {
   StringExtractorGDBRemote packet;
 
   PacketResult packet_result = WaitForPacketNoLock(packet, timeout, false);
@@ -59,13 +57,14 @@ GDBRemoteCommunicationServer::GetPacketAndSendResponse(
       break;
 
     case StringExtractorGDBRemote::eServerPacketType_unimplemented:
-      packet_result = SendUnimplementedResponse(packet.GetStringRef().data());
+      packet_result = SendUnimplementedResponse(packet.GetStringRef().c_str());
       break;
 
     default:
       auto handler_it = m_packet_handlers.find(packet_type);
       if (handler_it == m_packet_handlers.end())
-        packet_result = SendUnimplementedResponse(packet.GetStringRef().data());
+        packet_result =
+            SendUnimplementedResponse(packet.GetStringRef().c_str());
       else
         packet_result = handler_it->second(packet, error, interrupt, quit);
       break;
@@ -101,46 +100,13 @@ GDBRemoteCommunicationServer::SendErrorResponse(uint8_t err) {
 }
 
 GDBRemoteCommunication::PacketResult
-GDBRemoteCommunicationServer::SendErrorResponse(const Status &error) {
-  if (m_send_error_strings) {
-    lldb_private::StreamString packet;
-    packet.Printf("E%2.2x;", static_cast<uint8_t>(error.GetError()));
-    packet.PutStringAsRawHex8(error.AsCString());
-    return SendPacketNoLock(packet.GetString());
-  } else
-    return SendErrorResponse(error.GetError());
-}
-
-GDBRemoteCommunication::PacketResult
-GDBRemoteCommunicationServer::SendErrorResponse(llvm::Error error) {
-  std::unique_ptr<llvm::ErrorInfoBase> EIB;
-  std::unique_ptr<PacketUnimplementedError> PUE;
-  llvm::handleAllErrors(
-      std::move(error),
-      [&](std::unique_ptr<PacketUnimplementedError> E) { PUE = std::move(E); },
-      [&](std::unique_ptr<llvm::ErrorInfoBase> E) { EIB = std::move(E); });
-
-  if (EIB)
-    return SendErrorResponse(Status(llvm::Error(std::move(EIB))));
-  if (PUE)
-    return SendUnimplementedResponse(PUE->message().c_str());
-  return SendErrorResponse(Status("Unknown Error"));
-}
-
-GDBRemoteCommunication::PacketResult
-GDBRemoteCommunicationServer::Handle_QErrorStringEnable(
-    StringExtractorGDBRemote &packet) {
-  m_send_error_strings = true;
-  return SendOKResponse();
-}
-
-GDBRemoteCommunication::PacketResult
 GDBRemoteCommunicationServer::SendIllFormedResponse(
     const StringExtractorGDBRemote &failed_packet, const char *message) {
   Log *log(ProcessGDBRemoteLog::GetLogIfAllCategoriesSet(GDBR_LOG_PACKETS));
-  LLDB_LOGF(log, "GDBRemoteCommunicationServer::%s: ILLFORMED: '%s' (%s)",
-            __FUNCTION__, failed_packet.GetStringRef().data(),
-            message ? message : "");
+  if (log)
+    log->Printf("GDBRemoteCommunicationServer::%s: ILLFORMED: '%s' (%s)",
+                __FUNCTION__, failed_packet.GetStringRef().c_str(),
+                message ? message : "");
   return SendErrorResponse(0x03);
 }
 
@@ -152,5 +118,3 @@ GDBRemoteCommunicationServer::SendOKResponse() {
 bool GDBRemoteCommunicationServer::HandshakeWithClient() {
   return GetAck() == PacketResult::Success;
 }
-
-char PacketUnimplementedError::ID;

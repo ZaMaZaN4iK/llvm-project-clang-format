@@ -1,8 +1,9 @@
 //===-------------------------- __cxxabi_config.h -------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,7 +12,9 @@
 
 #if defined(__arm__) && !defined(__USING_SJLJ_EXCEPTIONS__) &&                 \
     !defined(__ARM_DWARF_EH__)
-#define _LIBCXXABI_ARM_EHABI
+#define LIBCXXABI_ARM_EHABI 1
+#else
+#define LIBCXXABI_ARM_EHABI 0
 #endif
 
 #if !defined(__has_attribute)
@@ -51,29 +54,6 @@
   #define _LIBCXXABI_FUNC_VIS
   #define _LIBCXXABI_TYPE_VIS
  #endif
-#endif
-
-#if defined(_WIN32)
-#define _LIBCXXABI_WEAK
-#else
-#define _LIBCXXABI_WEAK __attribute__((__weak__))
-#endif
-
-#if defined(__clang__)
-#define _LIBCXXABI_COMPILER_CLANG
-#elif defined(__GNUC__)
-#define _LIBCXXABI_COMPILER_GCC
-#endif
-
-#if __has_attribute(__no_sanitize__) && defined(_LIBCXXABI_COMPILER_CLANG)
-#define _LIBCXXABI_NO_CFI __attribute__((__no_sanitize__("cfi")))
-#else
-#define _LIBCXXABI_NO_CFI
-#endif
-
-// wasm32 follows the arm32 ABI convention of using 32-bit guard.
-#if defined(__arm__) || defined(__wasm32__)
-#  define _LIBCXXABI_GUARD_ABI_ARM
 #endif
 
 #endif // ____CXXABI_CONFIG_H

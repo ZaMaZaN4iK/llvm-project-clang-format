@@ -1,8 +1,9 @@
 //===-- XCoreFrameToArgsOffsetElim.cpp ----------------------------*- C++ -*-=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -55,7 +56,7 @@ bool XCoreFTAOElim::runOnMachineFunction(MachineFunction &MF) {
          MBBI != EE; ++MBBI) {
       if (MBBI->getOpcode() == XCore::FRAME_TO_ARGS_OFFSET) {
         MachineInstr &OldInst = *MBBI;
-        Register Reg = OldInst.getOperand(0).getReg();
+        unsigned Reg = OldInst.getOperand(0).getReg();
         MBBI = TII.loadImmediate(MBB, MBBI, Reg, StackSize);
         OldInst.eraseFromParent();
       }

@@ -1,26 +1,30 @@
 //===-- ValueObjectConstResult.cpp ------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Core/ValueObjectConstResult.h"
 
+#include "lldb/Core/DataExtractor.h"
+#include "lldb/Core/Module.h"
+#include "lldb/Core/ValueObjectChild.h"
+#include "lldb/Core/ValueObjectConstResultChild.h"
 #include "lldb/Core/ValueObjectDynamicValue.h"
-#include "lldb/Symbol/CompilerType.h"
-#include "lldb/Target/ExecutionContext.h"
-#include "lldb/Target/ExecutionContextScope.h"
-#include "lldb/Target/Process.h"
-#include "lldb/Utility/DataBuffer.h"
-#include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/Scalar.h"
+#include "lldb/Core/ValueObjectList.h"
 
-namespace lldb_private {
-class Module;
-}
+#include "lldb/Symbol/CompilerType.h"
+#include "lldb/Symbol/ObjectFile.h"
+#include "lldb/Symbol/SymbolContext.h"
+#include "lldb/Symbol/Type.h"
+#include "lldb/Symbol/Variable.h"
+
+#include "lldb/Target/ExecutionContext.h"
+#include "lldb/Target/Process.h"
+#include "lldb/Target/Target.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -49,7 +53,7 @@ ValueObjectConstResult::ValueObjectConstResult(ExecutionContextScope *exe_scope,
 
 ValueObjectSP ValueObjectConstResult::Create(ExecutionContextScope *exe_scope,
                                              const CompilerType &compiler_type,
-                                             ConstString name,
+                                             const ConstString &name,
                                              const DataExtractor &data,
                                              lldb::addr_t address) {
   return (new ValueObjectConstResult(exe_scope, compiler_type, name, data,
@@ -59,7 +63,7 @@ ValueObjectSP ValueObjectConstResult::Create(ExecutionContextScope *exe_scope,
 
 ValueObjectConstResult::ValueObjectConstResult(
     ExecutionContextScope *exe_scope, const CompilerType &compiler_type,
-    ConstString name, const DataExtractor &data, lldb::addr_t address)
+    const ConstString &name, const DataExtractor &data, lldb::addr_t address)
     : ValueObject(exe_scope), m_type_name(), m_byte_size(0),
       m_impl(this, address) {
   m_data = data;
@@ -81,7 +85,7 @@ ValueObjectConstResult::ValueObjectConstResult(
 
 ValueObjectSP ValueObjectConstResult::Create(ExecutionContextScope *exe_scope,
                                              const CompilerType &compiler_type,
-                                             ConstString name,
+                                             const ConstString &name,
                                              const lldb::DataBufferSP &data_sp,
                                              lldb::ByteOrder data_byte_order,
                                              uint32_t data_addr_size,
@@ -93,14 +97,14 @@ ValueObjectSP ValueObjectConstResult::Create(ExecutionContextScope *exe_scope,
 
 ValueObjectSP ValueObjectConstResult::Create(ExecutionContextScope *exe_scope,
                                              Value &value,
-                                             ConstString name,
+                                             const ConstString &name,
                                              Module *module) {
   return (new ValueObjectConstResult(exe_scope, value, name, module))->GetSP();
 }
 
 ValueObjectConstResult::ValueObjectConstResult(
     ExecutionContextScope *exe_scope, const CompilerType &compiler_type,
-    ConstString name, const lldb::DataBufferSP &data_sp,
+    const ConstString &name, const lldb::DataBufferSP &data_sp,
     lldb::ByteOrder data_byte_order, uint32_t data_addr_size,
     lldb::addr_t address)
     : ValueObject(exe_scope), m_type_name(), m_byte_size(0),
@@ -120,7 +124,7 @@ ValueObjectConstResult::ValueObjectConstResult(
 
 ValueObjectSP ValueObjectConstResult::Create(ExecutionContextScope *exe_scope,
                                              const CompilerType &compiler_type,
-                                             ConstString name,
+                                             const ConstString &name,
                                              lldb::addr_t address,
                                              AddressType address_type,
                                              uint32_t addr_byte_size) {
@@ -131,7 +135,7 @@ ValueObjectSP ValueObjectConstResult::Create(ExecutionContextScope *exe_scope,
 
 ValueObjectConstResult::ValueObjectConstResult(
     ExecutionContextScope *exe_scope, const CompilerType &compiler_type,
-    ConstString name, lldb::addr_t address, AddressType address_type,
+    const ConstString &name, lldb::addr_t address, AddressType address_type,
     uint32_t addr_byte_size)
     : ValueObject(exe_scope), m_type_name(), m_byte_size(0),
       m_impl(this, address) {
@@ -162,12 +166,12 @@ ValueObjectConstResult::ValueObjectConstResult(
 }
 
 ValueObjectSP ValueObjectConstResult::Create(ExecutionContextScope *exe_scope,
-                                             const Status &error) {
+                                             const Error &error) {
   return (new ValueObjectConstResult(exe_scope, error))->GetSP();
 }
 
 ValueObjectConstResult::ValueObjectConstResult(ExecutionContextScope *exe_scope,
-                                               const Status &error)
+                                               const Error &error)
     : ValueObject(exe_scope), m_type_name(), m_byte_size(0), m_impl(this) {
   m_error = error;
   SetIsConstant();
@@ -175,14 +179,14 @@ ValueObjectConstResult::ValueObjectConstResult(ExecutionContextScope *exe_scope,
 
 ValueObjectConstResult::ValueObjectConstResult(ExecutionContextScope *exe_scope,
                                                const Value &value,
-                                               ConstString name,
+                                               const ConstString &name,
                                                Module *module)
     : ValueObject(exe_scope), m_type_name(), m_byte_size(0), m_impl(this) {
   m_value = value;
   m_name = name;
   ExecutionContext exe_ctx;
   exe_scope->CalculateExecutionContext(exe_ctx);
-  m_error = m_value.GetValueAsData(&exe_ctx, m_data, module);
+  m_error = m_value.GetValueAsData(&exe_ctx, m_data, 0, module);
 }
 
 ValueObjectConstResult::~ValueObjectConstResult() {}
@@ -197,19 +201,17 @@ lldb::ValueType ValueObjectConstResult::GetValueType() const {
 
 uint64_t ValueObjectConstResult::GetByteSize() {
   ExecutionContext exe_ctx(GetExecutionContextRef());
-  if (m_byte_size == 0) {
-    if (auto size =
-        GetCompilerType().GetByteSize(exe_ctx.GetBestExecutionContextScope()))
-      SetByteSize(*size);
-  }
+
+  if (m_byte_size == 0)
+    SetByteSize(
+        GetCompilerType().GetByteSize(exe_ctx.GetBestExecutionContextScope()));
   return m_byte_size;
 }
 
 void ValueObjectConstResult::SetByteSize(size_t size) { m_byte_size = size; }
 
 size_t ValueObjectConstResult::CalculateNumChildren(uint32_t max) {
-  ExecutionContext exe_ctx(GetExecutionContextRef());
-  auto children_count = GetCompilerType().GetNumChildren(true, &exe_ctx);
+  auto children_count = GetCompilerType().GetNumChildren(true);
   return children_count <= max ? children_count : max;
 }
 
@@ -235,7 +237,7 @@ bool ValueObjectConstResult::IsInScope() {
   return true;
 }
 
-lldb::ValueObjectSP ValueObjectConstResult::Dereference(Status &error) {
+lldb::ValueObjectSP ValueObjectConstResult::Dereference(Error &error) {
   return m_impl.Dereference(error);
 }
 
@@ -246,7 +248,7 @@ lldb::ValueObjectSP ValueObjectConstResult::GetSyntheticChildAtOffset(
                                           name_const_str);
 }
 
-lldb::ValueObjectSP ValueObjectConstResult::AddressOf(Status &error) {
+lldb::ValueObjectSP ValueObjectConstResult::AddressOf(Error &error) {
   return m_impl.AddressOf(error);
 }
 

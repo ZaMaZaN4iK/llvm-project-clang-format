@@ -1,8 +1,9 @@
-//===- ScoreboardHazardRecognizer.cpp - Scheduler Support -----------------===//
+//===----- ScoreboardHazardRecognizer.cpp - Scheduler Support -------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,14 +15,11 @@
 
 #include "llvm/CodeGen/ScoreboardHazardRecognizer.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/Config/llvm-config.h"
-#include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/MCInstrItineraries.h"
-#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-#include <cassert>
+#include "llvm/Target/TargetInstrInfo.h"
 
 using namespace llvm;
 
@@ -31,8 +29,8 @@ ScoreboardHazardRecognizer::ScoreboardHazardRecognizer(
     const InstrItineraryData *II, const ScheduleDAG *SchedDAG,
     const char *ParentDebugType)
     : ScheduleHazardRecognizer(), DebugType(ParentDebugType), ItinData(II),
-      DAG(SchedDAG) {
-  (void)DebugType;
+      DAG(SchedDAG), IssueWidth(0), IssueCount(0) {
+
   // Determine the maximum depth of any itinerary. This determines the depth of
   // the scoreboard. We always make the scoreboard at least 1 cycle deep to
   // avoid dealing with the boundary condition.
@@ -68,12 +66,12 @@ ScoreboardHazardRecognizer::ScoreboardHazardRecognizer(
 
   // If MaxLookAhead is not set above, then we are not enabled.
   if (!isEnabled())
-    LLVM_DEBUG(dbgs() << "Disabled scoreboard hazard recognizer\n");
+    DEBUG(dbgs() << "Disabled scoreboard hazard recognizer\n");
   else {
     // A nonempty itinerary must have a SchedModel.
     IssueWidth = ItinData->SchedModel.IssueWidth;
-    LLVM_DEBUG(dbgs() << "Using scoreboard hazard recognizer: Depth = "
-                      << ScoreboardDepth << '\n');
+    DEBUG(dbgs() << "Using scoreboard hazard recognizer: Depth = "
+          << ScoreboardDepth << '\n');
   }
 }
 
@@ -155,8 +153,9 @@ ScoreboardHazardRecognizer::getHazardType(SUnit *SU, int Stalls) {
       }
 
       if (!freeUnits) {
-        LLVM_DEBUG(dbgs() << "*** Hazard in cycle +" << StageCycle << ", ");
-        LLVM_DEBUG(DAG->dumpNode(*SU));
+        DEBUG(dbgs() << "*** Hazard in cycle +" << StageCycle << ", ");
+        DEBUG(dbgs() << "SU(" << SU->NodeNum << "): ");
+        DEBUG(DAG->dumpNode(SU));
         return Hazard;
       }
     }
@@ -222,8 +221,8 @@ void ScoreboardHazardRecognizer::EmitInstruction(SUnit *SU) {
     cycle += IS->getNextCycles();
   }
 
-  LLVM_DEBUG(ReservedScoreboard.dump());
-  LLVM_DEBUG(RequiredScoreboard.dump());
+  DEBUG(ReservedScoreboard.dump());
+  DEBUG(RequiredScoreboard.dump());
 }
 
 void ScoreboardHazardRecognizer::AdvanceCycle() {

@@ -1,8 +1,9 @@
-//===- HexagonBitTracker.h --------------------------------------*- C++ -*-===//
+//===--- HexagonBitTracker.h ------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,16 +18,12 @@ namespace llvm {
 
 class HexagonInstrInfo;
 class HexagonRegisterInfo;
-class MachineFrameInfo;
-class MachineFunction;
-class MachineInstr;
-class MachineRegisterInfo;
 
 struct HexagonEvaluator : public BitTracker::MachineEvaluator {
-  using CellMapType = BitTracker::CellMapType;
-  using RegisterRef = BitTracker::RegisterRef;
-  using RegisterCell = BitTracker::RegisterCell;
-  using BranchTargetList = BitTracker::BranchTargetList;
+  typedef BitTracker::CellMapType CellMapType;
+  typedef BitTracker::RegisterRef RegisterRef;
+  typedef BitTracker::RegisterCell RegisterCell;
+  typedef BitTracker::BranchTargetList BranchTargetList;
 
   HexagonEvaluator(const HexagonRegisterInfo &tri, MachineRegisterInfo &mri,
                    const HexagonInstrInfo &tii, MachineFunction &mf);
@@ -38,17 +35,11 @@ struct HexagonEvaluator : public BitTracker::MachineEvaluator {
 
   BitTracker::BitMask mask(unsigned Reg, unsigned Sub) const override;
 
-  uint16_t getPhysRegBitWidth(unsigned Reg) const override;
-
-  const TargetRegisterClass &composeWithSubRegIndex(
-        const TargetRegisterClass &RC, unsigned Idx) const override;
-
   MachineFunction &MF;
   MachineFrameInfo &MFI;
   const HexagonInstrInfo &TII;
 
 private:
-  unsigned getUniqueDefVReg(const MachineInstr &MI) const;
   bool evaluateLoad(const MachineInstr &MI, const CellMapType &Inputs,
                     CellMapType &Outputs) const;
   bool evaluateFormalCopy(const MachineInstr &MI, const CellMapType &Inputs,
@@ -68,7 +59,7 @@ private:
     uint16_t Width = 0;
   };
   // Map VR -> extension type.
-  using RegExtMap = DenseMap<unsigned, ExtType>;
+  typedef DenseMap<unsigned, ExtType> RegExtMap;
   RegExtMap VRX;
 };
 

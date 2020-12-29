@@ -1,28 +1,32 @@
-//===- Multilib.cpp - Multilib Implementation -----------------------------===//
+//===--- Multilib.cpp - Multilib Implementation ---------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "clang/Driver/Multilib.h"
-#include "clang/Basic/LLVM.h"
-#include "llvm/ADT/SmallString.h"
+#include "Tools.h"
+#include "clang/Driver/Options.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
-#include "llvm/Support/Compiler.h"
-#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Option/Arg.h"
+#include "llvm/Option/ArgList.h"
+#include "llvm/Option/OptTable.h"
+#include "llvm/Option/Option.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Regex.h"
+#include "llvm/Support/YAMLParser.h"
+#include "llvm/Support/YAMLTraits.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
-#include <cassert>
-#include <string>
 
+using namespace clang::driver;
 using namespace clang;
-using namespace driver;
+using namespace llvm::opt;
 using namespace llvm::sys;
 
 /// normalize Segment to "/foo/bar" or "".
@@ -30,7 +34,7 @@ static void normalizePathSegment(std::string &Segment) {
   StringRef seg = Segment;
 
   // Prune trailing "/" or "./"
-  while (true) {
+  while (1) {
     StringRef last = path::filename(seg);
     if (last != ".")
       break;
@@ -38,7 +42,7 @@ static void normalizePathSegment(std::string &Segment) {
   }
 
   if (seg.empty() || seg == "/") {
-    Segment.clear();
+    Segment = "";
     return;
   }
 
@@ -51,9 +55,8 @@ static void normalizePathSegment(std::string &Segment) {
 }
 
 Multilib::Multilib(StringRef GCCSuffix, StringRef OSSuffix,
-                   StringRef IncludeSuffix, int Priority)
-    : GCCSuffix(GCCSuffix), OSSuffix(OSSuffix), IncludeSuffix(IncludeSuffix),
-      Priority(Priority) {
+                   StringRef IncludeSuffix)
+    : GCCSuffix(GCCSuffix), OSSuffix(OSSuffix), IncludeSuffix(IncludeSuffix) {
   normalizePathSegment(this->GCCSuffix);
   normalizePathSegment(this->OSSuffix);
   normalizePathSegment(this->IncludeSuffix);
@@ -75,10 +78,6 @@ Multilib &Multilib::includeSuffix(StringRef S) {
   IncludeSuffix = S;
   normalizePathSegment(IncludeSuffix);
   return *this;
-}
-
-LLVM_DUMP_METHOD void Multilib::dump() const {
-  print(llvm::errs());
 }
 
 void Multilib::print(raw_ostream &OS) const {
@@ -195,8 +194,8 @@ MultilibSet &MultilibSet::Either(ArrayRef<Multilib> MultilibSegments) {
     Multilibs.insert(Multilibs.end(), MultilibSegments.begin(),
                      MultilibSegments.end());
   else {
-    for (const auto &New : MultilibSegments) {
-      for (const auto &Base : *this) {
+    for (const Multilib &New : MultilibSegments) {
+      for (const Multilib &Base : *this) {
         Multilib MO = compose(Base, New);
         if (MO.isValid())
           Composed.push_back(MO);
@@ -259,35 +258,20 @@ bool MultilibSet::select(const Multilib::flags_list &Flags, Multilib &M) const {
     return false;
   }, Multilibs);
 
-  if (Filtered.empty())
+  if (Filtered.size() == 0)
     return false;
   if (Filtered.size() == 1) {
     M = Filtered[0];
     return true;
   }
 
-  // Sort multilibs by priority and select the one with the highest priority.
-  llvm::sort(Filtered.begin(), Filtered.end(),
-             [](const Multilib &a, const Multilib &b) -> bool {
-               return a.priority() > b.priority();
-             });
-
-  if (Filtered[0].priority() > Filtered[1].priority()) {
-    M = Filtered[0];
-    return true;
-  }
-
-  // TODO: We should consider returning llvm::Error rather than aborting.
-  assert(false && "More than one multilib with the same priority");
+  // TODO: pick the "best" multlib when more than one is suitable
+  assert(false);
   return false;
 }
 
-LLVM_DUMP_METHOD void MultilibSet::dump() const {
-  print(llvm::errs());
-}
-
 void MultilibSet::print(raw_ostream &OS) const {
-  for (const auto &M : *this)
+  for (const Multilib &M : *this)
     OS << M << "\n";
 }
 

@@ -1,10 +1,3 @@
-add_lldb_library(lldbPluginABISysV_mips PLUGIN
+add_lldb_library(lldbPluginABISysV_mips
   ABISysV_mips.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbSymbol
-    lldbTarget
-  LINK_COMPONENTS
-    Support
   )

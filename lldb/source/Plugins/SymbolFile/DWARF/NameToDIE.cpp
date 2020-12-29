@@ -1,18 +1,23 @@
 //===-- NameToDIE.cpp -------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "NameToDIE.h"
-#include "DWARFUnit.h"
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/RegularExpression.h"
+#include "lldb/Core/Stream.h"
+#include "lldb/Core/StreamString.h"
 #include "lldb/Symbol/ObjectFile.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/RegularExpression.h"
-#include "lldb/Utility/Stream.h"
-#include "lldb/Utility/StreamString.h"
+
+#include "DWARFCompileUnit.h"
+#include "DWARFDebugInfo.h"
+#include "DWARFDebugInfoEntry.h"
+#include "SymbolFileDWARF.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -22,12 +27,12 @@ void NameToDIE::Finalize() {
   m_map.SizeToFit();
 }
 
-void NameToDIE::Insert(ConstString name, const DIERef &die_ref) {
-  m_map.Append(name, die_ref);
+void NameToDIE::Insert(const ConstString &name, const DIERef &die_ref) {
+  m_map.Append(name.GetStringRef(), die_ref);
 }
 
-size_t NameToDIE::Find(ConstString name, DIEArray &info_array) const {
-  return m_map.GetValues(name, info_array);
+size_t NameToDIE::Find(const ConstString &name, DIEArray &info_array) const {
+  return m_map.GetValues(name.GetStringRef(), info_array);
 }
 
 size_t NameToDIE::Find(const RegularExpression &regex,
@@ -35,16 +40,13 @@ size_t NameToDIE::Find(const RegularExpression &regex,
   return m_map.GetValues(regex, info_array);
 }
 
-size_t NameToDIE::FindAllEntriesForUnit(const DWARFUnit &unit,
-                                        DIEArray &info_array) const {
+size_t NameToDIE::FindAllEntriesForCompileUnit(dw_offset_t cu_offset,
+                                               DIEArray &info_array) const {
   const size_t initial_size = info_array.size();
   const uint32_t size = m_map.GetSize();
   for (uint32_t i = 0; i < size; ++i) {
     const DIERef &die_ref = m_map.GetValueAtIndexUnchecked(i);
-    if (unit.GetSymbolFileDWARF().GetDwoNum() == die_ref.dwo_num() &&
-        unit.GetDebugSection() == die_ref.section() &&
-        unit.GetOffset() <= die_ref.die_offset() &&
-        die_ref.die_offset() < unit.GetNextUnitOffset())
+    if (cu_offset == die_ref.cu_offset)
       info_array.push_back(die_ref);
   }
   return info_array.size() - initial_size;
@@ -53,13 +55,15 @@ size_t NameToDIE::FindAllEntriesForUnit(const DWARFUnit &unit,
 void NameToDIE::Dump(Stream *s) {
   const uint32_t size = m_map.GetSize();
   for (uint32_t i = 0; i < size; ++i) {
-    s->Format("{0} \"{1}\"\n", m_map.GetValueAtIndexUnchecked(i),
-              m_map.GetCStringAtIndexUnchecked(i));
+    llvm::StringRef cstr = m_map.GetCStringAtIndex(i);
+    const DIERef &die_ref = m_map.GetValueAtIndexUnchecked(i);
+    s->Printf("%p: {0x%8.8x/0x%8.8x} \"%s\"\n", (const void *)cstr.data(),
+              die_ref.cu_offset, die_ref.die_offset, cstr.str().c_str());
   }
 }
 
 void NameToDIE::ForEach(
-    std::function<bool(ConstString name, const DIERef &die_ref)> const
+    std::function<bool(llvm::StringRef name, const DIERef &die_ref)> const
         &callback) const {
   const uint32_t size = m_map.GetSize();
   for (uint32_t i = 0; i < size; ++i) {

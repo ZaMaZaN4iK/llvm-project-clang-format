@@ -1,8 +1,9 @@
 //===-- BPFRegisterInfo.h - BPF Register Information Impl -------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,7 +14,7 @@
 #ifndef LLVM_LIB_TARGET_BPF_BPFREGISTERINFO_H
 #define LLVM_LIB_TARGET_BPF_BPFREGISTERINFO_H
 
-#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/Target/TargetRegisterInfo.h"
 
 #define GET_REGINFO_HEADER
 #include "BPFGenRegisterInfo.inc"
@@ -32,7 +33,7 @@ struct BPFRegisterInfo : public BPFGenRegisterInfo {
                            unsigned FIOperandNum,
                            RegScavenger *RS = nullptr) const override;
 
-  Register getFrameRegister(const MachineFunction &MF) const override;
+  unsigned getFrameRegister(const MachineFunction &MF) const override;
 };
 }
 

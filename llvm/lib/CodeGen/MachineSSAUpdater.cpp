@@ -1,8 +1,9 @@
 //===- MachineSSAUpdater.cpp - Unstructured SSA Update Tool ---------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,36 +15,31 @@
 #include "llvm/CodeGen/MachineSSAUpdater.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/CodeGen/TargetOpcodes.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/IR/DebugLoc.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include "llvm/Transforms/Utils/SSAUpdaterImpl.h"
-#include <utility>
-
 using namespace llvm;
 
 #define DEBUG_TYPE "machine-ssaupdater"
 
-using AvailableValsTy = DenseMap<MachineBasicBlock *, unsigned>;
-
+typedef DenseMap<MachineBasicBlock*, unsigned> AvailableValsTy;
 static AvailableValsTy &getAvailableVals(void *AV) {
   return *static_cast<AvailableValsTy*>(AV);
 }
 
 MachineSSAUpdater::MachineSSAUpdater(MachineFunction &MF,
                                      SmallVectorImpl<MachineInstr*> *NewPHI)
-  : InsertedPHIs(NewPHI), TII(MF.getSubtarget().getInstrInfo()),
-    MRI(&MF.getRegInfo()) {}
+  : AV(nullptr), InsertedPHIs(NewPHI) {
+  TII = MF.getSubtarget().getInstrInfo();
+  MRI = &MF.getRegInfo();
+}
 
 MachineSSAUpdater::~MachineSSAUpdater() {
   delete static_cast<AvailableValsTy*>(AV);
@@ -81,7 +77,7 @@ unsigned MachineSSAUpdater::GetValueAtEndOfBlock(MachineBasicBlock *BB) {
 
 static
 unsigned LookForIdenticalPHI(MachineBasicBlock *BB,
-        SmallVectorImpl<std::pair<MachineBasicBlock *, unsigned>> &PredValues) {
+        SmallVectorImpl<std::pair<MachineBasicBlock*, unsigned> > &PredValues) {
   if (BB->empty())
     return 0;
 
@@ -95,7 +91,7 @@ unsigned LookForIdenticalPHI(MachineBasicBlock *BB,
   while (I != BB->end() && I->isPHI()) {
     bool Same = true;
     for (unsigned i = 1, e = I->getNumOperands(); i != e; i += 2) {
-      Register SrcReg = I->getOperand(i).getReg();
+      unsigned SrcReg = I->getOperand(i).getReg();
       MachineBasicBlock *SrcBB = I->getOperand(i+1).getMBB();
       if (AVals[SrcBB] != SrcReg) {
         Same = false;
@@ -118,7 +114,7 @@ MachineInstrBuilder InsertNewDef(unsigned Opcode,
                            const TargetRegisterClass *RC,
                            MachineRegisterInfo *MRI,
                            const TargetInstrInfo *TII) {
-  Register NewVR = MRI->createVirtualRegister(RC);
+  unsigned NewVR = MRI->createVirtualRegister(RC);
   return BuildMI(*BB, I, DebugLoc(), TII->get(Opcode), NewVR);
 }
 
@@ -140,6 +136,7 @@ MachineInstrBuilder InsertNewDef(unsigned Opcode,
 /// their respective blocks.  However, the use of X happens in the *middle* of
 /// a block.  Because of this, we need to insert a new PHI node in SomeBB to
 /// merge the appropriate values, and this value isn't live out of the block.
+///
 unsigned MachineSSAUpdater::GetValueInMiddleOfBlock(MachineBasicBlock *BB) {
   // If there is no definition of the renamed variable in this block, just use
   // GetValueAtEndOfBlock to do our work.
@@ -203,7 +200,7 @@ unsigned MachineSSAUpdater::GetValueInMiddleOfBlock(MachineBasicBlock *BB) {
   // If the client wants to know about all new instructions, tell it.
   if (InsertedPHIs) InsertedPHIs->push_back(InsertedPHI);
 
-  LLVM_DEBUG(dbgs() << "  Inserted PHI: " << *InsertedPHI << "\n");
+  DEBUG(dbgs() << "  Inserted PHI: " << *InsertedPHI << "\n");
   return InsertedPHI->getOperand(0).getReg();
 }
 
@@ -236,15 +233,14 @@ void MachineSSAUpdater::RewriteUse(MachineOperand &U) {
 /// SSAUpdaterTraits<MachineSSAUpdater> - Traits for the SSAUpdaterImpl
 /// template, specialized for MachineSSAUpdater.
 namespace llvm {
-
 template<>
 class SSAUpdaterTraits<MachineSSAUpdater> {
 public:
-  using BlkT = MachineBasicBlock;
-  using ValT = unsigned;
-  using PhiT = MachineInstr;
-  using BlkSucc_iterator = MachineBasicBlock::succ_iterator;
+  typedef MachineBasicBlock BlkT;
+  typedef unsigned ValT;
+  typedef MachineInstr PhiT;
 
+  typedef MachineBasicBlock::succ_iterator BlkSucc_iterator;
   static BlkSucc_iterator BlkSucc_begin(BlkT *BB) { return BB->succ_begin(); }
   static BlkSucc_iterator BlkSucc_end(BlkT *BB) { return BB->succ_end(); }
 
@@ -253,26 +249,22 @@ public:
   private:
     MachineInstr *PHI;
     unsigned idx;
-
+ 
   public:
     explicit PHI_iterator(MachineInstr *P) // begin iterator
       : PHI(P), idx(1) {}
     PHI_iterator(MachineInstr *P, bool) // end iterator
       : PHI(P), idx(PHI->getNumOperands()) {}
 
-    PHI_iterator &operator++() { idx += 2; return *this; }
+    PHI_iterator &operator++() { idx += 2; return *this; } 
     bool operator==(const PHI_iterator& x) const { return idx == x.idx; }
     bool operator!=(const PHI_iterator& x) const { return !operator==(x); }
-
     unsigned getIncomingValue() { return PHI->getOperand(idx).getReg(); }
-
     MachineBasicBlock *getIncomingBlock() {
       return PHI->getOperand(idx+1).getMBB();
     }
   };
-
   static inline PHI_iterator PHI_begin(PhiT *PHI) { return PHI_iterator(PHI); }
-
   static inline PHI_iterator PHI_end(PhiT *PHI) {
     return PHI_iterator(PHI, true);
   }
@@ -292,7 +284,7 @@ public:
                               MachineSSAUpdater *Updater) {
     // Insert an implicit_def to represent an undef value.
     MachineInstr *NewDef = InsertNewDef(TargetOpcode::IMPLICIT_DEF,
-                                        BB, BB->getFirstNonPHI(),
+                                        BB, BB->getFirstTerminator(),
                                         Updater->VRC, Updater->MRI,
                                         Updater->TII);
     return NewDef->getOperand(0).getReg();
@@ -317,6 +309,7 @@ public:
   }
 
   /// InstrIsPHI - Check if an instruction is a PHI.
+  ///
   static MachineInstr *InstrIsPHI(MachineInstr *I) {
     if (I && I->isPHI())
       return I;
@@ -345,7 +338,7 @@ public:
   }
 };
 
-} // end namespace llvm
+} // End llvm namespace
 
 /// GetValueAtEndOfBlockInternal - Check to see if AvailableVals has an entry
 /// for the specified BB and if so, return it.  If not, construct SSA form by

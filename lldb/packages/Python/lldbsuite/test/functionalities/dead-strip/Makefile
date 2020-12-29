@@ -1,3 +1,5 @@
+LEVEL = ../../make
+
 C_SOURCES := main.c
 
 ifeq "$(OS)" ""
@@ -5,16 +7,12 @@ ifeq "$(OS)" ""
 endif
 
 ifeq "$(OS)" "Darwin"
-    LD_EXTRAS = -Xlinker -dead_strip
+    LDFLAGS = $(CFLAGS) -Xlinker -dead_strip
 else
-    CFLAGS_EXTRAS += -fdata-sections -ffunction-sections
-    ifeq "$(OS)" "Windows_NT"
-        LD_EXTRAS = -Xlinker /OPT:REF
-    else
-        LD_EXTRAS = -Wl,--gc-sections
-    endif
+    CFLAGS += -fdata-sections -ffunction-sections
+    LDFLAGS = $(CFLAGS) -Wl,--gc-sections
 endif
 
 MAKE_DSYM := NO
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

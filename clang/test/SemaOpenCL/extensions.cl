@@ -28,7 +28,6 @@
 // enabled by default with -cl-std=CL2.0).
 //
 // RUN: %clang_cc1 %s -triple amdgcn-unknown-unknown -verify -pedantic -fsyntax-only -cl-std=CL2.0 -finclude-default-header
-// RUN: %clang_cc1 %s -triple spir-unknown-unknown -verify -pedantic -fsyntax-only -cl-std=clc++
 
 #ifdef _OPENCL_H_
 // expected-no-diagnostics
@@ -38,11 +37,7 @@
 // expected-no-diagnostics
 #endif
 
-#ifdef __OPENCL_CPP_VERSION__
-// expected-no-diagnostics
-#endif
-
-#if (defined(__OPENCL_C_VERSION__) && __OPENCL_C_VERSION__ < 120)
+#if __OPENCL_C_VERSION__ < 120
 void f1(double da) { // expected-error {{type 'double' requires cl_khr_fp64 extension}}
   double d; // expected-error {{type 'double' requires cl_khr_fp64 extension}}
   (void) 1.0; // expected-warning {{double precision constant requires cl_khr_fp64}}
@@ -75,13 +70,6 @@ void f2(void) {
 // expected-error@-2{{use of type 'double' requires cl_khr_fp64 extension to be enabled}}
 #endif
 
-  typedef double double4 __attribute__((ext_vector_type(4)));
-  double4 d4 = {0.0f, 2.0f, 3.0f, 1.0f};
-#ifdef NOFP64
-// expected-error@-3 {{use of type 'double' requires cl_khr_fp64 extension to be enabled}}
-// expected-error@-3 {{use of type 'double4' (vector of 4 'double' values) requires cl_khr_fp64 extension to be enabled}}
-#endif
-
   (void) 1.0;
 
 #ifdef NOFP64
@@ -94,7 +82,7 @@ void f2(void) {
 // expected-warning@-2{{unsupported OpenCL extension 'cl_khr_fp64' - ignoring}}
 #endif
 
-#if (defined(__OPENCL_C_VERSION__) && __OPENCL_C_VERSION__ < 120)
+#if __OPENCL_C_VERSION__ < 120
 void f3(void) {
   double d; // expected-error {{type 'double' requires cl_khr_fp64 extension}}
 }

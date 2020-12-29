@@ -1,14 +1,19 @@
 //===-- DataVisualization.cpp ---------------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/DataFormatters/DataVisualization.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 
 using namespace lldb;
 using namespace lldb_private;
@@ -50,20 +55,42 @@ DataVisualization::GetSummaryForType(lldb::TypeNameSpecifierImplSP type_sp) {
   return GetFormatManager().GetSummaryForType(type_sp);
 }
 
+#ifndef LLDB_DISABLE_PYTHON
 lldb::SyntheticChildrenSP
 DataVisualization::GetSyntheticChildren(ValueObject &valobj,
                                         lldb::DynamicValueType use_dynamic) {
   return GetFormatManager().GetSyntheticChildren(valobj, use_dynamic);
 }
+#endif
+
+#ifndef LLDB_DISABLE_PYTHON
+lldb::SyntheticChildrenSP DataVisualization::GetSyntheticChildrenForType(
+    lldb::TypeNameSpecifierImplSP type_sp) {
+  return GetFormatManager().GetSyntheticChildrenForType(type_sp);
+}
+#endif
 
 lldb::TypeFilterImplSP
 DataVisualization::GetFilterForType(lldb::TypeNameSpecifierImplSP type_sp) {
   return GetFormatManager().GetFilterForType(type_sp);
 }
 
+#ifndef LLDB_DISABLE_PYTHON
 lldb::ScriptedSyntheticChildrenSP
 DataVisualization::GetSyntheticForType(lldb::TypeNameSpecifierImplSP type_sp) {
   return GetFormatManager().GetSyntheticForType(type_sp);
+}
+#endif
+
+lldb::TypeValidatorImplSP
+DataVisualization::GetValidator(ValueObject &valobj,
+                                lldb::DynamicValueType use_dynamic) {
+  return GetFormatManager().GetValidator(valobj, use_dynamic);
+}
+
+lldb::TypeValidatorImplSP
+DataVisualization::GetValidatorForType(lldb::TypeNameSpecifierImplSP type_sp) {
+  return GetFormatManager().GetValidatorForType(type_sp);
 }
 
 bool DataVisualization::AnyMatches(
@@ -74,11 +101,11 @@ bool DataVisualization::AnyMatches(
                                        matching_category, matching_type);
 }
 
-bool DataVisualization::Categories::GetCategory(ConstString category,
+bool DataVisualization::Categories::GetCategory(const ConstString &category,
                                                 lldb::TypeCategoryImplSP &entry,
                                                 bool allow_create) {
   entry = GetFormatManager().GetCategory(category, allow_create);
-  return (entry.get() != nullptr);
+  return (entry.get() != NULL);
 }
 
 bool DataVisualization::Categories::GetCategory(
@@ -89,11 +116,11 @@ bool DataVisualization::Categories::GetCategory(
   return (entry.get() != nullptr);
 }
 
-void DataVisualization::Categories::Add(ConstString category) {
+void DataVisualization::Categories::Add(const ConstString &category) {
   GetFormatManager().GetCategory(category);
 }
 
-bool DataVisualization::Categories::Delete(ConstString category) {
+bool DataVisualization::Categories::Delete(const ConstString &category) {
   GetFormatManager().DisableCategory(category);
   return GetFormatManager().DeleteCategory(category);
 }
@@ -102,16 +129,17 @@ void DataVisualization::Categories::Clear() {
   GetFormatManager().ClearCategories();
 }
 
-void DataVisualization::Categories::Clear(ConstString category) {
+void DataVisualization::Categories::Clear(const ConstString &category) {
   GetFormatManager().GetCategory(category)->Clear(
       eFormatCategoryItemSummary | eFormatCategoryItemRegexSummary);
 }
 
-void DataVisualization::Categories::Enable(ConstString category,
+void DataVisualization::Categories::Enable(const ConstString &category,
                                            TypeCategoryMap::Position pos) {
   if (GetFormatManager().GetCategory(category)->IsEnabled())
     GetFormatManager().DisableCategory(category);
-  GetFormatManager().EnableCategory(category, pos, {});
+  GetFormatManager().EnableCategory(
+      category, pos, std::initializer_list<lldb::LanguageType>());
 }
 
 void DataVisualization::Categories::Enable(lldb::LanguageType lang_type) {
@@ -120,8 +148,8 @@ void DataVisualization::Categories::Enable(lldb::LanguageType lang_type) {
     lang_category->Enable();
 }
 
-void DataVisualization::Categories::Disable(ConstString category) {
-  if (GetFormatManager().GetCategory(category)->IsEnabled())
+void DataVisualization::Categories::Disable(const ConstString &category) {
+  if (GetFormatManager().GetCategory(category)->IsEnabled() == true)
     GetFormatManager().DisableCategory(category);
 }
 
@@ -142,7 +170,7 @@ void DataVisualization::Categories::Enable(
 
 void DataVisualization::Categories::Disable(
     const lldb::TypeCategoryImplSP &category) {
-  if (category.get() && category->IsEnabled())
+  if (category.get() && category->IsEnabled() == true)
     GetFormatManager().DisableCategory(category);
 }
 
@@ -169,17 +197,17 @@ DataVisualization::Categories::GetCategoryAtIndex(size_t index) {
 }
 
 bool DataVisualization::NamedSummaryFormats::GetSummaryFormat(
-    ConstString type, lldb::TypeSummaryImplSP &entry) {
+    const ConstString &type, lldb::TypeSummaryImplSP &entry) {
   return GetFormatManager().GetNamedSummaryContainer().Get(type, entry);
 }
 
 void DataVisualization::NamedSummaryFormats::Add(
-    ConstString type, const lldb::TypeSummaryImplSP &entry) {
+    const ConstString &type, const lldb::TypeSummaryImplSP &entry) {
   GetFormatManager().GetNamedSummaryContainer().Add(
       FormatManager::GetValidTypeName(type), entry);
 }
 
-bool DataVisualization::NamedSummaryFormats::Delete(ConstString type) {
+bool DataVisualization::NamedSummaryFormats::Delete(const ConstString &type) {
   return GetFormatManager().GetNamedSummaryContainer().Delete(type);
 }
 

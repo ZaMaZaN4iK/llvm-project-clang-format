@@ -1,23 +1,23 @@
-//===- ARMTargetFrameLowering.h - Define frame lowering for ARM -*- C++ -*-===//
+//==-- ARMTargetFrameLowering.h - Define frame lowering for ARM --*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+//
+//
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_ARM_ARMFRAMELOWERING_H
 #define LLVM_LIB_TARGET_ARM_ARMFRAMELOWERING_H
 
-#include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/TargetFrameLowering.h"
-#include <vector>
+#include "llvm/Target/TargetFrameLowering.h"
 
 namespace llvm {
-
-class ARMSubtarget;
-class CalleeSavedInfo;
-class MachineFunction;
+  class ARMSubtarget;
 
 class ARMFrameLowering : public TargetFrameLowering {
 protected:
@@ -38,12 +38,10 @@ public:
 
   bool restoreCalleeSavedRegisters(MachineBasicBlock &MBB,
                                   MachineBasicBlock::iterator MI,
-                                  std::vector<CalleeSavedInfo> &CSI,
+                                  const std::vector<CalleeSavedInfo> &CSI,
                                   const TargetRegisterInfo *TRI) const override;
 
-  bool keepFramePointer(const MachineFunction &MF) const override;
-
-  bool enableCalleeSaveSkip(const MachineFunction &MF) const override;
+  bool noFramePointerElim(const MachineFunction &MF) const override;
 
   bool hasFP(const MachineFunction &MF) const override;
   bool hasReservedCallFrame(const MachineFunction &MF) const override;
@@ -53,8 +51,6 @@ public:
   int ResolveFrameIndexReference(const MachineFunction &MF, int FI,
                                  unsigned &FrameReg, int SPAdj) const;
 
-  void getCalleeSaves(const MachineFunction &MF,
-                      BitVector &SavedRegs) const override;
   void determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
                             RegScavenger *RS) const override;
 
@@ -65,20 +61,15 @@ public:
   bool enableShrinkWrapping(const MachineFunction &MF) const override {
     return true;
   }
-  bool isProfitableForNoCSROpt(const Function &F) const override {
-    // The no-CSR optimisation is bad for code size on ARM, because we can save
-    // many registers with a single PUSH/POP pair.
-    return false;
-  }
 
-private:
+ private:
   void emitPushInst(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
                     const std::vector<CalleeSavedInfo> &CSI, unsigned StmOpc,
                     unsigned StrOpc, bool NoGap,
                     bool(*Func)(unsigned, bool), unsigned NumAlignedDPRCS2Regs,
                     unsigned MIFlags = 0) const;
   void emitPopInst(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
-                   std::vector<CalleeSavedInfo> &CSI, unsigned LdmOpc,
+                   const std::vector<CalleeSavedInfo> &CSI, unsigned LdmOpc,
                    unsigned LdrOpc, bool isVarArg, bool NoGap,
                    bool(*Func)(unsigned, bool),
                    unsigned NumAlignedDPRCS2Regs) const;
@@ -89,6 +80,6 @@ private:
                                 MachineBasicBlock::iterator MI) const override;
 };
 
-} // end namespace llvm
+} // End llvm namespace
 
-#endif // LLVM_LIB_TARGET_ARM_ARMFRAMELOWERING_H
+#endif

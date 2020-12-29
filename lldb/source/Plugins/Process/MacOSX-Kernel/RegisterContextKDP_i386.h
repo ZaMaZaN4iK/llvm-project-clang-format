@@ -1,14 +1,19 @@
 //===-- RegisterContextKDP_i386.h -------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_RegisterContextKDP_i386_h_
 #define liblldb_RegisterContextKDP_i386_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "Plugins/Process/Utility/RegisterContextDarwin_i386.h"
 
 class ThreadKDP;

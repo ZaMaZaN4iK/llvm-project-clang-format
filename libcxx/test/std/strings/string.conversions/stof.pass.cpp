@@ -1,14 +1,14 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
-// PR14919 was fixed in r172447, out_of_range wasn't thrown before.
-// XFAIL: with_system_cxx_lib=macosx10.7
-// XFAIL: with_system_cxx_lib=macosx10.8
+// XFAIL: with_system_cxx_lib=x86_64-apple-darwin11
+// XFAIL: with_system_cxx_lib=x86_64-apple-darwin12
 
 // <string>
 
@@ -18,11 +18,10 @@
 #include <string>
 #include <cmath>
 #include <cassert>
-#include <stdexcept>
 
 #include "test_macros.h"
 
-int main(int, char**)
+int main()
 {
     assert(std::stof("0") == 0);
     assert(std::stof(L"0") == 0);
@@ -186,6 +185,4 @@ int main(int, char**)
         assert(idx == 0);
     }
 #endif
-
-  return 0;
 }

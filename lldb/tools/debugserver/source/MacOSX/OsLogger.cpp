@@ -1,15 +1,15 @@
 //===-- OsLogger.cpp --------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "OsLogger.h"
-#include <Availability.h>
 
-#if (LLDB_USE_OS_LOG) && (__MAC_OS_X_VERSION_MAX_ALLOWED >= 101200)
+#if LLDB_USE_OS_LOG
 
 #include <os/log.h>
 
@@ -19,8 +19,10 @@
 #define LLDB_OS_LOG_MAX_BUFFER_LENGTH 256
 
 namespace {
+//----------------------------------------------------------------------
 // Darwin os_log logging callback that can be registered with
 // DNBLogSetLogCallback
+//----------------------------------------------------------------------
 void DarwinLogCallback(void *baton, uint32_t flags, const char *format,
                        va_list args) {
   if (format == nullptr)
@@ -53,11 +55,12 @@ void DarwinLogCallback(void *baton, uint32_t flags, const char *format,
 }
 }
 
-DNBCallbackLog OsLogger::GetLogFunction() { return DarwinLogCallback; }
+DNBCallbackLog OsLogger::GetLogFunction() {
+  return _os_log_impl ? DarwinLogCallback : nullptr;
+}
 
 #else
 
 DNBCallbackLog OsLogger::GetLogFunction() { return nullptr; }
 
 #endif
-

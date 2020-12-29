@@ -5,6 +5,8 @@ Test watchpoint condition API.
 from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -14,7 +16,6 @@ from lldbsuite.test import lldbutil
 class WatchpointConditionAPITestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
-    NO_DEBUG_INFO_TESTCASE = True
 
     def setUp(self):
         # Call super's setUp().
@@ -32,11 +33,18 @@ class WatchpointConditionAPITestCase(TestBase):
         self.exe_name = self.testMethodName
         self.d = {'CXX_SOURCES': self.source, 'EXE': self.exe_name}
 
+    # Watchpoints not supported
+    @expectedFailureAndroid(archs=['arm', 'aarch64'])
+    @expectedFailureAll(
+        oslist=["linux"],
+        archs=["aarch64"],
+        bugnumber="llvm.org/pr27710")
+    @skipIfWindows  # Watchpoints not supported on Windows, and this test hangs
     def test_watchpoint_cond_api(self):
         """Test watchpoint condition API."""
         self.build(dictionary=self.d)
         self.setTearDownCleanup(dictionary=self.d)
-        exe = self.getBuildArtifact(self.exe_name)
+        exe = os.path.join(os.getcwd(), self.exe_name)
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)

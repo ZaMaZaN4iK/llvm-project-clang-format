@@ -1,8 +1,9 @@
 //===-- ARMMCInstLower.cpp - Convert ARM MachineInstr to an MCInst --------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,36 +14,23 @@
 
 #include "ARM.h"
 #include "ARMAsmPrinter.h"
-#include "ARMBaseInstrInfo.h"
-#include "ARMMachineFunctionInfo.h"
-#include "ARMSubtarget.h"
-#include "MCTargetDesc/ARMAddressingModes.h"
 #include "MCTargetDesc/ARMBaseInfo.h"
 #include "MCTargetDesc/ARMMCExpr.h"
-#include "llvm/ADT/APFloat.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/MC/MCContext.h"
+#include "llvm/IR/Mangler.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCInstBuilder.h"
 #include "llvm/MC/MCStreamer.h"
-#include "llvm/Support/ErrorHandling.h"
-#include <cassert>
-#include <cstdint>
-
 using namespace llvm;
+
 
 MCOperand ARMAsmPrinter::GetSymbolRef(const MachineOperand &MO,
                                       const MCSymbol *Symbol) {
-  MCSymbolRefExpr::VariantKind SymbolVariant = MCSymbolRefExpr::VK_None;
-  if (MO.getTargetFlags() & ARMII::MO_SBREL)
-    SymbolVariant = MCSymbolRefExpr::VK_ARM_SBREL;
-
   const MCExpr *Expr =
-      MCSymbolRefExpr::create(Symbol, SymbolVariant, OutContext);
+      MCSymbolRefExpr::create(Symbol, MCSymbolRefExpr::VK_None, OutContext);
   switch (MO.getTargetFlags() & ARMII::MO_OPTION_MASK) {
   default:
     llvm_unreachable("Unknown target flag on symbol operand");
@@ -50,12 +38,12 @@ MCOperand ARMAsmPrinter::GetSymbolRef(const MachineOperand &MO,
     break;
   case ARMII::MO_LO16:
     Expr =
-        MCSymbolRefExpr::create(Symbol, SymbolVariant, OutContext);
+        MCSymbolRefExpr::create(Symbol, MCSymbolRefExpr::VK_None, OutContext);
     Expr = ARMMCExpr::createLower16(Expr, OutContext);
     break;
   case ARMII::MO_HI16:
     Expr =
-        MCSymbolRefExpr::create(Symbol, SymbolVariant, OutContext);
+        MCSymbolRefExpr::create(Symbol, MCSymbolRefExpr::VK_None, OutContext);
     Expr = ARMMCExpr::createUpper16(Expr, OutContext);
     break;
   }
@@ -74,8 +62,8 @@ bool ARMAsmPrinter::lowerOperand(const MachineOperand &MO,
   switch (MO.getType()) {
   default: llvm_unreachable("unknown operand type");
   case MachineOperand::MO_Register:
-    // Ignore all implicit register operands.
-    if (MO.isImplicit())
+    // Ignore all non-CPSR implicit register operands.
+    if (MO.isImplicit() && MO.getReg() != ARM::CPSR)
       return false;
     assert(!MO.getSubReg() && "Subregs should be eliminated!");
     MCOp = MCOperand::createReg(MO.getReg());
@@ -87,10 +75,11 @@ bool ARMAsmPrinter::lowerOperand(const MachineOperand &MO,
     MCOp = MCOperand::createExpr(MCSymbolRefExpr::create(
         MO.getMBB()->getSymbol(), OutContext));
     break;
-  case MachineOperand::MO_GlobalAddress:
+  case MachineOperand::MO_GlobalAddress: {
     MCOp = GetSymbolRef(MO,
                         GetARMGVSymbol(MO.getGlobal(), MO.getTargetFlags()));
     break;
+  }
   case MachineOperand::MO_ExternalSymbol:
     MCOp = GetSymbolRef(MO,
                         GetExternalSymbolSymbol(MO.getSymbolName()));
@@ -152,7 +141,9 @@ void llvm::LowerARMMachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
     break;
   }
 
-  for (const MachineOperand &MO : MI->operands()) {
+  for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
+    const MachineOperand &MO = MI->getOperand(i);
+
     MCOperand MCOp;
     if (AP.lowerOperand(MO, MCOp)) {
       if (MCOp.isImm() && EncodeImms) {
@@ -207,7 +198,12 @@ void ARMAsmPrinter::EmitSled(const MachineInstr &MI, SledKind Kind)
   EmitToStreamer(*OutStreamer, MCInstBuilder(ARM::Bcc).addImm(20)
     .addImm(ARMCC::AL).addReg(0));
 
-  emitNops(NoopsInSledCount);
+  MCInst Noop;
+  Subtarget->getInstrInfo()->getNoopForElfTarget(Noop);
+  for (int8_t I = 0; I < NoopsInSledCount; I++)
+  {
+    OutStreamer->EmitInstruction(Noop, getSubtargetInfo());
+  }
 
   OutStreamer->EmitLabel(Target);
   recordSled(CurSled, MI, Kind);

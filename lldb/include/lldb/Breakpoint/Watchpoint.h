@@ -1,22 +1,27 @@
 //===-- Watchpoint.h --------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_Watchpoint_h_
 #define liblldb_Watchpoint_h_
 
+// C Includes
+// C++ Includes
 #include <memory>
 #include <string>
 
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Breakpoint/StoppointLocation.h"
 #include "lldb/Breakpoint/WatchpointOptions.h"
+#include "lldb/Core/UserID.h"
 #include "lldb/Symbol/CompilerType.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/UserID.h"
 #include "lldb/lldb-private.h"
 
 namespace lldb_private {
@@ -31,9 +36,9 @@ public:
 
     ~WatchpointEventData() override;
 
-    static ConstString GetFlavorString();
+    static const ConstString &GetFlavorString();
 
-    ConstString GetFlavor() const override;
+    const ConstString &GetFlavor() const override;
 
     lldb::WatchpointEventType GetWatchpointEventType() const;
 
@@ -66,9 +71,10 @@ public:
 
   bool IsEnabled() const;
 
-  // This doesn't really enable/disable the watchpoint.   It is currently just
-  // for use in the Process plugin's {Enable,Disable}Watchpoint, which should
-  // be used instead.
+  // This doesn't really enable/disable the watchpoint.  
+  // It is currently just for use in the Process plugin's
+  // {Enable,Disable}Watchpoint, which should be used instead.
+  
   void SetEnabled(bool enabled, bool notify = true);
 
   bool IsHardware() const override;
@@ -94,24 +100,32 @@ public:
   void DumpSnapshots(Stream *s, const char *prefix = nullptr) const;
   void DumpWithLevel(Stream *s, lldb::DescriptionLevel description_level) const;
   Target &GetTarget() { return m_target; }
-  const Status &GetError() { return m_error; }
+  const Error &GetError() { return m_error; }
 
+  //------------------------------------------------------------------
   /// Returns the WatchpointOptions structure set for this watchpoint.
   ///
-  /// \return
+  /// @return
   ///     A pointer to this watchpoint's WatchpointOptions.
+  //------------------------------------------------------------------
   WatchpointOptions *GetOptions() { return &m_options; }
 
+  //------------------------------------------------------------------
   /// Set the callback action invoked when the watchpoint is hit.
   ///
-  /// \param[in] callback
+  /// @param[in] callback
   ///    The method that will get called when the watchpoint is hit.
-  /// \param[in] callback_baton
+  /// @param[in] callback_baton
   ///    A void * pointer that will get passed back to the callback function.
-  /// \param[in] is_synchronous
+  /// @param[in] is_synchronous
   ///    If \b true the callback will be run on the private event thread
   ///    before the stop event gets reported.  If false, the callback will get
   ///    handled on the public event thread after the stop has been posted.
+  ///
+  /// @return
+  ///    \b true if the process should stop when you hit the watchpoint.
+  ///    \b false if it should continue.
+  //------------------------------------------------------------------
   void SetCallback(WatchpointHitCallback callback, void *callback_baton,
                    bool is_synchronous = false);
 
@@ -121,28 +135,36 @@ public:
 
   void ClearCallback();
 
+  //------------------------------------------------------------------
   /// Invoke the callback action when the watchpoint is hit.
   ///
-  /// \param[in] context
+  /// @param[in] context
   ///     Described the watchpoint event.
   ///
-  /// \return
+  /// @return
   ///     \b true if the target should stop at this watchpoint and \b false not.
+  //------------------------------------------------------------------
   bool InvokeCallback(StoppointCallbackContext *context);
 
+  //------------------------------------------------------------------
   // Condition
+  //------------------------------------------------------------------
+  //------------------------------------------------------------------
   /// Set the watchpoint's condition.
   ///
-  /// \param[in] condition
+  /// @param[in] condition
   ///    The condition expression to evaluate when the watchpoint is hit.
   ///    Pass in nullptr to clear the condition.
+  //------------------------------------------------------------------
   void SetCondition(const char *condition);
 
+  //------------------------------------------------------------------
   /// Return a pointer to the text of the condition expression.
   ///
-  /// \return
+  /// @return
   ///    A pointer to the condition expression text, or nullptr if no
   //     condition has been set.
+  //------------------------------------------------------------------
   const char *GetConditionText() const;
 
   void TurnOnEphemeralMode();
@@ -175,8 +197,10 @@ private:
   uint32_t m_disabled_count; // Keep track of the count that the watchpoint is
                              // disabled while in ephemeral mode.
   // At the end of the ephemeral mode when the watchpoint is to be enabled
-  // again, we check the count, if it is more than 1, it means the user-
-  // supplied actions actually want the watchpoint to be disabled!
+  // again,
+  // we check the count, if it is more than 1, it means the user-supplied
+  // actions
+  // actually want the watchpoint to be disabled!
   uint32_t m_watch_read : 1, // 1 if we stop when the watched data is read from
       m_watch_write : 1,     // 1 if we stop when the watched data is written to
       m_watch_was_read : 1, // Set to 1 when watchpoint is hit for a read access
@@ -189,14 +213,14 @@ private:
   lldb::ValueObjectSP m_old_value_sp;
   lldb::ValueObjectSP m_new_value_sp;
   CompilerType m_type;
-  Status m_error; // An error object describing errors associated with this
-                  // watchpoint.
+  Error m_error; // An error object describing errors associated with this
+                 // watchpoint.
   WatchpointOptions
       m_options; // Settable watchpoint options, which is a delegate to handle
                  // the callback machinery.
   bool m_being_created;
 
-  std::unique_ptr<UserExpression> m_condition_up; // The condition to test.
+  std::unique_ptr<UserExpression> m_condition_ap; // The condition to test.
 
   void SetID(lldb::watch_id_t id) { m_loc_id = id; }
 

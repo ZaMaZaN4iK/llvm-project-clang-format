@@ -104,12 +104,6 @@ __attribute__((objc_root_class))
 @property (nonatomic,retain) ViewType view;
 @end
 
-@interface TypedefTypeParam<T> : NSObject
-typedef T AliasT;
-- (void)test:(AliasT)object;
-// expected-note@-1 {{parameter 'object' here}}
-@end
-
 // --------------------------------------------------------------------------
 // Nullability
 // --------------------------------------------------------------------------
@@ -196,7 +190,6 @@ void test_message_send_param(
        MutableSetOfArrays<NSString *> *mutStringArraySet,
        NSMutableSet *mutSet,
        MutableSetOfArrays *mutArraySet,
-       TypedefTypeParam<NSString *> *typedefTypeParam,
        void (^block)(void)) {
   Window *window;
 
@@ -206,7 +199,6 @@ void test_message_send_param(
   [mutStringArraySet addObject: window]; // expected-warning{{parameter of type 'NSArray<NSString *> *'}}
   [mutSet addObject: window]; // expected-warning{{parameter of incompatible type 'id<NSCopying>'}}
   [mutArraySet addObject: window]; // expected-warning{{parameter of incompatible type 'id<NSCopying>'}}
-  [typedefTypeParam test: window]; // expected-warning{{parameter of type 'NSString *'}}
   [block addObject: window]; // expected-warning{{parameter of incompatible type 'id<NSCopying>'}}
 }
 

@@ -5,6 +5,8 @@ Test lldb data formatter subsystem.
 from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.lldbbench import *
 from lldbsuite.test.decorators import *
@@ -28,8 +30,7 @@ class TestBenchmarkLibcxxMap(BenchBase):
 
     def data_formatter_commands(self):
         """Benchmark the std::map data formatter (libc++)"""
-        self.runCmd("file " +self.getBuildArtifact("a.out"),
-                    CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         bkpt = self.target().FindBreakpointByID(
             lldbutil.run_break_set_by_source_regexp(

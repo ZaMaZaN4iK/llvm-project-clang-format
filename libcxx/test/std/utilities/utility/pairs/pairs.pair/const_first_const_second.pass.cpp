@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,10 +18,8 @@
 #include <utility>
 #include <cassert>
 
-#include "archetypes.h"
-#include "test_convertible.h"
-
-#include "test_macros.h"
+#include "archetypes.hpp"
+#include "test_convertible.hpp"
 using namespace ImplicitTypes; // Get implicitly archetypes
 
 struct ExplicitT {
@@ -48,7 +47,7 @@ void test_sfinae() {
     static_assert(test_convertible<P2,   T2,   T1Arg>() == CanConvert, "");
 }
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::pair<float, short*> P;
@@ -96,6 +95,4 @@ int main(int, char**)
         static_assert(p.second == 10, "");
     }
 #endif
-
-  return 0;
 }

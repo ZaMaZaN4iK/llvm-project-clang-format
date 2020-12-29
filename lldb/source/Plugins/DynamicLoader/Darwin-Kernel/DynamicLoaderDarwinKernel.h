@@ -1,25 +1,27 @@
 //===-- DynamicLoaderDarwinKernel.h -----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_DynamicLoaderDarwinKernel_h_
 #define liblldb_DynamicLoaderDarwinKernel_h_
 
+// C Includes
+// C++ Includes
 #include <mutex>
 #include <string>
 #include <vector>
 
-
-#include "lldb/Host/SafeMachO.h"
-
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/UUID.h"
+#include "lldb/Host/FileSpec.h"
 #include "lldb/Target/DynamicLoader.h"
 #include "lldb/Target/Process.h"
-#include "lldb/Utility/FileSpec.h"
-#include "lldb/Utility/UUID.h"
 
 class DynamicLoaderDarwinKernel : public lldb_private::DynamicLoader {
 public:
@@ -28,7 +30,9 @@ public:
 
   ~DynamicLoaderDarwinKernel() override;
 
+  //------------------------------------------------------------------
   // Static Functions
+  //------------------------------------------------------------------
   static void Initialize();
 
   static void Terminate();
@@ -44,10 +48,12 @@ public:
 
   static lldb::addr_t SearchForDarwinKernel(lldb_private::Process *process);
 
+  //------------------------------------------------------------------
   /// Called after attaching a process.
   ///
   /// Allow DynamicLoader plug-ins to execute some code after
   /// attaching to a process.
+  //------------------------------------------------------------------
   void DidAttach() override;
 
   void DidLaunch() override;
@@ -55,9 +61,11 @@ public:
   lldb::ThreadPlanSP GetStepThroughTrampolinePlan(lldb_private::Thread &thread,
                                                   bool stop_others) override;
 
-  lldb_private::Status CanLoadImage() override;
+  lldb_private::Error CanLoadImage() override;
 
+  //------------------------------------------------------------------
   // PluginInterface protocol
+  //------------------------------------------------------------------
   lldb_private::ConstString GetPluginName() override;
 
   uint32_t GetPluginVersion() override;
@@ -240,7 +248,7 @@ protected:
       image_infos_addr = LLDB_INVALID_ADDRESS;
     }
 
-    bool IsValid() const { return version >= 1 && version <= 2; }
+    bool IsValid() const { return version >= 1 || version <= 2; }
   };
 
   void RegisterNotificationCallbacks();
@@ -276,14 +284,9 @@ protected:
   static lldb::addr_t
   SearchForKernelViaExhaustiveSearch(lldb_private::Process *process);
 
-  static bool
-  ReadMachHeader(lldb::addr_t addr, lldb_private::Process *process, llvm::MachO::mach_header &mh,
-                 bool *read_error = nullptr);
-
   static lldb_private::UUID
   CheckForKernelImageAtAddress(lldb::addr_t addr,
-                               lldb_private::Process *process,
-                               bool *read_error = nullptr);
+                               lldb_private::Process *process);
 
   lldb::addr_t m_kernel_load_address;
   KextImageInfo m_kernel; // Info about the current kernel image being used

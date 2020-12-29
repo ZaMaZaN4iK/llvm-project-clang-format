@@ -1,8 +1,9 @@
 //===- gcov.cpp - GCOV compatible LLVM coverage tool ----------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,11 +11,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ProfileData/GCOV.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/GCOV.h"
 #include "llvm/Support/Path.h"
 #include <system_error>
 using namespace llvm;
@@ -73,7 +74,7 @@ static void reportCoverage(StringRef SourceFile, StringRef ObjectDir,
   }
 
   if (DumpGCOV)
-    GF.print(errs());
+    GF.dump();
 
   FileInfo FI(Options);
   GF.collectLineCounts(FI);
@@ -124,11 +125,6 @@ int gcovMain(int argc, const char *argv[]) {
                                       "(requires -b)"));
   cl::alias UncondBranchA("unconditional-branches", cl::aliasopt(UncondBranch));
 
-  cl::opt<bool> HashFilenames("x", cl::Grouping, cl::init(false),
-                              cl::desc("Hash long pathnames"));
-  cl::alias HashFilenamesA("hash-filenames", cl::aliasopt(HashFilenames));
-
-
   cl::OptionCategory DebugCat("Internal and debugging options");
   cl::opt<bool> DumpGCOV("dump", cl::init(false), cl::cat(DebugCat),
                          cl::desc("Dump the gcov file to stderr"));
@@ -140,8 +136,7 @@ int gcovMain(int argc, const char *argv[]) {
   cl::ParseCommandLineOptions(argc, argv, "LLVM code coverage tool\n");
 
   GCOV::Options Options(AllBlocks, BranchProb, BranchCount, FuncSummary,
-                        PreservePaths, UncondBranch, LongNames, NoOutput,
-                        HashFilenames);
+                        PreservePaths, UncondBranch, LongNames, NoOutput);
 
   for (const auto &SourceFile : SourceFiles)
     reportCoverage(SourceFile, ObjectDir, InputGCNO, InputGCDA, DumpGCOV,

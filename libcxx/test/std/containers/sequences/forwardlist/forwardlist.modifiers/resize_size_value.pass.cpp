@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,7 +22,7 @@
 #include "container_test_types.h"
 #endif
 
-int main(int, char**)
+int main()
 {
     {
         typedef int T;
@@ -87,6 +88,7 @@ int main(int, char**)
     {
         // Test that the allocator's construct method is being used to
         // construct the new elements and that it's called exactly N times.
+        typedef int T;
         typedef std::forward_list<int, ContainerTestAllocator<int, int>> Container;
         ConstructController* cc = getConstructController();
         cc->reset();
@@ -98,6 +100,4 @@ int main(int, char**)
         }
     }
 #endif
-
-  return 0;
 }

@@ -1,8 +1,9 @@
 //===-- IPO.cpp -----------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,10 +13,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm-c/Transforms/IPO.h"
 #include "llvm-c/Initialization.h"
-#include "llvm/IR/LegacyPassManager.h"
+#include "llvm-c/Transforms/IPO.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/AlwaysInliner.h"
 #include "llvm/Transforms/IPO/FunctionAttrs.h"
@@ -24,7 +25,6 @@ using namespace llvm;
 
 void llvm::initializeIPO(PassRegistry &Registry) {
   initializeArgPromotionPass(Registry);
-  initializeCalledValuePropagationLegacyPassPass(Registry);
   initializeConstantMergeLegacyPassPass(Registry);
   initializeCrossDSOCFIPass(Registry);
   initializeDAEPass(Registry);
@@ -33,23 +33,20 @@ void llvm::initializeIPO(PassRegistry &Registry) {
   initializeGlobalDCELegacyPassPass(Registry);
   initializeGlobalOptLegacyPassPass(Registry);
   initializeGlobalSplitPass(Registry);
-  initializeHotColdSplittingLegacyPassPass(Registry);
   initializeIPCPPass(Registry);
   initializeAlwaysInlinerLegacyPassPass(Registry);
   initializeSimpleInlinerPass(Registry);
   initializeInferFunctionAttrsLegacyPassPass(Registry);
   initializeInternalizeLegacyPassPass(Registry);
   initializeLoopExtractorPass(Registry);
-  initializeBlockExtractorPass(Registry);
+  initializeBlockExtractorPassPass(Registry);
   initializeSingleLoopExtractorPass(Registry);
   initializeLowerTypeTestsPass(Registry);
-  initializeMergeFunctionsLegacyPassPass(Registry);
+  initializeMergeFunctionsPass(Registry);
   initializePartialInlinerLegacyPassPass(Registry);
-  initializeAttributorLegacyPassPass(Registry);
   initializePostOrderFunctionAttrsLegacyPassPass(Registry);
   initializeReversePostOrderFunctionAttrsLegacyPassPass(Registry);
   initializePruneEHPass(Registry);
-  initializeIPSCCPLegacyPassPass(Registry);
   initializeStripDeadPrototypesLegacyPassPass(Registry);
   initializeStripSymbolsPass(Registry);
   initializeStripDebugDeclarePass(Registry);
@@ -68,10 +65,6 @@ void LLVMInitializeIPO(LLVMPassRegistryRef R) {
 
 void LLVMAddArgumentPromotionPass(LLVMPassManagerRef PM) {
   unwrap(PM)->add(createArgumentPromotionPass());
-}
-
-void LLVMAddCalledValuePropagationPass(LLVMPassManagerRef PM) {
-  unwrap(PM)->add(createCalledValuePropagationPass());
 }
 
 void LLVMAddConstantMergePass(LLVMPassManagerRef PM) {
@@ -114,24 +107,11 @@ void LLVMAddIPSCCPPass(LLVMPassManagerRef PM) {
   unwrap(PM)->add(createIPSCCPPass());
 }
 
-void LLVMAddMergeFunctionsPass(LLVMPassManagerRef PM) {
-  unwrap(PM)->add(createMergeFunctionsPass());
-}
-
 void LLVMAddInternalizePass(LLVMPassManagerRef PM, unsigned AllButMain) {
   auto PreserveMain = [=](const GlobalValue &GV) {
     return AllButMain && GV.getName() == "main";
   };
   unwrap(PM)->add(createInternalizePass(PreserveMain));
-}
-
-void LLVMAddInternalizePassWithMustPreservePredicate(
-    LLVMPassManagerRef PM,
-    void *Context,
-    LLVMBool (*Pred)(LLVMValueRef, void *)) {
-  unwrap(PM)->add(createInternalizePass([=](const GlobalValue &GV) {
-    return Pred(wrap(&GV), Context) == 0 ? false : true;
-  }));
 }
 
 void LLVMAddStripDeadPrototypesPass(LLVMPassManagerRef PM) {

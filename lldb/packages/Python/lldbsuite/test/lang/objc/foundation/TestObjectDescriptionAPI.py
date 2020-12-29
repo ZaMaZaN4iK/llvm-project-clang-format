@@ -5,6 +5,9 @@ Test SBValue.GetObjectDescription() with the value from SBTarget.FindGlobalVaria
 from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -31,7 +34,7 @@ class ObjectDescriptionAPITestCase(TestBase):
         d = {'EXE': 'b.out'}
         self.build(dictionary=d)
         self.setTearDownCleanup(dictionary=d)
-        exe = self.getBuildArtifact('b.out')
+        exe = os.path.join(os.getcwd(), 'b.out')
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)

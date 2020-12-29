@@ -1,8 +1,9 @@
 //===--- GeneratePCH.cpp - Sema Consumer for PCH Generation -----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,23 +17,20 @@
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/SemaConsumer.h"
 #include "clang/Serialization/ASTWriter.h"
-#include "llvm/Bitstream/BitstreamWriter.h"
+#include "llvm/Bitcode/BitstreamWriter.h"
 
 using namespace clang;
 
 PCHGenerator::PCHGenerator(
-    const Preprocessor &PP, InMemoryModuleCache &ModuleCache,
-    StringRef OutputFile, StringRef isysroot, std::shared_ptr<PCHBuffer> Buffer,
+    const Preprocessor &PP, StringRef OutputFile, StringRef isysroot,
+    std::shared_ptr<PCHBuffer> Buffer,
     ArrayRef<std::shared_ptr<ModuleFileExtension>> Extensions,
-    bool AllowASTWithErrors, bool IncludeTimestamps,
-    bool ShouldCacheASTInMemory)
+    bool AllowASTWithErrors, bool IncludeTimestamps)
     : PP(PP), OutputFile(OutputFile), isysroot(isysroot.str()),
-      SemaPtr(nullptr), Buffer(std::move(Buffer)), Stream(this->Buffer->Data),
-      Writer(Stream, this->Buffer->Data, ModuleCache, Extensions,
-             IncludeTimestamps),
-      AllowASTWithErrors(AllowASTWithErrors),
-      ShouldCacheASTInMemory(ShouldCacheASTInMemory) {
-  this->Buffer->IsComplete = false;
+      SemaPtr(nullptr), Buffer(Buffer), Stream(Buffer->Data),
+      Writer(Stream, Extensions, IncludeTimestamps),
+      AllowASTWithErrors(AllowASTWithErrors) {
+  Buffer->IsComplete = false;
 }
 
 PCHGenerator::~PCHGenerator() {
@@ -63,8 +61,7 @@ void PCHGenerator::HandleTranslationUnit(ASTContext &Ctx) {
       Writer.WriteAST(*SemaPtr, OutputFile, Module, isysroot,
                       // For serialization we are lenient if the errors were
                       // only warn-as-error kind.
-                      PP.getDiagnostics().hasUncompilableErrorOccurred(),
-                      ShouldCacheASTInMemory);
+                      PP.getDiagnostics().hasUncompilableErrorOccurred());
 
   Buffer->IsComplete = true;
 }

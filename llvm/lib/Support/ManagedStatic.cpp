@@ -1,8 +1,9 @@
 //===-- ManagedStatic.cpp - Static Global wrapper -------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,20 +13,24 @@
 
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Config/config.h"
+#include "llvm/Support/Mutex.h"
+#include "llvm/Support/MutexGuard.h"
 #include "llvm/Support/Threading.h"
 #include <cassert>
-#include <mutex>
 using namespace llvm;
 
 static const ManagedStaticBase *StaticList = nullptr;
-static std::recursive_mutex *ManagedStaticMutex = nullptr;
-static llvm::once_flag mutex_init_flag;
+static sys::Mutex *ManagedStaticMutex = nullptr;
+LLVM_DEFINE_ONCE_FLAG(mutex_init_flag);
 
 static void initializeMutex() {
-  ManagedStaticMutex = new std::recursive_mutex();
+  ManagedStaticMutex = new sys::Mutex();
 }
 
-static std::recursive_mutex *getManagedStaticMutex() {
+static sys::Mutex* getManagedStaticMutex() {
+  // We need to use a function local static here, since this can get called
+  // during a static constructor and we need to guarantee that it's initialized
+  // correctly.
   llvm::call_once(mutex_init_flag, initializeMutex);
   return ManagedStaticMutex;
 }
@@ -34,14 +39,14 @@ void ManagedStaticBase::RegisterManagedStatic(void *(*Creator)(),
                                               void (*Deleter)(void*)) const {
   assert(Creator);
   if (llvm_is_multithreaded()) {
-    std::lock_guard<std::recursive_mutex> Lock(*getManagedStaticMutex());
+    MutexGuard Lock(*getManagedStaticMutex());
 
     if (!Ptr.load(std::memory_order_relaxed)) {
       void *Tmp = Creator();
 
       Ptr.store(Tmp, std::memory_order_release);
       DeleterFn = Deleter;
-
+      
       // Add to list of managed statics.
       Next = StaticList;
       StaticList = this;
@@ -51,7 +56,7 @@ void ManagedStaticBase::RegisterManagedStatic(void *(*Creator)(),
            "Partially initialized ManagedStatic!?");
     Ptr = Creator();
     DeleterFn = Deleter;
-
+  
     // Add to list of managed statics.
     Next = StaticList;
     StaticList = this;
@@ -68,7 +73,7 @@ void ManagedStaticBase::destroy() const {
 
   // Destroy memory.
   DeleterFn(Ptr);
-
+  
   // Cleanup.
   Ptr = nullptr;
   DeleterFn = nullptr;
@@ -76,7 +81,7 @@ void ManagedStaticBase::destroy() const {
 
 /// llvm_shutdown - Deallocate and destroy all ManagedStatic variables.
 void llvm::llvm_shutdown() {
-  std::lock_guard<std::recursive_mutex> Lock(*getManagedStaticMutex());
+  MutexGuard Lock(*getManagedStaticMutex());
 
   while (StaticList)
     StaticList->destroy();

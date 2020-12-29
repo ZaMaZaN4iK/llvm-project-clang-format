@@ -1,27 +1,29 @@
-//===-- ThreadLauncher.h ----------------------------------------*- C++ -*-===//
+//===-- ThreadLauncher.h -----------------------------------------*- C++
+//-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef lldb_Host_ThreadLauncher_h_
 #define lldb_Host_ThreadLauncher_h_
 
+#include "lldb/Core/Error.h"
 #include "lldb/Host/HostThread.h"
 #include "lldb/lldb-types.h"
 
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/Error.h"
 
 namespace lldb_private {
 
 class ThreadLauncher {
 public:
-  static llvm::Expected<HostThread>
+  static HostThread
   LaunchThread(llvm::StringRef name, lldb::thread_func_t thread_function,
-               lldb::thread_arg_t thread_arg,
+               lldb::thread_arg_t thread_arg, Error *error_ptr,
                size_t min_stack_byte_size = 0); // Minimum stack size in bytes,
                                                 // set stack size to zero for
                                                 // default platform thread stack

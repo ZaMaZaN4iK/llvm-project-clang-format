@@ -1,8 +1,9 @@
 ﻿//===-- ClangFormatPackages.cs - VSPackage for clang-format ------*- C# -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,11 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-using EnvDTE;
+using Microsoft.VisualStudio.Editor;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Editor;
+using Microsoft.VisualStudio.TextManager.Interop;
 using System;
 using System.Collections;
 using System.ComponentModel;
@@ -23,8 +25,6 @@ using System.ComponentModel.Design;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
-using System.Linq;
-using System.Text;
 
 namespace LLVM.ClangFormat
 {
@@ -36,17 +36,6 @@ namespace LLVM.ClangFormat
         private string fallbackStyle = "LLVM";
         private bool sortIncludes = false;
         private string style = "file";
-        private bool formatOnSave = false;
-        private string formatOnSaveFileExtensions =
-            ".c;.cpp;.cxx;.cc;.tli;.tlh;.h;.hh;.hpp;.hxx;.hh;.inl;" +
-            ".java;.js;.ts;.m;.mm;.proto;.protodevel;.td";
-
-        public OptionPageGrid Clone()
-        {
-            // Use MemberwiseClone to copy value types.
-            var clone = (OptionPageGrid)MemberwiseClone();
-            return clone;
-        }
 
         public class StyleConverter : TypeConverter
         {
@@ -85,7 +74,7 @@ namespace LLVM.ClangFormat
             }
         }
 
-        [Category("Format Options")]
+        [Category("LLVM/Clang")]
         [DisplayName("Style")]
         [Description("Coding style, currently supports:\n" +
                      "  - Predefined styles ('LLVM', 'Google', 'Chromium', 'Mozilla', 'WebKit').\n" +
@@ -132,7 +121,7 @@ namespace LLVM.ClangFormat
             }
         }
 
-        [Category("Format Options")]
+        [Category("LLVM/Clang")]
         [DisplayName("Assume Filename")]
         [Description("When reading from stdin, clang-format assumes this " +
                      "filename to look for a style config file (with 'file' style) " +
@@ -153,7 +142,7 @@ namespace LLVM.ClangFormat
             }
         }
 
-        [Category("Format Options")]
+        [Category("LLVM/Clang")]
         [DisplayName("Fallback Style")]
         [Description("The name of the predefined style used as a fallback in case clang-format " +
                      "is invoked with 'file' style, but can not find the configuration file.\n" +
@@ -165,7 +154,7 @@ namespace LLVM.ClangFormat
             set { fallbackStyle = value; }
         }
 
-        [Category("Format Options")]
+        [Category("LLVM/Clang")]
         [DisplayName("Sort includes")]
         [Description("Sort touched include lines.\n\n" +
                      "See also: http://clang.llvm.org/docs/ClangFormat.html.")]
@@ -174,47 +163,19 @@ namespace LLVM.ClangFormat
             get { return sortIncludes; }
             set { sortIncludes = value; }
         }
-
-        [Category("Format On Save")]
-        [DisplayName("Enable")]
-        [Description("Enable running clang-format when modified files are saved. " +
-                     "Will only format if Style is found (ignores Fallback Style)."
-            )]
-        public bool FormatOnSave
-        {
-            get { return formatOnSave; }
-            set { formatOnSave = value; }
-        }
-
-        [Category("Format On Save")]
-        [DisplayName("File extensions")]
-        [Description("When formatting on save, clang-format will be applied only to " +
-                     "files with these extensions.")]
-        public string FormatOnSaveFileExtensions
-        {
-            get { return formatOnSaveFileExtensions; }
-            set { formatOnSaveFileExtensions = value; }
-        }
     }
 
     [PackageRegistration(UseManagedResourcesOnly = true)]
     [InstalledProductRegistration("#110", "#112", "1.0", IconResourceID = 400)]
     [ProvideMenuResource("Menus.ctmenu", 1)]
-    [ProvideAutoLoad(UIContextGuids80.SolutionExists)] // Load package on solution load
     [Guid(GuidList.guidClangFormatPkgString)]
     [ProvideOptionPage(typeof(OptionPageGrid), "LLVM/Clang", "ClangFormat", 0, 0, true)]
     public sealed class ClangFormatPackage : Package
     {
         #region Package Members
-
-        RunningDocTableEventsDispatcher _runningDocTableEventsDispatcher;
-
         protected override void Initialize()
         {
             base.Initialize();
-
-            _runningDocTableEventsDispatcher = new RunningDocTableEventsDispatcher(this);
-            _runningDocTableEventsDispatcher.BeforeSave += OnBeforeSave;
 
             var commandService = GetService(typeof(IMenuCommandService)) as OleMenuCommandService;
             if (commandService != null)
@@ -234,11 +195,6 @@ namespace LLVM.ClangFormat
         }
         #endregion
 
-        OptionPageGrid GetUserOptions()
-        {
-            return (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
-        }
-
         private void MenuItemCallback(object sender, EventArgs args)
         {
             var mc = sender as System.ComponentModel.Design.MenuCommand;
@@ -248,99 +204,61 @@ namespace LLVM.ClangFormat
             switch (mc.CommandID.ID)
             {
                 case (int)PkgCmdIDList.cmdidClangFormatSelection:
-                    FormatSelection(GetUserOptions());
+                    FormatSelection();
                     break;
 
                 case (int)PkgCmdIDList.cmdidClangFormatDocument:
-                    FormatDocument(GetUserOptions());
+                    FormatDocument();
                     break;
             }
-        }
-
-        private static bool FileHasExtension(string filePath, string fileExtensions)
-        {
-            var extensions = fileExtensions.ToLower().Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-            return extensions.Contains(Path.GetExtension(filePath).ToLower());
-        }
-
-        private void OnBeforeSave(object sender, Document document)
-        {
-            var options = GetUserOptions();
-
-            if (!options.FormatOnSave)
-                return;
-
-            if (!FileHasExtension(document.FullName, options.FormatOnSaveFileExtensions))
-                return;
-
-            if (!Vsix.IsDocumentDirty(document))
-                return;
-
-            var optionsWithNoFallbackStyle = GetUserOptions().Clone();
-            optionsWithNoFallbackStyle.FallbackStyle = "none";
-            FormatDocument(document, optionsWithNoFallbackStyle);
         }
 
         /// <summary>
         /// Runs clang-format on the current selection
         /// </summary>
-        private void FormatSelection(OptionPageGrid options)
+        private void FormatSelection()
         {
-            IWpfTextView view = Vsix.GetCurrentView();
+            IWpfTextView view = GetCurrentView();
             if (view == null)
                 // We're not in a text view.
                 return;
             string text = view.TextBuffer.CurrentSnapshot.GetText();
             int start = view.Selection.Start.Position.GetContainingLine().Start.Position;
             int end = view.Selection.End.Position.GetContainingLine().End.Position;
-
+            int length = end - start;
+            
             // clang-format doesn't support formatting a range that starts at the end
             // of the file.
             if (start >= text.Length && text.Length > 0)
                 start = text.Length - 1;
-            string path = Vsix.GetDocumentParent(view);
-            string filePath = Vsix.GetDocumentPath(view);
+            string path = GetDocumentParent(view);
+            string filePath = GetDocumentPath(view);
 
-            RunClangFormatAndApplyReplacements(text, start, end, path, filePath, options, view);
+            RunClangFormatAndApplyReplacements(text, start, length, path, filePath, view);
         }
 
         /// <summary>
         /// Runs clang-format on the current document
         /// </summary>
-        private void FormatDocument(OptionPageGrid options)
+        private void FormatDocument()
         {
-            FormatView(Vsix.GetCurrentView(), options);
-        }
-
-        private void FormatDocument(Document document, OptionPageGrid options)
-        {
-            FormatView(Vsix.GetDocumentView(document), options);
-        }
-
-        private void FormatView(IWpfTextView view, OptionPageGrid options)
-        {
+            IWpfTextView view = GetCurrentView();
             if (view == null)
                 // We're not in a text view.
                 return;
 
-            string filePath = Vsix.GetDocumentPath(view);
+            string filePath = GetDocumentPath(view);
             var path = Path.GetDirectoryName(filePath);
-
             string text = view.TextBuffer.CurrentSnapshot.GetText();
-            if (!text.EndsWith(Environment.NewLine))
-            {
-                view.TextBuffer.Insert(view.TextBuffer.CurrentSnapshot.Length, Environment.NewLine);
-                text += Environment.NewLine;
-            }
 
-            RunClangFormatAndApplyReplacements(text, 0, text.Length, path, filePath, options, view);
+            RunClangFormatAndApplyReplacements(text, 0, text.Length, path, filePath, view);
         }
 
-        private void RunClangFormatAndApplyReplacements(string text, int start, int end, string path, string filePath, OptionPageGrid options, IWpfTextView view)
+        private void RunClangFormatAndApplyReplacements(string text, int offset, int length, string path, string filePath, IWpfTextView view)
         {
             try
             {
-                string replacements = RunClangFormat(text, start, end, path, filePath, options);
+                string replacements = RunClangFormat(text, offset, length, path, filePath);
                 ApplyClangFormatReplacements(replacements, view);
             }
             catch (Exception e)
@@ -363,9 +281,9 @@ namespace LLVM.ClangFormat
         /// <summary>
         /// Runs the given text through clang-format and returns the replacements as XML.
         /// 
-        /// Formats the text in range start and end.
+        /// Formats the text range starting at offset of the given length.
         /// </summary>
-        private static string RunClangFormat(string text, int start, int end, string path, string filePath, OptionPageGrid options)
+        private string RunClangFormat(string text, int offset, int length, string path, string filePath)
         {
             string vsixPath = Path.GetDirectoryName(
                 typeof(ClangFormatPackage).Assembly.Location);
@@ -373,21 +291,18 @@ namespace LLVM.ClangFormat
             System.Diagnostics.Process process = new System.Diagnostics.Process();
             process.StartInfo.UseShellExecute = false;
             process.StartInfo.FileName = vsixPath + "\\clang-format.exe";
-            char[] chars = text.ToCharArray();
-            int offset = Encoding.UTF8.GetByteCount(chars, 0, start);
-            int length = Encoding.UTF8.GetByteCount(chars, 0, end) - offset;
             // Poor man's escaping - this will not work when quotes are already escaped
             // in the input (but we don't need more).
-            string style = options.Style.Replace("\"", "\\\"");
-            string fallbackStyle = options.FallbackStyle.Replace("\"", "\\\"");
+            string style = GetStyle().Replace("\"", "\\\"");
+            string fallbackStyle = GetFallbackStyle().Replace("\"", "\\\"");
             process.StartInfo.Arguments = " -offset " + offset +
                                           " -length " + length +
                                           " -output-replacements-xml " +
                                           " -style \"" + style + "\"" +
                                           " -fallback-style \"" + fallbackStyle + "\"";
-            if (options.SortIncludes)
+            if (GetSortIncludes())
               process.StartInfo.Arguments += " -sort-includes ";
-            string assumeFilename = options.AssumeFilename;
+            string assumeFilename = GetAssumeFilename();
             if (string.IsNullOrEmpty(assumeFilename))
                 assumeFilename = filePath;
             if (!string.IsNullOrEmpty(assumeFilename))
@@ -416,11 +331,10 @@ namespace LLVM.ClangFormat
             // 2. We write everything to the standard output - this cannot block, as clang-format
             //    reads the full standard input before analyzing it without writing anything to the
             //    standard output.
-            StreamWriter utf8Writer = new StreamWriter(process.StandardInput.BaseStream, new UTF8Encoding(false));
-            utf8Writer.Write(text);
+            process.StandardInput.Write(text);
             // 3. We notify clang-format that the input is done - after this point clang-format
             //    will start analyzing the input and eventually write the output.
-            utf8Writer.Close();
+            process.StandardInput.Close();
             // 4. We must read clang-format's output before waiting for it to exit; clang-format
             //    will close the channel by exiting.
             string output = process.StandardOutput.ReadToEnd();
@@ -438,27 +352,87 @@ namespace LLVM.ClangFormat
         /// <summary>
         /// Applies the clang-format replacements (xml) to the current view
         /// </summary>
-        private static void ApplyClangFormatReplacements(string replacements, IWpfTextView view)
+        private void ApplyClangFormatReplacements(string replacements, IWpfTextView view)
         {
             // clang-format returns no replacements if input text is empty
             if (replacements.Length == 0)
                 return;
 
-            string text = view.TextBuffer.CurrentSnapshot.GetText();
-            byte[] bytes = Encoding.UTF8.GetBytes(text);
-
             var root = XElement.Parse(replacements);
             var edit = view.TextBuffer.CreateEdit();
             foreach (XElement replacement in root.Descendants("replacement"))
             {
-                int offset = int.Parse(replacement.Attribute("offset").Value);
-                int length = int.Parse(replacement.Attribute("length").Value);
                 var span = new Span(
-                    Encoding.UTF8.GetCharCount(bytes, 0, offset),
-                    Encoding.UTF8.GetCharCount(bytes, offset, length));
+                    int.Parse(replacement.Attribute("offset").Value),
+                    int.Parse(replacement.Attribute("length").Value));
                 edit.Replace(span, replacement.Value);
             }
             edit.Apply();
+        }
+
+        /// <summary>
+        /// Returns the currently active view if it is a IWpfTextView.
+        /// </summary>
+        private IWpfTextView GetCurrentView()
+        {
+            // The SVsTextManager is a service through which we can get the active view.
+            var textManager = (IVsTextManager)Package.GetGlobalService(typeof(SVsTextManager));
+            IVsTextView textView;
+            textManager.GetActiveView(1, null, out textView);
+
+            // Now we have the active view as IVsTextView, but the text interfaces we need
+            // are in the IWpfTextView.
+            var userData = (IVsUserData)textView;
+            if (userData == null)
+                return null;
+            Guid guidWpfViewHost = DefGuidList.guidIWpfTextViewHost;
+            object host;
+            userData.GetData(ref guidWpfViewHost, out host);
+            return ((IWpfTextViewHost)host).TextView;
+        }
+
+        private string GetStyle()
+        {
+            var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
+            return page.Style;
+        }
+
+        private string GetAssumeFilename()
+        {
+            var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
+            return page.AssumeFilename;
+        }
+
+        private string GetFallbackStyle()
+        {
+            var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
+            return page.FallbackStyle;
+        }
+
+        private bool GetSortIncludes()
+        {
+            var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
+            return page.SortIncludes;
+        }
+
+        private string GetDocumentParent(IWpfTextView view)
+        {
+            ITextDocument document;
+            if (view.TextBuffer.Properties.TryGetProperty(typeof(ITextDocument), out document))
+            {
+                return Directory.GetParent(document.FilePath).ToString();
+            }
+            return null;
+        }
+
+        private string GetDocumentPath(IWpfTextView view)
+        {
+            ITextDocument document;
+            if (view.TextBuffer.Properties.TryGetProperty(typeof(ITextDocument), out document))
+            {
+                return document.FilePath;
+            }
+            return null;
         }
     }
 }

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,8 +20,6 @@
 #include <type_traits>
 #include <cassert>
 
-#include "test_macros.h"
-
 template <class Duration>
 void
 test(const Duration& f, const Duration& d)
@@ -32,7 +31,7 @@ test(const Duration& f, const Duration& d)
     }
 }
 
-int main(int, char**)
+int main()
 {
 //  7290000ms is 2 hours, 1 minute, and 30 seconds
     test(std::chrono::milliseconds( 7290000), std::chrono::milliseconds( 7290000));
@@ -48,12 +47,4 @@ int main(int, char**)
     constexpr std::chrono::hours h2 = std::chrono::abs(std::chrono::hours(3));
     static_assert(h2.count() == 3, "");
     }
-
-    {
-//  Make sure it works for durations that are not LCD'ed - example from LWG3091
-    constexpr auto d = std::chrono::abs(std::chrono::duration<int, std::ratio<60, 100>>{2});
-    static_assert(d.count() == 2, "");
-    }
-
-  return 0;
 }

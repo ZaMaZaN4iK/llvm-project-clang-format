@@ -2,8 +2,11 @@
 Make sure that ivars of Objective-C++ classes are visible in LLDB.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -21,7 +24,7 @@ class ObjCXXTestCase(TestBase):
             self.skipTest("requires Objective-C 2.0 runtime")
 
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_source_regexp(

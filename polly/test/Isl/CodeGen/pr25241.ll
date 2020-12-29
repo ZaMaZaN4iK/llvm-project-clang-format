@@ -35,10 +35,10 @@ entry:
 
 while.body.740:                                   ; preds = %if.else.864, %if.then.862
   %curr.3 = phi i32 [ %inc863, %if.then.862 ], [ undef, %if.else.864 ]
-  ret void
+  unreachable
 
 sw.bb.748:                                        ; preds = %entry
-  ret void
+  unreachable
 
 if.then.813:                                      ; preds = %entry
   %conv823903 = and i32 undef, undef
@@ -56,7 +56,7 @@ save_state_and_return:                            ; preds = %entry
   ret void
 }
 
-attributes #0 = { nounwind uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "frame-pointer"="none" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+mmx,+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { nounwind uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+mmx,+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
 
 !llvm.ident = !{!0}
 

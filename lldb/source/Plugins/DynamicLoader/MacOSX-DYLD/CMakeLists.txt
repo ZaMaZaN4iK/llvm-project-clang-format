@@ -1,16 +1,5 @@
-add_lldb_library(lldbPluginDynamicLoaderMacOSXDYLD PLUGIN
+add_lldb_library(lldbPluginDynamicLoaderMacOSXDYLD
   DynamicLoaderMacOSXDYLD.cpp
   DynamicLoaderMacOS.cpp
   DynamicLoaderDarwin.cpp
-
-  LINK_LIBS
-    lldbBreakpoint
-    lldbCore
-    lldbExpression
-    lldbHost
-    lldbSymbol
-    lldbTarget
-    lldbUtility
-  LINK_COMPONENTS
-    Support
   )

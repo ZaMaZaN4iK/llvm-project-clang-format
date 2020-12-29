@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -110,7 +111,7 @@ void g3(std::ios_base::event ev, std::ios_base& stream, int index)
     }
 }
 
-int main(int, char**)
+int main()
 {
     testbuf sb1;
     std::ios ios1(&sb1);
@@ -190,6 +191,4 @@ int main(int, char**)
     assert(ios1.tie() == (std::ostream*)2);
     assert(ios1.fill() == '2');
 #endif
-
-  return 0;
 }

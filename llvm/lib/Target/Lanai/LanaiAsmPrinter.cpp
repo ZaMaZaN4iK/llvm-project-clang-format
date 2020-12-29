@@ -1,8 +1,9 @@
 //===-- LanaiAsmPrinter.cpp - Lanai LLVM assembly writer ------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,13 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MCTargetDesc/LanaiInstPrinter.h"
-#include "LanaiAluCode.h"
-#include "LanaiCondCode.h"
+#include "InstPrinter/LanaiInstPrinter.h"
+#include "Lanai.h"
 #include "LanaiInstrInfo.h"
 #include "LanaiMCInstLower.h"
 #include "LanaiTargetMachine.h"
-#include "TargetInfo/LanaiTargetInfo.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -50,7 +49,8 @@ public:
 
   void printOperand(const MachineInstr *MI, int OpNum, raw_ostream &O);
   bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
-                       const char *ExtraCode, raw_ostream &O) override;
+                       unsigned AsmVariant, const char *ExtraCode,
+                       raw_ostream &O) override;
   void EmitInstruction(const MachineInstr *MI) override;
   bool isBlockOnlyReachableByFallthrough(
       const MachineBasicBlock *MBB) const override;
@@ -109,6 +109,7 @@ void LanaiAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
 
 // PrintAsmOperand - Print out an operand for an inline asm expression.
 bool LanaiAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
+                                      unsigned /*AsmVariant*/,
                                       const char *ExtraCode, raw_ostream &O) {
   // Does this asm operand have a single letter operand modifier?
   if (ExtraCode && ExtraCode[0]) {
@@ -133,12 +134,12 @@ bool LanaiAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
       const MachineOperand &MO = MI->getOperand(RegOp);
       if (!MO.isReg())
         return true;
-      Register Reg = MO.getReg();
+      unsigned Reg = MO.getReg();
       O << LanaiInstPrinter::getRegisterName(Reg);
       return false;
     }
     default:
-      return AsmPrinter::PrintAsmOperand(MI, OpNo, ExtraCode, O);
+      return true; // Unknown modifier.
     }
   }
   printOperand(MI, OpNo, O);
@@ -237,6 +238,6 @@ bool LanaiAsmPrinter::isBlockOnlyReachableByFallthrough(
 }
 
 // Force static initialization.
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeLanaiAsmPrinter() {
+extern "C" void LLVMInitializeLanaiAsmPrinter() {
   RegisterAsmPrinter<LanaiAsmPrinter> X(getTheLanaiTarget());
 }

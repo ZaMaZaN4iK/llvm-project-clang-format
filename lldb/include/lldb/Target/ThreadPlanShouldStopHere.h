@@ -1,29 +1,38 @@
 //===-- ThreadPlanShouldStopHere.h ------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ThreadPlanShouldStopHere_h_
 #define liblldb_ThreadPlanShouldStopHere_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Target/ThreadPlan.h"
 
 namespace lldb_private {
 
 // This is an interface that ThreadPlans can adopt to allow flexible
-// modifications of the behavior when a thread plan comes to a place where it
-// would ordinarily stop.  If such modification makes sense for your plan,
-// inherit from this class, and when you would be about to stop (in your
-// ShouldStop method), call InvokeShouldStopHereCallback, passing in the frame
-// comparison between where the step operation started and where you arrived.
-// If it returns true, then QueueStepOutFromHere will queue the plan to execute
-// instead of stopping.
+// modifications of the behavior
+// when a thread plan comes to a place where it would ordinarily stop.  If such
+// modification makes
+// sense for your plan, inherit from this class, and when you would be about to
+// stop (in your ShouldStop
+// method), call InvokeShouldStopHereCallback, passing in the frame comparison
+// between where the step operation
+// started and where you arrived.  If it returns true, then QueueStepOutFromHere
+// will queue the plan
+// to execute instead of stopping.
 //
 // The classic example of the use of this is ThreadPlanStepInRange not stopping
-// in frames that have no debug information.
+// in frames that have
+// no debug information.
 //
 // This class also defines a set of flags to control general aspects of this
 // "ShouldStop" behavior.
@@ -62,7 +71,9 @@ public:
     eStepOutAvoidNoDebug = (1 << 2)
   };
 
+  //------------------------------------------------------------------
   // Constructors and Destructors
+  //------------------------------------------------------------------
   ThreadPlanShouldStopHere(ThreadPlan *owner);
 
   ThreadPlanShouldStopHere(ThreadPlan *owner,
@@ -71,9 +82,11 @@ public:
   virtual ~ThreadPlanShouldStopHere();
 
   // Set the ShouldStopHere callbacks.  Pass in null to clear them and have no
-  // special behavior (though you can also call ClearShouldStopHereCallbacks
-  // for that purpose.  If you pass in a valid pointer, it will adopt the non-
-  // null fields, and any null fields will be set to the default values.
+  // special behavior (though you
+  // can also call ClearShouldStopHereCallbacks for that purpose.  If you pass
+  // in a valid pointer, it will
+  // adopt the non-null fields, and any null fields will be set to the default
+  // values.
 
   void
   SetShouldStopHereCallbacks(const ThreadPlanShouldStopHereCallbacks *callbacks,
@@ -94,12 +107,10 @@ public:
 
   void ClearShouldStopHereCallbacks() { m_callbacks.Clear(); }
 
-  bool InvokeShouldStopHereCallback(lldb::FrameComparison operation,
-                                    Status &status);
+  bool InvokeShouldStopHereCallback(lldb::FrameComparison operation);
 
   lldb::ThreadPlanSP
-  CheckShouldStopHereAndQueueStepOut(lldb::FrameComparison operation,
-                                     Status &status);
+  CheckShouldStopHereAndQueueStepOut(lldb::FrameComparison operation);
 
   lldb_private::Flags &GetFlags() { return m_flags; }
 
@@ -109,16 +120,14 @@ protected:
   static bool DefaultShouldStopHereCallback(ThreadPlan *current_plan,
                                             Flags &flags,
                                             lldb::FrameComparison operation,
-                                            Status &status, void *baton);
+                                            void *baton);
 
   static lldb::ThreadPlanSP
   DefaultStepFromHereCallback(ThreadPlan *current_plan, Flags &flags,
-                              lldb::FrameComparison operation, Status &status,
-                              void *baton);
+                              lldb::FrameComparison operation, void *baton);
 
   virtual lldb::ThreadPlanSP
-  QueueStepOutFromHerePlan(Flags &flags, lldb::FrameComparison operation,
-                           Status &status);
+  QueueStepOutFromHerePlan(Flags &flags, lldb::FrameComparison operation);
 
   // Implement this, and call it in the plan's constructor to set the default
   // flags.

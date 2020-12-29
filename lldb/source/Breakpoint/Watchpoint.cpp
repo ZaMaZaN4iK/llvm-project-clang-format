@@ -1,24 +1,28 @@
 //===-- Watchpoint.cpp ------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Breakpoint/Watchpoint.h"
 
 #include "lldb/Breakpoint/StoppointCallbackContext.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Core/Value.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Core/ValueObjectMemory.h"
 #include "lldb/Expression/UserExpression.h"
-#include "lldb/Symbol/TypeSystem.h"
+#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/ThreadSpec.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -31,22 +35,14 @@ Watchpoint::Watchpoint(Target &target, lldb::addr_t addr, uint32_t size,
       m_watch_write(0), m_watch_was_read(0), m_watch_was_written(0),
       m_ignore_count(0), m_false_alarms(0), m_decl_str(), m_watch_spec_str(),
       m_type(), m_error(), m_options(), m_being_created(true) {
-
   if (type && type->IsValid())
     m_type = *type;
   else {
     // If we don't have a known type, then we force it to unsigned int of the
     // right size.
-    auto type_system_or_err =
-        target.GetScratchTypeSystemForLanguage(eLanguageTypeC);
-    if (auto err = type_system_or_err.takeError()) {
-      LLDB_LOG_ERROR(
-          lldb_private::GetLogIfAnyCategoriesSet(LIBLLDB_LOG_WATCHPOINTS),
-          std::move(err), "Failed to set type.");
-    } else {
-      m_type = type_system_or_err->GetBuiltinTypeForEncodingAndBitSize(
-          eEncodingUint, 8 * size);
-    }
+    ClangASTContext *ast_context = target.GetScratchClangASTContext();
+    m_type = ast_context->GetBuiltinTypeForEncodingAndBitSize(eEncodingUint,
+                                                              8 * size);
   }
 
   // Set the initial value of the watched variable:
@@ -63,8 +59,8 @@ Watchpoint::~Watchpoint() = default;
 // This function is used when "baton" doesn't need to be freed
 void Watchpoint::SetCallback(WatchpointHitCallback callback, void *baton,
                              bool is_synchronous) {
-  // The default "Baton" class will keep a copy of "baton" and won't free or
-  // delete it when it goes goes out of scope.
+  // The default "Baton" class will keep a copy of "baton" and won't free
+  // or delete it when it goes goes out of scope.
   m_options.SetCallback(callback, std::make_shared<UntypedBaton>(baton),
                         is_synchronous);
 
@@ -107,8 +103,8 @@ bool Watchpoint::CaptureWatchedValue(const ExecutionContext &exe_ctx) {
   Address watch_address(GetLoadAddress());
   if (!m_type.IsValid()) {
     // Don't know how to report new & old values, since we couldn't make a
-    // scalar type for this watchpoint. This works around an assert in
-    // ValueObjectMemory::Create.
+    // scalar type for this watchpoint.
+    // This works around an assert in ValueObjectMemory::Create.
     // FIXME: This should not happen, but if it does in some case we care about,
     // we can go grab the value raw and print it as unsigned.
     return false;
@@ -139,7 +135,10 @@ void Watchpoint::IncrementFalseAlarmsAndReviseHitCount() {
 bool Watchpoint::ShouldStop(StoppointCallbackContext *context) {
   IncrementHitCount();
 
-  return IsEnabled();
+  if (!IsEnabled())
+    return false;
+
+  return true;
 }
 
 void Watchpoint::GetDescription(Stream *s, lldb::DescriptionLevel level) {
@@ -218,9 +217,11 @@ void Watchpoint::DumpWithLevel(Stream *s,
 bool Watchpoint::IsEnabled() const { return m_enabled; }
 
 // Within StopInfo.cpp, we purposely turn on the ephemeral mode right before
-// temporarily disable the watchpoint in order to perform possible watchpoint
-// actions without triggering further watchpoint events. After the temporary
-// disabled watchpoint is enabled, we then turn off the ephemeral mode.
+// temporarily disable the watchpoint
+// in order to perform possible watchpoint actions without triggering further
+// watchpoint events.
+// After the temporary disabled watchpoint is enabled, we then turn off the
+// ephemeral mode.
 
 void Watchpoint::TurnOnEphemeralMode() { m_is_ephemeral = true; }
 
@@ -281,26 +282,25 @@ bool Watchpoint::InvokeCallback(StoppointCallbackContext *context) {
 
 void Watchpoint::SetCondition(const char *condition) {
   if (condition == nullptr || condition[0] == '\0') {
-    if (m_condition_up)
-      m_condition_up.reset();
+    if (m_condition_ap.get())
+      m_condition_ap.reset();
   } else {
     // Pass nullptr for expr_prefix (no translation-unit level definitions).
-    Status error;
-    m_condition_up.reset(m_target.GetUserExpressionForLanguage(
+    Error error;
+    m_condition_ap.reset(m_target.GetUserExpressionForLanguage(
         condition, llvm::StringRef(), lldb::eLanguageTypeUnknown,
-        UserExpression::eResultTypeAny, EvaluateExpressionOptions(), nullptr,
-        error));
+        UserExpression::eResultTypeAny, EvaluateExpressionOptions(), error));
     if (error.Fail()) {
       // FIXME: Log something...
-      m_condition_up.reset();
+      m_condition_ap.reset();
     }
   }
   SendWatchpointChangedEvent(eWatchpointEventTypeConditionChanged);
 }
 
 const char *Watchpoint::GetConditionText() const {
-  if (m_condition_up)
-    return m_condition_up->GetUserText();
+  if (m_condition_ap.get())
+    return m_condition_ap->GetUserText();
   else
     return nullptr;
 }
@@ -334,12 +334,12 @@ Watchpoint::WatchpointEventData::WatchpointEventData(
 
 Watchpoint::WatchpointEventData::~WatchpointEventData() = default;
 
-ConstString Watchpoint::WatchpointEventData::GetFlavorString() {
+const ConstString &Watchpoint::WatchpointEventData::GetFlavorString() {
   static ConstString g_flavor("Watchpoint::WatchpointEventData");
   return g_flavor;
 }
 
-ConstString Watchpoint::WatchpointEventData::GetFlavor() const {
+const ConstString &Watchpoint::WatchpointEventData::GetFlavor() const {
   return WatchpointEventData::GetFlavorString();
 }
 

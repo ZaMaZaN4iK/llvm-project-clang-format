@@ -1,23 +1,25 @@
 //===- lld/Core/Reader.h - Abstract File Format Reading Interface ---------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLD_CORE_READER_H
 #define LLD_CORE_READER_H
 
-#include "lld/Common/LLVM.h"
+#include "lld/Core/LLVM.h"
 #include "lld/Core/Reference.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include <memory>
 #include <vector>
+
+using llvm::sys::fs::file_magic;
 
 namespace llvm {
 namespace yaml {
@@ -31,7 +33,7 @@ class File;
 class LinkingContext;
 class MachOLinkingContext;
 
-/// An abstract class for reading object files, library files, and
+/// \brief An abstract class for reading object files, library files, and
 /// executable files.
 ///
 /// Each file format (e.g. mach-o, etc) has a concrete subclass of Reader.
@@ -43,16 +45,16 @@ public:
   /// The method is called with:
   /// 1) the file_magic enumeration returned by identify_magic()
   /// 2) the whole file content buffer if the above is not enough.
-  virtual bool canParse(llvm::file_magic magic, MemoryBufferRef mb) const = 0;
+  virtual bool canParse(file_magic magic, MemoryBufferRef mb) const = 0;
 
-  /// Parse a supplied buffer (already filled with the contents of a
+  /// \brief Parse a supplied buffer (already filled with the contents of a
   /// file) and create a File object.
   /// The resulting File object takes ownership of the MemoryBuffer.
   virtual ErrorOr<std::unique_ptr<File>>
   loadFile(std::unique_ptr<MemoryBuffer> mb, const class Registry &) const = 0;
 };
 
-/// An abstract class for handling alternate yaml representations
+/// \brief An abstract class for handling alternate yaml representations
 /// of object files.
 ///
 /// The YAML syntax allows "tags" which are used to specify the type of

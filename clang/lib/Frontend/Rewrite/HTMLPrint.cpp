@@ -1,8 +1,9 @@
 //===--- HTMLPrint.cpp - Source code -> HTML pretty-printing --------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -48,7 +49,7 @@ namespace {
 std::unique_ptr<ASTConsumer>
 clang::CreateHTMLPrinter(std::unique_ptr<raw_ostream> OS, Preprocessor &PP,
                          bool SyntaxHighlight, bool HighlightMacros) {
-  return std::make_unique<HTMLPrinter>(std::move(OS), PP, SyntaxHighlight,
+  return llvm::make_unique<HTMLPrinter>(std::move(OS), PP, SyntaxHighlight,
                                         HighlightMacros);
 }
 
@@ -85,7 +86,8 @@ void HTMLPrinter::HandleTranslationUnit(ASTContext &Ctx) {
 
   // Emit the HTML.
   const RewriteBuffer &RewriteBuf = R.getEditBuffer(FID);
-  std::unique_ptr<char[]> Buffer(new char[RewriteBuf.size()]);
-  std::copy(RewriteBuf.begin(), RewriteBuf.end(), Buffer.get());
-  Out->write(Buffer.get(), RewriteBuf.size());
+  char *Buffer = (char*)malloc(RewriteBuf.size());
+  std::copy(RewriteBuf.begin(), RewriteBuf.end(), Buffer);
+  Out->write(Buffer, RewriteBuf.size());
+  free(Buffer);
 }

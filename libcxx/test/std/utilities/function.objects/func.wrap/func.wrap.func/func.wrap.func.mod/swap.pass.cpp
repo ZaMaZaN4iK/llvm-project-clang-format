@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,9 +16,7 @@
 #include <functional>
 #include <cassert>
 
-#include "count_new.h"
-
-#include "test_macros.h"
+#include "count_new.hpp"
 
 class A {
   int data_[10];
@@ -59,7 +58,7 @@ int h(int) { return 1; }
 int g2(int, int) { return 2; }
 int g3(int, int, int) { return 3; }
 
-int main(int, char**) {
+int main() {
   assert(globalMemCounter.checkOutstandingNewEq(0));
   {
     std::function<int(int)> f1 = A(1);
@@ -191,6 +190,4 @@ int main(int, char**) {
   }
   assert(globalMemCounter.checkOutstandingNewEq(0));
   assert(A::count == 0);
-
-  return 0;
 }

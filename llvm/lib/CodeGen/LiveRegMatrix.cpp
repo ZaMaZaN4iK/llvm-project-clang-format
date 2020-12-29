@@ -1,8 +1,9 @@
-//===- LiveRegMatrix.cpp - Track register interference --------------------===//
+//===-- LiveRegMatrix.cpp - Track register interference -------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,20 +14,12 @@
 #include "llvm/CodeGen/LiveRegMatrix.h"
 #include "RegisterCoalescer.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/CodeGen/LiveInterval.h"
-#include "llvm/CodeGen/LiveIntervalUnion.h"
-#include "llvm/CodeGen/LiveIntervals.h"
-#include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/CodeGen/LiveIntervalAnalysis.h"
 #include "llvm/CodeGen/VirtRegMap.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/MC/LaneBitmask.h"
-#include "llvm/MC/MCRegisterInfo.h"
-#include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include <cassert>
+#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 
 using namespace llvm;
 
@@ -43,7 +36,8 @@ INITIALIZE_PASS_DEPENDENCY(VirtRegMap)
 INITIALIZE_PASS_END(LiveRegMatrix, "liveregmatrix",
                     "Live Register Matrix", false, false)
 
-LiveRegMatrix::LiveRegMatrix() : MachineFunctionPass(ID) {}
+LiveRegMatrix::LiveRegMatrix() : MachineFunctionPass(ID),
+  UserTag(0), RegMaskTag(0), RegMaskVirtReg(0) {}
 
 void LiveRegMatrix::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesAll();
@@ -102,37 +96,37 @@ static bool foreachUnit(const TargetRegisterInfo *TRI,
 }
 
 void LiveRegMatrix::assign(LiveInterval &VirtReg, unsigned PhysReg) {
-  LLVM_DEBUG(dbgs() << "assigning " << printReg(VirtReg.reg, TRI) << " to "
-                    << printReg(PhysReg, TRI) << ':');
+  DEBUG(dbgs() << "assigning " << PrintReg(VirtReg.reg, TRI)
+               << " to " << PrintReg(PhysReg, TRI) << ':');
   assert(!VRM->hasPhys(VirtReg.reg) && "Duplicate VirtReg assignment");
   VRM->assignVirt2Phys(VirtReg.reg, PhysReg);
 
-  foreachUnit(
-      TRI, VirtReg, PhysReg, [&](unsigned Unit, const LiveRange &Range) {
-        LLVM_DEBUG(dbgs() << ' ' << printRegUnit(Unit, TRI) << ' ' << Range);
-        Matrix[Unit].unify(VirtReg, Range);
-        return false;
-      });
+  foreachUnit(TRI, VirtReg, PhysReg, [&](unsigned Unit,
+                                         const LiveRange &Range) {
+    DEBUG(dbgs() << ' ' << PrintRegUnit(Unit, TRI) << ' ' << Range);
+    Matrix[Unit].unify(VirtReg, Range);
+    return false;
+  });
 
   ++NumAssigned;
-  LLVM_DEBUG(dbgs() << '\n');
+  DEBUG(dbgs() << '\n');
 }
 
 void LiveRegMatrix::unassign(LiveInterval &VirtReg) {
-  Register PhysReg = VRM->getPhys(VirtReg.reg);
-  LLVM_DEBUG(dbgs() << "unassigning " << printReg(VirtReg.reg, TRI) << " from "
-                    << printReg(PhysReg, TRI) << ':');
+  unsigned PhysReg = VRM->getPhys(VirtReg.reg);
+  DEBUG(dbgs() << "unassigning " << PrintReg(VirtReg.reg, TRI)
+               << " from " << PrintReg(PhysReg, TRI) << ':');
   VRM->clearVirt(VirtReg.reg);
 
-  foreachUnit(TRI, VirtReg, PhysReg,
-              [&](unsigned Unit, const LiveRange &Range) {
-                LLVM_DEBUG(dbgs() << ' ' << printRegUnit(Unit, TRI));
-                Matrix[Unit].extract(VirtReg, Range);
-                return false;
-              });
+  foreachUnit(TRI, VirtReg, PhysReg, [&](unsigned Unit,
+                                         const LiveRange &Range) {
+    DEBUG(dbgs() << ' ' << PrintRegUnit(Unit, TRI));
+    Matrix[Unit].extract(VirtReg, Range);
+    return false;
+  });
 
   ++NumUnassigned;
-  LLVM_DEBUG(dbgs() << '\n');
+  DEBUG(dbgs() << '\n');
 }
 
 bool LiveRegMatrix::isPhysRegUsed(unsigned PhysReg) const {
@@ -175,10 +169,10 @@ bool LiveRegMatrix::checkRegUnitInterference(LiveInterval &VirtReg,
   return Result;
 }
 
-LiveIntervalUnion::Query &LiveRegMatrix::query(const LiveRange &LR,
+LiveIntervalUnion::Query &LiveRegMatrix::query(LiveInterval &VirtReg,
                                                unsigned RegUnit) {
   LiveIntervalUnion::Query &Q = Queries[RegUnit];
-  Q.init(UserTag, LR, Matrix[RegUnit]);
+  Q.init(UserTag, &VirtReg, &Matrix[RegUnit]);
   return Q;
 }
 
@@ -196,28 +190,9 @@ LiveRegMatrix::checkInterference(LiveInterval &VirtReg, unsigned PhysReg) {
     return IK_RegUnit;
 
   // Check the matrix for virtual register interference.
-  bool Interference = foreachUnit(TRI, VirtReg, PhysReg,
-                                  [&](unsigned Unit, const LiveRange &LR) {
-    return query(LR, Unit).checkInterference();
-  });
-  if (Interference)
-    return IK_VirtReg;
+  for (MCRegUnitIterator Units(PhysReg, TRI); Units.isValid(); ++Units)
+    if (query(VirtReg, *Units).checkInterference())
+      return IK_VirtReg;
 
   return IK_Free;
-}
-
-bool LiveRegMatrix::checkInterference(SlotIndex Start, SlotIndex End,
-                                      unsigned PhysReg) {
-  // Construct artificial live range containing only one segment [Start, End).
-  VNInfo valno(0, Start);
-  LiveRange::Segment Seg(Start, End, &valno);
-  LiveRange LR;
-  LR.addSegment(Seg);
-
-  // Check for interference with that segment
-  for (MCRegUnitIterator Units(PhysReg, TRI); Units.isValid(); ++Units) {
-    if (query(LR, *Units).checkInterference())
-      return true;
-  }
-  return false;
 }

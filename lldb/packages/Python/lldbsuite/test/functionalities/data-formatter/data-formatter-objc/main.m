@@ -1,8 +1,9 @@
 //===-- main.m ------------------------------------------------*- ObjC -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -168,11 +169,7 @@ int main (int argc, const char * argv[])
 	    NSNumber* num_at3 = @12.5;
 	    NSNumber* num_at4 = @-12.5;
 
-	    NSDecimalNumber* decimal_number = [NSDecimalNumber decimalNumberWithMantissa:123456 exponent:-10 isNegative:NO];
-	    NSDecimalNumber* decimal_number_neg = [NSDecimalNumber decimalNumberWithMantissa:123456 exponent:10 isNegative:YES];
-	    NSDecimalNumber* decimal_one = [NSDecimalNumber one];
-	    NSDecimalNumber* decimal_zero = [NSDecimalNumber zero];
-	    NSDecimalNumber* decimal_nan = [NSDecimalNumber notANumber];
+		NSDecimalNumber* decimal_one = [NSDecimalNumber one];
 
 	    NSString *str0 = [num6 stringValue];
 
@@ -384,11 +381,6 @@ int main (int argc, const char * argv[])
 	    [newMutableDictionary setObject:@"foo" forKey:@"bar19"];
 	    [newMutableDictionary setObject:@"foo" forKey:@"bar20"];
 
-	    id cfKeys[2] = { @"foo", @"bar", @"baz", @"quux" };
-	    id cfValues[2] = { @"foo", @"bar", @"baz", @"quux" };
-	    NSDictionary *nsDictionary = CFBridgingRelease(CFDictionaryCreate(nil, (void *)cfKeys, (void *)cfValues, 2, nil, nil));
-	    CFDictionaryRef cfDictionaryRef = CFDictionaryCreate(nil, (void *)cfKeys, (void *)cfValues, 3, nil, nil);
-
 	    NSAttributedString* attrString = [[NSAttributedString alloc] initWithString:@"hello world from foo" attributes:newDictionary];
 	    [attrString isEqual:nil];
 	    NSAttributedString* mutableAttrString = [[NSMutableAttributedString alloc] initWithString:@"hello world from foo" attributes:newDictionary];
@@ -403,14 +395,6 @@ int main (int argc, const char * argv[])
 
 	    NSData *immutableData = [[NSData alloc] initWithBytes:"HELLO" length:4];
 	    NSData *mutableData = [[NSMutableData alloc] initWithBytes:"NODATA" length:6];
-
-	    // No-copy versions of NSData initializers use NSConcreteData if over 2^16 elements are specified.
-	    unsigned concreteLength = 100000;
-	    void *zeroes1 = calloc(1, concreteLength);
-            // initWithBytesNoCopy takes ownership of the buffer.
-	    NSData *concreteData = [[NSData alloc] initWithBytesNoCopy:zeroes1 length:concreteLength];
-	    void *zeroes2 = calloc(1, concreteLength);
-	    NSMutableData *concreteMutableData = [[NSMutableData alloc] initWithBytesNoCopy:zeroes2 length:concreteLength];
 
 	    [mutableData appendBytes:"MOREDATA" length:8];
 
@@ -492,10 +476,10 @@ int main (int argc, const char * argv[])
 	        nsurl0 = [bundle bundleURL];
 	    }
 
-	    NSException* except0 = [[NSException alloc] initWithName:@"TheGuyWhoHasNoName" reason:@"First" userInfo:nil];
-	    NSException* except1 = [[NSException alloc] initWithName:@"TheGuyWhoHasNoName~1" reason:@"Second" userInfo:nil];
-	    NSException* except2 = [[NSException alloc] initWithName:@"TheGuyWhoHasNoName`2" reason:@"Third" userInfo:nil];
-	    NSException* except3 = [[NSException alloc] initWithName:@"TheGuyWhoHasNoName/3" reason:@"Fourth" userInfo:nil];
+	    NSException* except0 = [[NSException alloc] initWithName:@"TheGuyWhoHasNoName" reason:@"cuz it's funny" userInfo:nil];
+	    NSException* except1 = [[NSException alloc] initWithName:@"TheGuyWhoHasNoName~1" reason:@"cuz it's funny" userInfo:nil];
+	    NSException* except2 = [[NSException alloc] initWithName:@"TheGuyWhoHasNoName`2" reason:@"cuz it's funny" userInfo:nil];
+	    NSException* except3 = [[NSException alloc] initWithName:@"TheGuyWhoHasNoName/3" reason:@"cuz it's funny" userInfo:nil];
 
 	    NSURL *nsurl = [[NSURL alloc] initWithString:@"http://www.foo.bar"];
 	    NSURL *nsurl2 = [NSURL URLWithString:@"page.html" relativeToURL:nsurl];

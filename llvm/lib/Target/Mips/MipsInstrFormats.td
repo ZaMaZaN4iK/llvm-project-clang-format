@@ -1,8 +1,9 @@
 //===-- MipsInstrFormats.td - Mips Instruction Formats -----*- tablegen -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -69,7 +70,7 @@ class StdArch {
 
 // Generic Mips Format
 class MipsInst<dag outs, dag ins, string asmstr, list<dag> pattern,
-               InstrItinClass itin, Format f>: Instruction, PredicateControl
+               InstrItinClass itin, Format f>: Instruction
 {
   field bits<32> Inst;
   Format Form = f;
@@ -97,6 +98,9 @@ class MipsInst<dag outs, dag ins, string asmstr, list<dag> pattern,
   bit isCTI            = 0; // Any form of Control Transfer Instruction.
                             // Required for MIPSR6
   bit hasForbiddenSlot = 0; // Instruction has a forbidden slot.
+  bit IsPCRelativeLoad = 0; // Load instruction with implicit source register
+                            // ($pc) and with explicit offset and destination
+                            // register
   bit hasFCCRegOperand = 0; // Instruction uses $fcc<X> register and is
                             // present in MIPS-I to MIPS-III.
 
@@ -104,7 +108,8 @@ class MipsInst<dag outs, dag ins, string asmstr, list<dag> pattern,
   let TSFlags{3-0}   = FormBits;
   let TSFlags{4}     = isCTI;
   let TSFlags{5}     = hasForbiddenSlot;
-  let TSFlags{6}     = hasFCCRegOperand;
+  let TSFlags{6}     = IsPCRelativeLoad;
+  let TSFlags{7}     = hasFCCRegOperand;
 
   let DecoderNamespace = "Mips";
 
@@ -114,8 +119,8 @@ class MipsInst<dag outs, dag ins, string asmstr, list<dag> pattern,
 // Mips32/64 Instruction Format
 class InstSE<dag outs, dag ins, string asmstr, list<dag> pattern,
              InstrItinClass itin, Format f, string opstr = ""> :
-  MipsInst<outs, ins, asmstr, pattern, itin, f> {
-  let EncodingPredicates = [NotInMips16Mode];
+  MipsInst<outs, ins, asmstr, pattern, itin, f>, PredicateControl {
+  let EncodingPredicates = [HasStdEnc];
   string BaseOpcode = opstr;
   string Arch;
 }
@@ -131,17 +136,16 @@ class MipsPseudo<dag outs, dag ins, list<dag> pattern,
 // Mips32/64 Pseudo Instruction Format
 class PseudoSE<dag outs, dag ins, list<dag> pattern,
                InstrItinClass itin = IIPseudo> :
-  MipsPseudo<outs, ins, pattern, itin> {
-  let EncodingPredicates = [NotInMips16Mode];
+  MipsPseudo<outs, ins, pattern, itin>, PredicateControl {
+  let EncodingPredicates = [HasStdEnc];
 }
 
 // Pseudo-instructions for alternate assembly syntax (never used by codegen).
 // These are aliases that require C++ handling to convert to the target
 // instruction, while InstAliases can be handled directly by tblgen.
 class MipsAsmPseudoInst<dag outs, dag ins, string asmstr>:
-  MipsInst<outs, ins, asmstr, [], IIPseudo, Pseudo> {
+  MipsInst<outs, ins, asmstr, [], IIPseudo, Pseudo>, PredicateControl {
   let isPseudo = 1;
-  let hasNoSchedulingInfo = 1;
   let Pattern = [];
 }
 //===----------------------------------------------------------------------===//
@@ -216,9 +220,10 @@ class FJ<bits<6> op> : StdArch
 }
 
 //===----------------------------------------------------------------------===//
-// MFC instruction class in Mips : <|op|mf|rt|rd|gst|0000|sel|>
+// MFC instruction class in Mips : <|op|mf|rt|rd|0000000|sel|>
 //===----------------------------------------------------------------------===//
-class MFC3OP_FM<bits<6> op, bits<5> mfmt, bits<3> guest> : StdArch {
+class MFC3OP_FM<bits<6> op, bits<5> mfmt>
+{
   bits<5> rt;
   bits<5> rd;
   bits<3> sel;
@@ -229,8 +234,7 @@ class MFC3OP_FM<bits<6> op, bits<5> mfmt, bits<3> guest> : StdArch {
   let Inst{25-21} = mfmt;
   let Inst{20-16} = rt;
   let Inst{15-11} = rd;
-  let Inst{10-8}  = guest;
-  let Inst{7-3}   = 0;
+  let Inst{10-3}  = 0;
   let Inst{2-0}   = sel;
 }
 
@@ -504,7 +508,6 @@ class EXT_FM<bits<6> funct> : StdArch {
 class RDHWR_FM : StdArch {
   bits<5> rt;
   bits<5> rd;
-  bits<3> sel;
 
   bits<32> Inst;
 
@@ -512,8 +515,7 @@ class RDHWR_FM : StdArch {
   let Inst{25-21} = 0;
   let Inst{20-16} = rt;
   let Inst{15-11} = rd;
-  let Inst{10-9}  = 0b00;
-  let Inst{8-6}   = sel;
+  let Inst{10-6}  = 0;
   let Inst{5-0}   = 0x3b;
 }
 
@@ -619,19 +621,6 @@ class SEQI_FM<bits<6> funct> : StdArch {
   let Inst{25-21} = rs;
   let Inst{20-16} = rt;
   let Inst{15-6}  = imm10;
-  let Inst{5-0}   = funct;
-}
-
-class SAA_FM<bits<6> funct> : StdArch {
-  bits<5> rt;
-  bits<5> rs;
-
-  bits<32> Inst;
-
-  let Inst{31-26} = 0x1c;
-  let Inst{25-21} = rs;
-  let Inst{20-16} = rt;
-  let Inst{15-6}  = 0;
   let Inst{5-0}   = funct;
 }
 
@@ -980,15 +969,4 @@ class CACHEOP_FM<bits<6> op> : StdArch {
   let Inst{25-21} = base;
   let Inst{20-16} = hint;
   let Inst{15-0}  = offset;
-}
-
-class HYPCALL_FM<bits<6> op> : StdArch {
-  bits<10> code_;
-
-  bits<32> Inst;
-
-  let Inst{31-26} = 0b010000;
-  let Inst{25}    = 1;
-  let Inst{20-11} = code_;
-  let Inst{5-0}   = op;
 }

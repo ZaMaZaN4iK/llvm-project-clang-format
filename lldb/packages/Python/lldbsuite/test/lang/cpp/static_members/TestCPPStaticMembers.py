@@ -2,6 +2,7 @@
 Tests that C++ member and static variables have correct layout and scope.
 """
 
+from __future__ import print_function
 
 
 import unittest2
@@ -20,7 +21,7 @@ class CPPStaticMembersTestCase(TestBase):
     def test_with_run_command(self):
         """Test that member variables have the correct layout, scope and qualifiers when stopped inside and outside C++ methods"""
         self.build()
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         self.set_breakpoint(line_number('main.cpp', '// breakpoint 1'))
         self.set_breakpoint(line_number('main.cpp', '// breakpoint 2'))

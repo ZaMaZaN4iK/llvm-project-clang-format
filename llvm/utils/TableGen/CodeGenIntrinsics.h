@@ -1,8 +1,9 @@
 //===- CodeGenIntrinsic.h - Intrinsic Class Wrapper ------------*- C++ -*--===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,8 +14,7 @@
 #ifndef LLVM_UTILS_TABLEGEN_CODEGENINTRINSICS_H
 #define LLVM_UTILS_TABLEGEN_CODEGENINTRINSICS_H
 
-#include "SDNodeProperties.h"
-#include "llvm/Support/MachineValueType.h"
+#include "llvm/CodeGen/MachineValueType.h"
 #include <string>
 #include <vector>
 
@@ -104,9 +104,6 @@ struct CodeGenIntrinsic {
   };
   ModRefBehavior ModRef;
 
-  /// SDPatternOperator Properties applied to the intrinsic.
-  unsigned Properties;
-
   /// This is set to true if the intrinsic is overloaded by its argument
   /// types.
   bool isOverloaded;
@@ -123,46 +120,11 @@ struct CodeGenIntrinsic {
   /// True if the intrinsic is no-return.
   bool isNoReturn;
 
-  /// True if the intrinsic is will-return.
-  bool isWillReturn;
-
-  /// True if the intrinsic is cold.
-  bool isCold;
-
   /// True if the intrinsic is marked as convergent.
   bool isConvergent;
 
-  /// True if the intrinsic has side effects that aren't captured by any
-  /// of the other flags.
-  bool hasSideEffects;
-
-  // True if the intrinsic is marked as speculatable.
-  bool isSpeculatable;
-
-  enum ArgAttribute {
-    NoCapture,
-    NoAlias,
-    Returned,
-    ReadOnly,
-    WriteOnly,
-    ReadNone,
-    ImmArg
-  };
-
+  enum ArgAttribute { NoCapture, Returned, ReadOnly, WriteOnly, ReadNone };
   std::vector<std::pair<unsigned, ArgAttribute>> ArgumentAttributes;
-
-  bool hasProperty(enum SDNP Prop) const {
-    return Properties & (1 << Prop);
-  }
-
-  /// Returns true if the parameter at \p ParamIdx is a pointer type. Returns
-  /// false if the parameter is not a pointer, or \p ParamIdx is greater than
-  /// the size of \p IS.ParamVTs.
-  ///
-  /// Note that this requires that \p IS.ParamVTs is available.
-  bool isParamAPointer(unsigned ParamIdx) const;
-
-  bool isParamImmArg(unsigned ParamIdx) const;
 
   CodeGenIntrinsic(Record *R);
 };
@@ -178,7 +140,7 @@ public:
   };
   std::vector<TargetSet> Targets;
 
-  explicit CodeGenIntrinsicTable(const RecordKeeper &RC);
+  explicit CodeGenIntrinsicTable(const RecordKeeper &RC, bool TargetOnly);
   CodeGenIntrinsicTable() = default;
 
   bool empty() const { return Intrinsics.empty(); }

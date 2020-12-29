@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,15 +12,13 @@
 #include <iosfwd>
 #include <cwchar>  // for mbstate_t
 
-#include "test_macros.h"
-
 template <class Ptr> void test()
 {
     Ptr p = 0;
     ((void)p); // Prevent unused warning
 }
 
-int main(int, char**)
+int main()
 {
     test<std::char_traits<char>*          >();
     test<std::char_traits<wchar_t>*       >();
@@ -121,6 +120,4 @@ int main(int, char**)
     test<std::fpos<std::mbstate_t>*>();
     test<std::streampos*           >();
     test<std::wstreampos*          >();
-
-  return 0;
 }

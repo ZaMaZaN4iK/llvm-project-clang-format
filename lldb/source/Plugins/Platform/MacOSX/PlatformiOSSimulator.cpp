@@ -1,42 +1,45 @@
 //===-- PlatformiOSSimulator.cpp -----------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "PlatformiOSSimulator.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Breakpoint/BreakpointLocation.h"
+#include "lldb/Core/ArchSpec.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleList.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
+#include "lldb/Core/StreamString.h"
+#include "lldb/Host/FileSpec.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostInfo.h"
+#include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/ArchSpec.h"
-#include "lldb/Utility/FileSpec.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/ProcessInfo.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/StreamString.h"
-
-#include "llvm/Support/FileSystem.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
-namespace lldb_private {
-class Process;
-}
-
+//------------------------------------------------------------------
 // Static Variables
+//------------------------------------------------------------------
 static uint32_t g_initialize_count = 0;
 
+//------------------------------------------------------------------
 // Static Functions
+//------------------------------------------------------------------
 void PlatformiOSSimulator::Initialize() {
   PlatformAppleSimulator::Initialize();
 
@@ -70,12 +73,12 @@ PlatformSP PlatformiOSSimulator::CreateInstance(bool force,
     const char *triple_cstr =
         arch ? arch->GetTriple().getTriple().c_str() : "<null>";
 
-    LLDB_LOGF(log, "PlatformiOSSimulator::%s(force=%s, arch={%s,%s})",
-              __FUNCTION__, force ? "true" : "false", arch_name, triple_cstr);
+    log->Printf("PlatformiOSSimulator::%s(force=%s, arch={%s,%s})",
+                __FUNCTION__, force ? "true" : "false", arch_name, triple_cstr);
   }
 
   bool create = force;
-  if (!create && arch && arch->IsValid()) {
+  if (create == false && arch && arch->IsValid()) {
     switch (arch->GetMachine()) {
     case llvm::Triple::x86_64:
     case llvm::Triple::x86: {
@@ -86,10 +89,10 @@ PlatformSP PlatformiOSSimulator::CreateInstance(bool force,
         break;
 
 #if defined(__APPLE__)
-      // Only accept "unknown" for the vendor if the host is Apple and it
-      // "unknown" wasn't specified (it was just returned because it was NOT
-      // specified)
-      case llvm::Triple::UnknownVendor:
+      // Only accept "unknown" for the vendor if the host is Apple and
+      // it "unknown" wasn't specified (it was just returned because it
+      // was NOT specified)
+      case llvm::Triple::UnknownArch:
         create = !arch->TripleVendorWasSpecified();
         break;
 #endif
@@ -107,9 +110,9 @@ PlatformSP PlatformiOSSimulator::CreateInstance(bool force,
           break;
 
 #if defined(__APPLE__)
-        // Only accept "unknown" for the OS if the host is Apple and it
-        // "unknown" wasn't specified (it was just returned because it was NOT
-        // specified)
+        // Only accept "unknown" for the OS if the host is Apple and
+        // it "unknown" wasn't specified (it was just returned because it
+        // was NOT specified)
         case llvm::Triple::UnknownOS:
           create = !arch->TripleOSWasSpecified();
           break;
@@ -125,14 +128,15 @@ PlatformSP PlatformiOSSimulator::CreateInstance(bool force,
     }
   }
   if (create) {
-    LLDB_LOGF(log, "PlatformiOSSimulator::%s() creating platform",
-              __FUNCTION__);
+    if (log)
+      log->Printf("PlatformiOSSimulator::%s() creating platform", __FUNCTION__);
 
     return PlatformSP(new PlatformiOSSimulator());
   }
 
-  LLDB_LOGF(log, "PlatformiOSSimulator::%s() aborting creation of platform",
-            __FUNCTION__);
+  if (log)
+    log->Printf("PlatformiOSSimulator::%s() aborting creation of platform",
+                __FUNCTION__);
 
   return PlatformSP();
 }
@@ -146,15 +150,19 @@ const char *PlatformiOSSimulator::GetDescriptionStatic() {
   return "iOS simulator platform plug-in.";
 }
 
+//------------------------------------------------------------------
 /// Default Constructor
+//------------------------------------------------------------------
 PlatformiOSSimulator::PlatformiOSSimulator()
     : PlatformAppleSimulator(), m_sdk_dir_mutex(), m_sdk_directory(),
       m_build_update() {}
 
+//------------------------------------------------------------------
 /// Destructor.
 ///
 /// The destructor is virtual since this class is designed to be
 /// inherited from by the plug-in instance.
+//------------------------------------------------------------------
 PlatformiOSSimulator::~PlatformiOSSimulator() {}
 
 void PlatformiOSSimulator::GetStatus(Stream &strm) {
@@ -167,10 +175,10 @@ void PlatformiOSSimulator::GetStatus(Stream &strm) {
   PlatformAppleSimulator::GetStatus(strm);
 }
 
-Status PlatformiOSSimulator::ResolveExecutable(
+Error PlatformiOSSimulator::ResolveExecutable(
     const ModuleSpec &module_spec, lldb::ModuleSP &exe_module_sp,
     const FileSpecList *module_search_paths_ptr) {
-  Status error;
+  Error error;
   // Nothing special to do here, just use the actual file and architecture
 
   ModuleSpec resolved_module_spec(module_spec);
@@ -186,7 +194,7 @@ Status PlatformiOSSimulator::ResolveExecutable(
   // ourselves
   Host::ResolveExecutableInBundle(resolved_module_spec.GetFileSpec());
 
-  if (FileSystem::Instance().Exists(resolved_module_spec.GetFileSpec())) {
+  if (resolved_module_spec.GetFileSpec().Exists()) {
     if (resolved_module_spec.GetArchitecture().IsValid()) {
       error = ModuleList::GetSharedModule(resolved_module_spec, exe_module_sp,
                                           NULL, NULL, NULL);
@@ -195,9 +203,9 @@ Status PlatformiOSSimulator::ResolveExecutable(
         return error;
       exe_module_sp.reset();
     }
-    // No valid architecture was specified or the exact ARM slice wasn't found
-    // so ask the platform for the architectures that we should be using (in
-    // the correct order) and see if we can find a match that way
+    // No valid architecture was specified or the exact ARM slice wasn't
+    // found so ask the platform for the architectures that we should be
+    // using (in the correct order) and see if we can find a match that way
     StreamString arch_names;
     ArchSpec platform_arch;
     for (uint32_t idx = 0; GetSupportedArchitectureAtIndex(
@@ -224,7 +232,7 @@ Status PlatformiOSSimulator::ResolveExecutable(
     }
 
     if (error.Fail() || !exe_module_sp) {
-      if (FileSystem::Instance().Readable(resolved_module_spec.GetFileSpec())) {
+      if (resolved_module_spec.GetFileSpec().Readable()) {
         error.SetErrorStringWithFormat(
             "'%s' doesn't contain any '%s' platform architectures: %s",
             resolved_module_spec.GetFileSpec().GetPath().c_str(),
@@ -243,19 +251,18 @@ Status PlatformiOSSimulator::ResolveExecutable(
   return error;
 }
 
-static FileSystem::EnumerateDirectoryResult
-EnumerateDirectoryCallback(void *baton, llvm::sys::fs::file_type ft,
-                           llvm::StringRef path) {
-  if (ft == llvm::sys::fs::file_type::directory_file) {
-    FileSpec file_spec(path);
+static FileSpec::EnumerateDirectoryResult
+EnumerateDirectoryCallback(void *baton, FileSpec::FileType file_type,
+                           const FileSpec &file_spec) {
+  if (file_type == FileSpec::eFileTypeDirectory) {
     const char *filename = file_spec.GetFilename().GetCString();
     if (filename &&
         strncmp(filename, "iPhoneSimulator", strlen("iPhoneSimulator")) == 0) {
       ::snprintf((char *)baton, PATH_MAX, "%s", filename);
-      return FileSystem::eEnumerateDirectoryResultQuit;
+      return FileSpec::eEnumerateDirectoryResultQuit;
     }
   }
-  return FileSystem::eEnumerateDirectoryResultNext;
+  return FileSpec::eEnumerateDirectoryResultNext;
 }
 
 const char *PlatformiOSSimulator::GetSDKDirectoryAsCString() {
@@ -273,9 +280,9 @@ const char *PlatformiOSSimulator::GetSDKDirectoryAsCString() {
       bool find_directories = true;
       bool find_files = false;
       bool find_other = false;
-      FileSystem::Instance().EnumerateDirectory(
-          sdks_directory, find_directories, find_files, find_other,
-          EnumerateDirectoryCallback, sdk_dirname);
+      FileSpec::EnumerateDirectory(sdks_directory, find_directories, find_files,
+                                   find_other, EnumerateDirectoryCallback,
+                                   sdk_dirname);
 
       if (sdk_dirname[0]) {
         m_sdk_directory = sdks_directory;
@@ -289,18 +296,18 @@ const char *PlatformiOSSimulator::GetSDKDirectoryAsCString() {
     m_sdk_directory.assign(1, '\0');
   }
 
-  // We should have put a single NULL character into m_sdk_directory or it
-  // should have a valid path if the code gets here
+  // We should have put a single NULL character into m_sdk_directory
+  // or it should have a valid path if the code gets here
   assert(m_sdk_directory.empty() == false);
   if (m_sdk_directory[0])
     return m_sdk_directory.c_str();
   return NULL;
 }
 
-Status PlatformiOSSimulator::GetSymbolFile(const FileSpec &platform_file,
-                                           const UUID *uuid_ptr,
-                                           FileSpec &local_file) {
-  Status error;
+Error PlatformiOSSimulator::GetSymbolFile(const FileSpec &platform_file,
+                                          const UUID *uuid_ptr,
+                                          FileSpec &local_file) {
+  Error error;
   char platform_file_path[PATH_MAX];
   if (platform_file.GetPath(platform_file_path, sizeof(platform_file_path))) {
     char resolved_path[PATH_MAX];
@@ -311,15 +318,13 @@ Status PlatformiOSSimulator::GetSymbolFile(const FileSpec &platform_file,
                  platform_file_path);
 
       // First try in the SDK and see if the file is in there
-      local_file.SetFile(resolved_path, FileSpec::Style::native);
-      FileSystem::Instance().Resolve(local_file);
-      if (FileSystem::Instance().Exists(local_file))
+      local_file.SetFile(resolved_path, true);
+      if (local_file.Exists())
         return error;
 
       // Else fall back to the actual path itself
-      local_file.SetFile(platform_file_path, FileSpec::Style::native);
-      FileSystem::Instance().Resolve(local_file);
-      if (FileSystem::Instance().Exists(local_file))
+      local_file.SetFile(platform_file_path, true);
+      if (local_file.Exists())
         return error;
     }
     error.SetErrorStringWithFormat(
@@ -331,14 +336,15 @@ Status PlatformiOSSimulator::GetSymbolFile(const FileSpec &platform_file,
   return error;
 }
 
-Status PlatformiOSSimulator::GetSharedModule(
+Error PlatformiOSSimulator::GetSharedModule(
     const ModuleSpec &module_spec, Process *process, ModuleSP &module_sp,
     const FileSpecList *module_search_paths_ptr, ModuleSP *old_module_sp_ptr,
     bool *did_create_ptr) {
-  // For iOS, the SDK files are all cached locally on the host system. So first
-  // we ask for the file in the cached SDK, then we attempt to get a shared
-  // module for the right architecture with the right UUID.
-  Status error;
+  // For iOS, the SDK files are all cached locally on the host
+  // system. So first we ask for the file in the cached SDK,
+  // then we attempt to get a shared module for the right architecture
+  // with the right UUID.
+  Error error;
   ModuleSpec platform_module_spec(module_spec);
   const FileSpec &platform_file = module_spec.GetFileSpec();
   error = GetSymbolFile(platform_file, module_spec.GetUUIDPtr(),
@@ -401,14 +407,14 @@ bool PlatformiOSSimulator::GetSupportedArchitectureAtIndex(uint32_t idx,
         if (arch.IsValid()) {
           if (idx == 2)
             arch.GetTriple().setOS(llvm::Triple::IOS);
-          // 32/64: return "i386-apple-ios" for architecture 2 32/64: return
-          // "i386-apple-macosx" for architecture 3
+          // 32/64: return "i386-apple-ios" for architecture 2
+          // 32/64: return "i386-apple-macosx" for architecture 3
           return true;
         }
       }
     } else if (idx == 1) {
-      // This macosx platform supports only 32 bit, so return the *-apple-
-      // macosx version
+      // This macosx platform supports only 32 bit, so return the *-apple-macosx
+      // version
       arch = platform_arch;
       return true;
     }

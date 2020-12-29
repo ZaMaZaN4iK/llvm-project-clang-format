@@ -1,8 +1,9 @@
 //===- LTO.h ----------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,10 +21,8 @@
 #ifndef LLD_ELF_LTO_H
 #define LLD_ELF_LTO_H
 
-#include "lld/Common/LLVM.h"
-#include "llvm/ADT/DenseSet.h"
+#include "lld/Core/LLVM.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/Support/raw_ostream.h"
 #include <memory>
 #include <vector>
 
@@ -31,32 +30,27 @@ namespace llvm {
 namespace lto {
 class LTO;
 }
-} // namespace llvm
+}
 
 namespace lld {
 namespace elf {
 
 class BitcodeFile;
 class InputFile;
-class LazyObjFile;
 
 class BitcodeCompiler {
 public:
   BitcodeCompiler();
   ~BitcodeCompiler();
 
-  void add(BitcodeFile &f);
+  template <class ELFT> void add(BitcodeFile &F);
   std::vector<InputFile *> compile();
 
 private:
-  std::unique_ptr<llvm::lto::LTO> ltoObj;
-  std::vector<SmallString<0>> buf;
-  std::vector<std::unique_ptr<MemoryBuffer>> files;
-  llvm::DenseSet<StringRef> usedStartStop;
-  std::unique_ptr<llvm::raw_fd_ostream> indexFile;
-  llvm::DenseSet<StringRef> thinIndices;
+  std::unique_ptr<llvm::lto::LTO> LTOObj;
+  std::vector<SmallString<0>> Buff;
 };
-} // namespace elf
-} // namespace lld
+}
+}
 
 #endif

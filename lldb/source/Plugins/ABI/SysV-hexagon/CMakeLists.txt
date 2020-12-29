@@ -1,10 +1,3 @@
-add_lldb_library(lldbPluginABISysV_hexagon PLUGIN
+add_lldb_library(lldbPluginABISysV_hexagon
   ABISysV_hexagon.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbSymbol
-    lldbTarget
-  LINK_COMPONENTS
-    Support
   )

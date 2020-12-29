@@ -1,24 +1,31 @@
 //===-- ThreadPlanStepInstruction.cpp ---------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Target/ThreadPlanStepInstruction.h"
+#include "lldb/Core/Log.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/StopInfo.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
+//----------------------------------------------------------------------
 // ThreadPlanStepInstruction: Step over the current instruction
+//----------------------------------------------------------------------
 
 ThreadPlanStepInstruction::ThreadPlanStepInstruction(Thread &thread,
                                                      bool step_over,
@@ -50,22 +57,14 @@ void ThreadPlanStepInstruction::SetUpState() {
 
 void ThreadPlanStepInstruction::GetDescription(Stream *s,
                                                lldb::DescriptionLevel level) {
-  auto PrintFailureIfAny = [&]() {
-    if (m_status.Success())
-      return;
-    s->Printf(" failed (%s)", m_status.AsCString());
-  };
-
   if (level == lldb::eDescriptionLevelBrief) {
     if (m_step_over)
       s->Printf("instruction step over");
     else
       s->Printf("instruction step into");
-
-    PrintFailureIfAny();
   } else {
     s->Printf("Stepping one instruction past ");
-    DumpAddress(s->AsRawOstream(), m_instruction_addr, sizeof(addr_t));
+    s->Address(m_instruction_addr, sizeof(addr_t));
     if (!m_start_has_symbol)
       s->Printf(" which has no symbol");
 
@@ -73,14 +72,12 @@ void ThreadPlanStepInstruction::GetDescription(Stream *s,
       s->Printf(" stepping over calls");
     else
       s->Printf(" stepping into calls");
-
-    PrintFailureIfAny();
   }
 }
 
 bool ThreadPlanStepInstruction::ValidatePlan(Stream *error) {
-  // Since we read the instruction we're stepping over from the thread, this
-  // plan will always work.
+  // Since we read the instruction we're stepping over from the thread,
+  // this plan will always work.
   return true;
 }
 
@@ -97,26 +94,16 @@ bool ThreadPlanStepInstruction::IsPlanStale() {
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
   StackID cur_frame_id = m_thread.GetStackFrameAtIndex(0)->GetStackID();
   if (cur_frame_id == m_stack_id) {
-    // Set plan Complete when we reach next instruction
-    uint64_t pc = m_thread.GetRegisterContext()->GetPC(0);
-    uint32_t max_opcode_size = m_thread.CalculateTarget()
-        ->GetArchitecture().GetMaximumOpcodeByteSize();
-    bool next_instruction_reached = (pc > m_instruction_addr) &&
-        (pc <= m_instruction_addr + max_opcode_size);
-    if (next_instruction_reached) {
-      SetPlanComplete();
-    }
     return (m_thread.GetRegisterContext()->GetPC(0) != m_instruction_addr);
   } else if (cur_frame_id < m_stack_id) {
     // If the current frame is younger than the start frame and we are stepping
-    // over, then we need to continue, but if we are doing just one step, we're
-    // done.
+    // over, then we need to continue,
+    // but if we are doing just one step, we're done.
     return !m_step_over;
   } else {
     if (log) {
-      LLDB_LOGF(log,
-                "ThreadPlanStepInstruction::IsPlanStale - Current frame is "
-                "older than start frame, plan is stale.");
+      log->Printf("ThreadPlanStepInstruction::IsPlanStale - Current frame is "
+                  "older than start frame, plan is stale.");
     }
     return true;
   }
@@ -128,9 +115,9 @@ bool ThreadPlanStepInstruction::ShouldStop(Event *event_ptr) {
 
     StackFrameSP cur_frame_sp = m_thread.GetStackFrameAtIndex(0);
     if (!cur_frame_sp) {
-      LLDB_LOGF(
-          log,
-          "ThreadPlanStepInstruction couldn't get the 0th frame, stopping.");
+      if (log)
+        log->Printf(
+            "ThreadPlanStepInstruction couldn't get the 0th frame, stopping.");
       SetPlanComplete();
       return true;
     }
@@ -144,7 +131,8 @@ bool ThreadPlanStepInstruction::ShouldStop(Event *event_ptr) {
           return true;
         } else {
           // We are still stepping, reset the start pc, and in case we've
-          // stepped out, reset the current stack id.
+          // stepped out,
+          // reset the current stack id.
           SetUpState();
           return false;
         }
@@ -157,8 +145,9 @@ bool ThreadPlanStepInstruction::ShouldStop(Event *event_ptr) {
         if (return_frame->GetStackID() != m_parent_frame_id ||
             m_start_has_symbol) {
           // next-instruction shouldn't step out of inlined functions.  But we
-          // may have stepped into a real function that starts with an inlined
-          // function, and we do want to step out of that...
+          // may have stepped into a
+          // real function that starts with an inlined function, and we do want
+          // to step out of that...
 
           if (cur_frame_sp->IsInlined()) {
             StackFrameSP parent_frame_sp =
@@ -169,9 +158,8 @@ bool ThreadPlanStepInstruction::ShouldStop(Event *event_ptr) {
                     cur_frame_sp->GetConcreteFrameIndex()) {
               SetPlanComplete();
               if (log) {
-                LLDB_LOGF(log,
-                          "Frame we stepped into is inlined into the frame "
-                          "we were stepping from, stopping.");
+                log->Printf("Frame we stepped into is inlined into the frame "
+                            "we were stepping from, stopping.");
               }
               return true;
             }
@@ -182,25 +170,23 @@ bool ThreadPlanStepInstruction::ShouldStop(Event *event_ptr) {
             s.PutCString("Stepped in to: ");
             addr_t stop_addr =
                 m_thread.GetStackFrameAtIndex(0)->GetRegisterContext()->GetPC();
-            DumpAddress(s.AsRawOstream(), stop_addr,
-                        m_thread.CalculateTarget()
-                            ->GetArchitecture()
-                            .GetAddressByteSize());
+            s.Address(stop_addr, m_thread.CalculateTarget()
+                                     ->GetArchitecture()
+                                     .GetAddressByteSize());
             s.PutCString(" stepping out to: ");
             addr_t return_addr = return_frame->GetRegisterContext()->GetPC();
-            DumpAddress(s.AsRawOstream(), return_addr,
-                        m_thread.CalculateTarget()
-                            ->GetArchitecture()
-                            .GetAddressByteSize());
-            LLDB_LOGF(log, "%s.", s.GetData());
+            s.Address(return_addr, m_thread.CalculateTarget()
+                                       ->GetArchitecture()
+                                       .GetAddressByteSize());
+            log->Printf("%s.", s.GetData());
           }
 
-          // StepInstruction should probably have the tri-state RunMode, but
-          // for now it is safer to run others.
+          // StepInstruction should probably have the tri-state RunMode, but for
+          // now it is safer to
+          // run others.
           const bool stop_others = false;
           m_thread.QueueThreadPlanForStepOutNoShouldStop(
-              false, nullptr, true, stop_others, eVoteNo, eVoteNoOpinion, 0,
-              m_status);
+              false, nullptr, true, stop_others, eVoteNo, eVoteNoOpinion, 0);
           return false;
         } else {
           if (log) {
@@ -213,7 +199,8 @@ bool ThreadPlanStepInstruction::ShouldStop(Event *event_ptr) {
           return true;
         }
       } else {
-        LLDB_LOGF(log, "Could not find previous frame, stopping.");
+        if (log)
+          log->Printf("Could not find previous frame, stopping.");
         SetPlanComplete();
         return true;
       }
@@ -226,7 +213,8 @@ bool ThreadPlanStepInstruction::ShouldStop(Event *event_ptr) {
         return true;
       } else {
         // We are still stepping, reset the start pc, and in case we've stepped
-        // in or out, reset the current stack id.
+        // in or out,
+        // reset the current stack id.
         SetUpState();
         return false;
       }
@@ -246,7 +234,8 @@ bool ThreadPlanStepInstruction::WillStop() { return true; }
 bool ThreadPlanStepInstruction::MischiefManaged() {
   if (IsPlanComplete()) {
     Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
-    LLDB_LOGF(log, "Completed single instruction step plan.");
+    if (log)
+      log->Printf("Completed single instruction step plan.");
     ThreadPlan::MischiefManaged();
     return true;
   } else {

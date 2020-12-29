@@ -1,4 +1,6 @@
-OBJC_SOURCES := test.m
-LD_EXTRAS := -lobjc -framework Foundation
+LEVEL = ../../../make
 
-include Makefile.rules
+OBJC_SOURCES := test.m
+LDFLAGS = $(CFLAGS) -lobjc -framework Foundation
+
+include $(LEVEL)/Makefile.rules

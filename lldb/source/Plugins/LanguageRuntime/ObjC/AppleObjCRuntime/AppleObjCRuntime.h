@@ -1,22 +1,26 @@
 //===-- AppleObjCRuntime.h --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_AppleObjCRuntime_h_
 #define liblldb_AppleObjCRuntime_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
 #include "llvm/ADT/Optional.h"
 
+// Project includes
 #include "AppleObjCTrampolineHandler.h"
 #include "AppleThreadPlanStepThroughObjCTrampoline.h"
 #include "lldb/Target/LanguageRuntime.h"
+#include "lldb/Target/ObjCLanguageRuntime.h"
 #include "lldb/lldb-private.h"
-
-#include "Plugins/LanguageRuntime/ObjC/ObjCLanguageRuntime.h"
 
 namespace lldb_private {
 
@@ -24,19 +28,21 @@ class AppleObjCRuntime : public lldb_private::ObjCLanguageRuntime {
 public:
   ~AppleObjCRuntime() override;
 
+  //------------------------------------------------------------------
   // Static Functions
+  //------------------------------------------------------------------
   // Note there is no CreateInstance, Initialize & Terminate functions here,
   // because
   // you can't make an instance of this generic runtime.
 
-  static char ID;
-
-  bool isA(const void *ClassID) const override {
-    return ClassID == &ID || ObjCLanguageRuntime::isA(ClassID);
-  }
-
-  static bool classof(const LanguageRuntime *runtime) {
-    return runtime->isA(&ID);
+  static bool classof(const ObjCLanguageRuntime *runtime) {
+    switch (runtime->GetRuntimeVersion()) {
+    case ObjCRuntimeVersions::eAppleObjC_V1:
+    case ObjCRuntimeVersions::eAppleObjC_V2:
+      return true;
+    default:
+      return false;
+    }
   }
 
   // These are generic runtime functions:
@@ -84,21 +90,11 @@ public:
   bool ExceptionBreakpointsExplainStop(lldb::StopInfoSP stop_reason) override;
 
   lldb::SearchFilterSP CreateExceptionSearchFilter() override;
-  
-  static std::tuple<FileSpec, ConstString> GetExceptionThrowLocation();
-
-  lldb::ValueObjectSP GetExceptionObjectForThread(
-      lldb::ThreadSP thread_sp) override;
-
-  lldb::ThreadSP GetBacktraceThreadFromException(
-      lldb::ValueObjectSP thread_sp) override;
 
   uint32_t GetFoundationVersion();
 
   virtual void GetValuesForGlobalCFBooleans(lldb::addr_t &cf_true,
                                             lldb::addr_t &cf_false);
-                                            
-  virtual bool IsTaggedPointer (lldb::addr_t addr) { return false; }
 
 protected:
   // Call CreateInstance instead.
@@ -118,7 +114,7 @@ protected:
   std::unique_ptr<Address> m_PrintForDebugger_addr;
   bool m_read_objc_library;
   std::unique_ptr<lldb_private::AppleObjCTrampolineHandler>
-      m_objc_trampoline_handler_up;
+      m_objc_trampoline_handler_ap;
   lldb::BreakpointSP m_objc_exception_bp_sp;
   lldb::ModuleWP m_objc_module_wp;
   std::unique_ptr<FunctionCaller> m_print_object_caller_up;

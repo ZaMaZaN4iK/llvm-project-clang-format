@@ -1,8 +1,9 @@
 //===-- Internalize.cpp - Mark functions internal -------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -24,15 +25,14 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/IR/Module.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/LineIterator.h"
-#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Utils/GlobalStatus.h"
+#include <fstream>
+#include <set>
 using namespace llvm;
 
 #define DEBUG_TYPE "internalize"
@@ -73,15 +73,18 @@ private:
 
   void LoadFile(StringRef Filename) {
     // Load the APIFile...
-    ErrorOr<std::unique_ptr<MemoryBuffer>> Buf =
-        MemoryBuffer::getFile(Filename);
-    if (!Buf) {
+    std::ifstream In(Filename.data());
+    if (!In.good()) {
       errs() << "WARNING: Internalize couldn't load file '" << Filename
              << "'! Continuing as if it's empty.\n";
       return; // Just continue as if the file were empty
     }
-    for (line_iterator I(*Buf->get(), true), E; I != E; ++I)
-      ExternalNames.insert(*I);
+    while (In) {
+      std::string Symbol;
+      In >> Symbol;
+      if (!Symbol.empty())
+        ExternalNames.insert(Symbol);
+    }
   }
 };
 } // end anonymous namespace
@@ -111,7 +114,7 @@ bool InternalizePass::shouldPreserveGV(const GlobalValue &GV) {
 }
 
 bool InternalizePass::maybeInternalize(
-    GlobalValue &GV, const DenseSet<const Comdat *> &ExternalComdats) {
+    GlobalValue &GV, const std::set<const Comdat *> &ExternalComdats) {
   if (Comdat *C = GV.getComdat()) {
     if (ExternalComdats.count(C))
       return false;
@@ -138,7 +141,7 @@ bool InternalizePass::maybeInternalize(
 // If GV is part of a comdat and is externally visible, keep track of its
 // comdat so that we don't internalize any of its members.
 void InternalizePass::checkComdatVisibility(
-    GlobalValue &GV, DenseSet<const Comdat *> &ExternalComdats) {
+    GlobalValue &GV, std::set<const Comdat *> &ExternalComdats) {
   Comdat *C = GV.getComdat();
   if (!C)
     return;
@@ -155,7 +158,7 @@ bool InternalizePass::internalizeModule(Module &M, CallGraph *CG) {
   collectUsedGlobalVariables(M, Used, false);
 
   // Collect comdat visiblity information for the module.
-  DenseSet<const Comdat *> ExternalComdats;
+  std::set<const Comdat *> ExternalComdats;
   if (!M.getComdatSymbolTable().empty()) {
     for (Function &F : M)
       checkComdatVisibility(F, ExternalComdats);
@@ -189,7 +192,7 @@ bool InternalizePass::internalizeModule(Module &M, CallGraph *CG) {
       ExternalNode->removeOneAbstractEdgeTo((*CG)[&I]);
 
     ++NumFunctions;
-    LLVM_DEBUG(dbgs() << "Internalizing func " << I.getName() << "\n");
+    DEBUG(dbgs() << "Internalizing func " << I.getName() << "\n");
   }
 
   // Never internalize the llvm.used symbol.  It is used to implement
@@ -218,7 +221,7 @@ bool InternalizePass::internalizeModule(Module &M, CallGraph *CG) {
     Changed = true;
 
     ++NumGlobals;
-    LLVM_DEBUG(dbgs() << "Internalized gvar " << GV.getName() << "\n");
+    DEBUG(dbgs() << "Internalized gvar " << GV.getName() << "\n");
   }
 
   // Mark all aliases that are not in the api as internal as well.
@@ -228,7 +231,7 @@ bool InternalizePass::internalizeModule(Module &M, CallGraph *CG) {
     Changed = true;
 
     ++NumAliases;
-    LLVM_DEBUG(dbgs() << "Internalized alias " << GA.getName() << "\n");
+    DEBUG(dbgs() << "Internalized alias " << GA.getName() << "\n");
   }
 
   return Changed;

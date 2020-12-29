@@ -1,9 +1,3 @@
-add_lldb_library(lldbPluginSymbolVendorELF PLUGIN
+add_lldb_library(lldbPluginSymbolVendorELF
   SymbolVendorELF.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbHost
-    lldbSymbol
-    lldbPluginObjectFileELF
   )

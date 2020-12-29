@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,33 +11,13 @@
 
 // template<ForwardIterator Iter1, ForwardIterator Iter2>
 //   requires HasEqualTo<Iter1::value_type, Iter2::value_type>
-//   constexpr Iter1  // constexpr after C++17
+//   Iter1
 //   find_end(Iter1 first1, Iter1 last1, Iter2 first2, Iter2 last2);
 
 #include <algorithm>
 #include <cassert>
 
-#include "test_macros.h"
 #include "test_iterators.h"
-
-#if TEST_STD_VER > 17
-TEST_CONSTEXPR bool test_constexpr() {
-    int ia[] = {0, 1, 2};
-    int ib[] = {4, 5, 6};
-    int ic[] = {0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 0, 1, 2, 3, 0, 1, 2, 0, 1, 0};
-    typedef forward_iterator<int*>       FI;
-    typedef bidirectional_iterator<int*> BI;
-    typedef random_access_iterator<int*> RI;
-
-    return    (std::find_end(FI(std::begin(ic)), FI(std::end(ic)), FI(std::begin(ia)), FI(std::end(ia))) == FI(ic+15))
-           && (std::find_end(FI(std::begin(ic)), FI(std::end(ic)), FI(std::begin(ib)), FI(std::end(ib))) == FI(std::end(ic)))
-           && (std::find_end(BI(std::begin(ic)), BI(std::end(ic)), BI(std::begin(ia)), BI(std::end(ia))) == BI(ic+15))
-           && (std::find_end(BI(std::begin(ic)), BI(std::end(ic)), BI(std::begin(ib)), BI(std::end(ib))) == BI(std::end(ic)))
-           && (std::find_end(RI(std::begin(ic)), RI(std::end(ic)), RI(std::begin(ia)), RI(std::end(ia))) == RI(ic+15))
-           && (std::find_end(RI(std::begin(ic)), RI(std::end(ic)), RI(std::begin(ib)), RI(std::end(ib))) == RI(std::end(ic)))
-           ;
-    }
-#endif
 
 template <class Iter1, class Iter2>
 void
@@ -62,7 +43,7 @@ test()
     assert(std::find_end(Iter1(ia), Iter1(ia), Iter2(b), Iter2(b+1)) == Iter1(ia));
 }
 
-int main(int, char**)
+int main()
 {
     test<forward_iterator<const int*>, forward_iterator<const int*> >();
     test<forward_iterator<const int*>, bidirectional_iterator<const int*> >();
@@ -73,10 +54,4 @@ int main(int, char**)
     test<random_access_iterator<const int*>, forward_iterator<const int*> >();
     test<random_access_iterator<const int*>, bidirectional_iterator<const int*> >();
     test<random_access_iterator<const int*>, random_access_iterator<const int*> >();
-
-#if TEST_STD_VER > 17
-    static_assert(test_constexpr());
-#endif
-
-  return 0;
 }

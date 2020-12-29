@@ -3,6 +3,9 @@
 from __future__ import print_function
 
 
+import os
+import sys
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -12,7 +15,6 @@ from lldbsuite.test import lldbutil
 class SBFormattersAPITestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
-    NO_DEBUG_INFO_TESTCASE = True
 
     def setUp(self):
         # Call super's setUp().
@@ -26,12 +28,10 @@ class SBFormattersAPITestCase(TestBase):
         self.setTearDownCleanup()
 
         """Test Python APIs for working with formatters"""
-        self.runCmd("file " + self.getBuildArtifact("a.out"),
-                    CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(
-            self, "main.cpp", self.line, num_expected_locations=1,
-            loc_exact=True)
+            self, "main.cpp", self.line, num_expected_locations=1, loc_exact=True)
 
         self.runCmd("run", RUN_SUCCEEDED)
 
@@ -69,17 +69,17 @@ class SBFormattersAPITestCase(TestBase):
         self.expect("frame variable foo.E",
                     substrs=['b8cca70a'])
 
-        format.SetFormat(lldb.eFormatOctal)
+        format.format = lldb.eFormatOctal
         category.AddTypeFormat(lldb.SBTypeNameSpecifier("int"), format)
         self.expect("frame variable foo.A",
-                    substrs=[' 01'])
+                    substrs=['01'])
         self.expect("frame variable foo.E",
                     substrs=['b8cca70a'])
 
         category.DeleteTypeFormat(lldb.SBTypeNameSpecifier("int"))
         category.DeleteTypeFormat(lldb.SBTypeNameSpecifier("long"))
         self.expect("frame variable foo.A", matching=False,
-                    substrs=[' 01'])
+                    substrs=['01'])
         self.expect("frame variable foo.E", matching=False,
                     substrs=['b8cca70a'])
 
@@ -91,13 +91,10 @@ class SBFormattersAPITestCase(TestBase):
             new_category.IsValid(),
             "getting a non-existing category worked")
         new_category = self.dbg.CreateCategory("foobar")
-        new_category.SetEnabled(True)
+        new_category.enabled = True
         new_category.AddTypeSummary(
             lldb.SBTypeNameSpecifier(
-                "^.*t$",
-                True,  # is_regexp
-            ), summary)
-
+                "^.*t$", True), summary)
         self.expect("frame variable foo.A",
                     substrs=['hello world'])
         self.expect("frame variable foo.E", matching=False,
@@ -106,7 +103,7 @@ class SBFormattersAPITestCase(TestBase):
                     substrs=['hello world'])
         self.expect("frame variable foo.F",
                     substrs=['hello world'])
-        new_category.SetEnabled(False)
+        new_category.enabled = False
         self.expect("frame variable foo.A", matching=False,
                     substrs=['hello world'])
         self.expect("frame variable foo.E", matching=False,
@@ -383,7 +380,7 @@ class SBFormattersAPITestCase(TestBase):
             lldb.SBTypeSummary.CreateWithScriptCode("return 'hello scripted world';"))
         self.expect("frame variable foo", matching=False,
                     substrs=['hello scripted world'])
-        new_category.SetEnabled(True)
+        new_category.enabled = True
         self.expect("frame variable foo", matching=True,
                     substrs=['hello scripted world'])
 
@@ -442,8 +439,7 @@ class SBFormattersAPITestCase(TestBase):
         self.build(dictionary={'EXE': 'no_synth'})
         self.setTearDownCleanup()
 
-        self.runCmd("file " + self.getBuildArtifact("no_synth"),
-                    CURRENT_EXECUTABLE_SET)
+        self.runCmd("file no_synth", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(
             self, "main.cpp", self.line, num_expected_locations=1, loc_exact=True)

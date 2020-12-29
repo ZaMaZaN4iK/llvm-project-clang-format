@@ -1,7 +1,10 @@
 """Test stepping over vrs. hitting breakpoints & subsequent stepping in various forms."""
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -12,21 +15,23 @@ class TestCStepping(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
+    def getCategories(self):
+        return ['basic_process']
+
     def setUp(self):
         # Call super's setUp().
         TestBase.setUp(self)
         # Find the line numbers that we will step to in main:
         self.main_source = "main.c"
 
-    @add_test_categories(['pyapi', 'basic_process'])
+    @add_test_categories(['pyapi'])
     @expectedFailureAll(oslist=['freebsd'], bugnumber='llvm.org/pr17932')
     @expectedFailureAll(oslist=["linux"], bugnumber="llvm.org/pr14437")
     @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr24777")
-    @expectedFailureNetBSD
     def test_and_python_api(self):
         """Test stepping over vrs. hitting breakpoints & subsequent stepping in various forms."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)

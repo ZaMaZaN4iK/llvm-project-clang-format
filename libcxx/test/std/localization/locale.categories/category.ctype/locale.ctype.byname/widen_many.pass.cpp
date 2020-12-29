@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,10 +22,9 @@
 #include <vector>
 #include <cassert>
 
-#include "test_macros.h"
 #include "platform_support.h" // locale name macros
 
-int main(int, char**)
+int main()
 {
     {
         std::locale l(LOCALE_en_US_UTF_8);
@@ -61,13 +61,11 @@ int main(int, char**)
             assert(v[3] == L'.');
             assert(v[4] == L'a');
             assert(v[5] == L'1');
-#if defined(__APPLE__) || defined(__FreeBSD__)
+#ifdef __APPLE__
             assert(v[6] == L'\x85');
 #else
             assert(v[6] == wchar_t(-1));
 #endif
         }
     }
-
-  return 0;
 }

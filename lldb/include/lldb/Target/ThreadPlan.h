@@ -1,27 +1,33 @@
 //===-- ThreadPlan.h --------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ThreadPlan_h_
 #define liblldb_ThreadPlan_h_
 
+// C Includes
+// C++ Includes
 #include <mutex>
 #include <string>
 
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/UserID.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/StopInfo.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadPlanTracer.h"
-#include "lldb/Utility/UserID.h"
 #include "lldb/lldb-private.h"
 
 namespace lldb_private {
 
+//------------------------------------------------------------------
 //  ThreadPlan:
 //  This is the pure virtual base class for thread plans.
 //
@@ -34,10 +40,9 @@ namespace lldb_private {
 //  The thread maintaining a thread plan stack, and you program the actions of a
 //  particular thread
 //  by pushing plans onto the plan stack.
-//  There is always a "Current" plan, which is the top of the plan stack,
+//  There is always a "Current" plan, which is the head of the plan stack,
 //  though in some cases
-//  a plan may defer to plans higher in the stack for some piece of information
-//  (let us define that the plan stack grows downwards).
+//  a plan may defer to plans higher in the stack for some piece of information.
 //
 //  The plan stack is never empty, there is always a Base Plan which persists
 //  through the life
@@ -104,15 +109,6 @@ namespace lldb_private {
 //  plans in the time between when
 //  your plan gets unshipped and the next resume.
 //
-//  Thread State Checkpoint:
-//
-//  Note that calling functions on target process (ThreadPlanCallFunction) changes
-//  current thread state. The function can be called either by direct user demand or
-//  internally, for example lldb allocates memory on device to calculate breakpoint
-//  condition expression - on Linux it is performed by calling mmap on device.
-//  ThreadStateCheckpoint saves Thread state (stop info and completed
-//  plan stack) to restore it after completing function call.
-//
 //  Over the lifetime of the plan, various methods of the ThreadPlan are then
 //  called in response to changes of state in
 //  the process we are debugging as follows:
@@ -153,7 +149,7 @@ namespace lldb_private {
 //  If the Current plan answers "true" then it is asked if the stop should
 //  percolate all the way to the
 //  user by calling the ShouldStop method.  If the current plan doesn't explain
-//  the stop, then we query up
+//  the stop, then we query down
 //  the plan stack for a plan that does explain the stop.  The plan that does
 //  explain the stop then needs to
 //  figure out what to do about the plans below it in the stack.  If the stop is
@@ -174,7 +170,7 @@ namespace lldb_private {
 //  event it didn't directly handle
 //  it can designate itself a "Master" plan by responding true to IsMasterPlan,
 //  and then if it wants not to be
-//  discarded, it can return false to OkayToDiscard, and it and all its dependent
+//  discarded, it can return true to OkayToDiscard, and it and all its dependent
 //  plans will be preserved when
 //  we resume execution.
 //
@@ -211,7 +207,7 @@ namespace lldb_private {
 //
 //  If a plan says responds "true" to ShouldStop, then it is asked if it's job
 //  is complete by calling
-//  MischiefManaged.  If that returns true, the plan is popped from the plan
+//  MischiefManaged.  If that returns true, the thread is popped from the plan
 //  stack and added to the
 //  Completed Plan Stack.  Then the next plan in the stack is asked if it
 //  ShouldStop, and  it returns "true",
@@ -245,9 +241,9 @@ namespace lldb_private {
 //
 //  When the process stops, the thread is given a StopReason, in the form of a
 //  StopInfo object.  If there is a completed
-//  plan corresponding to the stop, then the "actual" stop reason can be
+//  plan corresponding to the stop, then the "actual" stop reason will be
 //  suppressed, and instead a StopInfoThreadPlan
-//  object will be cons'ed up from the top completed plan in the stack.
+//  object will be cons'ed up from the highest completed plan in the stack.
 //  However, if the plan doesn't want to be
 //  the stop reason, then it can call SetPlanComplete and pass in "false" for
 //  the "success" parameter.  In that case,
@@ -327,15 +323,17 @@ namespace lldb_private {
 //  for a plan to instruct a sub-plan
 //  on how to respond to ShouldReportStop.
 //
+//------------------------------------------------------------------
 
 class ThreadPlan : public std::enable_shared_from_this<ThreadPlan>,
                    public UserID {
 public:
-  enum ThreadScope { eAllThreads, eSomeThreads, eThisThread };
+  typedef enum { eAllThreads, eSomeThreads, eThisThread } ThreadScope;
 
-  // We use these enums so that we can cast a base thread plan to it's real
-  // type without having to resort to dynamic casting.
-  enum ThreadPlanKind {
+  // We use these enums so that we can cast a base thread plan to it's real type
+  // without having to resort
+  // to dynamic casting.
+  typedef enum {
     eKindGeneric,
     eKindNull,
     eKindBase,
@@ -351,24 +349,30 @@ public:
     eKindStepUntil,
     eKindTestCondition
 
-  };
+  } ThreadPlanKind;
 
+  //------------------------------------------------------------------
   // Constructors and Destructors
+  //------------------------------------------------------------------
   ThreadPlan(ThreadPlanKind kind, const char *name, Thread &thread,
              Vote stop_vote, Vote run_vote);
 
   virtual ~ThreadPlan();
 
+  //------------------------------------------------------------------
   /// Returns the name of this thread plan.
   ///
-  /// \return
+  /// @return
   ///   A const char * pointer to the thread plan's name.
+  //------------------------------------------------------------------
   const char *GetName() const { return m_name.c_str(); }
 
+  //------------------------------------------------------------------
   /// Returns the Thread that is using this thread plan.
   ///
-  /// \return
+  /// @return
   ///   A  pointer to the thread plan's owning thread.
+  //------------------------------------------------------------------
   Thread &GetThread() { return m_thread; }
 
   const Thread &GetThread() const { return m_thread; }
@@ -377,26 +381,30 @@ public:
 
   const Target &GetTarget() const { return m_thread.GetProcess()->GetTarget(); }
 
+  //------------------------------------------------------------------
   /// Print a description of this thread to the stream \a s.
   /// \a thread.
   ///
-  /// \param[in] s
+  /// @param[in] s
   ///    The stream to which to print the description.
   ///
-  /// \param[in] level
+  /// @param[in] level
   ///    The level of description desired.  Note that eDescriptionLevelBrief
   ///    will be used in the stop message printed when the plan is complete.
+  //------------------------------------------------------------------
   virtual void GetDescription(Stream *s, lldb::DescriptionLevel level) = 0;
 
+  //------------------------------------------------------------------
   /// Returns whether this plan could be successfully created.
   ///
-  /// \param[in] error
+  /// @param[in] error
   ///    A stream to which to print some reason why the plan could not be
   ///    created.
   ///    Can be NULL.
   ///
-  /// \return
+  /// @return
   ///   \b true if the plan should be queued, \b false otherwise.
+  //------------------------------------------------------------------
   virtual bool ValidatePlan(Stream *error) = 0;
 
   bool TracerExplainsStop() {
@@ -414,8 +422,9 @@ public:
 
   virtual bool ShouldAutoContinue(Event *event_ptr) { return false; }
 
-  // Whether a "stop class" event should be reported to the "outside world".
-  // In general if a thread plan is active, events should not be reported.
+  // Whether a "stop class" event should be reported to the "outside world".  In
+  // general
+  // if a thread plan is active, events should not be reported.
 
   virtual Vote ShouldReportStop(Event *event_ptr);
 
@@ -426,7 +435,8 @@ public:
   virtual bool StopOthers();
 
   // This is the wrapper for DoWillResume that does generic ThreadPlan logic,
-  // then calls DoWillResume.
+  // then
+  // calls DoWillResume.
   bool WillResume(lldb::StateType resume_state, bool current_plan);
 
   virtual bool WillStop() = 0;
@@ -448,8 +458,8 @@ public:
   virtual bool MischiefManaged();
 
   virtual void ThreadDestroyed() {
-    // Any cleanup that a plan might want to do in case the thread goes away in
-    // the middle of the plan being queued on a thread can be done here.
+    // Any cleanup that a plan might want to do in case the thread goes away
+    // in the middle of the plan being queued on a thread can be done here.
   }
 
   bool GetPrivate() { return m_plan_private; }
@@ -489,35 +499,39 @@ public:
   }
 
   // Some thread plans hide away the actual stop info which caused any
-  // particular stop.  For instance the ThreadPlanCallFunction restores the
-  // original stop reason so that stopping and calling a few functions won't
-  // lose the history of the run. This call can be implemented to get you back
-  // to the real stop info.
+  // particular stop.  For
+  // instance the ThreadPlanCallFunction restores the original stop reason so
+  // that stopping and
+  // calling a few functions won't lose the history of the run.
+  // This call can be implemented to get you back to the real stop info.
   virtual lldb::StopInfoSP GetRealStopInfo() { return m_thread.GetStopInfo(); }
 
   // If the completion of the thread plan stepped out of a function, the return
-  // value of the function might have been captured by the thread plan
-  // (currently only ThreadPlanStepOut does this.) If so, the ReturnValueObject
-  // can be retrieved from here.
+  // value of the function
+  // might have been captured by the thread plan (currently only
+  // ThreadPlanStepOut does this.)
+  // If so, the ReturnValueObject can be retrieved from here.
 
   virtual lldb::ValueObjectSP GetReturnValueObject() {
     return lldb::ValueObjectSP();
   }
 
   // If the thread plan managing the evaluation of a user expression lives
-  // longer than the command that instigated the expression (generally because
-  // the expression evaluation hit a breakpoint, and the user regained control
-  // at that point) a subsequent process control command step/continue/etc.
-  // might complete the expression evaluations.  If so, the result of the
-  // expression evaluation will show up here.
+  // longer than the command
+  // that instigated the expression (generally because the expression evaluation
+  // hit a breakpoint, and
+  // the user regained control at that point) a subsequent process control
+  // command step/continue/etc. might
+  // complete the expression evaluations.  If so, the result of the expression
+  // evaluation will show up here.
 
   virtual lldb::ExpressionVariableSP GetExpressionVariable() {
     return lldb::ExpressionVariableSP();
   }
 
-  // If a thread plan stores the state before it was run, then you might want
-  // to restore the state when it is done.  This will do that job. This is
-  // mostly useful for artificial plans like CallFunction plans.
+  // If a thread plan stores the state before it was run, then you might
+  // want to restore the state when it is done.  This will do that job.
+  // This is mostly useful for artificial plans like CallFunction plans.
 
   virtual bool RestoreThreadState() {
     // Nothing to do in general.
@@ -544,7 +558,9 @@ public:
   }
 
 protected:
+  //------------------------------------------------------------------
   // Classes that inherit from ThreadPlan can see and modify these
+  //------------------------------------------------------------------
 
   virtual bool DoWillResume(lldb::StateType resume_state, bool current_plan) {
     return true;
@@ -559,7 +575,8 @@ protected:
   ThreadPlan *GetPreviousPlan() { return m_thread.GetPreviousPlan(this); }
 
   // This forwards the private Thread::GetPrivateStopInfo which is generally
-  // what ThreadPlan's need to know.
+  // what
+  // ThreadPlan's need to know.
 
   lldb::StopInfoSP GetPrivateStopInfo() {
     return m_thread.GetPrivateStopInfo();
@@ -581,16 +598,16 @@ protected:
 
   bool IsUsuallyUnexplainedStopReason(lldb::StopReason);
 
-  Status m_status;
   Thread &m_thread;
   Vote m_stop_vote;
   Vote m_run_vote;
-  bool m_takes_iteration_count;
-  bool m_could_not_resolve_hw_bp;
+  bool m_takes_iteration_count = false;
   int32_t m_iteration_count = 1;
 
 private:
+  //------------------------------------------------------------------
   // For ThreadPlan only
+  //------------------------------------------------------------------
   static lldb::user_id_t GetNextID();
 
   ThreadPlanKind m_kind;
@@ -609,11 +626,13 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ThreadPlan);
 };
 
+//----------------------------------------------------------------------
 // ThreadPlanNull:
-// Threads are assumed to always have at least one plan on the plan stack. This
-// is put on the plan stack when a thread is destroyed so that if you
-// accidentally access a thread after it is destroyed you won't crash. But
-// asking questions of the ThreadPlanNull is definitely an error.
+// Threads are assumed to always have at least one plan on the plan stack.
+// This is put on the plan stack when a thread is destroyed so that if you
+// accidentally access a thread after it is destroyed you won't crash.
+// But asking questions of the ThreadPlanNull is definitely an error.
+//----------------------------------------------------------------------
 
 class ThreadPlanNull : public ThreadPlan {
 public:
@@ -633,8 +652,6 @@ public:
   bool IsBasePlan() override { return true; }
 
   bool OkayToDiscard() override { return false; }
-
-  const Status &GetStatus() { return m_status; }
 
 protected:
   bool DoPlanExplainsStop(Event *event_ptr) override;

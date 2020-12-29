@@ -1,25 +1,32 @@
 //===-- ThreadPlanCallFunctionUsingABI.cpp ----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Target/ThreadPlanCallFunctionUsingABI.h"
 #include "lldb/Core/Address.h"
+#include "lldb/Core/Log.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
+//--------------------------------------------------------------------------------------------
 // ThreadPlanCallFunctionUsingABI: Plan to call a single function using the ABI
 // instead of JIT
+//-------------------------------------------------------------------------------------------
 ThreadPlanCallFunctionUsingABI::ThreadPlanCallFunctionUsingABI(
     Thread &thread, const Address &function, llvm::Type &prototype,
     llvm::Type &return_type, llvm::ArrayRef<ABI::CallArgument> args,

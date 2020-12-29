@@ -1,8 +1,9 @@
 //===- CodeGenInstruction.cpp - CodeGen Instruction Class Wrapper ---------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -33,24 +34,18 @@ CGIOperandList::CGIOperandList(Record *R) : TheDef(R) {
 
   if (DefInit *Init = dyn_cast<DefInit>(OutDI->getOperator())) {
     if (Init->getDef()->getName() != "outs")
-      PrintFatalError(R->getLoc(),
-                      R->getName() +
-                          ": invalid def name for output list: use 'outs'");
+      PrintFatalError(R->getName() + ": invalid def name for output list: use 'outs'");
   } else
-    PrintFatalError(R->getLoc(),
-                    R->getName() + ": invalid output list: use 'outs'");
+    PrintFatalError(R->getName() + ": invalid output list: use 'outs'");
 
   NumDefs = OutDI->getNumArgs();
 
   DagInit *InDI = R->getValueAsDag("InOperandList");
   if (DefInit *Init = dyn_cast<DefInit>(InDI->getOperator())) {
     if (Init->getDef()->getName() != "ins")
-      PrintFatalError(R->getLoc(),
-                      R->getName() +
-                          ": invalid def name for input list: use 'ins'");
+      PrintFatalError(R->getName() + ": invalid def name for input list: use 'ins'");
   } else
-    PrintFatalError(R->getLoc(),
-                    R->getName() + ": invalid input list: use 'ins'");
+    PrintFatalError(R->getName() + ": invalid input list: use 'ins'");
 
   unsigned MIOperandNo = 0;
   std::set<std::string> OperandNames;
@@ -69,8 +64,7 @@ CGIOperandList::CGIOperandList(Record *R) : TheDef(R) {
 
     DefInit *Arg = dyn_cast<DefInit>(ArgInit);
     if (!Arg)
-      PrintFatalError(R->getLoc(), "Illegal operand for the '" + R->getName() +
-                                       "' instruction!");
+      PrintFatalError("Illegal operand for the '" + R->getName() + "' instruction!");
 
     Record *Rec = Arg->getDef();
     std::string PrintMethod = "printOperand";
@@ -83,7 +77,6 @@ CGIOperandList::CGIOperandList(Record *R) : TheDef(R) {
       PrintMethod = Rec->getValueAsString("PrintMethod");
       OperandType = Rec->getValueAsString("OperandType");
       OperandNamespace = Rec->getValueAsString("OperandNamespace");
-      EncoderMethod = Rec->getValueAsString("EncoderMethod");
     } else if (Rec->isSubClassOf("Operand")) {
       PrintMethod = Rec->getValueAsString("PrintMethod");
       OperandType = Rec->getValueAsString("OperandType");
@@ -95,9 +88,8 @@ CGIOperandList::CGIOperandList(Record *R) : TheDef(R) {
       // Verify that MIOpInfo has an 'ops' root value.
       if (!isa<DefInit>(MIOpInfo->getOperator()) ||
           cast<DefInit>(MIOpInfo->getOperator())->getDef()->getName() != "ops")
-        PrintFatalError(R->getLoc(),
-                        "Bad value for MIOperandInfo in operand '" +
-                            Rec->getName() + "'\n");
+        PrintFatalError("Bad value for MIOperandInfo in operand '" + Rec->getName() +
+          "'\n");
 
       // If we have MIOpInfo, then we have #operands equal to number of entries
       // in MIOperandInfo.
@@ -115,20 +107,16 @@ CGIOperandList::CGIOperandList(Record *R) : TheDef(R) {
       OperandType = "OPERAND_REGISTER";
     } else if (!Rec->isSubClassOf("PointerLikeRegClass") &&
                !Rec->isSubClassOf("unknown_class"))
-      PrintFatalError(R->getLoc(), "Unknown operand class '" + Rec->getName() +
-                                       "' in '" + R->getName() +
-                                       "' instruction!");
+      PrintFatalError("Unknown operand class '" + Rec->getName() +
+        "' in '" + R->getName() + "' instruction!");
 
     // Check that the operand has a name and that it's unique.
     if (ArgName.empty())
-      PrintFatalError(R->getLoc(), "In instruction '" + R->getName() +
-                                       "', operand #" + Twine(i) +
-                                       " has no name!");
+      PrintFatalError("In instruction '" + R->getName() + "', operand #" +
+                      Twine(i) + " has no name!");
     if (!OperandNames.insert(ArgName).second)
-      PrintFatalError(R->getLoc(),
-                      "In instruction '" + R->getName() + "', operand #" +
-                          Twine(i) +
-                          " has the same name as a previous operand!");
+      PrintFatalError("In instruction '" + R->getName() + "', operand #" +
+                      Twine(i) + " has the same name as a previous operand!");
 
     OperandList.emplace_back(Rec, ArgName, PrintMethod, EncoderMethod,
                              OperandNamespace + "::" + OperandType, MIOperandNo,
@@ -139,8 +127,8 @@ CGIOperandList::CGIOperandList(Record *R) : TheDef(R) {
 
   // Make sure the constraints list for each operand is large enough to hold
   // constraint info, even if none is present.
-  for (OperandInfo &OpInfo : OperandList)
-    OpInfo.Constraints.resize(OpInfo.MINumOperands);
+  for (unsigned i = 0, e = OperandList.size(); i != e; ++i)
+    OperandList[i].Constraints.resize(OperandList[i].MINumOperands);
 }
 
 
@@ -150,11 +138,9 @@ CGIOperandList::CGIOperandList(Record *R) : TheDef(R) {
 ///
 unsigned CGIOperandList::getOperandNamed(StringRef Name) const {
   unsigned OpIdx;
-  if (hasOperandNamed(Name, OpIdx))
-    return OpIdx;
-  PrintFatalError(TheDef->getLoc(), "'" + TheDef->getName() +
-                                        "' does not have an operand named '$" +
-                                        Name + "'!");
+  if (hasOperandNamed(Name, OpIdx)) return OpIdx;
+  PrintFatalError("'" + TheDef->getName() +
+                  "' does not have an operand named '$" + Name + "'!");
 }
 
 /// hasOperandNamed - Query whether the instruction has an operand of the
@@ -173,8 +159,7 @@ bool CGIOperandList::hasOperandNamed(StringRef Name, unsigned &OpIdx) const {
 std::pair<unsigned,unsigned>
 CGIOperandList::ParseOperandName(const std::string &Op, bool AllowWholeOp) {
   if (Op.empty() || Op[0] != '$')
-    PrintFatalError(TheDef->getLoc(),
-                    TheDef->getName() + ": Illegal operand name: '" + Op + "'");
+    PrintFatalError(TheDef->getName() + ": Illegal operand name: '" + Op + "'");
 
   std::string OpName = Op.substr(1);
   std::string SubOpName;
@@ -184,9 +169,7 @@ CGIOperandList::ParseOperandName(const std::string &Op, bool AllowWholeOp) {
   if (DotIdx != std::string::npos) {
     SubOpName = OpName.substr(DotIdx+1);
     if (SubOpName.empty())
-      PrintFatalError(TheDef->getLoc(),
-                      TheDef->getName() +
-                          ": illegal empty suboperand name in '" + Op + "'");
+      PrintFatalError(TheDef->getName() + ": illegal empty suboperand name in '" +Op +"'");
     OpName = OpName.substr(0, DotIdx);
   }
 
@@ -196,11 +179,8 @@ CGIOperandList::ParseOperandName(const std::string &Op, bool AllowWholeOp) {
     // If one was needed, throw.
     if (OperandList[OpIdx].MINumOperands > 1 && !AllowWholeOp &&
         SubOpName.empty())
-      PrintFatalError(TheDef->getLoc(),
-                      TheDef->getName() +
-                          ": Illegal to refer to"
-                          " whole operand part of complex operand '" +
-                          Op + "'");
+      PrintFatalError(TheDef->getName() + ": Illegal to refer to"
+        " whole operand part of complex operand '" + Op + "'");
 
     // Otherwise, return the operand.
     return std::make_pair(OpIdx, 0U);
@@ -209,9 +189,7 @@ CGIOperandList::ParseOperandName(const std::string &Op, bool AllowWholeOp) {
   // Find the suboperand number involved.
   DagInit *MIOpInfo = OperandList[OpIdx].MIOperandInfo;
   if (!MIOpInfo)
-    PrintFatalError(TheDef->getLoc(), TheDef->getName() +
-                                          ": unknown suboperand name in '" +
-                                          Op + "'");
+    PrintFatalError(TheDef->getName() + ": unknown suboperand name in '" + Op + "'");
 
   // Find the operand with the right name.
   for (unsigned i = 0, e = MIOpInfo->getNumArgs(); i != e; ++i)
@@ -219,14 +197,11 @@ CGIOperandList::ParseOperandName(const std::string &Op, bool AllowWholeOp) {
       return std::make_pair(OpIdx, i);
 
   // Otherwise, didn't find it!
-  PrintFatalError(TheDef->getLoc(), TheDef->getName() +
-                                        ": unknown suboperand name in '" + Op +
-                                        "'");
+  PrintFatalError(TheDef->getName() + ": unknown suboperand name in '" + Op + "'");
   return std::make_pair(0U, 0U);
 }
 
-static void ParseConstraint(const std::string &CStr, CGIOperandList &Ops,
-                            Record *Rec) {
+static void ParseConstraint(const std::string &CStr, CGIOperandList &Ops) {
   // EARLY_CLOBBER: @early $reg
   std::string::size_type wpos = CStr.find_first_of(" \t");
   std::string::size_type start = CStr.find_first_not_of(" \t");
@@ -235,17 +210,13 @@ static void ParseConstraint(const std::string &CStr, CGIOperandList &Ops,
     std::string Name = CStr.substr(wpos+1);
     wpos = Name.find_first_not_of(" \t");
     if (wpos == std::string::npos)
-      PrintFatalError(
-        Rec->getLoc(), "Illegal format for @earlyclobber constraint in '" +
-        Rec->getName() + "': '" + CStr + "'");
+      PrintFatalError("Illegal format for @earlyclobber constraint: '" + CStr + "'");
     Name = Name.substr(wpos);
     std::pair<unsigned,unsigned> Op = Ops.ParseOperandName(Name, false);
 
     // Build the string for the operand
     if (!Ops[Op.first].Constraints[Op.second].isNone())
-      PrintFatalError(
-        Rec->getLoc(), "Operand '" + Name + "' of '" + Rec->getName() +
-        "' cannot have multiple constraints!");
+      PrintFatalError("Operand '" + Name + "' cannot have multiple constraints!");
     Ops[Op.first].Constraints[Op.second] =
     CGIOperandList::ConstraintInfo::getEarlyClobber();
     return;
@@ -253,73 +224,39 @@ static void ParseConstraint(const std::string &CStr, CGIOperandList &Ops,
 
   // Only other constraint is "TIED_TO" for now.
   std::string::size_type pos = CStr.find_first_of('=');
-  if (pos == std::string::npos)
-    PrintFatalError(
-      Rec->getLoc(), "Unrecognized constraint '" + CStr +
-      "' in '" + Rec->getName() + "'");
+  assert(pos != std::string::npos && "Unrecognized constraint");
   start = CStr.find_first_not_of(" \t");
+  std::string Name = CStr.substr(start, pos - start);
 
   // TIED_TO: $src1 = $dst
-  wpos = CStr.find_first_of(" \t", start);
-  if (wpos == std::string::npos || wpos > pos)
-    PrintFatalError(
-      Rec->getLoc(), "Illegal format for tied-to constraint in '" +
-      Rec->getName() + "': '" + CStr + "'");
-  std::string LHSOpName = StringRef(CStr).substr(start, wpos - start);
-  std::pair<unsigned,unsigned> LHSOp = Ops.ParseOperandName(LHSOpName, false);
-
-  wpos = CStr.find_first_not_of(" \t", pos + 1);
+  wpos = Name.find_first_of(" \t");
   if (wpos == std::string::npos)
-    PrintFatalError(
-      Rec->getLoc(), "Illegal format for tied-to constraint: '" + CStr + "'");
+    PrintFatalError("Illegal format for tied-to constraint: '" + CStr + "'");
+  std::string DestOpName = Name.substr(0, wpos);
+  std::pair<unsigned,unsigned> DestOp = Ops.ParseOperandName(DestOpName, false);
 
-  std::string RHSOpName = StringRef(CStr).substr(wpos);
-  std::pair<unsigned,unsigned> RHSOp = Ops.ParseOperandName(RHSOpName, false);
+  Name = CStr.substr(pos+1);
+  wpos = Name.find_first_not_of(" \t");
+  if (wpos == std::string::npos)
+    PrintFatalError("Illegal format for tied-to constraint: '" + CStr + "'");
 
-  // Sort the operands into order, which should put the output one
-  // first. But keep the original order, for use in diagnostics.
-  bool FirstIsDest = (LHSOp < RHSOp);
-  std::pair<unsigned,unsigned> DestOp = (FirstIsDest ? LHSOp : RHSOp);
-  StringRef DestOpName = (FirstIsDest ? LHSOpName : RHSOpName);
-  std::pair<unsigned,unsigned> SrcOp = (FirstIsDest ? RHSOp : LHSOp);
-  StringRef SrcOpName = (FirstIsDest ? RHSOpName : LHSOpName);
-
-  // Ensure one operand is a def and the other is a use.
-  if (DestOp.first >= Ops.NumDefs)
-    PrintFatalError(
-      Rec->getLoc(), "Input operands '" + LHSOpName + "' and '" + RHSOpName +
-      "' of '" + Rec->getName() + "' cannot be tied!");
-  if (SrcOp.first < Ops.NumDefs)
-    PrintFatalError(
-      Rec->getLoc(), "Output operands '" + LHSOpName + "' and '" + RHSOpName +
-      "' of '" + Rec->getName() + "' cannot be tied!");
-
-  // The constraint has to go on the operand with higher index, i.e.
-  // the source one. Check there isn't another constraint there
-  // already.
-  if (!Ops[SrcOp.first].Constraints[SrcOp.second].isNone())
-    PrintFatalError(
-      Rec->getLoc(), "Operand '" + SrcOpName + "' of '" + Rec->getName() +
-      "' cannot have multiple constraints!");
-
-  unsigned DestFlatOpNo = Ops.getFlattenedOperandNumber(DestOp);
-  auto NewConstraint = CGIOperandList::ConstraintInfo::getTied(DestFlatOpNo);
-
-  // Check that the earlier operand is not the target of another tie
-  // before making it the target of this one.
-  for (const CGIOperandList::OperandInfo &Op : Ops) {
-    for (unsigned i = 0; i < Op.MINumOperands; i++)
-      if (Op.Constraints[i] == NewConstraint)
-        PrintFatalError(
-          Rec->getLoc(), "Operand '" + DestOpName + "' of '" + Rec->getName() +
-          "' cannot have multiple operands tied to it!");
+  std::string SrcOpName = Name.substr(wpos);
+  std::pair<unsigned,unsigned> SrcOp = Ops.ParseOperandName(SrcOpName, false);
+  if (SrcOp > DestOp) {
+    std::swap(SrcOp, DestOp);
+    std::swap(SrcOpName, DestOpName);
   }
 
-  Ops[SrcOp.first].Constraints[SrcOp.second] = NewConstraint;
+  unsigned FlatOpNo = Ops.getFlattenedOperandNumber(SrcOp);
+
+  if (!Ops[DestOp.first].Constraints[DestOp.second].isNone())
+    PrintFatalError("Operand '" + DestOpName +
+      "' cannot have multiple constraints!");
+  Ops[DestOp.first].Constraints[DestOp.second] =
+    CGIOperandList::ConstraintInfo::getTied(FlatOpNo);
 }
 
-static void ParseConstraints(const std::string &CStr, CGIOperandList &Ops,
-                             Record *Rec) {
+static void ParseConstraints(const std::string &CStr, CGIOperandList &Ops) {
   if (CStr.empty()) return;
 
   const std::string delims(",");
@@ -331,7 +268,7 @@ static void ParseConstraints(const std::string &CStr, CGIOperandList &Ops,
     if (eidx == std::string::npos)
       eidx = CStr.length();
 
-    ParseConstraint(CStr.substr(bidx, eidx - bidx), Ops, Rec);
+    ParseConstraint(CStr.substr(bidx, eidx - bidx), Ops);
     bidx = CStr.find_first_not_of(delims, eidx);
   }
 }
@@ -363,23 +300,18 @@ CodeGenInstruction::CodeGenInstruction(Record *R)
   Namespace = R->getValueAsString("Namespace");
   AsmString = R->getValueAsString("AsmString");
 
-  isPreISelOpcode = R->getValueAsBit("isPreISelOpcode");
   isReturn     = R->getValueAsBit("isReturn");
-  isEHScopeReturn = R->getValueAsBit("isEHScopeReturn");
   isBranch     = R->getValueAsBit("isBranch");
   isIndirectBranch = R->getValueAsBit("isIndirectBranch");
   isCompare    = R->getValueAsBit("isCompare");
   isMoveImm    = R->getValueAsBit("isMoveImm");
-  isMoveReg    = R->getValueAsBit("isMoveReg");
   isBitcast    = R->getValueAsBit("isBitcast");
   isSelect     = R->getValueAsBit("isSelect");
   isBarrier    = R->getValueAsBit("isBarrier");
   isCall       = R->getValueAsBit("isCall");
   isAdd        = R->getValueAsBit("isAdd");
-  isTrap       = R->getValueAsBit("isTrap");
   canFoldAsLoad = R->getValueAsBit("canFoldAsLoad");
-  isPredicable = !R->getValueAsBit("isUnpredicable") && (
-      Operands.isPredicable || R->getValueAsBit("isPredicable"));
+  isPredicable = Operands.isPredicable || R->getValueAsBit("isPredicable");
   isConvertibleToThreeAddress = R->getValueAsBit("isConvertibleToThreeAddress");
   isCommutable = R->getValueAsBit("isCommutable");
   isTerminator = R->getValueAsBit("isTerminator");
@@ -394,16 +326,12 @@ CodeGenInstruction::CodeGenInstruction(Record *R)
   isInsertSubreg = R->getValueAsBit("isInsertSubreg");
   isConvergent = R->getValueAsBit("isConvergent");
   hasNoSchedulingInfo = R->getValueAsBit("hasNoSchedulingInfo");
-  FastISelShouldIgnore = R->getValueAsBit("FastISelShouldIgnore");
-  variadicOpsAreDefs = R->getValueAsBit("variadicOpsAreDefs");
-  isAuthenticated = R->getValueAsBit("isAuthenticated");
 
   bool Unset;
   mayLoad      = R->getValueAsBitOrUnset("mayLoad", Unset);
   mayLoad_Unset = Unset;
   mayStore     = R->getValueAsBitOrUnset("mayStore", Unset);
   mayStore_Unset = Unset;
-  mayRaiseFPException = R->getValueAsBit("mayRaiseFPException");
   hasSideEffects = R->getValueAsBitOrUnset("hasSideEffects", Unset);
   hasSideEffects_Unset = Unset;
 
@@ -415,12 +343,8 @@ CodeGenInstruction::CodeGenInstruction(Record *R)
   ImplicitDefs = R->getValueAsListOfDefs("Defs");
   ImplicitUses = R->getValueAsListOfDefs("Uses");
 
-  // This flag is only inferred from the pattern.
-  hasChain = false;
-  hasChain_Inferred = false;
-
   // Parse Constraints.
-  ParseConstraints(R->getValueAsString("Constraints"), Operands, R);
+  ParseConstraints(R->getValueAsString("Constraints"), Operands);
 
   // Parse the DisableEncoding field.
   Operands.ProcessDisableEncoding(R->getValueAsString("DisableEncoding"));
@@ -450,10 +374,10 @@ HasOneImplicitDefWithKnownVT(const CodeGenTarget &TargetInfo) const {
   // Check to see if the first implicit def has a resolvable type.
   Record *FirstImplicitDef = ImplicitDefs[0];
   assert(FirstImplicitDef->isSubClassOf("Register"));
-  const std::vector<ValueTypeByHwMode> &RegVTs =
+  const std::vector<MVT::SimpleValueType> &RegVTs =
     TargetInfo.getRegisterVTs(FirstImplicitDef);
-  if (RegVTs.size() == 1 && RegVTs[0].isSimple())
-    return RegVTs[0].getSimple().SimpleTy;
+  if (RegVTs.size() == 1)
+    return RegVTs[0];
   return MVT::Other;
 }
 
@@ -505,19 +429,6 @@ FlattenAsmStringVariants(StringRef Cur, unsigned Variant) {
   return Res;
 }
 
-bool CodeGenInstruction::isOperandImpl(unsigned i,
-                                       StringRef PropertyName) const {
-  DagInit *ConstraintList = TheDef->getValueAsDag("InOperandList");
-  if (!ConstraintList || i >= ConstraintList->getNumArgs())
-    return false;
-
-  DefInit *Constraint = dyn_cast<DefInit>(ConstraintList->getArg(i));
-  if (!Constraint)
-    return false;
-
-  return Constraint->getDef()->isSubClassOf("TypedOperand") &&
-         Constraint->getDef()->getValueAsBit(PropertyName);
-}
 
 //===----------------------------------------------------------------------===//
 /// CodeGenInstAlias Implementation
@@ -665,10 +576,12 @@ unsigned CodeGenInstAlias::ResultOperand::getMINumOperands() const {
   return MIOpInfo->getNumArgs();
 }
 
-CodeGenInstAlias::CodeGenInstAlias(Record *R, CodeGenTarget &T)
+CodeGenInstAlias::CodeGenInstAlias(Record *R, unsigned Variant,
+                                   CodeGenTarget &T)
     : TheDef(R) {
   Result = R->getValueAsDag("ResultInst");
   AsmString = R->getValueAsString("AsmString");
+  AsmString = CodeGenInstruction::FlattenAsmStringVariants(AsmString, Variant);
 
 
   // Verify that the root of the result is an instruction.
@@ -705,14 +618,8 @@ CodeGenInstAlias::CodeGenInstAlias(Record *R, CodeGenTarget &T)
     // of a complex operand, in which case we include them anyways, as we
     // don't have any other way to specify the whole operand.
     if (ResultInst->Operands[i].MINumOperands == 1 &&
-        ResultInst->Operands[i].getTiedRegister() != -1) {
-      // Tied operands of different RegisterClass should be explicit within an
-      // instruction's syntax and so cannot be skipped.
-      int TiedOpNum = ResultInst->Operands[i].getTiedRegister();
-      if (ResultInst->Operands[i].Rec->getName() ==
-          ResultInst->Operands[TiedOpNum].Rec->getName())
-        continue;
-    }
+        ResultInst->Operands[i].getTiedRegister() != -1)
+      continue;
 
     if (AliasOpNo >= Result->getNumArgs())
       PrintFatalError(R->getLoc(), "not enough arguments for instruction!");

@@ -1,15 +1,15 @@
 //===-- DomainSocket.cpp ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Host/posix/DomainSocket.h"
 
-#include "llvm/Support/Errno.h"
-#include "llvm/Support/FileSystem.h"
+#include "lldb/Host/FileSystem.h"
 
 #include <stddef.h>
 #include <sys/socket.h>
@@ -56,51 +56,43 @@ bool SetSockAddr(llvm::StringRef name, const size_t name_offset,
 
   return true;
 }
-} // namespace
-
-DomainSocket::DomainSocket(bool should_close, bool child_processes_inherit)
-    : Socket(ProtocolUnixDomain, should_close, child_processes_inherit) {}
-
-DomainSocket::DomainSocket(SocketProtocol protocol,
-                           bool child_processes_inherit)
-    : Socket(protocol, true, child_processes_inherit) {}
-
-DomainSocket::DomainSocket(NativeSocket socket,
-                           const DomainSocket &listen_socket)
-    : Socket(ProtocolUnixDomain, listen_socket.m_should_close_fd,
-             listen_socket.m_child_processes_inherit) {
-  m_socket = socket;
 }
 
-Status DomainSocket::Connect(llvm::StringRef name) {
+DomainSocket::DomainSocket(NativeSocket socket)
+    : Socket(socket, ProtocolUnixDomain, true) {}
+
+DomainSocket::DomainSocket(bool child_processes_inherit, Error &error)
+    : DomainSocket(
+          CreateSocket(kDomain, kType, 0, child_processes_inherit, error)) {}
+
+DomainSocket::DomainSocket(SocketProtocol protocol,
+                           bool child_processes_inherit, Error &error)
+    : Socket(CreateSocket(kDomain, kType, 0, child_processes_inherit, error),
+             protocol, true) {}
+
+Error DomainSocket::Connect(llvm::StringRef name) {
   sockaddr_un saddr_un;
   socklen_t saddr_un_len;
   if (!SetSockAddr(name, GetNameOffset(), &saddr_un, saddr_un_len))
-    return Status("Failed to set socket address");
+    return Error("Failed to set socket address");
 
-  Status error;
-  m_socket = CreateSocket(kDomain, kType, 0, m_child_processes_inherit, error);
-  if (error.Fail())
-    return error;
-  if (llvm::sys::RetryAfterSignal(-1, ::connect, GetNativeSocket(),
-        (struct sockaddr *)&saddr_un, saddr_un_len) < 0)
+  Error error;
+  if (::connect(GetNativeSocket(), (struct sockaddr *)&saddr_un, saddr_un_len) <
+      0)
     SetLastError(error);
 
   return error;
 }
 
-Status DomainSocket::Listen(llvm::StringRef name, int backlog) {
+Error DomainSocket::Listen(llvm::StringRef name, int backlog) {
   sockaddr_un saddr_un;
   socklen_t saddr_un_len;
   if (!SetSockAddr(name, GetNameOffset(), &saddr_un, saddr_un_len))
-    return Status("Failed to set socket address");
+    return Error("Failed to set socket address");
 
   DeleteSocketFile(name);
 
-  Status error;
-  m_socket = CreateSocket(kDomain, kType, 0, m_child_processes_inherit, error);
-  if (error.Fail())
-    return error;
+  Error error;
   if (::bind(GetNativeSocket(), (struct sockaddr *)&saddr_un, saddr_un_len) ==
       0)
     if (::listen(GetNativeSocket(), backlog) == 0)
@@ -110,12 +102,13 @@ Status DomainSocket::Listen(llvm::StringRef name, int backlog) {
   return error;
 }
 
-Status DomainSocket::Accept(Socket *&socket) {
-  Status error;
+Error DomainSocket::Accept(llvm::StringRef name, bool child_processes_inherit,
+                           Socket *&socket) {
+  Error error;
   auto conn_fd = AcceptSocket(GetNativeSocket(), nullptr, nullptr,
-                              m_child_processes_inherit, error);
+                              child_processes_inherit, error);
   if (error.Success())
-    socket = new DomainSocket(conn_fd, *this);
+    socket = new DomainSocket(conn_fd);
 
   return error;
 }
@@ -123,33 +116,5 @@ Status DomainSocket::Accept(Socket *&socket) {
 size_t DomainSocket::GetNameOffset() const { return 0; }
 
 void DomainSocket::DeleteSocketFile(llvm::StringRef name) {
-  llvm::sys::fs::remove(name);
-}
-
-std::string DomainSocket::GetSocketName() const {
-  if (m_socket != kInvalidSocketValue) {
-    struct sockaddr_un saddr_un;
-    saddr_un.sun_family = AF_UNIX;
-    socklen_t sock_addr_len = sizeof(struct sockaddr_un);
-    if (::getpeername(m_socket, (struct sockaddr *)&saddr_un, &sock_addr_len) ==
-        0) {
-      std::string name(saddr_un.sun_path + GetNameOffset(),
-                       sock_addr_len -
-                           offsetof(struct sockaddr_un, sun_path) -
-                           GetNameOffset());
-      if (name.back() == '\0') name.pop_back();
-      return name;
-    }
-  }
-  return "";
-}
-
-std::string DomainSocket::GetRemoteConnectionURI() const {
-  if (m_socket != kInvalidSocketValue) {
-    return llvm::formatv("{0}://{1}",
-                         GetNameOffset() == 0 ? "unix-connect"
-                                              : "unix-abstract-connect",
-                         GetSocketName());
-  }
-  return "";
+  FileSystem::Unlink(FileSpec{name, true});
 }

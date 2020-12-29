@@ -1,12 +1,5 @@
-lldb_tablegen(InterpreterProperties.inc -gen-lldb-property-defs
-  SOURCE InterpreterProperties.td
-  TARGET LLDBInterpreterPropertiesGen)
-
-lldb_tablegen(InterpreterPropertiesEnum.inc -gen-lldb-property-enum-defs
-  SOURCE InterpreterProperties.td
-  TARGET LLDBInterpreterPropertiesEnumGen)
-
 add_lldb_library(lldbInterpreter
+  Args.cpp
   CommandAlias.cpp
   CommandHistory.cpp
   CommandInterpreter.cpp
@@ -15,12 +8,10 @@ add_lldb_library(lldbInterpreter
   CommandObjectScript.cpp
   CommandOptionValidators.cpp
   CommandReturnObject.cpp
-  OptionArgParser.cpp
   OptionGroupArchitecture.cpp
   OptionGroupBoolean.cpp
   OptionGroupFile.cpp
   OptionGroupFormat.cpp
-  OptionGroupPythonClassWithDict.cpp
   OptionGroupOutputFile.cpp
   OptionGroupPlatform.cpp
   OptionGroupString.cpp
@@ -36,7 +27,7 @@ add_lldb_library(lldbInterpreter
   OptionValueDictionary.cpp
   OptionValueEnumeration.cpp
   OptionValueFileSpec.cpp
-  OptionValueFileSpecList.cpp
+  OptionValueFileSpecLIst.cpp
   OptionValueFormat.cpp
   OptionValueFormatEntity.cpp
   OptionValueLanguage.cpp
@@ -52,23 +43,4 @@ add_lldb_library(lldbInterpreter
   Options.cpp
   Property.cpp
   ScriptInterpreter.cpp
-
-  LINK_LIBS
-    lldbCommands
-    lldbCore
-    lldbDataFormatters
-    lldbHost
-    lldbTarget
-    lldbUtility
-
-  LINK_COMPONENTS
-    Support
   )
-
-add_dependencies(lldbInterpreter
-  LLDBInterpreterPropertiesGen
-  LLDBInterpreterPropertiesEnumGen)
-
-if (LLDB_ENABLE_LIBEDIT)
-  target_include_directories(lldbInterpreter PRIVATE ${LibEdit_INCLUDE_DIRS})
-endif()

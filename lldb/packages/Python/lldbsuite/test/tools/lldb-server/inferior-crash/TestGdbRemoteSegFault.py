@@ -1,6 +1,8 @@
+from __future__ import print_function
 
 
 import gdbremote_testcase
+import signal
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
@@ -11,7 +13,6 @@ class TestGdbRemoteSegFault(gdbremote_testcase.GdbRemoteTestCaseBase):
 
     GDB_REMOTE_STOP_CODE_BAD_ACCESS = 0x91
 
-    @skipIfDarwinEmbedded # <rdar://problem/34539270> lldb-server tests not updated to work on ios etc yet
     def inferior_seg_fault_received(self, expected_signo):
         procs = self.prep_debug_monitor_and_inferior(
             inferior_args=["segfault"])
@@ -37,7 +38,6 @@ class TestGdbRemoteSegFault(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.build()
         self.inferior_seg_fault_received(self.GDB_REMOTE_STOP_CODE_BAD_ACCESS)
 
-    @skipIfWindows # No signal is sent on Windows.
     @llgs_test
     def test_inferior_seg_fault_received_llgs(self):
         self.init_llgs_test()

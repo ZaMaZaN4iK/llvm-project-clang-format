@@ -1,8 +1,9 @@
-//===- StmtIterator.h - Iterators for Statements ----------------*- C++ -*-===//
+//===--- StmtIterator.h - Iterators for Statements --------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,38 +14,31 @@
 #ifndef LLVM_CLANG_AST_STMTITERATOR_H
 #define LLVM_CLANG_AST_STMTITERATOR_H
 
+#include "llvm/Support/Compiler.h"
+#include "llvm/Support/DataTypes.h"
 #include <cassert>
 #include <cstddef>
-#include <cstdint>
 #include <iterator>
+#include <utility>
 
 namespace clang {
 
-class Decl;
 class Stmt;
+class Decl;
 class VariableArrayType;
 
 class StmtIteratorBase {
 protected:
-  enum {
-    StmtMode = 0x0,
-    SizeOfTypeVAMode = 0x1,
-    DeclGroupMode = 0x2,
-    Flags = 0x3
-  };
-
+  enum { StmtMode = 0x0, SizeOfTypeVAMode = 0x1, DeclGroupMode = 0x2,
+         Flags = 0x3 };
+  
   union {
     Stmt **stmt;
     Decl **DGI;
   };
-  uintptr_t RawVAPtr = 0;
+  uintptr_t RawVAPtr;
   Decl **DGE;
-
-  StmtIteratorBase(Stmt **s) : stmt(s) {}
-  StmtIteratorBase(const VariableArrayType *t);
-  StmtIteratorBase(Decl **dgi, Decl **dge);
-  StmtIteratorBase() : stmt(nullptr) {}
-
+  
   bool inDeclGroup() const {
     return (RawVAPtr & Flags) == DeclGroupMode;
   }
@@ -62,7 +56,7 @@ protected:
   }
 
   void setVAPtr(const VariableArrayType *P) {
-    assert(inDeclGroup() || inSizeOfTypeVA());
+    assert (inDeclGroup() || inSizeOfTypeVA());
     RawVAPtr = reinterpret_cast<uintptr_t>(P) | (RawVAPtr & Flags);
   }
 
@@ -71,7 +65,13 @@ protected:
   void NextVA();
 
   Stmt*& GetDeclExpr() const;
+
+  StmtIteratorBase(Stmt **s) : stmt(s), RawVAPtr(0) {}
+  StmtIteratorBase(const VariableArrayType *t);
+  StmtIteratorBase(Decl **dgi, Decl **dge);
+  StmtIteratorBase() : stmt(nullptr), RawVAPtr(0) {}
 };
+
 
 template <typename DERIVED, typename REFERENCE>
 class StmtIteratorImpl : public StmtIteratorBase,
@@ -80,9 +80,8 @@ class StmtIteratorImpl : public StmtIteratorBase,
                                               REFERENCE, REFERENCE> {
 protected:
   StmtIteratorImpl(const StmtIteratorBase& RHS) : StmtIteratorBase(RHS) {}
-
 public:
-  StmtIteratorImpl() = default;
+  StmtIteratorImpl() {}
   StmtIteratorImpl(Stmt **s) : StmtIteratorBase(s) {}
   StmtIteratorImpl(Decl **dgi, Decl **dge) : StmtIteratorBase(dgi, dge) {}
   StmtIteratorImpl(const VariableArrayType *t) : StmtIteratorBase(t) {}
@@ -119,39 +118,27 @@ public:
   REFERENCE operator->() const { return operator*(); }
 };
 
-struct ConstStmtIterator;
+struct StmtIterator : public StmtIteratorImpl<StmtIterator,Stmt*&> {
+  explicit StmtIterator() : StmtIteratorImpl<StmtIterator,Stmt*&>() {}
 
-struct StmtIterator : public StmtIteratorImpl<StmtIterator, Stmt*&> {
-  explicit StmtIterator() = default;
-  StmtIterator(Stmt** S) : StmtIteratorImpl<StmtIterator, Stmt*&>(S) {}
+  StmtIterator(Stmt** S) : StmtIteratorImpl<StmtIterator,Stmt*&>(S) {}
+
   StmtIterator(Decl** dgi, Decl** dge)
-      : StmtIteratorImpl<StmtIterator, Stmt*&>(dgi, dge) {}
+   : StmtIteratorImpl<StmtIterator,Stmt*&>(dgi, dge) {}
+
   StmtIterator(const VariableArrayType *t)
-      : StmtIteratorImpl<StmtIterator, Stmt*&>(t) {}
-
-private:
-  StmtIterator(const StmtIteratorBase &RHS)
-      : StmtIteratorImpl<StmtIterator, Stmt *&>(RHS) {}
-
-  inline friend StmtIterator
-  cast_away_const(const ConstStmtIterator &RHS);
+    : StmtIteratorImpl<StmtIterator,Stmt*&>(t) {}
 };
 
 struct ConstStmtIterator : public StmtIteratorImpl<ConstStmtIterator,
                                                    const Stmt*> {
-  explicit ConstStmtIterator() = default;
-  ConstStmtIterator(const StmtIterator& RHS)
-      : StmtIteratorImpl<ConstStmtIterator, const Stmt*>(RHS) {}
+  explicit ConstStmtIterator() :
+    StmtIteratorImpl<ConstStmtIterator,const Stmt*>() {}
 
-  ConstStmtIterator(Stmt * const *S)
-      : StmtIteratorImpl<ConstStmtIterator, const Stmt *>(
-            const_cast<Stmt **>(S)) {}
+  ConstStmtIterator(const StmtIterator& RHS) :
+    StmtIteratorImpl<ConstStmtIterator,const Stmt*>(RHS) {}
 };
 
-inline StmtIterator cast_away_const(const ConstStmtIterator &RHS) {
-  return RHS;
-}
+} // end namespace clang
 
-} // namespace clang
-
-#endif // LLVM_CLANG_AST_STMTITERATOR_H
+#endif

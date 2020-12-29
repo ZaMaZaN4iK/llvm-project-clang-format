@@ -1,8 +1,9 @@
 //===- llvm/Analysis/Interval.h - Interval Class Declaration ----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -38,11 +39,10 @@ class Interval {
   /// interval.  Also, any loops in this interval must go through the HeaderNode.
   ///
   BasicBlock *HeaderNode;
-
 public:
-  using succ_iterator = std::vector<BasicBlock*>::iterator;
-  using pred_iterator = std::vector<BasicBlock*>::iterator;
-  using node_iterator = std::vector<BasicBlock*>::iterator;
+  typedef std::vector<BasicBlock*>::iterator succ_iterator;
+  typedef std::vector<BasicBlock*>::iterator pred_iterator;
+  typedef std::vector<BasicBlock*>::iterator node_iterator;
 
   inline Interval(BasicBlock *Header) : HeaderNode(Header) {
     Nodes.push_back(Header);
@@ -51,15 +51,18 @@ public:
   inline BasicBlock *getHeaderNode() const { return HeaderNode; }
 
   /// Nodes - The basic blocks in this interval.
+  ///
   std::vector<BasicBlock*> Nodes;
 
   /// Successors - List of BasicBlocks that are reachable directly from nodes in
   /// this interval, but are not in the interval themselves.
   /// These nodes necessarily must be header nodes for other intervals.
+  ///
   std::vector<BasicBlock*> Successors;
 
   /// Predecessors - List of BasicBlocks that have this Interval's header block
   /// as one of their successors.
+  ///
   std::vector<BasicBlock*> Predecessors;
 
   /// contains - Find out if a basic block is in this interval
@@ -85,6 +88,7 @@ public:
   /// Equality operator.  It is only valid to compare two intervals from the
   /// same partition, because of this, all we have to check is the header node
   /// for equality.
+  ///
   inline bool operator==(const Interval &I) const {
     return HeaderNode == I.HeaderNode;
   }
@@ -117,8 +121,8 @@ inline Interval::pred_iterator pred_end(Interval *I)   {
 }
 
 template <> struct GraphTraits<Interval*> {
-  using NodeRef = Interval *;
-  using ChildIteratorType = Interval::succ_iterator;
+  typedef Interval *NodeRef;
+  typedef Interval::succ_iterator ChildIteratorType;
 
   static NodeRef getEntryNode(Interval *I) { return I; }
 
@@ -127,15 +131,14 @@ template <> struct GraphTraits<Interval*> {
   static ChildIteratorType child_end(NodeRef N) { return succ_end(N); }
 };
 
-template <> struct GraphTraits<Inverse<Interval*>> {
-  using NodeRef = Interval *;
-  using ChildIteratorType = Interval::pred_iterator;
-
+template <> struct GraphTraits<Inverse<Interval*> > {
+  typedef Interval *NodeRef;
+  typedef Interval::pred_iterator ChildIteratorType;
   static NodeRef getEntryNode(Inverse<Interval *> G) { return G.Graph; }
   static ChildIteratorType child_begin(NodeRef N) { return pred_begin(N); }
   static ChildIteratorType child_end(NodeRef N) { return pred_end(N); }
 };
 
-} // end namespace llvm
+} // End llvm namespace
 
-#endif // LLVM_ANALYSIS_INTERVAL_H
+#endif

@@ -1,8 +1,9 @@
 ;===- ./lib/Target/X86/LLVMBuild.txt ---------------------------*- Conf -*--===;
 ;
-; Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-; See https://llvm.org/LICENSE.txt for license information.
-; SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+;                     The LLVM Compiler Infrastructure
+;
+; This file is distributed under the University of Illinois Open Source
+; License. See LICENSE.TXT for details.
 ;
 ;===------------------------------------------------------------------------===;
 ;
@@ -15,7 +16,7 @@
 ;===------------------------------------------------------------------------===;
 
 [common]
-subdirectories = AsmParser Disassembler MCTargetDesc TargetInfo Utils
+subdirectories = AsmParser Disassembler InstPrinter MCTargetDesc TargetInfo Utils
 
 [component_0]
 type = TargetGroup
@@ -30,5 +31,5 @@ has_jit = 1
 type = Library
 name = X86CodeGen
 parent = X86
-required_libraries = Analysis AsmPrinter CodeGen Core MC SelectionDAG Support Target X86Desc X86Info X86Utils GlobalISel ProfileData CFGuard
+required_libraries = Analysis AsmPrinter CodeGen Core MC SelectionDAG Support Target X86AsmPrinter X86Desc X86Info X86Utils GlobalISel
 add_to_library_groups = X86

@@ -1,8 +1,9 @@
 //===-- AVR.h - Top-level interface for AVR representation ------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,8 +15,8 @@
 #ifndef LLVM_AVR_H
 #define LLVM_AVR_H
 
-#include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/CodeGen/SelectionDAGNodes.h"
 
 namespace llvm {
 
@@ -26,20 +27,20 @@ FunctionPass *createAVRISelDag(AVRTargetMachine &TM,
                                CodeGenOpt::Level OptLevel);
 FunctionPass *createAVRExpandPseudoPass();
 FunctionPass *createAVRFrameAnalyzerPass();
+FunctionPass *createAVRInstrumentFunctionsPass();
 FunctionPass *createAVRRelaxMemPass();
 FunctionPass *createAVRDynAllocaSRPass();
 FunctionPass *createAVRBranchSelectionPass();
 
 void initializeAVRExpandPseudoPass(PassRegistry&);
+void initializeAVRInstrumentFunctionsPass(PassRegistry&);
 void initializeAVRRelaxMemPass(PassRegistry&);
 
 /// Contains the AVR backend.
 namespace AVR {
 
-/// An integer that identifies all of the supported AVR address spaces.
 enum AddressSpace { DataMemory, ProgramMemory };
 
-/// Checks if a given type is a pointer to program memory.
 template <typename T> bool isProgramMemoryAddress(T *V) {
   return cast<PointerType>(V->getType())->getAddressSpace() == ProgramMemory;
 }

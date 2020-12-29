@@ -1,6 +1,4 @@
-// RUN: %clang_cc1 -verify -fopenmp -ferror-limit 100 %s -Wuninitialized
-
-// RUN: %clang_cc1 -verify -fopenmp-simd -ferror-limit 100 %s -Wuninitialized
+// RUN: %clang_cc1 -verify -fopenmp -ferror-limit 100 %s
 
 struct S1 { // expected-note 2 {{declared here}}
   int a;
@@ -8,7 +6,7 @@ struct S1 { // expected-note 2 {{declared here}}
 
 template <class T>
 T tmain(T argc) {
-#pragma omp flush allocate(argc) // expected-error {{unexpected OpenMP clause 'allocate' in directive '#pragma omp flush'}}
+#pragma omp flush
   ;
 #pragma omp flush untied  // expected-error {{unexpected OpenMP clause 'untied' in directive '#pragma omp flush'}}
 #pragma omp flush unknown // expected-warning {{extra tokens at the end of '#pragma omp flush' are ignored}}
@@ -33,7 +31,7 @@ T tmain(T argc) {
 #pragma omp flush // expected-error {{'#pragma omp flush' cannot be an immediate substatement}}
     switch (argc)
     case 1:
-#pragma omp flush // expected-error {{'#pragma omp flush' cannot be an immediate substatement}}
+#pragma omp flush
   switch (argc)
   case 1: {
 #pragma omp flush
@@ -53,7 +51,7 @@ T tmain(T argc) {
 #pragma omp flush
     }
 label:
-#pragma omp flush
+#pragma omp flush // expected-error {{'#pragma omp flush' cannot be an immediate substatement}}
 label1 : {
 #pragma omp flush
 }
@@ -97,7 +95,7 @@ int main(int argc, char **argv) {
 #pragma omp flush // expected-error {{'#pragma omp flush' cannot be an immediate substatement}}
     switch (argc)
     case 1:
-#pragma omp flush // expected-error {{'#pragma omp flush' cannot be an immediate substatement}}
+#pragma omp flush
   switch (argc)
   case 1: {
 #pragma omp flush
@@ -117,7 +115,7 @@ int main(int argc, char **argv) {
 #pragma omp flush
     }
 label:
-#pragma omp flush
+#pragma omp flush // expected-error {{'#pragma omp flush' cannot be an immediate substatement}}
 label1 : {
 #pragma omp flush
 }

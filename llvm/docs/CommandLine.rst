@@ -128,7 +128,6 @@ this:
   USAGE: compiler [options]
 
   OPTIONS:
-    -h                - Alias for -help
     -help             - display available options (-help-hidden for more)
     -o <filename>     - Specify output filename
 
@@ -195,7 +194,6 @@ declarations above, the ``-help`` option synopsis is now extended to:
   USAGE: compiler [options] <input file>
 
   OPTIONS:
-    -h                - Alias for -help
     -help             - display available options (-help-hidden for more)
     -o <filename>     - Specify output filename
 
@@ -888,12 +886,12 @@ To do this, set up your .h file with your option, like this for example:
   // debug build, then the code specified as the option to the macro will be
   // executed.  Otherwise it will not be.
   #ifdef NDEBUG
-  #define LLVM_DEBUG(X)
+  #define DEBUG(X)
   #else
-  #define LLVM_DEBUG(X) do { if (DebugFlag) { X; } } while (0)
+  #define DEBUG(X) do { if (DebugFlag) { X; } } while (0)
   #endif
 
-This allows clients to blissfully use the ``LLVM_DEBUG()`` macro, or the
+This allows clients to blissfully use the ``DEBUG()`` macro, or the
 ``DebugFlag`` explicitly if they want to.  Now we just need to be able to set
 the ``DebugFlag`` boolean when the option is set.  To do this, we pass an
 additional argument to our command line argument processor, and we specify where
@@ -995,31 +993,6 @@ This section describes the basic attributes that you can specify on options.
 
 * The **cl::cat** attribute specifies the option category that the option
   belongs to. The category should be a `cl::OptionCategory`_ object.
-
-.. _cl::callback:
-
-* The **cl::callback** attribute specifies a callback function that is
-  called when an option is seen, and can be used to set other options,
-  as in option B implies option A.  If the option is a `cl::list`_,
-  and `cl::CommaSeparated`_ is also specified, the callback will fire
-  once for each value.  This could be used to validate combinations or
-  selectively set other options.
-
-  .. code-block:: c++
-
-    cl::opt<bool> OptA("a", cl::desc("option a"));
-    cl::opt<bool> OptB(
-        "b", cl::desc("option b -- This option turns on option a"),
-        cl::callback([&](const bool &) { OptA = true; }));
-    cl::list<std::string, cl::list<std::string>> List(
-      "list",
-      cl::desc("option list -- This option turns on options a when "
-               "'foo' is included in list"),
-      cl::CommaSeparated,
-      cl::callback([&](const std::string &Str) {
-        if (Str == "foo")
-          OptA = true;
-      }));
 
 Option Modifiers
 ----------------
@@ -1195,18 +1168,11 @@ As usual, you can only specify one of these arguments at most.
 .. _grouping:
 .. _cl::Grouping:
 
-Controlling options grouping
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The **cl::Grouping** modifier can be combined with any formatting types except
-for `cl::Positional`_.  It is used to implement Unix-style tools (like ``ls``)
-that have lots of single letter arguments, but only require a single dash.
-For example, the '``ls -labF``' command actually enables four different options,
-all of which are single letters.
-
-Note that **cl::Grouping** options can have values only if they are used
-separately or at the end of the groups.  For `cl::ValueRequired`_, it is
-a runtime error if such an option is used elsewhere in the group.
+* The **cl::Grouping** modifier is used to implement Unix-style tools (like
+  ``ls``) that have lots of single letter arguments, but only require a single
+  dash.  For example, the '``ls -labF``' command actually enables four different
+  options, all of which are single letters.  Note that **cl::Grouping** options
+  cannot have values.
 
 The CommandLine library does not restrict how you use the **cl::Prefix** or
 **cl::Grouping** modifiers, but it is possible to specify ambiguous argument
@@ -1221,24 +1187,19 @@ basically looks like this:
 
   parse(string OrigInput) {
 
-  1. string Input = OrigInput;
-  2. if (isOption(Input)) return getOption(Input).parse();  // Normal option
-  3. while (!Input.empty() && !isOption(Input)) Input.pop_back();  // Remove the last letter
-  4. while (!Input.empty()) {
-       string MaybeValue = OrigInput.substr(Input.length())
-       if (getOption(Input).isPrefix())
-         return getOption(Input).parse(MaybeValue)
-       if (!MaybeValue.empty() && MaybeValue[0] == '=')
-         return getOption(Input).parse(MaybeValue.substr(1))
-       if (!getOption(Input).isGrouping())
-         return error()
-       getOption(Input).parse()
-       Input = OrigInput = MaybeValue
-       while (!Input.empty() && !isOption(Input)) Input.pop_back();
-       if (!Input.empty() && !getOption(Input).isGrouping())
-         return error()
+  1. string input = OrigInput;
+  2. if (isOption(input)) return getOption(input).parse();  // Normal option
+  3. while (!isOption(input) && !input.empty()) input.pop_back();  // Remove the last letter
+  4. if (input.empty()) return error();  // No matching option
+  5. if (getOption(input).isPrefix())
+       return getOption(input).parse(input);
+  6. while (!input.empty()) {  // Must be grouping options
+       getOption(input).parse();
+       OrigInput.erase(OrigInput.begin(), OrigInput.begin()+input.length());
+       input = OrigInput;
+       while (!isOption(input) && !input.empty()) input.pop_back();
      }
-  5. if (!OrigInput.empty()) error();
+  7. if (!OrigInput.empty()) error();
 
   }
 
@@ -1259,14 +1220,6 @@ specify boolean properties that modify the option.
   option is allowed to accept one or more values (i.e. it is a `cl::list`_
   option).
 
-.. _cl::DefaultOption:
-
-* The **cl::DefaultOption** modifier is used to specify that the option is a
-  default that can be overridden by application specific parsers. For example,
-  the ``-help`` alias, ``-h``, is registered this way, so it can be overridden
-  by applications that need to use the ``-h`` option for another purpose,
-  either as a regular option or an alias for another option.
-
 .. _cl::PositionalEatsArgs:
 
 * The **cl::PositionalEatsArgs** modifier (which only applies to positional
@@ -1286,6 +1239,8 @@ specify boolean properties that modify the option.
   with ``cl::CommaSeparated``, this modifier only makes sense with a `cl::list`_
   option.
 
+So far, these are the only three miscellaneous option modifiers.
+
 .. _response files:
 
 Response files
@@ -1296,13 +1251,15 @@ Unices have a relatively low limit on command-line length. It is therefore
 customary to use the so-called 'response files' to circumvent this
 restriction. These files are mentioned on the command-line (using the "@file")
 syntax. The program reads these files and inserts the contents into argv,
-thereby working around the command-line length limits.
+thereby working around the command-line length limits. Response files are
+enabled by an optional fourth argument to `cl::ParseEnvironmentOptions`_ and
+`cl::ParseCommandLineOptions`_.
 
 Top-Level Classes and Functions
 -------------------------------
 
 Despite all of the built-in flexibility, the CommandLine option library really
-only consists of one function `cl::ParseCommandLineOptions`_ and three main
+only consists of one function `cl::ParseCommandLineOptions`_) and three main
 classes: `cl::opt`_, `cl::list`_, and `cl::alias`_.  This section describes
 these three classes in detail.
 
@@ -1319,7 +1276,7 @@ it cannot be guaranteed that all options will have been initialised. Hence it
 should be called from ``main``.
 
 This function can be used to gain access to options declared in libraries that
-the tool writer may not have direct access to.
+the tool writter may not have direct access to.
 
 The function retrieves a :ref:`StringMap <dss_stringmap>` that maps the option
 string (e.g. ``-help``) to an ``Option*``.
@@ -1367,7 +1324,8 @@ option variables once ``argc`` and ``argv`` are available.
 
 The ``cl::ParseCommandLineOptions`` function requires two parameters (``argc``
 and ``argv``), but may also take an optional third parameter which holds
-`additional extra text`_ to emit when the ``-help`` option is invoked.
+`additional extra text`_ to emit when the ``-help`` option is invoked, and a
+fourth boolean parameter that enables `response files`_.
 
 .. _cl::ParseEnvironmentOptions:
 
@@ -1382,8 +1340,9 @@ command line option variables just like `cl::ParseCommandLineOptions`_ does.
 
 It takes four parameters: the name of the program (since ``argv`` may not be
 available, it can't just look in ``argv[0]``), the name of the environment
-variable to examine, and the optional `additional extra text`_ to emit when the
-``-help`` option is invoked.
+variable to examine, the optional `additional extra text`_ to emit when the
+``-help`` option is invoked, and the boolean switch that controls whether
+`response files`_ should be read.
 
 ``cl::ParseEnvironmentOptions`` will break the environment variable's value up
 into words and then process them using `cl::ParseCommandLineOptions`_.
@@ -1761,7 +1720,7 @@ line option outside of the library. In these cases the library does or should
 provide an external storage location that is accessible to users of the
 library. Examples of this include the ``llvm::DebugFlag`` exported by the
 ``lib/Support/Debug.cpp`` file and the ``llvm::TimePassesIsEnabled`` flag
-exported by the ``lib/IR/PassManager.cpp`` file.
+exported by the ``lib/VMCore/PassManager.cpp`` file.
 
 .. todo::
 

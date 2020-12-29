@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,8 +14,7 @@
 
 #include <memory>
 #include <cassert>
-#include "test_macros.h"
-#include "deleter_types.h"
+#include "../test_deleter.h"
 #include "test_allocator.h"
 
 struct A
@@ -28,7 +28,7 @@ struct A
 
 int A::count = 0;
 
-int main(int, char**)
+int main()
 {
     A* ptr = new A;
     try
@@ -45,6 +45,4 @@ int main(int, char**)
         assert(test_allocator<A>::count == 0);
         assert(test_allocator<A>::alloc_count == 0);
     }
-
-  return 0;
 }

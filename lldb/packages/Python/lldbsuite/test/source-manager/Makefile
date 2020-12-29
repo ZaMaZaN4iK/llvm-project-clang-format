@@ -1,11 +1,5 @@
-C_SOURCES := main-copy.c
+LEVEL = ../make
 
-include Makefile.rules
+C_SOURCES := main.c
 
-# Copy file into the build folder to enable the test to modify it.
-main-copy.c: main.c
-	cp -f $< $@
-
-
-clean::
-	$(RM) main-copy.c
+include $(LEVEL)/Makefile.rules

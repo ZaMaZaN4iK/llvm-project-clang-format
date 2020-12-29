@@ -2,8 +2,12 @@
 Use lldb Python API to make sure the dynamic checkers are doing their jobs.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -13,8 +17,6 @@ from lldbsuite.test import lldbutil
 class ObjCCheckerTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
-
-    NO_DEBUG_INFO_TESTCASE = True
 
     def setUp(self):
         # Call super's setUp().
@@ -31,7 +33,7 @@ class ObjCCheckerTestCase(TestBase):
             self.skipTest("requires Objective-C 2.0 runtime")
 
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target from the debugger.
 
@@ -75,16 +77,3 @@ class ObjCCheckerTestCase(TestBase):
         # Make sure the error is helpful:
         err_string = expr_error.GetCString()
         self.assertTrue("selector" in err_string)
-
-        #
-        # Check that we correctly insert the checker for an
-        # ObjC method with the struct return convention.
-        # Getting this wrong would cause us to call the checker
-        # with the wrong arguments, and the checker would crash
-        # So I'm just checking "expression runs successfully" here:
-        #
-        expr_value = frame.EvaluateExpression("[my_simple getBigStruct]", False)
-        expr_error = expr_value.GetError()
-        
-        self.assertTrue(expr_error.Success())
-        

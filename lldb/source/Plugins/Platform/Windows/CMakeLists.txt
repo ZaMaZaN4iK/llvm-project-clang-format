@@ -1,9 +1,3 @@
-add_lldb_library(lldbPluginPlatformWindows PLUGIN
+add_lldb_library(lldbPluginPlatformWindows
   PlatformWindows.cpp
-
-   LINK_LIBS
-    lldbBreakpoint
-    lldbCore
-    lldbHost
-    lldbTarget
   )

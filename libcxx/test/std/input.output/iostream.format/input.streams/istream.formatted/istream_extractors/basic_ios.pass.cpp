@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,8 +18,6 @@
 #include <istream>
 #include <cassert>
 
-#include "test_macros.h"
-
 int f_called = 0;
 
 template <class CharT>
@@ -29,13 +28,11 @@ f(std::basic_ios<CharT>& is)
     return is;
 }
 
-int main(int, char**)
+int main()
 {
     {
         std::istream is((std::streambuf*)0);
         is >> f;
         assert(f_called == 1);
     }
-
-  return 0;
 }

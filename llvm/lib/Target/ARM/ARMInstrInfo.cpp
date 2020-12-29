@@ -1,8 +1,9 @@
 //===-- ARMInstrInfo.cpp - ARM Instruction Information --------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -31,8 +32,8 @@ using namespace llvm;
 ARMInstrInfo::ARMInstrInfo(const ARMSubtarget &STI)
     : ARMBaseInstrInfo(STI), RI() {}
 
-/// Return the noop instruction to use for a noop.
-void ARMInstrInfo::getNoop(MCInst &NopInst) const {
+/// getNoopForMachoTarget - Return the noop instruction to use for a noop.
+void ARMInstrInfo::getNoopForMachoTarget(MCInst &NopInst) const {
   if (hasNOP()) {
     NopInst.setOpcode(ARM::HINT);
     NopInst.addOperand(MCOperand::createImm(0));
@@ -94,7 +95,7 @@ void ARMInstrInfo::expandLoadStackGuard(MachineBasicBlock::iterator MI) const {
   const ARMSubtarget &Subtarget = MF.getSubtarget<ARMSubtarget>();
   const TargetMachine &TM = MF.getTarget();
 
-  if (!Subtarget.useMovt()) {
+  if (!Subtarget.useMovt(MF)) {
     if (TM.isPositionIndependent())
       expandLoadStackGuardBase(MI, ARM::LDRLIT_ga_pcrel, ARM::LDRi12);
     else
@@ -117,7 +118,7 @@ void ARMInstrInfo::expandLoadStackGuard(MachineBasicBlock::iterator MI) const {
 
   MachineBasicBlock &MBB = *MI->getParent();
   DebugLoc DL = MI->getDebugLoc();
-  Register Reg = MI->getOperand(0).getReg();
+  unsigned Reg = MI->getOperand(0).getReg();
   MachineInstrBuilder MIB;
 
   MIB = BuildMI(MBB, MI, DL, get(ARM::MOV_ga_pcrel_ldr), Reg)
@@ -128,9 +129,8 @@ void ARMInstrInfo::expandLoadStackGuard(MachineBasicBlock::iterator MI) const {
   MachineMemOperand *MMO = MBB.getParent()->getMachineMemOperand(
       MachinePointerInfo::getGOT(*MBB.getParent()), Flags, 4, 4);
   MIB.addMemOperand(MMO);
-  BuildMI(MBB, MI, DL, get(ARM::LDRi12), Reg)
-      .addReg(Reg, RegState::Kill)
-      .addImm(0)
-      .cloneMemRefs(*MI)
-      .add(predOps(ARMCC::AL));
+  MIB = BuildMI(MBB, MI, DL, get(ARM::LDRi12), Reg);
+  MIB.addReg(Reg, RegState::Kill).addImm(0);
+  MIB.setMemRefs(MI->memoperands_begin(), MI->memoperands_end());
+  AddDefaultPred(MIB);
 }

@@ -1,8 +1,9 @@
 //===- ConstantProp.cpp - Code to perform Simple Constant Propagation -----===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,26 +18,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/SmallVector.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/ConstantFolding.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instruction.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
-#include "llvm/Support/DebugCounter.h"
-#include "llvm/Transforms/Scalar.h"
-#include "llvm/Transforms/Utils/Local.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
+#include <set>
 using namespace llvm;
 
 #define DEBUG_TYPE "constprop"
 
 STATISTIC(NumInstKilled, "Number of instructions killed");
-DEBUG_COUNTER(CPCounter, "constprop-transform",
-              "Controls which instructions are killed");
 
 namespace {
   struct ConstantPropagation : public FunctionPass {
@@ -70,52 +66,39 @@ bool ConstantPropagation::runOnFunction(Function &F) {
     return false;
 
   // Initialize the worklist to all of the instructions ready to process...
-  SmallPtrSet<Instruction *, 16> WorkList;
-  // The SmallVector of WorkList ensures that we do iteration at stable order.
-  // We use two containers rather than one SetVector, since remove is
-  // linear-time, and we don't care enough to remove from Vec.
-  SmallVector<Instruction *, 16> WorkListVec;
-  for (Instruction &I : instructions(&F)) {
+  std::set<Instruction*> WorkList;
+  for (Instruction &I: instructions(&F))
     WorkList.insert(&I);
-    WorkListVec.push_back(&I);
-  }
 
   bool Changed = false;
   const DataLayout &DL = F.getParent()->getDataLayout();
   TargetLibraryInfo *TLI =
-      &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
+      &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI();
 
   while (!WorkList.empty()) {
-    SmallVector<Instruction*, 16> NewWorkListVec;
-    for (auto *I : WorkListVec) {
-      WorkList.erase(I); // Remove element from the worklist...
+    Instruction *I = *WorkList.begin();
+    WorkList.erase(WorkList.begin());    // Get an element from the worklist...
 
-      if (!I->use_empty()) // Don't muck with dead instructions...
-        if (Constant *C = ConstantFoldInstruction(I, DL, TLI)) {
-          if (!DebugCounter::shouldExecute(CPCounter))
-            continue;
+    if (!I->use_empty())                 // Don't muck with dead instructions...
+      if (Constant *C = ConstantFoldInstruction(I, DL, TLI)) {
+        // Add all of the users of this instruction to the worklist, they might
+        // be constant propagatable now...
+        for (User *U : I->users())
+          WorkList.insert(cast<Instruction>(U));
 
-          // Add all of the users of this instruction to the worklist, they might
-          // be constant propagatable now...
-          for (User *U : I->users()) {
-            // If user not in the set, then add it to the vector.
-            if (WorkList.insert(cast<Instruction>(U)).second)
-              NewWorkListVec.push_back(cast<Instruction>(U));
-          }
+        // Replace all of the uses of a variable with uses of the constant.
+        I->replaceAllUsesWith(C);
 
-          // Replace all of the uses of a variable with uses of the constant.
-          I->replaceAllUsesWith(C);
-
-          if (isInstructionTriviallyDead(I, TLI)) {
-            I->eraseFromParent();
-            ++NumInstKilled;
-          }
-
-          // We made a change to the function...
-          Changed = true;
+        // Remove the dead instruction.
+        WorkList.erase(I);
+        if (isInstructionTriviallyDead(I, TLI)) {
+          I->eraseFromParent();
+          ++NumInstKilled;
         }
-    }
-    WorkListVec = std::move(NewWorkListVec);
+
+        // We made a change to the function...
+        Changed = true;
+      }
   }
   return Changed;
 }

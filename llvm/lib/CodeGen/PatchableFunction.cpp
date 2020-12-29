@@ -1,8 +1,9 @@
 //===-- PatchableFunction.cpp - Patchable prologues for LLVM -------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,14 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/Passes.h"
-#include "llvm/CodeGen/TargetFrameLowering.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/InitializePasses.h"
+#include "llvm/Target/TargetFrameLowering.h"
+#include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 
 using namespace llvm;
 
@@ -49,31 +49,16 @@ static bool doesNotGeneratecode(const MachineInstr &MI) {
   case TargetOpcode::EH_LABEL:
   case TargetOpcode::GC_LABEL:
   case TargetOpcode::DBG_VALUE:
-  case TargetOpcode::DBG_LABEL:
     return true;
   }
 }
 
 bool PatchableFunction::runOnMachineFunction(MachineFunction &MF) {
-  if (MF.getFunction().hasFnAttribute("patchable-function-entry")) {
-    MachineBasicBlock &FirstMBB = *MF.begin();
-    const TargetInstrInfo *TII = MF.getSubtarget().getInstrInfo();
-    if (FirstMBB.empty()) {
-      BuildMI(&FirstMBB, DebugLoc(),
-              TII->get(TargetOpcode::PATCHABLE_FUNCTION_ENTER));
-    } else {
-      MachineInstr &FirstMI = *FirstMBB.begin();
-      BuildMI(FirstMBB, FirstMI, FirstMI.getDebugLoc(),
-              TII->get(TargetOpcode::PATCHABLE_FUNCTION_ENTER));
-    }
-    return true;
-  }
-
-  if (!MF.getFunction().hasFnAttribute("patchable-function"))
+  if (!MF.getFunction()->hasFnAttribute("patchable-function"))
     return false;
 
 #ifndef NDEBUG
-  Attribute PatchAttr = MF.getFunction().getFnAttribute("patchable-function");
+  Attribute PatchAttr = MF.getFunction()->getFnAttribute("patchable-function");
   StringRef PatchType = PatchAttr.getValueAsString();
   assert(PatchType == "prologue-short-redirect" && "Only possibility today!");
 #endif
@@ -90,10 +75,10 @@ bool PatchableFunction::runOnMachineFunction(MachineFunction &MF) {
                  .addImm(FirstActualI->getOpcode());
 
   for (auto &MO : FirstActualI->operands())
-    MIB.add(MO);
+    MIB.addOperand(MO);
 
   FirstActualI->eraseFromParent();
-  MF.ensureAlignment(Align(16));
+  MF.ensureAlignment(4);
   return true;
 }
 

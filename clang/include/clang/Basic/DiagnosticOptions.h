@@ -1,8 +1,9 @@
-//===- DiagnosticOptions.h --------------------------------------*- C++ -*-===//
+//===--- DiagnosticOptions.h ------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,17 +18,14 @@
 
 namespace clang {
 
-/// Specifies which overload candidates to display when overload
+/// \brief Specifies which overload candidates to display when overload
 /// resolution fails.
 enum OverloadsShown : unsigned {
-  /// Show all overloads.
-  Ovl_All,
-
-  /// Show just the "best" overload candidates.
-  Ovl_Best
+  Ovl_All,  ///< Show all overloads.
+  Ovl_Best  ///< Show just the "best" overload candidates.
 };
 
-/// A bitmask representing the diagnostic levels used by
+/// \brief A bitmask representing the diagnostic levels used by
 /// VerifyDiagnosticConsumer.
 enum class DiagnosticLevelMask : unsigned {
   None    = 0,
@@ -59,21 +57,17 @@ inline DiagnosticLevelMask operator&(DiagnosticLevelMask LHS,
 
 raw_ostream& operator<<(raw_ostream& Out, DiagnosticLevelMask M);
 
-/// Options for controlling the compiler diagnostics engine.
+/// \brief Options for controlling the compiler diagnostics engine.
 class DiagnosticOptions : public RefCountedBase<DiagnosticOptions>{
 public:
   enum TextDiagnosticFormat { Clang, MSVC, Vi };
 
   // Default values.
-  enum {
-    DefaultTabStop = 8,
-    MaxTabStop = 100,
+  enum { DefaultTabStop = 8, MaxTabStop = 100,
     DefaultMacroBacktraceLimit = 6,
     DefaultTemplateBacktraceLimit = 10,
     DefaultConstexprBacktraceLimit = 10,
-    DefaultSpellCheckingLimit = 50,
-    DefaultSnippetLineLimit = 1,
-  };
+    DefaultSpellCheckingLimit = 50 };
 
   // Define simple diagnostic options (with no accessors).
 #define DIAGOPT(Name, Bits, Default) unsigned Name : Bits;
@@ -88,10 +82,10 @@ protected:
 #include "clang/Basic/DiagnosticOptions.def"
 
 public:
-  /// The file to log diagnostic output to.
+  /// \brief The file to log diagnostic output to.
   std::string DiagnosticLogFile;
-
-  /// The file to serialize diagnostics to (non-appending).
+  
+  /// \brief The file to serialize diagnostics to (non-appending).
   std::string DiagnosticSerializationFile;
 
   /// The list of -W... options used to alter the diagnostic mappings, with the
@@ -101,10 +95,6 @@ public:
   /// The list of -R... options used to alter the diagnostic mappings, with the
   /// prefixes removed.
   std::vector<std::string> Remarks;
-
-  /// The prefixes for comment directives sought by -verify ("expected" by
-  /// default).
-  std::vector<std::string> VerifyPrefixes;
 
 public:
   // Define accessors/mutators for diagnostic options of enumeration type.
@@ -121,8 +111,8 @@ public:
   }
 };
 
-using TextDiagnosticFormat = DiagnosticOptions::TextDiagnosticFormat;
+typedef DiagnosticOptions::TextDiagnosticFormat TextDiagnosticFormat;
 
-} // namespace clang
+}  // end namespace clang
 
-#endif // LLVM_CLANG_BASIC_DIAGNOSTICOPTIONS_H
+#endif

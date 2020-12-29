@@ -1,8 +1,9 @@
 //===-- PseudoTerminal.h ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,7 +22,7 @@ class PseudoTerminal {
 public:
   enum { invalid_fd = -1, invalid_pid = -1 };
 
-  enum Status {
+  enum Error {
     success = 0,
     err_posix_openpt_failed = -2,
     err_grantpt_failed = -3,
@@ -35,14 +36,16 @@ public:
     err_dup2_failed_on_stdout = -11,
     err_dup2_failed_on_stderr = -12
   };
+  //------------------------------------------------------------------
   // Constructors and Destructors
+  //------------------------------------------------------------------
   PseudoTerminal();
   ~PseudoTerminal();
 
   void CloseMaster();
   void CloseSlave();
-  Status OpenFirstAvailableMaster(int oflag);
-  Status OpenSlave(int oflag);
+  Error OpenFirstAvailableMaster(int oflag);
+  Error OpenSlave(int oflag);
   int MasterFD() const { return m_master_fd; }
   int SlaveFD() const { return m_slave_fd; }
   int ReleaseMasterFD() {
@@ -64,16 +67,21 @@ public:
 
   const char *SlaveName() const;
 
-  pid_t Fork(Status &error);
+  pid_t Fork(Error &error);
 
 protected:
+  //------------------------------------------------------------------
   // Classes that inherit from PseudoTerminal can see and modify these
+  //------------------------------------------------------------------
   int m_master_fd;
   int m_slave_fd;
 
 private:
-  PseudoTerminal(const PseudoTerminal &rhs) = delete;
-  PseudoTerminal &operator=(const PseudoTerminal &rhs) = delete;
+  //------------------------------------------------------------------
+  // Outlaw copy and assignment constructors
+  //------------------------------------------------------------------
+  PseudoTerminal(const PseudoTerminal &rhs);
+  PseudoTerminal &operator=(const PseudoTerminal &rhs);
 };
 
 #endif // #ifndef __PseudoTerminal_h__

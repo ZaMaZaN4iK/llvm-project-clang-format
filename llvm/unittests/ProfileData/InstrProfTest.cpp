@@ -1,8 +1,9 @@
 //===- unittest/ProfileData/InstrProfTest.cpp -------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,15 +14,20 @@
 #include "llvm/ProfileData/InstrProfReader.h"
 #include "llvm/ProfileData/InstrProfWriter.h"
 #include "llvm/Support/Compression.h"
-#include "llvm/Testing/Support/Error.h"
-#include "llvm/Testing/Support/SupportHelpers.h"
 #include "gtest/gtest.h"
 #include <cstdarg>
 
 using namespace llvm;
 
-LLVM_NODISCARD static ::testing::AssertionResult
-ErrorEquals(instrprof_error Expected, Error E) {
+static ::testing::AssertionResult NoError(Error E) {
+  if (!E)
+    return ::testing::AssertionSuccess();
+  return ::testing::AssertionFailure() << "error: " << toString(std::move(E))
+                                       << "\n";
+}
+
+static ::testing::AssertionResult ErrorEquals(instrprof_error Expected,
+                                              Error E) {
   instrprof_error Found;
   std::string FoundMsg;
   handleAllErrors(std::move(E), [&](const InstrProfError &IPE) {
@@ -41,11 +47,9 @@ struct InstrProfTest : ::testing::Test {
 
   void SetUp() { Writer.setOutputSparse(false); }
 
-  void readProfile(std::unique_ptr<MemoryBuffer> Profile,
-                   std::unique_ptr<MemoryBuffer> Remapping = nullptr) {
-    auto ReaderOrErr = IndexedInstrProfReader::create(std::move(Profile),
-                                                      std::move(Remapping));
-    EXPECT_THAT_ERROR(ReaderOrErr.takeError(), Succeeded());
+  void readProfile(std::unique_ptr<MemoryBuffer> Profile) {
+    auto ReaderOrErr = IndexedInstrProfReader::create(std::move(Profile));
+    ASSERT_TRUE(NoError(ReaderOrErr.takeError()));
     Reader = std::move(ReaderOrErr.get());
   }
 };
@@ -65,13 +69,9 @@ TEST_P(MaybeSparseInstrProfTest, write_and_read_empty_profile) {
   ASSERT_TRUE(Reader->begin() == Reader->end());
 }
 
-static const auto Err = [](Error E) {
-  consumeError(std::move(E));
-  FAIL();
-};
-
 TEST_P(MaybeSparseInstrProfTest, write_and_read_one_function) {
-  Writer.addRecord({"foo", 0x1234, {1, 2, 3, 4}}, Err);
+  InstrProfRecord Record("foo", 0x1234, {1, 2, 3, 4});
+  NoError(Writer.addRecord(std::move(Record)));
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
 
@@ -88,19 +88,21 @@ TEST_P(MaybeSparseInstrProfTest, write_and_read_one_function) {
 }
 
 TEST_P(MaybeSparseInstrProfTest, get_instr_prof_record) {
-  Writer.addRecord({"foo", 0x1234, {1, 2}}, Err);
-  Writer.addRecord({"foo", 0x1235, {3, 4}}, Err);
+  InstrProfRecord Record1("foo", 0x1234, {1, 2});
+  InstrProfRecord Record2("foo", 0x1235, {3, 4});
+  NoError(Writer.addRecord(std::move(Record1)));
+  NoError(Writer.addRecord(std::move(Record2)));
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
 
   Expected<InstrProfRecord> R = Reader->getInstrProfRecord("foo", 0x1234);
-  EXPECT_THAT_ERROR(R.takeError(), Succeeded());
+  ASSERT_TRUE(NoError(R.takeError()));
   ASSERT_EQ(2U, R->Counts.size());
   ASSERT_EQ(1U, R->Counts[0]);
   ASSERT_EQ(2U, R->Counts[1]);
 
   R = Reader->getInstrProfRecord("foo", 0x1235);
-  EXPECT_THAT_ERROR(R.takeError(), Succeeded());
+  ASSERT_TRUE(NoError(R.takeError()));
   ASSERT_EQ(2U, R->Counts.size());
   ASSERT_EQ(3U, R->Counts[0]);
   ASSERT_EQ(4U, R->Counts[1]);
@@ -113,20 +115,20 @@ TEST_P(MaybeSparseInstrProfTest, get_instr_prof_record) {
 }
 
 TEST_P(MaybeSparseInstrProfTest, get_function_counts) {
-  Writer.addRecord({"foo", 0x1234, {1, 2}}, Err);
-  Writer.addRecord({"foo", 0x1235, {3, 4}}, Err);
+  InstrProfRecord Record1("foo", 0x1234, {1, 2});
+  InstrProfRecord Record2("foo", 0x1235, {3, 4});
+  NoError(Writer.addRecord(std::move(Record1)));
+  NoError(Writer.addRecord(std::move(Record2)));
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
 
   std::vector<uint64_t> Counts;
-  EXPECT_THAT_ERROR(Reader->getFunctionCounts("foo", 0x1234, Counts),
-                    Succeeded());
+  ASSERT_TRUE(NoError(Reader->getFunctionCounts("foo", 0x1234, Counts)));
   ASSERT_EQ(2U, Counts.size());
   ASSERT_EQ(1U, Counts[0]);
   ASSERT_EQ(2U, Counts[1]);
 
-  EXPECT_THAT_ERROR(Reader->getFunctionCounts("foo", 0x1235, Counts),
-                    Succeeded());
+  ASSERT_TRUE(NoError(Reader->getFunctionCounts("foo", 0x1235, Counts)));
   ASSERT_EQ(2U, Counts.size());
   ASSERT_EQ(3U, Counts[0]);
   ASSERT_EQ(4U, Counts[1]);
@@ -140,15 +142,17 @@ TEST_P(MaybeSparseInstrProfTest, get_function_counts) {
 
 // Profile data is copied from general.proftext
 TEST_F(InstrProfTest, get_profile_summary) {
-  Writer.addRecord({"func1", 0x1234, {97531}}, Err);
-  Writer.addRecord({"func2", 0x1234, {0, 0}}, Err);
-  Writer.addRecord(
-      {"func3",
-       0x1234,
-       {2305843009213693952, 1152921504606846976, 576460752303423488,
-        288230376151711744, 144115188075855872, 72057594037927936}},
-      Err);
-  Writer.addRecord({"func4", 0x1234, {0}}, Err);
+  InstrProfRecord Record1("func1", 0x1234, {97531});
+  InstrProfRecord Record2("func2", 0x1234, {0, 0});
+  InstrProfRecord Record3("func3", 0x1234,
+                          {2305843009213693952, 1152921504606846976,
+                           576460752303423488, 288230376151711744,
+                           144115188075855872, 72057594037927936});
+  InstrProfRecord Record4("func4", 0x1234, {0});
+  NoError(Writer.addRecord(std::move(Record1)));
+  NoError(Writer.addRecord(std::move(Record2)));
+  NoError(Writer.addRecord(std::move(Record3)));
+  NoError(Writer.addRecord(std::move(Record4)));
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
 
@@ -175,7 +179,7 @@ TEST_F(InstrProfTest, get_profile_summary) {
     ASSERT_EQ(288230376151711744U, NinetyFivePerc->MinCount);
     ASSERT_EQ(72057594037927936U, NinetyNinePerc->MinCount);
   };
-  ProfileSummary &PS = Reader->getSummary(/* IsCS */ false);
+  ProfileSummary &PS = Reader->getSummary();
   VerifySummary(PS);
 
   // Test that conversion of summary to and from Metadata works.
@@ -189,8 +193,8 @@ TEST_F(InstrProfTest, get_profile_summary) {
 
   // Test that summary can be attached to and read back from module.
   Module M("my_module", Context);
-  M.setProfileSummary(MD, ProfileSummary::PSK_Instr);
-  MD = M.getProfileSummary(/* IsCS */ false);
+  M.setProfileSummary(MD);
+  MD = M.getProfileSummary();
   ASSERT_TRUE(MD);
   PSFromMD = ProfileSummary::getFromMD(MD);
   ASSERT_TRUE(PSFromMD);
@@ -199,23 +203,25 @@ TEST_F(InstrProfTest, get_profile_summary) {
 }
 
 TEST_F(InstrProfTest, test_writer_merge) {
-  Writer.addRecord({"func1", 0x1234, {42}}, Err);
+  InstrProfRecord Record1("func1", 0x1234, {42});
+  NoError(Writer.addRecord(std::move(Record1)));
 
   InstrProfWriter Writer2;
-  Writer2.addRecord({"func2", 0x1234, {0, 0}}, Err);
+  InstrProfRecord Record2("func2", 0x1234, {0, 0});
+  NoError(Writer2.addRecord(std::move(Record2)));
 
-  Writer.mergeRecordsFromWriter(std::move(Writer2), Err);
+  NoError(Writer.mergeRecordsFromWriter(std::move(Writer2)));
 
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
 
   Expected<InstrProfRecord> R = Reader->getInstrProfRecord("func1", 0x1234);
-  EXPECT_THAT_ERROR(R.takeError(), Succeeded());
+  ASSERT_TRUE(NoError(R.takeError()));
   ASSERT_EQ(1U, R->Counts.size());
   ASSERT_EQ(42U, R->Counts[0]);
 
   R = Reader->getInstrProfRecord("func2", 0x1234);
-  EXPECT_THAT_ERROR(R.takeError(), Succeeded());
+  ASSERT_TRUE(NoError(R.takeError()));
   ASSERT_EQ(2U, R->Counts.size());
   ASSERT_EQ(0U, R->Counts[0]);
   ASSERT_EQ(0U, R->Counts[1]);
@@ -229,7 +235,10 @@ static const char callee5[] = "callee5";
 static const char callee6[] = "callee6";
 
 TEST_P(MaybeSparseInstrProfTest, get_icall_data_read_write) {
-  NamedInstrProfRecord Record1("caller", 0x1234, {1, 2});
+  InstrProfRecord Record1("caller", 0x1234, {1, 2});
+  InstrProfRecord Record2("callee1", 0x1235, {3, 4});
+  InstrProfRecord Record3("callee2", 0x1235, {3, 4});
+  InstrProfRecord Record4("callee3", 0x1235, {3, 4});
 
   // 4 value sites.
   Record1.reserveSites(IPVK_IndirectCallTarget, 4);
@@ -243,15 +252,15 @@ TEST_P(MaybeSparseInstrProfTest, get_icall_data_read_write) {
   InstrProfValueData VD3[] = {{(uint64_t)callee1, 1}};
   Record1.addValueData(IPVK_IndirectCallTarget, 3, VD3, 1, nullptr);
 
-  Writer.addRecord(std::move(Record1), Err);
-  Writer.addRecord({"callee1", 0x1235, {3, 4}}, Err);
-  Writer.addRecord({"callee2", 0x1235, {3, 4}}, Err);
-  Writer.addRecord({"callee3", 0x1235, {3, 4}}, Err);
+  NoError(Writer.addRecord(std::move(Record1)));
+  NoError(Writer.addRecord(std::move(Record2)));
+  NoError(Writer.addRecord(std::move(Record3)));
+  NoError(Writer.addRecord(std::move(Record4)));
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
 
   Expected<InstrProfRecord> R = Reader->getInstrProfRecord("caller", 0x1234);
-  EXPECT_THAT_ERROR(R.takeError(), Succeeded());
+  ASSERT_TRUE(NoError(R.takeError()));
   ASSERT_EQ(4U, R->getNumValueSites(IPVK_IndirectCallTarget));
   ASSERT_EQ(3U, R->getNumValueDataForSite(IPVK_IndirectCallTarget, 0));
   ASSERT_EQ(0U, R->getNumValueDataForSite(IPVK_IndirectCallTarget, 1));
@@ -273,16 +282,16 @@ TEST_P(MaybeSparseInstrProfTest, get_icall_data_read_write) {
 }
 
 TEST_P(MaybeSparseInstrProfTest, annotate_vp_data) {
-  NamedInstrProfRecord Record("caller", 0x1234, {1, 2});
+  InstrProfRecord Record("caller", 0x1234, {1, 2});
   Record.reserveSites(IPVK_IndirectCallTarget, 1);
   InstrProfValueData VD0[] = {{1000, 1}, {2000, 2}, {3000, 3}, {5000, 5},
                               {4000, 4}, {6000, 6}};
   Record.addValueData(IPVK_IndirectCallTarget, 0, VD0, 6, nullptr);
-  Writer.addRecord(std::move(Record), Err);
+  NoError(Writer.addRecord(std::move(Record)));
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
   Expected<InstrProfRecord> R = Reader->getInstrProfRecord("caller", 0x1234);
-  EXPECT_THAT_ERROR(R.takeError(), Succeeded());
+  ASSERT_TRUE(NoError(R.takeError()));
 
   LLVMContext Ctx;
   std::unique_ptr<Module> M(new Module("MyModule", Ctx));
@@ -369,7 +378,10 @@ TEST_P(MaybeSparseInstrProfTest, annotate_vp_data) {
 }
 
 TEST_P(MaybeSparseInstrProfTest, get_icall_data_read_write_with_weight) {
-  NamedInstrProfRecord Record1("caller", 0x1234, {1, 2});
+  InstrProfRecord Record1("caller", 0x1234, {1, 2});
+  InstrProfRecord Record2("callee1", 0x1235, {3, 4});
+  InstrProfRecord Record3("callee2", 0x1235, {3, 4});
+  InstrProfRecord Record4("callee3", 0x1235, {3, 4});
 
   // 4 value sites.
   Record1.reserveSites(IPVK_IndirectCallTarget, 4);
@@ -383,15 +395,15 @@ TEST_P(MaybeSparseInstrProfTest, get_icall_data_read_write_with_weight) {
   InstrProfValueData VD3[] = {{(uint64_t)callee1, 1}};
   Record1.addValueData(IPVK_IndirectCallTarget, 3, VD3, 1, nullptr);
 
-  Writer.addRecord(std::move(Record1), 10, Err);
-  Writer.addRecord({"callee1", 0x1235, {3, 4}}, Err);
-  Writer.addRecord({"callee2", 0x1235, {3, 4}}, Err);
-  Writer.addRecord({"callee3", 0x1235, {3, 4}}, Err);
+  NoError(Writer.addRecord(std::move(Record1), 10));
+  NoError(Writer.addRecord(std::move(Record2)));
+  NoError(Writer.addRecord(std::move(Record3)));
+  NoError(Writer.addRecord(std::move(Record4)));
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
 
   Expected<InstrProfRecord> R = Reader->getInstrProfRecord("caller", 0x1234);
-  EXPECT_THAT_ERROR(R.takeError(), Succeeded());
+  ASSERT_TRUE(NoError(R.takeError()));
   ASSERT_EQ(4U, R->getNumValueSites(IPVK_IndirectCallTarget));
   ASSERT_EQ(3U, R->getNumValueDataForSite(IPVK_IndirectCallTarget, 0));
   ASSERT_EQ(0U, R->getNumValueDataForSite(IPVK_IndirectCallTarget, 1));
@@ -412,7 +424,10 @@ TEST_P(MaybeSparseInstrProfTest, get_icall_data_read_write_with_weight) {
 }
 
 TEST_P(MaybeSparseInstrProfTest, get_icall_data_read_write_big_endian) {
-  NamedInstrProfRecord Record1("caller", 0x1234, {1, 2});
+  InstrProfRecord Record1("caller", 0x1234, {1, 2});
+  InstrProfRecord Record2("callee1", 0x1235, {3, 4});
+  InstrProfRecord Record3("callee2", 0x1235, {3, 4});
+  InstrProfRecord Record4("callee3", 0x1235, {3, 4});
 
   // 4 value sites.
   Record1.reserveSites(IPVK_IndirectCallTarget, 4);
@@ -426,10 +441,10 @@ TEST_P(MaybeSparseInstrProfTest, get_icall_data_read_write_big_endian) {
   InstrProfValueData VD3[] = {{(uint64_t)callee1, 1}};
   Record1.addValueData(IPVK_IndirectCallTarget, 3, VD3, 1, nullptr);
 
-  Writer.addRecord(std::move(Record1), Err);
-  Writer.addRecord({"callee1", 0x1235, {3, 4}}, Err);
-  Writer.addRecord({"callee2", 0x1235, {3, 4}}, Err);
-  Writer.addRecord({"callee3", 0x1235, {3, 4}}, Err);
+  NoError(Writer.addRecord(std::move(Record1)));
+  NoError(Writer.addRecord(std::move(Record2)));
+  NoError(Writer.addRecord(std::move(Record3)));
+  NoError(Writer.addRecord(std::move(Record4)));
 
   // Set big endian output.
   Writer.setValueProfDataEndianness(support::big);
@@ -441,7 +456,7 @@ TEST_P(MaybeSparseInstrProfTest, get_icall_data_read_write_big_endian) {
   Reader->setValueProfDataEndianness(support::big);
 
   Expected<InstrProfRecord> R = Reader->getInstrProfRecord("caller", 0x1234);
-  EXPECT_THAT_ERROR(R.takeError(), Succeeded());
+  ASSERT_TRUE(NoError(R.takeError()));
   ASSERT_EQ(4U, R->getNumValueSites(IPVK_IndirectCallTarget));
   ASSERT_EQ(3U, R->getNumValueDataForSite(IPVK_IndirectCallTarget, 0));
   ASSERT_EQ(0U, R->getNumValueDataForSite(IPVK_IndirectCallTarget, 1));
@@ -460,8 +475,13 @@ TEST_P(MaybeSparseInstrProfTest, get_icall_data_read_write_big_endian) {
 
 TEST_P(MaybeSparseInstrProfTest, get_icall_data_merge1) {
   static const char caller[] = "caller";
-  NamedInstrProfRecord Record11(caller, 0x1234, {1, 2});
-  NamedInstrProfRecord Record12(caller, 0x1234, {1, 2});
+  InstrProfRecord Record11(caller, 0x1234, {1, 2});
+  InstrProfRecord Record12(caller, 0x1234, {1, 2});
+  InstrProfRecord Record2(callee1, 0x1235, {3, 4});
+  InstrProfRecord Record3(callee2, 0x1235, {3, 4});
+  InstrProfRecord Record4(callee3, 0x1235, {3, 4});
+  InstrProfRecord Record5(callee3, 0x1235, {3, 4});
+  InstrProfRecord Record6(callee4, 0x1235, {3, 5});
 
   // 5 value sites.
   Record11.reserveSites(IPVK_IndirectCallTarget, 5);
@@ -505,20 +525,20 @@ TEST_P(MaybeSparseInstrProfTest, get_icall_data_merge1) {
                                {uint64_t(callee3), 3}};
   Record12.addValueData(IPVK_IndirectCallTarget, 4, VD42, 3, nullptr);
 
-  Writer.addRecord(std::move(Record11), Err);
+  NoError(Writer.addRecord(std::move(Record11)));
   // Merge profile data.
-  Writer.addRecord(std::move(Record12), Err);
+  NoError(Writer.addRecord(std::move(Record12)));
 
-  Writer.addRecord({callee1, 0x1235, {3, 4}}, Err);
-  Writer.addRecord({callee2, 0x1235, {3, 4}}, Err);
-  Writer.addRecord({callee3, 0x1235, {3, 4}}, Err);
-  Writer.addRecord({callee3, 0x1235, {3, 4}}, Err);
-  Writer.addRecord({callee4, 0x1235, {3, 5}}, Err);
+  NoError(Writer.addRecord(std::move(Record2)));
+  NoError(Writer.addRecord(std::move(Record3)));
+  NoError(Writer.addRecord(std::move(Record4)));
+  NoError(Writer.addRecord(std::move(Record5)));
+  NoError(Writer.addRecord(std::move(Record6)));
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
 
   Expected<InstrProfRecord> R = Reader->getInstrProfRecord("caller", 0x1234);
-  EXPECT_THAT_ERROR(R.takeError(), Succeeded());
+  ASSERT_TRUE(NoError(R.takeError()));
   ASSERT_EQ(5U, R->getNumValueSites(IPVK_IndirectCallTarget));
   ASSERT_EQ(4U, R->getNumValueDataForSite(IPVK_IndirectCallTarget, 0));
   ASSERT_EQ(0U, R->getNumValueDataForSite(IPVK_IndirectCallTarget, 1));
@@ -568,37 +588,38 @@ TEST_P(MaybeSparseInstrProfTest, get_icall_data_merge1_saturation) {
 
   const uint64_t Max = std::numeric_limits<uint64_t>::max();
 
-  instrprof_error Result;
-  auto Err = [&](Error E) { Result = InstrProfError::take(std::move(E)); };
-  Result = instrprof_error::success;
-  Writer.addRecord({"foo", 0x1234, {1}}, Err);
-  ASSERT_EQ(Result, instrprof_error::success);
+  InstrProfRecord Record1("foo", 0x1234, {1});
+  auto Result1 = Writer.addRecord(std::move(Record1));
+  ASSERT_EQ(InstrProfError::take(std::move(Result1)),
+            instrprof_error::success);
 
   // Verify counter overflow.
-  Result = instrprof_error::success;
-  Writer.addRecord({"foo", 0x1234, {Max}}, Err);
-  ASSERT_EQ(Result, instrprof_error::counter_overflow);
+  InstrProfRecord Record2("foo", 0x1234, {Max});
+  auto Result2 = Writer.addRecord(std::move(Record2));
+  ASSERT_EQ(InstrProfError::take(std::move(Result2)),
+            instrprof_error::counter_overflow);
 
-  Result = instrprof_error::success;
-  Writer.addRecord({bar, 0x9012, {8}}, Err);
-  ASSERT_EQ(Result, instrprof_error::success);
+  InstrProfRecord Record3(bar, 0x9012, {8});
+  auto Result3 = Writer.addRecord(std::move(Record3));
+  ASSERT_EQ(InstrProfError::take(std::move(Result3)),
+            instrprof_error::success);
 
-  NamedInstrProfRecord Record4("baz", 0x5678, {3, 4});
+  InstrProfRecord Record4("baz", 0x5678, {3, 4});
   Record4.reserveSites(IPVK_IndirectCallTarget, 1);
   InstrProfValueData VD4[] = {{uint64_t(bar), 1}};
   Record4.addValueData(IPVK_IndirectCallTarget, 0, VD4, 1, nullptr);
-  Result = instrprof_error::success;
-  Writer.addRecord(std::move(Record4), Err);
-  ASSERT_EQ(Result, instrprof_error::success);
+  auto Result4 = Writer.addRecord(std::move(Record4));
+  ASSERT_EQ(InstrProfError::take(std::move(Result4)),
+            instrprof_error::success);
 
   // Verify value data counter overflow.
-  NamedInstrProfRecord Record5("baz", 0x5678, {5, 6});
+  InstrProfRecord Record5("baz", 0x5678, {5, 6});
   Record5.reserveSites(IPVK_IndirectCallTarget, 1);
   InstrProfValueData VD5[] = {{uint64_t(bar), Max}};
   Record5.addValueData(IPVK_IndirectCallTarget, 0, VD5, 1, nullptr);
-  Result = instrprof_error::success;
-  Writer.addRecord(std::move(Record5), Err);
-  ASSERT_EQ(Result, instrprof_error::counter_overflow);
+  auto Result5 = Writer.addRecord(std::move(Record5));
+  ASSERT_EQ(InstrProfError::take(std::move(Result5)),
+            instrprof_error::counter_overflow);
 
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
@@ -606,7 +627,7 @@ TEST_P(MaybeSparseInstrProfTest, get_icall_data_merge1_saturation) {
   // Verify saturation of counts.
   Expected<InstrProfRecord> ReadRecord1 =
       Reader->getInstrProfRecord("foo", 0x1234);
-  EXPECT_THAT_ERROR(ReadRecord1.takeError(), Succeeded());
+  ASSERT_TRUE(NoError(ReadRecord1.takeError()));
   ASSERT_EQ(Max, ReadRecord1->Counts[0]);
 
   Expected<InstrProfRecord> ReadRecord2 =
@@ -625,8 +646,8 @@ TEST_P(MaybeSparseInstrProfTest, get_icall_data_merge1_saturation) {
 TEST_P(MaybeSparseInstrProfTest, get_icall_data_merge_site_trunc) {
   static const char caller[] = "caller";
 
-  NamedInstrProfRecord Record11(caller, 0x1234, {1, 2});
-  NamedInstrProfRecord Record12(caller, 0x1234, {1, 2});
+  InstrProfRecord Record11(caller, 0x1234, {1, 2});
+  InstrProfRecord Record12(caller, 0x1234, {1, 2});
 
   // 2 value sites.
   Record11.reserveSites(IPVK_IndirectCallTarget, 2);
@@ -649,15 +670,15 @@ TEST_P(MaybeSparseInstrProfTest, get_icall_data_merge_site_trunc) {
   Record12.addValueData(IPVK_IndirectCallTarget, 0, VD1, 255, nullptr);
   Record12.addValueData(IPVK_IndirectCallTarget, 1, nullptr, 0, nullptr);
 
-  Writer.addRecord(std::move(Record11), Err);
+  NoError(Writer.addRecord(std::move(Record11)));
   // Merge profile data.
-  Writer.addRecord(std::move(Record12), Err);
+  NoError(Writer.addRecord(std::move(Record12)));
 
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
 
   Expected<InstrProfRecord> R = Reader->getInstrProfRecord("caller", 0x1234);
-  EXPECT_THAT_ERROR(R.takeError(), Succeeded());
+  ASSERT_TRUE(NoError(R.takeError()));
   std::unique_ptr<InstrProfValueData[]> VD(
       R->getValueForSite(IPVK_IndirectCallTarget, 0));
   ASSERT_EQ(2U, R->getNumValueSites(IPVK_IndirectCallTarget));
@@ -692,12 +713,12 @@ static void addValueProfData(InstrProfRecord &Record) {
 }
 
 TEST_P(MaybeSparseInstrProfTest, value_prof_data_read_write) {
-  InstrProfRecord SrcRecord({1ULL << 31, 2});
+  InstrProfRecord SrcRecord("caller", 0x1234, {1ULL << 31, 2});
   addValueProfData(SrcRecord);
   std::unique_ptr<ValueProfData> VPData =
       ValueProfData::serializeFrom(SrcRecord);
 
-  InstrProfRecord Record({1ULL << 31, 2});
+  InstrProfRecord Record("caller", 0x1234, {1ULL << 31, 2});
   VPData->deserializeTo(Record, nullptr);
 
   // Now read data from Record and sanity check the data
@@ -713,7 +734,7 @@ TEST_P(MaybeSparseInstrProfTest, value_prof_data_read_write) {
   };
   std::unique_ptr<InstrProfValueData[]> VD_0(
       Record.getValueForSite(IPVK_IndirectCallTarget, 0));
-  llvm::sort(&VD_0[0], &VD_0[5], Cmp);
+  std::sort(&VD_0[0], &VD_0[5], Cmp);
   ASSERT_EQ(StringRef((const char *)VD_0[0].Value, 7), StringRef("callee2"));
   ASSERT_EQ(1000U, VD_0[0].Count);
   ASSERT_EQ(StringRef((const char *)VD_0[1].Value, 7), StringRef("callee3"));
@@ -727,7 +748,7 @@ TEST_P(MaybeSparseInstrProfTest, value_prof_data_read_write) {
 
   std::unique_ptr<InstrProfValueData[]> VD_1(
       Record.getValueForSite(IPVK_IndirectCallTarget, 1));
-  llvm::sort(&VD_1[0], &VD_1[4], Cmp);
+  std::sort(&VD_1[0], &VD_1[4], Cmp);
   ASSERT_EQ(StringRef((const char *)VD_1[0].Value, 7), StringRef("callee2"));
   ASSERT_EQ(2500U, VD_1[0].Count);
   ASSERT_EQ(StringRef((const char *)VD_1[1].Value, 7), StringRef("callee1"));
@@ -739,7 +760,7 @@ TEST_P(MaybeSparseInstrProfTest, value_prof_data_read_write) {
 
   std::unique_ptr<InstrProfValueData[]> VD_2(
       Record.getValueForSite(IPVK_IndirectCallTarget, 2));
-  llvm::sort(&VD_2[0], &VD_2[3], Cmp);
+  std::sort(&VD_2[0], &VD_2[3], Cmp);
   ASSERT_EQ(StringRef((const char *)VD_2[0].Value, 7), StringRef("callee4"));
   ASSERT_EQ(5500U, VD_2[0].Count);
   ASSERT_EQ(StringRef((const char *)VD_2[1].Value, 7), StringRef("callee3"));
@@ -749,7 +770,7 @@ TEST_P(MaybeSparseInstrProfTest, value_prof_data_read_write) {
 
   std::unique_ptr<InstrProfValueData[]> VD_3(
       Record.getValueForSite(IPVK_IndirectCallTarget, 3));
-  llvm::sort(&VD_3[0], &VD_3[2], Cmp);
+  std::sort(&VD_3[0], &VD_3[2], Cmp);
   ASSERT_EQ(StringRef((const char *)VD_3[0].Value, 7), StringRef("callee3"));
   ASSERT_EQ(2000U, VD_3[0].Count);
   ASSERT_EQ(StringRef((const char *)VD_3[1].Value, 7), StringRef("callee2"));
@@ -758,20 +779,21 @@ TEST_P(MaybeSparseInstrProfTest, value_prof_data_read_write) {
 
 TEST_P(MaybeSparseInstrProfTest, value_prof_data_read_write_mapping) {
 
-  NamedInstrProfRecord SrcRecord("caller", 0x1234, {1ULL << 31, 2});
+  InstrProfRecord SrcRecord("caller", 0x1234, {1ULL << 31, 2});
   addValueProfData(SrcRecord);
   std::unique_ptr<ValueProfData> VPData =
       ValueProfData::serializeFrom(SrcRecord);
 
-  NamedInstrProfRecord Record("caller", 0x1234, {1ULL << 31, 2});
+  InstrProfRecord Record("caller", 0x1234, {1ULL << 31, 2});
   InstrProfSymtab Symtab;
   Symtab.mapAddress(uint64_t(callee1), 0x1000ULL);
   Symtab.mapAddress(uint64_t(callee2), 0x2000ULL);
   Symtab.mapAddress(uint64_t(callee3), 0x3000ULL);
   Symtab.mapAddress(uint64_t(callee4), 0x4000ULL);
   // Missing mapping for callee5
+  Symtab.finalizeSymtab();
 
-  VPData->deserializeTo(Record, &Symtab);
+  VPData->deserializeTo(Record, &Symtab.getAddrHashMap());
 
   // Now read data from Record and sanity check the data
   ASSERT_EQ(5U, Record.getNumValueSites(IPVK_IndirectCallTarget));
@@ -782,7 +804,7 @@ TEST_P(MaybeSparseInstrProfTest, value_prof_data_read_write_mapping) {
   };
   std::unique_ptr<InstrProfValueData[]> VD_0(
       Record.getValueForSite(IPVK_IndirectCallTarget, 0));
-  llvm::sort(&VD_0[0], &VD_0[5], Cmp);
+  std::sort(&VD_0[0], &VD_0[5], Cmp);
   ASSERT_EQ(VD_0[0].Value, 0x2000ULL);
   ASSERT_EQ(1000U, VD_0[0].Count);
   ASSERT_EQ(VD_0[1].Value, 0x3000ULL);
@@ -795,30 +817,33 @@ TEST_P(MaybeSparseInstrProfTest, value_prof_data_read_write_mapping) {
 }
 
 TEST_P(MaybeSparseInstrProfTest, get_max_function_count) {
-  Writer.addRecord({"foo", 0x1234, {1ULL << 31, 2}}, Err);
-  Writer.addRecord({"bar", 0, {1ULL << 63}}, Err);
-  Writer.addRecord({"baz", 0x5678, {0, 0, 0, 0}}, Err);
+  InstrProfRecord Record1("foo", 0x1234, {1ULL << 31, 2});
+  InstrProfRecord Record2("bar", 0, {1ULL << 63});
+  InstrProfRecord Record3("baz", 0x5678, {0, 0, 0, 0});
+  NoError(Writer.addRecord(std::move(Record1)));
+  NoError(Writer.addRecord(std::move(Record2)));
+  NoError(Writer.addRecord(std::move(Record3)));
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
 
-  ASSERT_EQ(1ULL << 63, Reader->getMaximumFunctionCount(/* IsCS */ false));
+  ASSERT_EQ(1ULL << 63, Reader->getMaximumFunctionCount());
 }
 
 TEST_P(MaybeSparseInstrProfTest, get_weighted_function_counts) {
-  Writer.addRecord({"foo", 0x1234, {1, 2}}, 3, Err);
-  Writer.addRecord({"foo", 0x1235, {3, 4}}, 5, Err);
+  InstrProfRecord Record1("foo", 0x1234, {1, 2});
+  InstrProfRecord Record2("foo", 0x1235, {3, 4});
+  NoError(Writer.addRecord(std::move(Record1), 3));
+  NoError(Writer.addRecord(std::move(Record2), 5));
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
 
   std::vector<uint64_t> Counts;
-  EXPECT_THAT_ERROR(Reader->getFunctionCounts("foo", 0x1234, Counts),
-                    Succeeded());
+  ASSERT_TRUE(NoError(Reader->getFunctionCounts("foo", 0x1234, Counts)));
   ASSERT_EQ(2U, Counts.size());
   ASSERT_EQ(3U, Counts[0]);
   ASSERT_EQ(6U, Counts[1]);
 
-  EXPECT_THAT_ERROR(Reader->getFunctionCounts("foo", 0x1235, Counts),
-                    Succeeded());
+  ASSERT_TRUE(NoError(Reader->getFunctionCounts("foo", 0x1235, Counts)));
   ASSERT_EQ(2U, Counts.size());
   ASSERT_EQ(15U, Counts[0]);
   ASSERT_EQ(20U, Counts[1]);
@@ -834,7 +859,7 @@ TEST_P(MaybeSparseInstrProfTest, instr_prof_symtab_test) {
   FuncNames.push_back("bar2");
   FuncNames.push_back("bar3");
   InstrProfSymtab Symtab;
-  EXPECT_THAT_ERROR(Symtab.create(FuncNames), Succeeded());
+  Symtab.create(FuncNames);
   StringRef R = Symtab.getFuncName(IndexedInstrProf::ComputeHash("func1"));
   ASSERT_EQ(StringRef("func1"), R);
   R = Symtab.getFuncName(IndexedInstrProf::ComputeHash("func2"));
@@ -855,9 +880,11 @@ TEST_P(MaybeSparseInstrProfTest, instr_prof_symtab_test) {
   ASSERT_EQ(StringRef(), R);
 
   // Now incrementally update the symtab
-  EXPECT_THAT_ERROR(Symtab.addFuncName("blah_1"), Succeeded());
-  EXPECT_THAT_ERROR(Symtab.addFuncName("blah_2"), Succeeded());
-  EXPECT_THAT_ERROR(Symtab.addFuncName("blah_3"), Succeeded());
+  Symtab.addFuncName("blah_1");
+  Symtab.addFuncName("blah_2");
+  Symtab.addFuncName("blah_3");
+  // Finalize it
+  Symtab.finalizeSymtab();
 
   // Check again
   R = Symtab.getFuncName(IndexedInstrProf::ComputeHash("blah_1"));
@@ -880,16 +907,10 @@ TEST_P(MaybeSparseInstrProfTest, instr_prof_symtab_test) {
   ASSERT_EQ(StringRef("bar3"), R);
 }
 
-// Test that we get an error when creating a bogus symtab.
-TEST_P(MaybeSparseInstrProfTest, instr_prof_bogus_symtab_empty_func_name) {
-  InstrProfSymtab Symtab;
-  EXPECT_TRUE(ErrorEquals(instrprof_error::malformed, Symtab.addFuncName("")));
-}
-
 // Testing symtab creator interface used by value profile transformer.
 TEST_P(MaybeSparseInstrProfTest, instr_prof_symtab_module_test) {
   LLVMContext Ctx;
-  std::unique_ptr<Module> M = std::make_unique<Module>("MyModule.cpp", Ctx);
+  std::unique_ptr<Module> M = llvm::make_unique<Module>("MyModule.cpp", Ctx);
   FunctionType *FTy = FunctionType::get(Type::getVoidTy(Ctx),
                                         /*isVarArg=*/false);
   Function::Create(FTy, Function::ExternalLinkage, "Gfoo", M.get());
@@ -906,7 +927,7 @@ TEST_P(MaybeSparseInstrProfTest, instr_prof_symtab_module_test) {
   Function::Create(FTy, Function::WeakODRLinkage, "Wbar", M.get());
 
   InstrProfSymtab ProfSymtab;
-  EXPECT_THAT_ERROR(ProfSymtab.create(*M), Succeeded());
+  ProfSymtab.create(*M);
 
   StringRef Funcs[] = {"Gfoo", "Gblah", "Gbar", "Ifoo", "Iblah", "Ibar",
                        "Pfoo", "Pblah", "Pbar", "Wfoo", "Wblah", "Wbar"};
@@ -946,17 +967,13 @@ TEST_P(MaybeSparseInstrProfTest, instr_prof_symtab_compression_test) {
   for (bool DoCompression : {false, true}) {
     // Compressing:
     std::string FuncNameStrings1;
-    EXPECT_THAT_ERROR(collectPGOFuncNameStrings(
-                          FuncNames1, (DoCompression && zlib::isAvailable()),
-                          FuncNameStrings1),
-                      Succeeded());
+    NoError(collectPGOFuncNameStrings(
+        FuncNames1, (DoCompression && zlib::isAvailable()), FuncNameStrings1));
 
     // Compressing:
     std::string FuncNameStrings2;
-    EXPECT_THAT_ERROR(collectPGOFuncNameStrings(
-                          FuncNames2, (DoCompression && zlib::isAvailable()),
-                          FuncNameStrings2),
-                      Succeeded());
+    NoError(collectPGOFuncNameStrings(
+        FuncNames2, (DoCompression && zlib::isAvailable()), FuncNameStrings2));
 
     for (int Padding = 0; Padding < 2; Padding++) {
       // Join with paddings :
@@ -968,7 +985,7 @@ TEST_P(MaybeSparseInstrProfTest, instr_prof_symtab_compression_test) {
 
       // Now decompress:
       InstrProfSymtab Symtab;
-      EXPECT_THAT_ERROR(Symtab.create(StringRef(FuncNameStrings)), Succeeded());
+      NoError(Symtab.create(StringRef(FuncNameStrings)));
 
       // Now do the checks:
       // First sampling some data points:
@@ -991,49 +1008,14 @@ TEST_P(MaybeSparseInstrProfTest, instr_prof_symtab_compression_test) {
   }
 }
 
-TEST_P(MaybeSparseInstrProfTest, remapping_test) {
-  Writer.addRecord({"_Z3fooi", 0x1234, {1, 2, 3, 4}}, Err);
-  Writer.addRecord({"file:_Z3barf", 0x567, {5, 6, 7}}, Err);
-  auto Profile = Writer.writeBuffer();
-  readProfile(std::move(Profile), llvm::MemoryBuffer::getMemBuffer(R"(
-    type i l
-    name 3bar 4quux
-  )"));
-
-  std::vector<uint64_t> Counts;
-  for (StringRef FooName : {"_Z3fooi", "_Z3fool"}) {
-    EXPECT_THAT_ERROR(Reader->getFunctionCounts(FooName, 0x1234, Counts),
-                      Succeeded());
-    ASSERT_EQ(4u, Counts.size());
-    EXPECT_EQ(1u, Counts[0]);
-    EXPECT_EQ(2u, Counts[1]);
-    EXPECT_EQ(3u, Counts[2]);
-    EXPECT_EQ(4u, Counts[3]);
-  }
-
-  for (StringRef BarName : {"file:_Z3barf", "file:_Z4quuxf"}) {
-    EXPECT_THAT_ERROR(Reader->getFunctionCounts(BarName, 0x567, Counts),
-                      Succeeded());
-    ASSERT_EQ(3u, Counts.size());
-    EXPECT_EQ(5u, Counts[0]);
-    EXPECT_EQ(6u, Counts[1]);
-    EXPECT_EQ(7u, Counts[2]);
-  }
-
-  for (StringRef BadName : {"_Z3foof", "_Z4quuxi", "_Z3barl", "", "_ZZZ",
-                            "_Z3barf", "otherfile:_Z4quuxf"}) {
-    EXPECT_THAT_ERROR(Reader->getFunctionCounts(BadName, 0x1234, Counts),
-                      Failed());
-    EXPECT_THAT_ERROR(Reader->getFunctionCounts(BadName, 0x567, Counts),
-                      Failed());
-  }
-}
-
 TEST_F(SparseInstrProfTest, preserve_no_records) {
-  Writer.addRecord({"foo", 0x1234, {0}}, Err);
-  Writer.addRecord({"bar", 0x4321, {0, 0}}, Err);
-  Writer.addRecord({"baz", 0x4321, {0, 0, 0}}, Err);
+  InstrProfRecord Record1("foo", 0x1234, {0});
+  InstrProfRecord Record2("bar", 0x4321, {0, 0});
+  InstrProfRecord Record3("bar", 0x4321, {0, 0, 0});
 
+  NoError(Writer.addRecord(std::move(Record1)));
+  NoError(Writer.addRecord(std::move(Record2)));
+  NoError(Writer.addRecord(std::move(Record3)));
   auto Profile = Writer.writeBuffer();
   readProfile(std::move(Profile));
 
@@ -1042,27 +1024,6 @@ TEST_F(SparseInstrProfTest, preserve_no_records) {
 }
 
 INSTANTIATE_TEST_CASE_P(MaybeSparse, MaybeSparseInstrProfTest,
-                        ::testing::Bool(),);
-
-#if defined(_LP64) && defined(EXPENSIVE_CHECKS)
-TEST(ProfileReaderTest, ReadsLargeFiles) {
-  const size_t LargeSize = 1ULL << 32; // 4GB
-
-  auto RawProfile = WritableMemoryBuffer::getNewUninitMemBuffer(LargeSize);
-  if (!RawProfile)
-    return;
-  auto RawProfileReaderOrErr = InstrProfReader::create(std::move(RawProfile));
-  ASSERT_TRUE(InstrProfError::take(RawProfileReaderOrErr.takeError()) ==
-              instrprof_error::unrecognized_format);
-
-  auto IndexedProfile = WritableMemoryBuffer::getNewUninitMemBuffer(LargeSize);
-  if (!IndexedProfile)
-    return;
-  auto IndexedReaderOrErr =
-      IndexedInstrProfReader::create(std::move(IndexedProfile), nullptr);
-  ASSERT_TRUE(InstrProfError::take(IndexedReaderOrErr.takeError()) ==
-              instrprof_error::bad_magic);
-}
-#endif
+                        ::testing::Bool());
 
 } // end anonymous namespace

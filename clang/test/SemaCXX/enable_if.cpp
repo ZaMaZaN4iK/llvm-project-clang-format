@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -std=c++11 -verify %s
-// RUN: %clang_cc1 -std=c++2a -verify %s
+
 typedef int (*fp)(int);
 int surrogate(int);
 struct Incomplete;  // expected-note{{forward declaration of 'Incomplete'}} \
@@ -246,11 +246,11 @@ namespace FnPtrs {
 
   int noOvlNoCandidate(int m) __attribute__((enable_if(false, "")));
   void test8() {
-    int (*p)(int) = noOvlNoCandidate; // expected-error{{cannot take address of function 'noOvlNoCandidate' because it has one or more non-tautological enable_if conditions}}
-    int (*p2)(int) = &noOvlNoCandidate; // expected-error{{cannot take address of function 'noOvlNoCandidate' because it has one or more non-tautological enable_if conditions}}
+    int (*p)(int) = noOvlNoCandidate; // expected-error{{cannot take address of function 'noOvlNoCandidate' becuase it has one or more non-tautological enable_if conditions}}
+    int (*p2)(int) = &noOvlNoCandidate; // expected-error{{cannot take address of function 'noOvlNoCandidate' becuase it has one or more non-tautological enable_if conditions}}
     int (*a)(int);
-    a = noOvlNoCandidate; // expected-error{{cannot take address of function 'noOvlNoCandidate' because it has one or more non-tautological enable_if conditions}}
-    a = &noOvlNoCandidate; // expected-error{{cannot take address of function 'noOvlNoCandidate' because it has one or more non-tautological enable_if conditions}}
+    a = noOvlNoCandidate; // expected-error{{cannot take address of function 'noOvlNoCandidate' becuase it has one or more non-tautological enable_if conditions}}
+    a = &noOvlNoCandidate; // expected-error{{cannot take address of function 'noOvlNoCandidate' becuase it has one or more non-tautological enable_if conditions}}
   }
 }
 
@@ -414,8 +414,7 @@ static_assert(templated<1>() == 1, "");
 
 template <int N> constexpr int callTemplated() { return templated<N>(); }
 
-constexpr int B = 10 + // the carat for the error should be pointing to the problematic call (on the next line), not here.
-    callTemplated<0>(); // expected-error{{initialized by a constant expression}} expected-error@-3{{no matching function for call to 'templated'}} expected-note{{in instantiation of function template}} expected-note@-10{{candidate disabled}}
+constexpr int B = callTemplated<0>(); // expected-error{{initialized by a constant expression}} expected-error@-2{{no matching function for call to 'templated'}} expected-note{{in instantiation of function template}} expected-note@-9{{candidate disabled}}
 static_assert(callTemplated<1>() == 1, "");
 }
 
@@ -472,92 +471,4 @@ namespace instantiate_constexpr_in_enable_if {
     void f() __attribute__((enable_if(ok(), "")));
   };
   void g() { X<int>().f(); }
-}
-
-namespace PR31934 {
-int foo(int a) __attribute__((enable_if(a, "")));
-int runFn(int (&)(int));
-
-void run() {
-  {
-    int (&bar)(int) = foo; // expected-error{{cannot take address of function 'foo'}}
-    int baz = runFn(foo); // expected-error{{cannot take address of function 'foo'}}
-  }
-
-  {
-    int (&bar)(int) = (foo); // expected-error{{cannot take address of function 'foo'}}
-    int baz = runFn((foo)); // expected-error{{cannot take address of function 'foo'}}
-  }
-
-  {
-    int (&bar)(int) = static_cast<int (&)(int)>(foo); // expected-error{{cannot take address of function 'foo'}}
-    int baz = runFn(static_cast<int (&)(int)>(foo)); // expected-error{{cannot take address of function 'foo'}}
-  }
-
-  {
-    int (&bar)(int) = static_cast<int (&)(int)>((foo)); // expected-error{{cannot take address of function 'foo'}}
-    int baz = runFn(static_cast<int (&)(int)>((foo))); // expected-error{{cannot take address of function 'foo'}}
-  }
-}
-}
-
-namespace TypeOfFn {
-  template <typename T, typename U>
-  struct is_same;
-
-  template <typename T> struct is_same<T, T> {
-    enum { value = 1 };
-  };
-
-  void foo(int a) __attribute__((enable_if(a, "")));
-  void foo(float a) __attribute__((enable_if(1, "")));
-
-  static_assert(is_same<__typeof__(foo)*, decltype(&foo)>::value, "");
-}
-
-namespace InConstantContext {
-void foo(const char *s) __attribute__((enable_if(((void)__builtin_constant_p(*s), true), "trap"))) {}
-
-void test() {
-  InConstantContext::foo("abc");
-}
-} // namespace InConstantContext
-
-namespace StringLiteralDetector {
-  void need_string_literal(const char *p) __attribute__((enable_if(__builtin_constant_p(p), "argument is not a string literal"))); // expected-note 2{{not a string literal}}
-  void test(const char *unknown) {
-    need_string_literal("foo");
-    need_string_literal(unknown); // expected-error {{no matching function}}
-    constexpr char str[] = "bar";
-    need_string_literal(str); // expected-error {{no matching function}}
-  }
-}
-
-namespace IgnoreUnusedArgSideEffects {
-  struct A { ~A(); };
-  void f(A a, bool b) __attribute__((enable_if(b, ""))); // expected-note 2-3{{disabled}}
-  void test() {
-    f(A(), true);
-    f(A(), false); // expected-error {{no matching function}}
-    int n;
-    f((n = 1, A()), true);
-    f(A(), (n = 1, true)); // expected-error {{no matching function}}
-    f(A(), (A(), true));
-  }
-
-#if __cplusplus > 201702L
-  struct B { constexpr ~B() {} bool b; };
-  void g(B b) __attribute__((enable_if(b.b, ""))); // expected-note {{disabled}}
-  void test2() {
-    g(B{true});
-    g(B{false}); // expected-error {{no matching function}}
-    f(A(), B{true}.b);
-    f(A(), B{false}.b); // expected-error {{no matching function}}
-  }
-
-  // First condition is non-constant due to non-constexpr destructor of A.
-  int &h() __attribute__((enable_if((A(), true), "")));
-  float &h() __attribute__((enable_if((B(), true), "")));
-  float &x = h();
-#endif
 }

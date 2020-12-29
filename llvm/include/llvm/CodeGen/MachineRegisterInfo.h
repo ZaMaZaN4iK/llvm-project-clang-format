@@ -1,8 +1,9 @@
-//===- llvm/CodeGen/MachineRegisterInfo.h -----------------------*- C++ -*-===//
+//===-- llvm/CodeGen/MachineRegisterInfo.h ----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,38 +14,25 @@
 #ifndef LLVM_CODEGEN_MACHINEREGISTERINFO_H
 #define LLVM_CODEGEN_MACHINEREGISTERINFO_H
 
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/IndexedMap.h"
 #include "llvm/ADT/PointerUnion.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/iterator_range.h"
+// PointerUnion needs to have access to the full RegisterBank type.
 #include "llvm/CodeGen/GlobalISel/RegisterBank.h"
 #include "llvm/CodeGen/LowLevelType.h"
-#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
-#include "llvm/CodeGen/MachineOperand.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/MC/LaneBitmask.h"
-#include <cassert>
-#include <cstddef>
-#include <cstdint>
-#include <iterator>
-#include <memory>
-#include <utility>
+#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include <vector>
 
 namespace llvm {
-
 class PSetIterator;
 
 /// Convenient type to represent either a register class or a register bank.
-using RegClassOrRegBank =
-    PointerUnion<const TargetRegisterClass *, const RegisterBank *>;
+typedef PointerUnion<const TargetRegisterClass *, const RegisterBank *>
+    RegClassOrRegBank;
 
 /// MachineRegisterInfo - Keep track of information for virtual and physical
 /// registers, including vreg register classes, use/def chains for registers,
@@ -53,16 +41,15 @@ class MachineRegisterInfo {
 public:
   class Delegate {
     virtual void anchor();
-
   public:
-    virtual ~Delegate() = default;
-
     virtual void MRI_NoteNewVirtualRegister(unsigned Reg) = 0;
+
+    virtual ~Delegate() {}
   };
 
 private:
   MachineFunction *MF;
-  Delegate *TheDelegate = nullptr;
+  Delegate *TheDelegate;
 
   /// True if subregister liveness is tracked.
   const bool TracksSubRegLiveness;
@@ -75,31 +62,14 @@ private:
              VirtReg2IndexFunctor>
       VRegInfo;
 
-  /// Map for recovering vreg name from vreg number.
-  /// This map is used by the MIR Printer.
-  IndexedMap<std::string, VirtReg2IndexFunctor> VReg2Name;
-
-  /// StringSet that is used to unique vreg names.
-  StringSet<> VRegNames;
-
-  /// The flag is true upon \p UpdatedCSRs initialization
-  /// and false otherwise.
-  bool IsUpdatedCSRsInitialized;
-
-  /// Contains the updated callee saved register list.
-  /// As opposed to the static list defined in register info,
-  /// all registers that were disabled are removed from the list.
-  SmallVector<MCPhysReg, 16> UpdatedCSRs;
-
-  /// RegAllocHints - This vector records register allocation hints for
-  /// virtual registers. For each virtual register, it keeps a pair of hint
-  /// type and hints vector making up the allocation hints. Only the first
-  /// hint may be target specific, and in that case this is reflected by the
-  /// first member of the pair being non-zero. If the hinted register is
-  /// virtual, it means the allocator should prefer the physical register
-  /// allocated to it if any.
-  IndexedMap<std::pair<unsigned, SmallVector<unsigned, 4>>,
-             VirtReg2IndexFunctor> RegAllocHints;
+  /// RegAllocHints - This vector records register allocation hints for virtual
+  /// registers. For each virtual register, it keeps a register and hint type
+  /// pair making up the allocation hint. Hint type is target specific except
+  /// for the value 0 which means the second value of the pair is the preferred
+  /// register for allocation. For example, if the hint is <0, 1024>, it means
+  /// the allocator should prefer the physical register allocated to the virtual
+  /// register of the hint.
+  IndexedMap<std::pair<unsigned, unsigned>, VirtReg2IndexFunctor> RegAllocHints;
 
   /// PhysRegUseDefLists - This is an array of the head of the use/def list for
   /// physical registers.
@@ -107,16 +77,16 @@ private:
 
   /// getRegUseDefListHead - Return the head pointer for the register use/def
   /// list for the specified virtual or physical register.
-  MachineOperand *&getRegUseDefListHead(Register RegNo) {
-    if (RegNo.isVirtual())
-      return VRegInfo[RegNo.id()].second;
-    return PhysRegUseDefLists[RegNo.id()];
+  MachineOperand *&getRegUseDefListHead(unsigned RegNo) {
+    if (TargetRegisterInfo::isVirtualRegister(RegNo))
+      return VRegInfo[RegNo].second;
+    return PhysRegUseDefLists[RegNo];
   }
 
-  MachineOperand *getRegUseDefListHead(Register RegNo) const {
-    if (RegNo.isVirtual())
-      return VRegInfo[RegNo.id()].second;
-    return PhysRegUseDefLists[RegNo.id()];
+  MachineOperand *getRegUseDefListHead(unsigned RegNo) const {
+    if (TargetRegisterInfo::isVirtualRegister(RegNo))
+      return VRegInfo[RegNo].second;
+    return PhysRegUseDefLists[RegNo];
   }
 
   /// Get the next element in the use-def chain.
@@ -135,20 +105,20 @@ private:
   /// started.
   BitVector ReservedRegs;
 
-  using VRegToTypeMap = IndexedMap<LLT, VirtReg2IndexFunctor>;
-  /// Map generic virtual registers to their low-level type.
-  VRegToTypeMap VRegToType;
+  typedef DenseMap<unsigned, LLT> VRegToTypeMap;
+  /// Map generic virtual registers to their actual size.
+  mutable std::unique_ptr<VRegToTypeMap> VRegToType;
 
   /// Keep track of the physical registers that are live in to the function.
   /// Live in values are typically arguments in registers.  LiveIn values are
   /// allowed to have virtual registers associated with them, stored in the
   /// second element.
-  std::vector<std::pair<unsigned, unsigned>> LiveIns;
+  std::vector<std::pair<unsigned, unsigned> > LiveIns;
 
+  MachineRegisterInfo(const MachineRegisterInfo&) = delete;
+  void operator=(const MachineRegisterInfo&) = delete;
 public:
   explicit MachineRegisterInfo(MachineFunction *MF);
-  MachineRegisterInfo(const MachineRegisterInfo &) = delete;
-  MachineRegisterInfo &operator=(const MachineRegisterInfo &) = delete;
 
   const TargetRegisterInfo *getTargetRegisterInfo() const {
     return MF->getSubtarget().getRegisterInfo();
@@ -214,8 +184,8 @@ public:
   bool shouldTrackSubRegLiveness(const TargetRegisterClass &RC) const {
     return subRegLivenessEnabled() && RC.HasDisjunctSubRegs;
   }
-  bool shouldTrackSubRegLiveness(Register VReg) const {
-    assert(VReg.isVirtual() && "Must pass a VReg");
+  bool shouldTrackSubRegLiveness(unsigned VReg) const {
+    assert(TargetRegisterInfo::isVirtualRegister(VReg) && "Must pass a VReg");
     return shouldTrackSubRegLiveness(*getRegClass(VReg));
   }
   bool subRegLivenessEnabled() const {
@@ -225,23 +195,6 @@ public:
   //===--------------------------------------------------------------------===//
   // Register Info
   //===--------------------------------------------------------------------===//
-
-  /// Returns true if the updated CSR list was initialized and false otherwise.
-  bool isUpdatedCSRsInitialized() const { return IsUpdatedCSRsInitialized; }
-
-  /// Disables the register from the list of CSRs.
-  /// I.e. the register will not appear as part of the CSR mask.
-  /// \see UpdatedCalleeSavedRegs.
-  void disableCalleeSavedRegister(unsigned Reg);
-
-  /// Returns list of callee saved registers.
-  /// The function returns the updated CSR list (after taking into account
-  /// registers that are disabled from the CSR list).
-  const MCPhysReg *getCalleeSavedRegs() const;
-
-  /// Sets the updated Callee Saved Registers list.
-  /// Notice that it will override ant previously disabled/saved CSRs.
-  void setCalleeSavedRegs(ArrayRef<MCPhysReg> CSRs);
 
   // Strictly for use by MachineInstr.cpp.
   void addRegOperandToUseList(MachineOperand *MO);
@@ -274,10 +227,12 @@ public:
   template<bool, bool, bool, bool, bool, bool>
     friend class defusechain_instr_iterator;
 
+
+
   /// reg_iterator/reg_begin/reg_end - Walk all defs and uses of the specified
   /// register.
-  using reg_iterator =
-      defusechain_iterator<true, true, false, true, false, false>;
+  typedef defusechain_iterator<true,true,false,true,false,false>
+          reg_iterator;
   reg_iterator reg_begin(unsigned RegNo) const {
     return reg_iterator(getRegUseDefListHead(RegNo));
   }
@@ -289,8 +244,8 @@ public:
 
   /// reg_instr_iterator/reg_instr_begin/reg_instr_end - Walk all defs and uses
   /// of the specified register, stepping by MachineInstr.
-  using reg_instr_iterator =
-      defusechain_instr_iterator<true, true, false, false, true, false>;
+  typedef defusechain_instr_iterator<true,true,false,false,true,false>
+          reg_instr_iterator;
   reg_instr_iterator reg_instr_begin(unsigned RegNo) const {
     return reg_instr_iterator(getRegUseDefListHead(RegNo));
   }
@@ -305,8 +260,8 @@ public:
 
   /// reg_bundle_iterator/reg_bundle_begin/reg_bundle_end - Walk all defs and uses
   /// of the specified register, stepping by bundle.
-  using reg_bundle_iterator =
-      defusechain_instr_iterator<true, true, false, false, false, true>;
+  typedef defusechain_instr_iterator<true,true,false,false,false,true>
+          reg_bundle_iterator;
   reg_bundle_iterator reg_bundle_begin(unsigned RegNo) const {
     return reg_bundle_iterator(getRegUseDefListHead(RegNo));
   }
@@ -324,9 +279,9 @@ public:
 
   /// reg_nodbg_iterator/reg_nodbg_begin/reg_nodbg_end - Walk all defs and uses
   /// of the specified register, skipping those marked as Debug.
-  using reg_nodbg_iterator =
-      defusechain_iterator<true, true, true, true, false, false>;
-  reg_nodbg_iterator reg_nodbg_begin(Register RegNo) const {
+  typedef defusechain_iterator<true,true,true,true,false,false>
+          reg_nodbg_iterator;
+  reg_nodbg_iterator reg_nodbg_begin(unsigned RegNo) const {
     return reg_nodbg_iterator(getRegUseDefListHead(RegNo));
   }
   static reg_nodbg_iterator reg_nodbg_end() {
@@ -341,8 +296,8 @@ public:
   /// reg_instr_nodbg_iterator/reg_instr_nodbg_begin/reg_instr_nodbg_end - Walk
   /// all defs and uses of the specified register, stepping by MachineInstr,
   /// skipping those marked as Debug.
-  using reg_instr_nodbg_iterator =
-      defusechain_instr_iterator<true, true, true, false, true, false>;
+  typedef defusechain_instr_iterator<true,true,true,false,true,false>
+          reg_instr_nodbg_iterator;
   reg_instr_nodbg_iterator reg_instr_nodbg_begin(unsigned RegNo) const {
     return reg_instr_nodbg_iterator(getRegUseDefListHead(RegNo));
   }
@@ -358,8 +313,8 @@ public:
   /// reg_bundle_nodbg_iterator/reg_bundle_nodbg_begin/reg_bundle_nodbg_end - Walk
   /// all defs and uses of the specified register, stepping by bundle,
   /// skipping those marked as Debug.
-  using reg_bundle_nodbg_iterator =
-      defusechain_instr_iterator<true, true, true, false, false, true>;
+  typedef defusechain_instr_iterator<true,true,true,false,false,true>
+          reg_bundle_nodbg_iterator;
   reg_bundle_nodbg_iterator reg_bundle_nodbg_begin(unsigned RegNo) const {
     return reg_bundle_nodbg_iterator(getRegUseDefListHead(RegNo));
   }
@@ -374,13 +329,13 @@ public:
 
   /// reg_nodbg_empty - Return true if the only instructions using or defining
   /// Reg are Debug instructions.
-  bool reg_nodbg_empty(Register RegNo) const {
+  bool reg_nodbg_empty(unsigned RegNo) const {
     return reg_nodbg_begin(RegNo) == reg_nodbg_end();
   }
 
   /// def_iterator/def_begin/def_end - Walk all defs of the specified register.
-  using def_iterator =
-      defusechain_iterator<false, true, false, true, false, false>;
+  typedef defusechain_iterator<false,true,false,true,false,false>
+          def_iterator;
   def_iterator def_begin(unsigned RegNo) const {
     return def_iterator(getRegUseDefListHead(RegNo));
   }
@@ -392,8 +347,8 @@ public:
 
   /// def_instr_iterator/def_instr_begin/def_instr_end - Walk all defs of the
   /// specified register, stepping by MachineInst.
-  using def_instr_iterator =
-      defusechain_instr_iterator<false, true, false, false, true, false>;
+  typedef defusechain_instr_iterator<false,true,false,false,true,false>
+          def_instr_iterator;
   def_instr_iterator def_instr_begin(unsigned RegNo) const {
     return def_instr_iterator(getRegUseDefListHead(RegNo));
   }
@@ -408,8 +363,8 @@ public:
 
   /// def_bundle_iterator/def_bundle_begin/def_bundle_end - Walk all defs of the
   /// specified register, stepping by bundle.
-  using def_bundle_iterator =
-      defusechain_instr_iterator<false, true, false, false, false, true>;
+  typedef defusechain_instr_iterator<false,true,false,false,false,true>
+          def_bundle_iterator;
   def_bundle_iterator def_bundle_begin(unsigned RegNo) const {
     return def_bundle_iterator(getRegUseDefListHead(RegNo));
   }
@@ -425,20 +380,6 @@ public:
   /// specified register (it may be live-in).
   bool def_empty(unsigned RegNo) const { return def_begin(RegNo) == def_end(); }
 
-  StringRef getVRegName(unsigned Reg) const {
-    return VReg2Name.inBounds(Reg) ? StringRef(VReg2Name[Reg]) : "";
-  }
-
-  void insertVRegByName(StringRef Name, unsigned Reg) {
-    assert((Name.empty() || VRegNames.find(Name) == VRegNames.end()) &&
-           "Named VRegs Must be Unique.");
-    if (!Name.empty()) {
-      VRegNames.insert(Name);
-      VReg2Name.grow(Reg);
-      VReg2Name[Reg] = Name.str();
-    }
-  }
-
   /// Return true if there is exactly one operand defining the specified
   /// register.
   bool hasOneDef(unsigned RegNo) const {
@@ -449,8 +390,8 @@ public:
   }
 
   /// use_iterator/use_begin/use_end - Walk all uses of the specified register.
-  using use_iterator =
-      defusechain_iterator<true, false, false, true, false, false>;
+  typedef defusechain_iterator<true,false,false,true,false,false>
+          use_iterator;
   use_iterator use_begin(unsigned RegNo) const {
     return use_iterator(getRegUseDefListHead(RegNo));
   }
@@ -462,8 +403,8 @@ public:
 
   /// use_instr_iterator/use_instr_begin/use_instr_end - Walk all uses of the
   /// specified register, stepping by MachineInstr.
-  using use_instr_iterator =
-      defusechain_instr_iterator<true, false, false, false, true, false>;
+  typedef defusechain_instr_iterator<true,false,false,false,true,false>
+          use_instr_iterator;
   use_instr_iterator use_instr_begin(unsigned RegNo) const {
     return use_instr_iterator(getRegUseDefListHead(RegNo));
   }
@@ -478,8 +419,8 @@ public:
 
   /// use_bundle_iterator/use_bundle_begin/use_bundle_end - Walk all uses of the
   /// specified register, stepping by bundle.
-  using use_bundle_iterator =
-      defusechain_instr_iterator<true, false, false, false, false, true>;
+  typedef defusechain_instr_iterator<true,false,false,false,false,true>
+          use_bundle_iterator;
   use_bundle_iterator use_bundle_begin(unsigned RegNo) const {
     return use_bundle_iterator(getRegUseDefListHead(RegNo));
   }
@@ -506,8 +447,8 @@ public:
 
   /// use_nodbg_iterator/use_nodbg_begin/use_nodbg_end - Walk all uses of the
   /// specified register, skipping those marked as Debug.
-  using use_nodbg_iterator =
-      defusechain_iterator<true, false, true, true, false, false>;
+  typedef defusechain_iterator<true,false,true,true,false,false>
+          use_nodbg_iterator;
   use_nodbg_iterator use_nodbg_begin(unsigned RegNo) const {
     return use_nodbg_iterator(getRegUseDefListHead(RegNo));
   }
@@ -523,8 +464,8 @@ public:
   /// use_instr_nodbg_iterator/use_instr_nodbg_begin/use_instr_nodbg_end - Walk
   /// all uses of the specified register, stepping by MachineInstr, skipping
   /// those marked as Debug.
-  using use_instr_nodbg_iterator =
-      defusechain_instr_iterator<true, false, true, false, true, false>;
+  typedef defusechain_instr_iterator<true,false,true,false,true,false>
+          use_instr_nodbg_iterator;
   use_instr_nodbg_iterator use_instr_nodbg_begin(unsigned RegNo) const {
     return use_instr_nodbg_iterator(getRegUseDefListHead(RegNo));
   }
@@ -540,8 +481,8 @@ public:
   /// use_bundle_nodbg_iterator/use_bundle_nodbg_begin/use_bundle_nodbg_end - Walk
   /// all uses of the specified register, stepping by bundle, skipping
   /// those marked as Debug.
-  using use_bundle_nodbg_iterator =
-      defusechain_instr_iterator<true, false, true, false, false, true>;
+  typedef defusechain_instr_iterator<true,false,true,false,false,true>
+          use_bundle_nodbg_iterator;
   use_bundle_nodbg_iterator use_bundle_nodbg_begin(unsigned RegNo) const {
     return use_bundle_nodbg_iterator(getRegUseDefListHead(RegNo));
   }
@@ -561,29 +502,20 @@ public:
   }
 
   /// hasOneNonDBGUse - Return true if there is exactly one non-Debug
-  /// use of the specified register.
+  /// instruction using the specified register.
   bool hasOneNonDBGUse(unsigned RegNo) const;
 
-  /// hasOneNonDBGUse - Return true if there is exactly one non-Debug
-  /// instruction using the specified register. Said instruction may have
-  /// multiple uses.
-  bool hasOneNonDBGUser(unsigned RegNo) const;
-  
   /// replaceRegWith - Replace all instances of FromReg with ToReg in the
   /// machine function.  This is like llvm-level X->replaceAllUsesWith(Y),
   /// except that it also changes any definitions of the register as well.
   ///
   /// Note that it is usually necessary to first constrain ToReg's register
-  /// class and register bank to match the FromReg constraints using one of the
-  /// methods:
+  /// class to match the FromReg constraints using:
   ///
   ///   constrainRegClass(ToReg, getRegClass(FromReg))
-  ///   constrainRegAttrs(ToReg, FromReg)
-  ///   RegisterBankInfo::constrainGenericRegister(ToReg,
-  ///       *MRI.getRegClass(FromReg), MRI)
   ///
-  /// These functions will return a falsy result if the virtual registers have
-  /// incompatible constraints.
+  /// That function will return NULL if the virtual registers have incompatible
+  /// constraints.
   ///
   /// Note that if ToReg is a physical register the function will replace and
   /// apply sub registers to ToReg in order to obtain a final/proper physical
@@ -606,15 +538,13 @@ public:
   /// preserve conservative kill flag information.
   void clearKillFlags(unsigned Reg) const;
 
+#ifndef NDEBUG
   void dumpUses(unsigned RegNo) const;
+#endif
 
   /// Returns true if PhysReg is unallocatable and constant throughout the
   /// function. Writing to a constant register has no effect.
   bool isConstantPhysReg(unsigned PhysReg) const;
-
-  /// Returns true if either isConstantPhysReg or TRI->isCallerPreservedPhysReg
-  /// returns true. This is a utility member function.
-  bool isCallerPreservedOrConstPhysReg(unsigned PhysReg) const;
 
   /// Get an iterator over the pressure sets affected by the given physical or
   /// virtual register. If RegUnit is physical, it must be a register unit (from
@@ -628,10 +558,11 @@ public:
   /// Return the register class of the specified virtual register.
   /// This shouldn't be used directly unless \p Reg has a register class.
   /// \see getRegClassOrNull when this might happen.
-  const TargetRegisterClass *getRegClass(Register Reg) const {
-    assert(VRegInfo[Reg.id()].first.is<const TargetRegisterClass *>() &&
+  ///
+  const TargetRegisterClass *getRegClass(unsigned Reg) const {
+    assert(VRegInfo[Reg].first.is<const TargetRegisterClass *>() &&
            "Register class not set, wrong accessor");
-    return VRegInfo[Reg.id()].first.get<const TargetRegisterClass *>();
+    return VRegInfo[Reg].first.get<const TargetRegisterClass *>();
   }
 
   /// Return the register class of \p Reg, or null if Reg has not been assigned
@@ -654,6 +585,7 @@ public:
   /// a register bank or has been assigned a register class.
   /// \note It is possible to get the register bank from the register class via
   /// RegisterBankInfo::getRegBankFromRegClass.
+  ///
   const RegisterBank *getRegBankOrNull(unsigned Reg) const {
     const RegClassOrRegBank &Val = VRegInfo[Reg].first;
     return Val.dyn_cast<const RegisterBank *>();
@@ -662,20 +594,18 @@ public:
   /// Return the register bank or register class of \p Reg.
   /// \note Before the register bank gets assigned (i.e., before the
   /// RegBankSelect pass) \p Reg may not have either.
+  ///
   const RegClassOrRegBank &getRegClassOrRegBank(unsigned Reg) const {
     return VRegInfo[Reg].first;
   }
 
   /// setRegClass - Set the register class of the specified virtual register.
+  ///
   void setRegClass(unsigned Reg, const TargetRegisterClass *RC);
 
   /// Set the register bank to \p RegBank for \p Reg.
+  ///
   void setRegBank(unsigned Reg, const RegisterBank &RegBank);
-
-  void setRegClassOrRegBank(unsigned Reg,
-                            const RegClassOrRegBank &RCOrRB){
-    VRegInfo[Reg].first = RCOrRB;
-  }
 
   /// constrainRegClass - Constrain the register class of the specified virtual
   /// register to be a common subclass of RC and the current register class,
@@ -684,27 +614,9 @@ public:
   /// This should only be used when the constraint is known to be trivial, like
   /// GR32 -> GR32_NOSP. Beware of increasing register pressure.
   ///
-  /// \note Assumes that the register has a register class assigned.
-  /// Use RegisterBankInfo::constrainGenericRegister in GlobalISel's
-  /// InstructionSelect pass and constrainRegAttrs in every other pass,
-  /// including non-select passes of GlobalISel, instead.
   const TargetRegisterClass *constrainRegClass(unsigned Reg,
                                                const TargetRegisterClass *RC,
                                                unsigned MinNumRegs = 0);
-
-  /// Constrain the register class or the register bank of the virtual register
-  /// \p Reg (and low-level type) to be a common subclass or a common bank of
-  /// both registers provided respectively (and a common low-level type). Do
-  /// nothing if any of the attributes (classes, banks, or low-level types) of
-  /// the registers are deemed incompatible, or if the resulting register will
-  /// have a class smaller than before and of size less than \p MinNumRegs.
-  /// Return true if such register attributes exist, false otherwise.
-  ///
-  /// \note Use this method instead of constrainRegClass and
-  /// RegisterBankInfo::constrainGenericRegister everywhere but SelectionDAG
-  /// ISel / FastISel and GlobalISel's InstructionSelect pass respectively.
-  bool constrainRegAttrs(unsigned Reg, unsigned ConstrainingReg,
-                         unsigned MinNumRegs = 0);
 
   /// recomputeRegClass - Try to find a legal super-class of Reg's register
   /// class that still satisfies the constraints from the instructions using
@@ -713,31 +625,32 @@ public:
   /// This method can be used after constraints have been removed from a
   /// virtual register, for example after removing instructions or splitting
   /// the live range.
+  ///
   bool recomputeRegClass(unsigned Reg);
 
   /// createVirtualRegister - Create and return a new virtual register in the
   /// function with the specified register class.
-  Register createVirtualRegister(const TargetRegisterClass *RegClass,
-                                 StringRef Name = "");
+  ///
+  unsigned createVirtualRegister(const TargetRegisterClass *RegClass);
 
-  /// Create and return a new virtual register in the function with the same
-  /// attributes as the given register.
-  Register cloneVirtualRegister(Register VReg, StringRef Name = "");
-
-  /// Get the low-level type of \p Reg or LLT{} if Reg is not a generic
-  /// (target independent) virtual register.
-  LLT getType(unsigned Reg) const {
-    if (Register::isVirtualRegister(Reg) && VRegToType.inBounds(Reg))
-      return VRegToType[Reg];
-    return LLT{};
+  /// Accessor for VRegToType. This accessor should only be used
+  /// by global-isel related work.
+  VRegToTypeMap &getVRegToType() const {
+    if (!VRegToType)
+      VRegToType.reset(new VRegToTypeMap);
+    return *VRegToType.get();
   }
+
+  /// Get the low-level type of \p VReg or LLT{} if VReg is not a generic
+  /// (target independent) virtual register.
+  LLT getType(unsigned VReg) const;
 
   /// Set the low-level type of \p VReg to \p Ty.
   void setType(unsigned VReg, LLT Ty);
 
   /// Create and return a new generic virtual register with low-level
   /// type \p Ty.
-  Register createGenericVirtualRegister(LLT Ty, StringRef Name = "");
+  unsigned createGenericVirtualRegister(LLT Ty);
 
   /// Remove all types associated to virtual registers (after instruction
   /// selection and constraining of all generic virtual registers).
@@ -748,86 +661,49 @@ public:
   /// temporarily while constructing machine instructions. Most operations are
   /// undefined on an incomplete register until one of setRegClass(),
   /// setRegBank() or setSize() has been called on it.
-  unsigned createIncompleteVirtualRegister(StringRef Name = "");
+  unsigned createIncompleteVirtualRegister();
 
   /// getNumVirtRegs - Return the number of virtual registers created.
+  ///
   unsigned getNumVirtRegs() const { return VRegInfo.size(); }
 
   /// clearVirtRegs - Remove all virtual registers (after physreg assignment).
   void clearVirtRegs();
 
   /// setRegAllocationHint - Specify a register allocation hint for the
-  /// specified virtual register. This is typically used by target, and in case
-  /// of an earlier hint it will be overwritten.
+  /// specified virtual register.
   void setRegAllocationHint(unsigned VReg, unsigned Type, unsigned PrefReg) {
-    assert(Register::isVirtualRegister(VReg));
+    assert(TargetRegisterInfo::isVirtualRegister(VReg));
     RegAllocHints[VReg].first  = Type;
-    RegAllocHints[VReg].second.clear();
-    RegAllocHints[VReg].second.push_back(PrefReg);
+    RegAllocHints[VReg].second = PrefReg;
   }
 
-  /// addRegAllocationHint - Add a register allocation hint to the hints
-  /// vector for VReg.
-  void addRegAllocationHint(unsigned VReg, unsigned PrefReg) {
-    assert(Register::isVirtualRegister(VReg));
-    RegAllocHints[VReg].second.push_back(PrefReg);
-  }
-
-  /// Specify the preferred (target independent) register allocation hint for
-  /// the specified virtual register.
+  /// Specify the preferred register allocation hint for the specified virtual
+  /// register.
   void setSimpleHint(unsigned VReg, unsigned PrefReg) {
     setRegAllocationHint(VReg, /*Type=*/0, PrefReg);
   }
 
-  void clearSimpleHint(unsigned VReg) {
-    assert (RegAllocHints[VReg].first == 0 &&
-            "Expected to clear a non-target hint!");
-    RegAllocHints[VReg].second.clear();
-  }
-
   /// getRegAllocationHint - Return the register allocation hint for the
-  /// specified virtual register. If there are many hints, this returns the
-  /// one with the greatest weight.
+  /// specified virtual register.
   std::pair<unsigned, unsigned>
-  getRegAllocationHint(Register VReg) const {
-    assert(VReg.isVirtual());
-    unsigned BestHint = (RegAllocHints[VReg.id()].second.size() ?
-                         RegAllocHints[VReg.id()].second[0] : 0);
-    return std::pair<unsigned, unsigned>(RegAllocHints[VReg.id()].first,
-                                         BestHint);
+  getRegAllocationHint(unsigned VReg) const {
+    assert(TargetRegisterInfo::isVirtualRegister(VReg));
+    return RegAllocHints[VReg];
   }
 
-  /// getSimpleHint - same as getRegAllocationHint except it will only return
-  /// a target independent hint.
-  Register getSimpleHint(Register VReg) const {
-    assert(VReg.isVirtual());
+  /// getSimpleHint - Return the preferred register allocation hint, or 0 if a
+  /// standard simple hint (Type == 0) is not set.
+  unsigned getSimpleHint(unsigned VReg) const {
+    assert(TargetRegisterInfo::isVirtualRegister(VReg));
     std::pair<unsigned, unsigned> Hint = getRegAllocationHint(VReg);
     return Hint.first ? 0 : Hint.second;
-  }
-
-  /// getRegAllocationHints - Return a reference to the vector of all
-  /// register allocation hints for VReg.
-  const std::pair<unsigned, SmallVector<unsigned, 4>>
-  &getRegAllocationHints(unsigned VReg) const {
-    assert(Register::isVirtualRegister(VReg));
-    return RegAllocHints[VReg];
   }
 
   /// markUsesInDebugValueAsUndef - Mark every DBG_VALUE referencing the
   /// specified register as undefined which causes the DBG_VALUE to be
   /// deleted during LiveDebugVariables analysis.
   void markUsesInDebugValueAsUndef(unsigned Reg) const;
-
-  /// updateDbgUsersToReg - Update a collection of DBG_VALUE instructions
-  /// to refer to the designated register.
-  void updateDbgUsersToReg(unsigned Reg,
-                           ArrayRef<MachineInstr*> Users) const {
-    for (MachineInstr *MI : Users) {
-      assert(MI->isDebugInstr());
-      assert(MI->getOperand(0).isReg());
-      MI->getOperand(0).setReg(Reg);
-    }
-  }
 
   /// Return true if the specified register is modified in this function.
   /// This checks that no defining machine operands exist for the register or
@@ -850,6 +726,8 @@ public:
   }
 
   const BitVector &getUsedPhysRegsMask() const { return UsedPhysRegMask; }
+
+  void setUsedPhysRegMask(BitVector &Mask) { UsedPhysRegMask = Mask; }
 
   //===--------------------------------------------------------------------===//
   // Reserved Register Info
@@ -894,17 +772,10 @@ public:
   ///
   /// Reserved registers may belong to an allocatable register class, but the
   /// target has explicitly requested that they are not used.
-  bool isReserved(Register PhysReg) const {
-    return getReservedRegs().test(PhysReg.id());
-  }
-
-  /// Returns true when the given register unit is considered reserved.
   ///
-  /// Register units are considered reserved when for at least one of their
-  /// root registers, the root register and all super registers are reserved.
-  /// This currently iterates the register hierarchy and may be slower than
-  /// expected.
-  bool isReservedRegUnit(unsigned Unit) const;
+  bool isReserved(unsigned PhysReg) const {
+    return getReservedRegs().test(PhysReg);
+  }
 
   /// isAllocatable - Returns true when PhysReg belongs to an allocatable
   /// register class and it hasn't been reserved.
@@ -929,15 +800,11 @@ public:
 
   // Iteration support for the live-ins set.  It's kept in sorted order
   // by register number.
-  using livein_iterator =
-      std::vector<std::pair<unsigned,unsigned>>::const_iterator;
+  typedef std::vector<std::pair<unsigned,unsigned> >::const_iterator
+  livein_iterator;
   livein_iterator livein_begin() const { return LiveIns.begin(); }
   livein_iterator livein_end()   const { return LiveIns.end(); }
   bool            livein_empty() const { return LiveIns.empty(); }
-
-  ArrayRef<std::pair<unsigned, unsigned>> liveins() const {
-    return LiveIns;
-  }
 
   bool isLiveIn(unsigned Reg) const;
 
@@ -969,10 +836,7 @@ public:
            bool ByOperand, bool ByInstr, bool ByBundle>
   class defusechain_iterator
     : public std::iterator<std::forward_iterator_tag, MachineInstr, ptrdiff_t> {
-    friend class MachineRegisterInfo;
-
-    MachineOperand *Op = nullptr;
-
+    MachineOperand *Op;
     explicit defusechain_iterator(MachineOperand *op) : Op(op) {
       // If the first node isn't one we're interested in, advance to one that
       // we are interested in.
@@ -983,6 +847,7 @@ public:
           advance();
       }
     }
+    friend class MachineRegisterInfo;
 
     void advance() {
       assert(Op && "Cannot increment end iterator!");
@@ -1003,14 +868,13 @@ public:
           Op = getNextOperandForReg(Op);
       }
     }
-
   public:
-    using reference = std::iterator<std::forward_iterator_tag,
-                                    MachineInstr, ptrdiff_t>::reference;
-    using pointer = std::iterator<std::forward_iterator_tag,
-                                  MachineInstr, ptrdiff_t>::pointer;
+    typedef std::iterator<std::forward_iterator_tag,
+                          MachineInstr, ptrdiff_t>::reference reference;
+    typedef std::iterator<std::forward_iterator_tag,
+                          MachineInstr, ptrdiff_t>::pointer pointer;
 
-    defusechain_iterator() = default;
+    defusechain_iterator() : Op(nullptr) {}
 
     bool operator==(const defusechain_iterator &x) const {
       return Op == x.Op;
@@ -1075,10 +939,7 @@ public:
            bool ByOperand, bool ByInstr, bool ByBundle>
   class defusechain_instr_iterator
     : public std::iterator<std::forward_iterator_tag, MachineInstr, ptrdiff_t> {
-    friend class MachineRegisterInfo;
-
-    MachineOperand *Op = nullptr;
-
+    MachineOperand *Op;
     explicit defusechain_instr_iterator(MachineOperand *op) : Op(op) {
       // If the first node isn't one we're interested in, advance to one that
       // we are interested in.
@@ -1089,6 +950,7 @@ public:
           advance();
       }
     }
+    friend class MachineRegisterInfo;
 
     void advance() {
       assert(Op && "Cannot increment end iterator!");
@@ -1109,14 +971,13 @@ public:
           Op = getNextOperandForReg(Op);
       }
     }
-
   public:
-    using reference = std::iterator<std::forward_iterator_tag,
-                                    MachineInstr, ptrdiff_t>::reference;
-    using pointer = std::iterator<std::forward_iterator_tag,
-                                  MachineInstr, ptrdiff_t>::pointer;
+    typedef std::iterator<std::forward_iterator_tag,
+                          MachineInstr, ptrdiff_t>::reference reference;
+    typedef std::iterator<std::forward_iterator_tag,
+                          MachineInstr, ptrdiff_t>::pointer pointer;
 
-    defusechain_instr_iterator() = default;
+    defusechain_instr_iterator() : Op(nullptr) {}
 
     bool operator==(const defusechain_instr_iterator &x) const {
       return Op == x.Op;
@@ -1168,15 +1029,13 @@ public:
 /// register. If Reg is physical, it must be a register unit (from
 /// MCRegUnitIterator).
 class PSetIterator {
-  const int *PSet = nullptr;
-  unsigned Weight = 0;
-
+  const int *PSet;
+  unsigned Weight;
 public:
-  PSetIterator() = default;
-
+  PSetIterator(): PSet(nullptr), Weight(0) {}
   PSetIterator(unsigned RegUnit, const MachineRegisterInfo *MRI) {
     const TargetRegisterInfo *TRI = MRI->getTargetRegisterInfo();
-    if (Register::isVirtualRegister(RegUnit)) {
+    if (TargetRegisterInfo::isVirtualRegister(RegUnit)) {
       const TargetRegisterClass *RC = MRI->getRegClass(RegUnit);
       PSet = TRI->getRegClassPressureSets(RC);
       Weight = TRI->getRegClassWeight(RC).RegWeight;
@@ -1188,7 +1047,6 @@ public:
     if (*PSet == -1)
       PSet = nullptr;
   }
-
   bool isValid() const { return PSet; }
 
   unsigned getWeight() const { return Weight; }
@@ -1208,6 +1066,6 @@ getPressureSets(unsigned RegUnit) const {
   return PSetIterator(RegUnit, this);
 }
 
-} // end namespace llvm
+} // End llvm namespace
 
-#endif // LLVM_CODEGEN_MACHINEREGISTERINFO_H
+#endif

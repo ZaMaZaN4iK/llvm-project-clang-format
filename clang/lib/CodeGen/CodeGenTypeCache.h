@@ -1,8 +1,9 @@
 //===--- CodeGenTypeCache.h - Commonly used LLVM types and info -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,7 +15,6 @@
 #define LLVM_CLANG_LIB_CODEGEN_CODEGENTYPECACHE_H
 
 #include "clang/AST/CharUnits.h"
-#include "clang/Basic/AddressSpaces.h"
 #include "llvm/IR/CallingConv.h"
 
 namespace llvm {
@@ -36,7 +36,7 @@ struct CodeGenTypeCache {
   /// i8, i16, i32, and i64
   llvm::IntegerType *Int8Ty, *Int16Ty, *Int32Ty, *Int64Ty;
   /// float, double
-  llvm::Type *HalfTy, *FloatTy, *DoubleTy;
+  llvm::Type *FloatTy, *DoubleTy;
 
   /// int
   llvm::IntegerType *IntTy;
@@ -58,12 +58,6 @@ struct CodeGenTypeCache {
   union {
     llvm::PointerType *VoidPtrPtrTy;
     llvm::PointerType *Int8PtrPtrTy;
-  };
-
-  /// void* in alloca address space
-  union {
-    llvm::PointerType *AllocaVoidPtrTy;
-    llvm::PointerType *AllocaInt8PtrTy;
   };
 
   /// The size and alignment of the builtin C type 'int'.  This comes
@@ -94,8 +88,6 @@ struct CodeGenTypeCache {
     unsigned char SizeAlignInBytes;
   };
 
-  LangAS ASTAllocaAddressSpace;
-
   CharUnits getSizeSize() const {
     return CharUnits::fromQuantity(SizeSizeInBytes);
   }
@@ -111,8 +103,8 @@ struct CodeGenTypeCache {
 
   llvm::CallingConv::ID RuntimeCC;
   llvm::CallingConv::ID getRuntimeCC() const { return RuntimeCC; }
-
-  LangAS getASTAllocaAddressSpace() const { return ASTAllocaAddressSpace; }
+  llvm::CallingConv::ID BuiltinCC;
+  llvm::CallingConv::ID getBuiltinCC() const { return BuiltinCC; }
 };
 
 }  // end namespace CodeGen

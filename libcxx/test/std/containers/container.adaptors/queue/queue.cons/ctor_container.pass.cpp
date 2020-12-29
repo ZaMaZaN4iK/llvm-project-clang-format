@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,8 +15,6 @@
 #include <cassert>
 #include <cstddef>
 
-#include "test_macros.h"
-
 template <class C>
 C
 make(int n)
@@ -26,7 +25,7 @@ make(int n)
     return c;
 }
 
-int main(int, char**)
+int main()
 {
     std::deque<int> d = make<std::deque<int> >(5);
     std::queue<int> q(d);
@@ -36,6 +35,4 @@ int main(int, char**)
         assert(q.front() == d[i]);
         q.pop();
     }
-
-  return 0;
 }

@@ -1,16 +1,18 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03
+// REQUIRES-ANY: c++11, c++14
 
 // <functional>
 
-// See https://bugs.llvm.org/show_bug.cgi?id=20002
+// See https://llvm.org/bugs/show_bug.cgi?id=20002
 
 #include <functional>
 #include <type_traits>
@@ -20,12 +22,8 @@
 using Fn = std::function<void()>;
 struct S : public std::function<void()> { using function::function; };
 
-int main(int, char**) {
+int main() {
     S s( [](){} );
     S f1( s );
-#if TEST_STD_VER <= 14
     S f2(std::allocator_arg, std::allocator<int>{}, s);
-#endif
-
-  return 0;
 }

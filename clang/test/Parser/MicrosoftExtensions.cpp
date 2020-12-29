@@ -51,7 +51,7 @@ struct __declspec(uuid("0000000-0000-0000-Z234-000000000047")) uuid_attr_bad4 { 
 struct __declspec(uuid("000000000000-0000-1234-000000000047")) uuid_attr_bad5 { };// expected-error {{uuid attribute contains a malformed GUID}}
 [uuid("000000000000-0000-1234-000000000047")] struct uuid_attr_bad6 { };// expected-error {{uuid attribute contains a malformed GUID}}
 
-__declspec(uuid("000000A0-0000-0000-C000-000000000046")) int i; // expected-warning {{'uuid' attribute only applies to structs, unions, classes, and enums}}
+__declspec(uuid("000000A0-0000-0000-C000-000000000046")) int i; // expected-warning {{'uuid' attribute only applies to classes}}
 
 struct __declspec(uuid("000000A0-0000-0000-C000-000000000046"))
 struct_with_uuid { };
@@ -60,7 +60,7 @@ struct struct_without_uuid { };
 struct __declspec(uuid("000000A0-0000-0000-C000-000000000049"))
 struct_with_uuid2;
 
-[uuid("000000A0-0000-0000-C000-000000000049")] struct struct_with_uuid3; // expected-warning{{specifying 'uuid' as an ATL attribute is deprecated; use __declspec instead}}
+[uuid("000000A0-0000-0000-C000-000000000049")] struct struct_with_uuid3;
 
 struct
 struct_with_uuid2 {} ;
@@ -69,7 +69,7 @@ enum __declspec(uuid("000000A0-0000-0000-C000-000000000046"))
 enum_with_uuid { };
 enum enum_without_uuid { };
 
-int __declspec(uuid("000000A0-0000-0000-C000-000000000046")) inappropriate_uuid; // expected-warning {{'uuid' attribute only applies to}}
+int __declspec(uuid("000000A0-0000-0000-C000-000000000046")) inappropriate_uuid; // expected-warning {{'uuid' attribute only applies to classes and enumerations}}
 
 int uuid_sema_test()
 {
@@ -138,8 +138,6 @@ typedef COM_CLASS_TEMPLATE_REF<struct_with_uuid, __uuidof(struct_with_uuid)> COM
 COM_CLASS_TEMPLATE_REF<int, __uuidof(struct_with_uuid)> good_template_arg;
 
 COM_CLASS_TEMPLATE<int, __uuidof(struct_with_uuid)> bad_template_arg; // expected-error {{non-type template argument of type 'const _GUID' is not a constant expression}}
-// expected-note@-1 {{read of object '__uuidof(struct_with_uuid)' whose value is not known}}
-// expected-note@-2 {{temporary created here}}
 
 namespace PR16911 {
 struct __declspec(uuid("{12345678-1234-1234-1234-1234567890aB}")) uuid;
@@ -263,7 +261,9 @@ int __identifier(else} = __identifier(for); // expected-error {{missing ')' afte
 #define identifier_weird(x) __identifier(x
 int k = identifier_weird(if)); // expected-error {{use of undeclared identifier 'if'}}
 
-extern int __identifier(and);
+// This is a bit weird, but the alternative tokens aren't keywords, and this
+// behavior matches MSVC. FIXME: Consider supporting this anyway.
+extern int __identifier(and) r; // expected-error {{cannot convert '&&' token to an identifier}}
 
 void f() {
   __identifier(() // expected-error {{cannot convert '(' token to an identifier}}
@@ -290,18 +290,6 @@ struct pure_virtual_dtor_inline {
   virtual ~pure_virtual_dtor_inline() = 0 { }// expected-warning {{function definition with pure-specifier is a Microsoft extension}}
 };
 
-template<typename T> struct pure_virtual_dtor_template {
-  virtual ~pure_virtual_dtor_template() = 0;
-};
-template<typename T> pure_virtual_dtor_template<T>::~pure_virtual_dtor_template() {}
-template struct pure_virtual_dtor_template<int>;
-
-template<typename T> struct pure_virtual_dtor_template_inline {
-    virtual ~pure_virtual_dtor_template_inline() = 0 {}
-    // expected-warning@-1 2{{function definition with pure-specifier is a Microsoft extension}}
-};
-template struct pure_virtual_dtor_template_inline<int>;
-// expected-note@-1 {{in instantiation of member function}}
 
 int main () {
   // Necessary to force instantiation in -fdelayed-template-parsing mode.
@@ -437,11 +425,4 @@ struct S {
   template <typename T>
   S(T);
 } f([] {});
-}
-
-namespace pr36638 {
-// Make sure we accept __unaligned method qualifiers on member function
-// pointers.
-struct A;
-void (A::*mp1)(int) __unaligned;
 }

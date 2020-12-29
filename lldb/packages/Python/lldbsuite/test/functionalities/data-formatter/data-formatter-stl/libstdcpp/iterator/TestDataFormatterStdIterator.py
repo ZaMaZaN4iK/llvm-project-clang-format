@@ -2,8 +2,11 @@
 Test lldb data formatter subsystem.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -20,11 +23,11 @@ class StdIteratorDataFormatterTestCase(TestBase):
         # Find the line number to break at.
         self.line = line_number('main.cpp', '// Set break point at this line.')
 
-    @add_test_categories(["libstdcxx"])
+    @skipIfWindows  # libstdcpp not ported to Windows
     def test_with_run_command(self):
         """Test that libstdcpp iterators format properly."""
         self.build()
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(
             self, "main.cpp", self.line, num_expected_locations=-1)

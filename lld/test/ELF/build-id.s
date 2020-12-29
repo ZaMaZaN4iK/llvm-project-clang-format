@@ -2,12 +2,7 @@
 
 # RUN: llvm-mc -filetype=obj -triple=x86_64-unknown-linux %s -o %t
 
-# RUN: ld.lld --build-id %t -o %t2
-# RUN: llvm-readobj -S %t2 | FileCheck -check-prefix=ALIGN %s
-
 # RUN: ld.lld --build-id %t -o %t2 -threads
-# RUN: llvm-objdump -s %t2 | FileCheck -check-prefix=DEFAULT %s
-# RUN: ld.lld --build-id=fast %t -o %t2 -threads
 # RUN: llvm-objdump -s %t2 | FileCheck -check-prefix=DEFAULT %s
 # RUN: ld.lld --build-id %t -o %t2 -no-threads
 # RUN: llvm-objdump -s %t2 | FileCheck -check-prefix=DEFAULT %s
@@ -38,10 +33,6 @@
 
 # RUN: ld.lld --build-id=md5 --build-id=none %t -o %t2
 # RUN: llvm-objdump -s %t2 | FileCheck -check-prefix=NONE %s
-# RUN: ld.lld --build-id --build-id=none %t -o %t2
-# RUN: llvm-objdump -s %t2 | FileCheck -check-prefix=NONE %s
-# RUN: ld.lld --build-id=none --build-id %t -o %t2
-# RUN: llvm-objdump -s %t2 | FileCheck -check-prefix=DEFAULT %s
 
 .globl _start
 _start:
@@ -50,30 +41,18 @@ _start:
 .section .note.test, "a", @note
    .quad 42
 
-# ALIGN:      Name: .note.gnu.build-id
-# ALIGN-NEXT: Type: SHT_NOTE
-# ALIGN-NEXT: Flags [
-# ALIGN-NEXT:   SHF_ALLOC
-# ALIGN-NEXT: ]
-# ALIGN-NEXT: Address:
-# ALIGN-NEXT: Offset: [[_:0x[0-9A-Z]*(0|4|8|C)$]]
-# ALIGN-NEXT: Size:
-# ALIGN-NEXT: Link:
-# ALIGN-NEXT: Info:
-# ALIGN-NEXT: AddressAlignment: 4
-
 # DEFAULT:      Contents of section .note.test:
 # DEFAULT:      Contents of section .note.gnu.build-id:
 # DEFAULT-NEXT: 04000000 08000000 03000000 474e5500  ............GNU.
-# DEFAULT-NEXT: 7e8ddeff 3ed41fa3
+# DEFAULT-NEXT: d08dafb4 e6294b62
 
 # MD5:      Contents of section .note.gnu.build-id:
 # MD5-NEXT: 04000000 10000000 03000000 474e5500  ............GNU.
-# MD5-NEXT: 7b00fd9e 054ceb4b 06f64d0e 482cb476
+# MD5-NEXT: 37
 
 # SHA1:      Contents of section .note.gnu.build-id:
 # SHA1-NEXT: 04000000 14000000 03000000 474e5500  ............GNU.
-# SHA1-NEXT: 221a99da dd1d2bf3 05e48a91 dde8a0cb
+# SHA1-NEXT: 7a4f4eaf 69ceb948 4a7d6e51 2225e87c
 
 # UUID:      Contents of section .note.gnu.build-id:
 # UUID-NEXT: 04000000 10000000 03000000 474e5500  ............GNU.

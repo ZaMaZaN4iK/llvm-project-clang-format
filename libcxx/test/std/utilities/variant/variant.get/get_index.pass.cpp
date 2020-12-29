@@ -1,15 +1,14 @@
 // -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
-
-// XFAIL: dylib-has-no-bad_variant_access && !libcpp-no-exceptions
 
 // <variant>
 
@@ -27,8 +26,7 @@
 //  variant<Types...>&& v);
 
 #include "test_macros.h"
-#include "test_workarounds.h"
-#include "variant_test_helpers.h"
+#include "variant_test_helpers.hpp"
 #include <cassert>
 #include <type_traits>
 #include <utility>
@@ -38,10 +36,8 @@ void test_const_lvalue_get() {
   {
     using V = std::variant<int, const long>;
     constexpr V v(42);
-#ifdef TEST_WORKAROUND_CONSTEXPR_IMPLIES_NOEXCEPT
+#ifndef __clang__ // Avoid https://llvm.org/bugs/show_bug.cgi?id=15481
     ASSERT_NOEXCEPT(std::get<0>(v));
-#else
-    ASSERT_NOT_NOEXCEPT(std::get<0>(v));
 #endif
     ASSERT_SAME_TYPE(decltype(std::get<0>(v)), const int &);
     static_assert(std::get<0>(v) == 42, "");
@@ -56,10 +52,8 @@ void test_const_lvalue_get() {
   {
     using V = std::variant<int, const long>;
     constexpr V v(42l);
-#ifdef TEST_WORKAROUND_CONSTEXPR_IMPLIES_NOEXCEPT
+#ifndef __clang__ // Avoid https://llvm.org/bugs/show_bug.cgi?id=15481
     ASSERT_NOEXCEPT(std::get<1>(v));
-#else
-    ASSERT_NOT_NOEXCEPT(std::get<1>(v));
 #endif
     ASSERT_SAME_TYPE(decltype(std::get<1>(v)), const long &);
     static_assert(std::get<1>(v) == 42, "");
@@ -258,7 +252,7 @@ void test_throws_for_all_value_categories() {
   auto test = [](auto idx, auto &&v) {
     using Idx = decltype(idx);
     try {
-      TEST_IGNORE_NODISCARD std::get<Idx::value>(std::forward<decltype(v)>(v));
+      std::get<Idx::value>(std::forward<decltype(v)>(v));
     } catch (const std::bad_variant_access &) {
       return true;
     } catch (...) { /* ... */
@@ -284,12 +278,10 @@ void test_throws_for_all_value_categories() {
 #endif
 }
 
-int main(int, char**) {
+int main() {
   test_const_lvalue_get();
   test_lvalue_get();
   test_rvalue_get();
   test_const_rvalue_get();
   test_throws_for_all_value_categories();
-
-  return 0;
 }

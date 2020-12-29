@@ -1,28 +1,30 @@
 //===-- RISCVTargetInfo.cpp - RISCV Target Implementation -----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "TargetInfo/RISCVTargetInfo.h"
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 
-Target &llvm::getTheRISCV32Target() {
+namespace llvm {
+Target &getTheRISCV32Target() {
   static Target TheRISCV32Target;
   return TheRISCV32Target;
 }
 
-Target &llvm::getTheRISCV64Target() {
+Target &getTheRISCV64Target() {
   static Target TheRISCV64Target;
   return TheRISCV64Target;
 }
+}
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTargetInfo() {
+extern "C" void LLVMInitializeRISCVTargetInfo() {
   RegisterTarget<Triple::riscv32> X(getTheRISCV32Target(), "riscv32",
-                                    "32-bit RISC-V", "RISCV");
+                                    "32-bit RISC-V");
   RegisterTarget<Triple::riscv64> Y(getTheRISCV64Target(), "riscv64",
-                                    "64-bit RISC-V", "RISCV");
+                                    "64-bit RISC-V");
 }

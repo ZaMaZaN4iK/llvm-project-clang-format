@@ -1,24 +1,27 @@
 //===-- ThreadMachCore.cpp --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "ThreadMachCore.h"
 
+#include "lldb/Utility/SafeMachO.h"
+
 #include "lldb/Breakpoint/Watchpoint.h"
+#include "lldb/Core/ArchSpec.h"
+#include "lldb/Core/DataExtractor.h"
+#include "lldb/Core/State.h"
+#include "lldb/Core/StreamString.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/StopInfo.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Unwind.h"
-#include "lldb/Utility/ArchSpec.h"
-#include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/State.h"
-#include "lldb/Utility/StreamString.h"
 
 #include "ProcessMachCore.h"
 //#include "RegisterContextKDP_arm.h"
@@ -28,7 +31,9 @@
 using namespace lldb;
 using namespace lldb_private;
 
+//----------------------------------------------------------------------
 // Thread Registers
+//----------------------------------------------------------------------
 
 ThreadMachCore::ThreadMachCore(Process &process, lldb::tid_t tid)
     : Thread(process, tid), m_thread_name(), m_dispatch_queue_name(),
@@ -38,7 +43,7 @@ ThreadMachCore::~ThreadMachCore() { DestroyThread(); }
 
 const char *ThreadMachCore::GetName() {
   if (m_thread_name.empty())
-    return nullptr;
+    return NULL;
   return m_thread_name.c_str();
 }
 
@@ -49,8 +54,8 @@ void ThreadMachCore::RefreshStateAfterStop() {
   // context by the time this function gets called. The KDPRegisterContext
   // class has been made smart enough to detect when it needs to invalidate
   // which registers are valid by putting hooks in the register read and
-  // register supply functions where they check the process stop ID and do the
-  // right thing.
+  // register supply functions where they check the process stop ID and do
+  // the right thing.
   const bool force = false;
   GetRegisterContext()->InvalidateIfNeeded(force);
 }
@@ -58,8 +63,8 @@ void ThreadMachCore::RefreshStateAfterStop() {
 bool ThreadMachCore::ThreadIDIsValid(lldb::tid_t thread) { return thread != 0; }
 
 lldb::RegisterContextSP ThreadMachCore::GetRegisterContext() {
-  if (!m_reg_context_sp)
-    m_reg_context_sp = CreateRegisterContextForFrame(nullptr);
+  if (m_reg_context_sp.get() == NULL)
+    m_reg_context_sp = CreateRegisterContextForFrame(NULL);
   return m_reg_context_sp;
 }
 
@@ -84,7 +89,7 @@ ThreadMachCore::CreateRegisterContextForFrame(StackFrame *frame) {
     reg_ctx_sp = m_thread_reg_ctx_sp;
   } else {
     Unwind *unwinder = GetUnwinder();
-    if (unwinder != nullptr)
+    if (unwinder)
       reg_ctx_sp = unwinder->CreateRegisterContextForFrame(frame);
   }
   return reg_ctx_sp;

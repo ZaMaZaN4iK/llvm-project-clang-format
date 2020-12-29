@@ -1,8 +1,9 @@
 //===-IslExprBuilder.h - Helper to generate code for isl AST expressions --===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,11 +14,20 @@
 
 #include "polly/CodeGen/IRBuilder.h"
 #include "polly/Support/ScopHelper.h"
-#include "isl/isl-noexceptions.h"
+
+#include "llvm/ADT/MapVector.h"
+#include "isl/ast.h"
+
+namespace llvm {
+class DataLayout;
+class ScalarEvolution;
+} // namespace llvm
+
+struct isl_id;
 
 namespace llvm {
 // Provide PointerLikeTypeTraits for isl_id.
-template <> struct PointerLikeTypeTraits<isl_id *> {
+template <> class PointerLikeTypeTraits<isl_id *> {
 
 public:
   static inline const void *getAsVoidPointer(isl_id *P) { return (void *)P; }
@@ -65,7 +75,7 @@ class ScopArrayInfo;
 /// in the wild. Signed computations are needed, as loop bounds may become
 /// negative.
 ///
-/// It is possible to track overflows that occurred in the generated IR. See the
+/// It is possible to track overflows that occured in the generated IR. See the
 /// description of @see OverflowState for more information.
 ///
 /// FIXME: Hardcoding sizes can cause issues:
@@ -173,13 +183,6 @@ public:
   ///
   /// @return The llvm::Value* containing the result of the computation.
   llvm::Value *createAccessAddress(__isl_take isl_ast_expr *Expr);
-
-  /// Check if an @p Expr contains integer constants larger than 64 bit.
-  ///
-  /// @param Expr The expression to check.
-  ///
-  /// @return True if the ast expression is larger than 64 bit.
-  bool hasLargeInts(isl::ast_expr Expr);
 
 private:
   Scop &S;

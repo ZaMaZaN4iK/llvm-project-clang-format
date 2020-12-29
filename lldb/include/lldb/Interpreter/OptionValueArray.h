@@ -1,16 +1,21 @@
 //===-- OptionValueArray.h --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_OptionValueArray_h_
 #define liblldb_OptionValueArray_h_
 
+// C Includes
+// C++ Includes
 #include <vector>
 
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Interpreter/OptionValue.h"
 
 namespace lldb_private {
@@ -22,17 +27,19 @@ public:
 
   ~OptionValueArray() override {}
 
+  //---------------------------------------------------------------------
   // Virtual subclass pure virtual overrides
+  //---------------------------------------------------------------------
 
   OptionValue::Type GetType() const override { return eTypeArray; }
 
   void DumpValue(const ExecutionContext *exe_ctx, Stream &strm,
                  uint32_t dump_mask) override;
 
-  Status
+  Error
   SetValueFromString(llvm::StringRef value,
                      VarSetOperationType op = eVarSetOperationAssign) override;
-  Status
+  Error
   SetValueFromString(const char *,
                      VarSetOperationType = eVarSetOperationAssign) = delete;
 
@@ -48,9 +55,11 @@ public:
 
   lldb::OptionValueSP GetSubValue(const ExecutionContext *exe_ctx,
                                   llvm::StringRef name, bool will_modify,
-                                  Status &error) const override;
+                                  Error &error) const override;
 
+  //---------------------------------------------------------------------
   // Subclass specific functions
+  //---------------------------------------------------------------------
 
   size_t GetSize() const { return m_values.size(); }
 
@@ -69,8 +78,8 @@ public:
   }
 
   bool AppendValue(const lldb::OptionValueSP &value_sp) {
-    // Make sure the value_sp object is allowed to contain values of the type
-    // passed in...
+    // Make sure the value_sp object is allowed to contain
+    // values of the type passed in...
     if (value_sp && (m_type_mask & value_sp->GetTypeAsMask())) {
       m_values.push_back(value_sp);
       return true;
@@ -79,8 +88,8 @@ public:
   }
 
   bool InsertValue(size_t idx, const lldb::OptionValueSP &value_sp) {
-    // Make sure the value_sp object is allowed to contain values of the type
-    // passed in...
+    // Make sure the value_sp object is allowed to contain
+    // values of the type passed in...
     if (value_sp && (m_type_mask & value_sp->GetTypeAsMask())) {
       if (idx < m_values.size())
         m_values.insert(m_values.begin() + idx, value_sp);
@@ -92,8 +101,8 @@ public:
   }
 
   bool ReplaceValue(size_t idx, const lldb::OptionValueSP &value_sp) {
-    // Make sure the value_sp object is allowed to contain values of the type
-    // passed in...
+    // Make sure the value_sp object is allowed to contain
+    // values of the type passed in...
     if (value_sp && (m_type_mask & value_sp->GetTypeAsMask())) {
       if (idx < m_values.size()) {
         m_values[idx] = value_sp;
@@ -113,7 +122,7 @@ public:
 
   size_t GetArgs(Args &args) const;
 
-  Status SetArgs(const Args &args, VarSetOperationType op);
+  Error SetArgs(const Args &args, VarSetOperationType op);
 
 protected:
   typedef std::vector<lldb::OptionValueSP> collection;

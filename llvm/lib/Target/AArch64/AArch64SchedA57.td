@@ -1,8 +1,9 @@
 //=- AArch64SchedA57.td - ARM Cortex-A57 Scheduling Defs -----*- tablegen -*-=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
-// The Cortex-A57 is a traditional superscalar microprocessor with a
+// The Cortex-A57 is a traditional superscaler microprocessor with a
 // conservative 3-wide in-order stage for decode and dispatch. Combined with the
 // much wider out-of-order issue stage, this produced a need to carefully
 // schedule micro-ops so that all three decoded each cycle are successfully
@@ -30,9 +31,6 @@ def CortexA57Model : SchedMachineModel {
   // experiments and benchmarking data.
   let LoopMicroOpBufferSize = 16;
   let CompleteModel = 1;
-
-  list<Predicate> UnsupportedFeatures = !listconcat(SVEUnsupported.F,
-                                                    PAUnsupported.F);
 }
 
 //===----------------------------------------------------------------------===//
@@ -164,9 +162,7 @@ def : InstRW<[A57Write_2cyc_1M],    (instregex "BFM")>;
 // Cryptography Extensions
 // -----------------------------------------------------------------------------
 
-def A57ReadAES  : SchedReadAdvance<3, [A57Write_3cyc_1W]>;
-def : InstRW<[A57Write_3cyc_1W], (instregex "^AES[DE]")>;
-def : InstRW<[A57Write_3cyc_1W, A57ReadAES], (instregex "^AESI?MC")>;
+def : InstRW<[A57Write_3cyc_1W], (instregex "^AES")>;
 def : InstRW<[A57Write_6cyc_2V], (instregex "^SHA1SU0")>;
 def : InstRW<[A57Write_3cyc_1W], (instregex "^SHA1(H|SU1)")>;
 def : InstRW<[A57Write_6cyc_2W], (instregex "^SHA1[CMP]")>;

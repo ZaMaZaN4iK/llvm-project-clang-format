@@ -1,19 +1,20 @@
 //===-- EmulationStateARM.cpp -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "EmulationStateARM.h"
 
+#include "lldb/Core/RegisterValue.h"
+#include "lldb/Core/Scalar.h"
 #include "lldb/Interpreter/OptionValueArray.h"
 #include "lldb/Interpreter/OptionValueDictionary.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/StackFrame.h"
-#include "lldb/Utility/RegisterValue.h"
-#include "lldb/Utility/Scalar.h"
 
 #include "Utility/ARM_DWARF_Registers.h"
 
@@ -65,7 +66,7 @@ bool EmulationStateARM::LoadPseudoRegistersFromFrame(StackFrame &frame) {
 
 bool EmulationStateARM::StorePseudoRegisterValue(uint32_t reg_num,
                                                  uint64_t value) {
-  if (reg_num <= dwarf_cpsr)
+  if ((dwarf_r0 <= reg_num) && (reg_num <= dwarf_cpsr))
     m_gpr[reg_num - dwarf_r0] = (uint32_t)value;
   else if ((dwarf_s0 <= reg_num) && (reg_num <= dwarf_s31)) {
     uint32_t idx = reg_num - dwarf_s0;
@@ -88,7 +89,7 @@ uint64_t EmulationStateARM::ReadPseudoRegisterValue(uint32_t reg_num,
   uint64_t value = 0;
   success = true;
 
-  if (reg_num <= dwarf_cpsr)
+  if ((dwarf_r0 <= reg_num) && (reg_num <= dwarf_cpsr))
     value = m_gpr[reg_num - dwarf_r0];
   else if ((dwarf_s0 <= reg_num) && (reg_num <= dwarf_s31)) {
     uint32_t idx = reg_num - dwarf_s0;
@@ -191,19 +192,15 @@ size_t EmulationStateARM::WritePseudoMemory(
   EmulationStateARM *pseudo_state = (EmulationStateARM *)baton;
 
   if (length <= 4) {
-    uint32_t value;
-    memcpy (&value, dst, sizeof (uint32_t));
+    uint32_t value = *((const uint32_t *)dst);
     if (endian::InlHostByteOrder() == lldb::eByteOrderBig)
       value = llvm::ByteSwap_32(value);
 
     pseudo_state->StoreToPseudoAddress(addr, value);
     return length;
   } else if (length == 8) {
-    uint32_t value1;
-    uint32_t value2;
-    memcpy (&value1, dst, sizeof (uint32_t));
-    memcpy(&value2, static_cast<const uint8_t *>(dst) + sizeof(uint32_t),
-           sizeof(uint32_t));
+    uint32_t value1 = ((const uint32_t *)dst)[0];
+    uint32_t value2 = ((const uint32_t *)dst)[1];
     if (endian::InlHostByteOrder() == lldb::eByteOrderBig) {
       value1 = llvm::ByteSwap_32(value1);
       value2 = llvm::ByteSwap_32(value2);
@@ -284,14 +281,14 @@ bool EmulationStateARM::LoadStateFromDictionary(
 
   // Load memory, if present.
 
-  if (value_sp.get() != nullptr) {
+  if (value_sp.get() != NULL) {
     static ConstString address_key("address");
     static ConstString data_key("data");
     uint64_t start_address = 0;
 
     OptionValueDictionary *mem_dict = value_sp->GetAsDictionary();
     value_sp = mem_dict->GetValueForKey(address_key);
-    if (value_sp.get() == nullptr)
+    if (value_sp.get() == NULL)
       return false;
     else
       start_address = value_sp->GetUInt64Value();
@@ -306,7 +303,7 @@ bool EmulationStateARM::LoadStateFromDictionary(
 
     for (uint32_t i = 0; i < num_elts; ++i) {
       value_sp = mem_array->GetValueAtIndex(i);
-      if (value_sp.get() == nullptr)
+      if (value_sp.get() == NULL)
         return false;
       uint64_t value = value_sp->GetUInt64Value();
       StoreToPseudoAddress(address, value);
@@ -315,7 +312,7 @@ bool EmulationStateARM::LoadStateFromDictionary(
   }
 
   value_sp = test_data->GetValueForKey(registers_key);
-  if (value_sp.get() == nullptr)
+  if (value_sp.get() == NULL)
     return false;
 
   // Load General Registers
@@ -328,7 +325,7 @@ bool EmulationStateARM::LoadStateFromDictionary(
     sstr.Printf("r%d", i);
     ConstString reg_name(sstr.GetString());
     value_sp = reg_dict->GetValueForKey(reg_name);
-    if (value_sp.get() == nullptr)
+    if (value_sp.get() == NULL)
       return false;
     uint64_t reg_value = value_sp->GetUInt64Value();
     StorePseudoRegisterValue(dwarf_r0 + i, reg_value);
@@ -336,7 +333,7 @@ bool EmulationStateARM::LoadStateFromDictionary(
 
   static ConstString cpsr_name("cpsr");
   value_sp = reg_dict->GetValueForKey(cpsr_name);
-  if (value_sp.get() == nullptr)
+  if (value_sp.get() == NULL)
     return false;
   StorePseudoRegisterValue(dwarf_cpsr, value_sp->GetUInt64Value());
 
@@ -346,7 +343,7 @@ bool EmulationStateARM::LoadStateFromDictionary(
     sstr.Printf("s%d", i);
     ConstString reg_name(sstr.GetString());
     value_sp = reg_dict->GetValueForKey(reg_name);
-    if (value_sp.get() == nullptr)
+    if (value_sp.get() == NULL)
       return false;
     uint64_t reg_value = value_sp->GetUInt64Value();
     StorePseudoRegisterValue(dwarf_s0 + i, reg_value);

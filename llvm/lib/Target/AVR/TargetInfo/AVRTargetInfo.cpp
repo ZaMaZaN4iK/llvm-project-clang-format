@@ -1,12 +1,13 @@
 //===-- AVRTargetInfo.cpp - AVR Target Implementation ---------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "TargetInfo/AVRTargetInfo.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/TargetRegistry.h"
 namespace llvm {
 Target &getTheAVRTarget() {
@@ -15,8 +16,8 @@ Target &getTheAVRTarget() {
 }
 }
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAVRTargetInfo() {
+extern "C" void LLVMInitializeAVRTargetInfo() {
   llvm::RegisterTarget<llvm::Triple::avr> X(llvm::getTheAVRTarget(), "avr",
-                                            "Atmel AVR Microcontroller", "AVR");
+                                            "Atmel AVR Microcontroller");
 }
 

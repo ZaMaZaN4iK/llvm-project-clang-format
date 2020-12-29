@@ -1,8 +1,9 @@
 //===- AliasAnalysisEvaluator.h - Alias Analysis Accuracy Evaluator -------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -34,28 +35,24 @@ class AAEvaluator : public PassInfoMixin<AAEvaluator> {
   int64_t FunctionCount;
   int64_t NoAliasCount, MayAliasCount, PartialAliasCount, MustAliasCount;
   int64_t NoModRefCount, ModCount, RefCount, ModRefCount;
-  int64_t MustCount, MustRefCount, MustModCount, MustModRefCount;
 
 public:
   AAEvaluator()
       : FunctionCount(), NoAliasCount(), MayAliasCount(), PartialAliasCount(),
         MustAliasCount(), NoModRefCount(), ModCount(), RefCount(),
-        ModRefCount(), MustCount(), MustRefCount(), MustModCount(),
-        MustModRefCount() {}
+        ModRefCount() {}
   AAEvaluator(AAEvaluator &&Arg)
       : FunctionCount(Arg.FunctionCount), NoAliasCount(Arg.NoAliasCount),
         MayAliasCount(Arg.MayAliasCount),
         PartialAliasCount(Arg.PartialAliasCount),
         MustAliasCount(Arg.MustAliasCount), NoModRefCount(Arg.NoModRefCount),
         ModCount(Arg.ModCount), RefCount(Arg.RefCount),
-        ModRefCount(Arg.ModRefCount), MustCount(Arg.MustCount),
-        MustRefCount(Arg.MustRefCount), MustModCount(Arg.MustModCount),
-        MustModRefCount(Arg.MustModRefCount) {
+        ModRefCount(Arg.ModRefCount) {
     Arg.FunctionCount = 0;
   }
   ~AAEvaluator();
 
-  /// Run the pass over the function.
+  /// \brief Run the pass over the function.
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 
 private:

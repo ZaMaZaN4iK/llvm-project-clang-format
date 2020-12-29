@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,7 +32,7 @@ test(Iterator first, Iterator last, const typename C::allocator_type& a)
         assert(*i == *first);
 }
 
-int main(int, char**)
+int main()
 {
     bool a[] = {0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 0};
     bool* an = a + sizeof(a)/sizeof(a[0]);
@@ -53,6 +54,4 @@ int main(int, char**)
     test<std::vector<bool, min_allocator<bool>> >(a, an, alloc);
     }
 #endif
-
-  return 0;
 }

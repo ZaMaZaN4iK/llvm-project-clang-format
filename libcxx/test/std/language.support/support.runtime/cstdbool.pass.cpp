@@ -1,16 +1,15 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // test <cstdbool>
 
 #include <cstdbool>
-
-#include "test_macros.h"
 
 #ifndef __bool_true_false_are_defined
 #error __bool_true_false_are_defined not defined
@@ -28,8 +27,6 @@
 #error false should not be defined
 #endif
 
-int main(int, char**)
+int main()
 {
-
-  return 0;
 }

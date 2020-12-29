@@ -5,6 +5,9 @@ Test SBSymbolContext APIs.
 from __future__ import print_function
 
 
+import os
+import re
+import time
 
 import lldb
 from lldbsuite.test.decorators import *
@@ -28,7 +31,7 @@ class SymbolContextAPITestCase(TestBase):
     def test(self):
         """Exercise SBSymbolContext API extensively."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)
@@ -63,14 +66,17 @@ class SymbolContextAPITestCase(TestBase):
         module = context.GetModule()
         desc = lldbutil.get_description(module)
         self.expect(desc, "The module should match", exe=False,
-                    substrs=[self.getBuildArtifact("a.out")])
+                    substrs=[os.path.join(self.mydir, 'a.out')])
 
         compileUnit = context.GetCompileUnit()
         self.expect(
             str(compileUnit),
             "The compile unit should match",
             exe=False,
-            substrs=[self.getSourcePath('main.c')])
+            substrs=[
+                os.path.join(
+                    self.mydir,
+                    'main.c')])
 
         function = context.GetFunction()
         self.assertTrue(function)
@@ -86,7 +92,8 @@ class SymbolContextAPITestCase(TestBase):
             lineEntry.GetFileSpec().GetDirectory(),
             "The line entry should have the correct directory",
             exe=False,
-            substrs=[self.mydir])
+            substrs=[
+                self.mydir])
         self.expect(
             lineEntry.GetFileSpec().GetFilename(),
             "The line entry should have the correct filename",
@@ -99,9 +106,3 @@ class SymbolContextAPITestCase(TestBase):
         self.assertTrue(
             function.GetName() == symbol.GetName() and symbol.GetName() == 'c',
             "The symbol name should be 'c'")
-
-        sc_list = lldb.SBSymbolContextList()
-        sc_list.Append(context)
-        self.assertEqual(len(sc_list), 1)
-        for sc in sc_list:
-            self.assertEqual(lineEntry, sc.GetLineEntry())

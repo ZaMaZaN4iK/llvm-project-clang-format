@@ -1,5 +1,6 @@
 """Test that forward declarations don't cause bogus conflicts in namespaced types"""
 
+from __future__ import print_function
 
 
 import unittest2
@@ -23,7 +24,6 @@ class NamespaceDefinitionsTestCase(TestBase):
         bugnumber="llvm.org/pr28948",
         oslist=['linux'], compiler="gcc", archs=['arm','aarch64'])
     @expectedFailureAll(oslist=["windows"])
-    @expectedFailureNetBSD
     def test_expr(self):
         self.build()
         self.common_setup()
@@ -46,7 +46,7 @@ class NamespaceDefinitionsTestCase(TestBase):
         self.dbg.SetAsync(False)
 
         # Create a target by the debugger.
-        target = self.dbg.CreateTarget(self.getBuildArtifact("a.out"))
+        target = self.dbg.CreateTarget("a.out")
         self.assertTrue(target, VALID_TARGET)
 
         # Break inside the foo function which takes a bar_ptr argument.

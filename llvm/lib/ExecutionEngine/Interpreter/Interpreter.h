@@ -1,8 +1,9 @@
 //===-- Interpreter.h ------------------------------------------*- C++ -*--===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -124,7 +125,6 @@ public:
   void visitSwitchInst(SwitchInst &I);
   void visitIndirectBrInst(IndirectBrInst &I);
 
-  void visitUnaryOperator(UnaryOperator &I);
   void visitBinaryOperator(BinaryOperator &I);
   void visitICmpInst(ICmpInst &I);
   void visitFCmpInst(FCmpInst &I);
@@ -132,8 +132,8 @@ public:
   void visitLoadInst(LoadInst &I);
   void visitStoreInst(StoreInst &I);
   void visitGetElementPtrInst(GetElementPtrInst &I);
-  void visitPHINode(PHINode &PN) {
-    llvm_unreachable("PHI nodes already handled!");
+  void visitPHINode(PHINode &PN) { 
+    llvm_unreachable("PHI nodes already handled!"); 
   }
   void visitTruncInst(TruncInst &I);
   void visitZExtInst(ZExtInst &I);
@@ -224,7 +224,7 @@ private:  // Helper functions
                                    ExecutionContext &SF);
   GenericValue executeBitCastInst(Value *SrcVal, Type *DstTy,
                                   ExecutionContext &SF);
-  GenericValue executeCastOperation(Instruction::CastOps opcode, Value *SrcVal,
+  GenericValue executeCastOperation(Instruction::CastOps opcode, Value *SrcVal, 
                                     Type *Ty, ExecutionContext &SF);
   void popStackAndReturnValueToCaller(Type *RetTy, GenericValue Result);
 

@@ -1,11 +1,3 @@
-add_lldb_library(lldbPluginInstructionARM64 PLUGIN
+add_lldb_library(lldbPluginInstructionARM64
   EmulateInstructionARM64.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbInterpreter
-    lldbSymbol
-    lldbPluginProcessUtility
-  LINK_COMPONENTS
-    Support
   )

@@ -2,8 +2,12 @@
 Test the 'memory find' command.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.lldbtest import *
 import lldbsuite.test.lldbutil as lldbutil
@@ -20,13 +24,14 @@ class MemoryFindTestCase(TestBase):
         # Find the line number to break inside main().
         self.line = line_number('main.cpp', '// break here')
 
+    @expectedFailureAll(oslist=["windows"])
     def test_memory_find(self):
         """Test the 'memory find' command."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
-        # Break in main() after the variables are assigned values.
+        # Break in main() aftre the variables are assigned values.
         lldbutil.run_break_set_by_file_and_line(
             self, "main.cpp", self.line, num_expected_locations=1, loc_exact=True)
 

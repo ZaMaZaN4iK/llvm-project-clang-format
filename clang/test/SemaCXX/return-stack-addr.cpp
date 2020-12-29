@@ -63,8 +63,7 @@ int& ret_local_field_ref() {
 int* ret_conditional(bool cond) {
   int x = 1;
   int y = 2;
-  return cond ? &x // expected-warning {{address of stack memory associated with local variable 'x' returned}}
-              : &y; // expected-warning {{address of stack memory associated with local variable 'y' returned}}
+  return cond ? &x : &y; // expected-warning {{address of stack memory}}
 }
 
 int* ret_conditional_rhs(int *x, bool cond) {
@@ -156,10 +155,4 @@ void ret_from_lambda() {
   (void) [=]() -> int& { int a; return a; }; // expected-warning {{reference to stack}}
   (void) [&]() -> int& { int &a = b; return a; };
   (void) [=]() mutable -> int& { int &a = b; return a; };
-}
-
-namespace mem_ptr {
-  struct X {};
-  int X::*f();
-  int &r(X *p) { return p->*f(); }
 }

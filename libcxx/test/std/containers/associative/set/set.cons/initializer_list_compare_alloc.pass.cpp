@@ -1,12 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// UNSUPPORTED: c++98, c++03
 
 // <set>
 
@@ -21,8 +20,9 @@
 #include "../../../test_compare.h"
 #include "test_allocator.h"
 
-int main(int, char**)
+int main()
 {
+#ifndef _LIBCPP_HAS_NO_GENERALIZED_INITIALIZERS
     {
     typedef test_compare<std::less<int> > Cmp;
     typedef test_allocator<int> A;
@@ -41,6 +41,7 @@ int main(int, char**)
     assert(m.key_comp() == Cmp(10));
     assert(m.get_allocator() == A(4));
     }
+#if TEST_STD_VER > 11
     {
     typedef test_compare<std::less<int> > Cmp;
     typedef test_allocator<int> A;
@@ -58,6 +59,6 @@ int main(int, char**)
     assert(*++i == V(6));
     assert(m.get_allocator() == A(4));
     }
-
-  return 0;
+#endif
+#endif  // _LIBCPP_HAS_NO_GENERALIZED_INITIALIZERS
 }

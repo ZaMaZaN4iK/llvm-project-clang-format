@@ -1,7 +1,10 @@
 """Test variable with function ptr type and that break on the function works."""
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -43,7 +46,6 @@ class FunctionTypesTestCase(TestBase):
                              'stop reason = breakpoint'])
 
     @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr21765")
-    @expectedFailureNetBSD
     def test_pointers(self):
         """Test that a function pointer to 'printf' works and can be called."""
         self.build()
@@ -64,7 +66,7 @@ class FunctionTypesTestCase(TestBase):
                     startstr='(int) $2 = 12')
 
     def runToBreakpoint(self):
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Break inside the main.

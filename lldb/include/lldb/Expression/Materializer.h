@@ -1,21 +1,26 @@
 //===-- Materializer.h ------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_Materializer_h
 #define liblldb_Materializer_h
 
+// C Includes
+// C++ Includes
 #include <memory>
 #include <vector>
 
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/Error.h"
 #include "lldb/Expression/IRMemoryMap.h"
 #include "lldb/Symbol/TaggedASTType.h"
 #include "lldb/Target/StackFrame.h"
-#include "lldb/Utility/Status.h"
 #include "lldb/lldb-private-types.h"
 
 namespace lldb_private {
@@ -33,7 +38,7 @@ public:
 
     ~Dematerializer() { Wipe(); }
 
-    void Dematerialize(Status &err, lldb::addr_t frame_top,
+    void Dematerialize(Error &err, lldb::addr_t frame_top,
                        lldb::addr_t frame_bottom);
 
     void Wipe();
@@ -67,7 +72,7 @@ public:
   typedef std::weak_ptr<Dematerializer> DematerializerWP;
 
   DematerializerSP Materialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
-                               lldb::addr_t process_address, Status &err);
+                               lldb::addr_t process_address, Error &err);
 
   class PersistentVariableDelegate {
   public:
@@ -78,13 +83,13 @@ public:
 
   uint32_t
   AddPersistentVariable(lldb::ExpressionVariableSP &persistent_variable_sp,
-                        PersistentVariableDelegate *delegate, Status &err);
-  uint32_t AddVariable(lldb::VariableSP &variable_sp, Status &err);
+                        PersistentVariableDelegate *delegate, Error &err);
+  uint32_t AddVariable(lldb::VariableSP &variable_sp, Error &err);
   uint32_t AddResultVariable(const CompilerType &type, bool is_lvalue,
                              bool keep_in_memory,
-                             PersistentVariableDelegate *delegate, Status &err);
-  uint32_t AddSymbol(const Symbol &symbol_sp, Status &err);
-  uint32_t AddRegister(const RegisterInfo &register_info, Status &err);
+                             PersistentVariableDelegate *delegate, Error &err);
+  uint32_t AddSymbol(const Symbol &symbol_sp, Error &err);
+  uint32_t AddRegister(const RegisterInfo &register_info, Error &err);
 
   uint32_t GetStructAlignment() { return m_struct_alignment; }
 
@@ -97,11 +102,11 @@ public:
     virtual ~Entity() = default;
 
     virtual void Materialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
-                             lldb::addr_t process_address, Status &err) = 0;
+                             lldb::addr_t process_address, Error &err) = 0;
     virtual void Dematerialize(lldb::StackFrameSP &frame_sp, IRMemoryMap &map,
                                lldb::addr_t process_address,
                                lldb::addr_t frame_top,
-                               lldb::addr_t frame_bottom, Status &err) = 0;
+                               lldb::addr_t frame_bottom, Error &err) = 0;
     virtual void DumpToLog(IRMemoryMap &map, lldb::addr_t process_address,
                            Log *log) = 0;
     virtual void Wipe(IRMemoryMap &map, lldb::addr_t process_address) = 0;
@@ -115,6 +120,8 @@ public:
     void SetOffset(uint32_t offset) { m_offset = offset; }
 
   protected:
+    void SetSizeAndAlignmentFromType(CompilerType &type);
+
     uint32_t m_alignment;
     uint32_t m_size;
     uint32_t m_offset;

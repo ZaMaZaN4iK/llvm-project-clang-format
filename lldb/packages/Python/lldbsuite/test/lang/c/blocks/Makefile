@@ -1,4 +1,6 @@
-C_SOURCES := main.c
-CFLAGS_EXTRAS := -fblocks
+LEVEL = ../../../make
 
-include Makefile.rules
+C_SOURCES := main.c
+CFLAGS_EXTRAS += -fblocks
+
+include $(LEVEL)/Makefile.rules

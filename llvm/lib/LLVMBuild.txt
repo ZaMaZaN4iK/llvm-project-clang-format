@@ -1,8 +1,9 @@
 ;===- ./lib/LLVMBuild.txt --------------------------------------*- Conf -*--===;
 ;
-; Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-; See https://llvm.org/LICENSE.txt for license information.
-; SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+;                     The LLVM Compiler Infrastructure
+;
+; This file is distributed under the University of Illinois Open Source
+; License. See LICENSE.TXT for details.
 ;
 ;===------------------------------------------------------------------------===;
 ;
@@ -19,38 +20,26 @@ subdirectories =
  Analysis
  AsmParser
  Bitcode
- Bitstream
  CodeGen
  DebugInfo
  Demangle
- DWARFLinker
  ExecutionEngine
- Extensions
- Frontend
- FuzzMutate
+ LibDriver
  LineEditor
  Linker
  IR
  IRReader
  LTO
  MC
- MCA
  Object
- BinaryFormat
  ObjectYAML
  Option
- Remarks
  Passes
  ProfileData
  Support
  TableGen
- TextAPI
  Target
- Testing
- ToolDrivers
  Transforms
- WindowsManifest
- XRay
 
 [component_0]
 type = Group

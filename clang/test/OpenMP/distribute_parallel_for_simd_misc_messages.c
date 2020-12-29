@@ -1,15 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -fopenmp -fopenmp-version=45 -verify=expected,omp45 %s -Wuninitialized
-// RUN: %clang_cc1 -fsyntax-only -fopenmp -fopenmp-version=50 -verify=expected,omp50 %s -Wuninitialized
-
-// RUN: %clang_cc1 -fsyntax-only -fopenmp-simd -fopenmp-version=45 -verify=expected,omp45 %s -Wuninitialized
-// RUN: %clang_cc1 -fsyntax-only -fopenmp-simd -fopenmp-version=50 -verify=expected,omp50 %s -Wuninitialized
-
-void xxx(int argc) {
-  int x; // expected-note {{initialize the variable 'x' to silence this warning}}
-#pragma omp distribute parallel for simd
-  for (int i = 0; i < 10; ++i)
-    argc = x; // expected-warning {{variable 'x' is uninitialized when used here}}
-}
+// RUN: %clang_cc1 -fsyntax-only -fopenmp -verify %s
 
 // expected-error@+1 {{unexpected OpenMP directive '#pragma omp distribute parallel for simd'}}
 #pragma omp distribute parallel for simd
@@ -79,7 +68,7 @@ void test_non_identifiers() {
 #pragma omp target
 #pragma omp teams
 // expected-warning@+1 {{extra tokens at the end of '#pragma omp distribute parallel for simd' are ignored}}
-#pragma omp distribute parallel for simd firstprivate(x);
+#pragma omp distribute parallel for simd linear(x);
   for (i = 0; i < 16; ++i)
     ;
 
@@ -559,6 +548,89 @@ void test_linear() {
 #pragma omp distribute parallel for simd linear(x, y, z)
   for (i = 0; i < 16; ++i)
     ;
+
+  int x, y;
+#pragma omp target
+#pragma omp teams
+// expected-error@+1 {{expected expression}}
+#pragma omp distribute parallel for simd linear(x :)
+  for (i = 0; i < 16; ++i)
+    ;
+#pragma omp target
+#pragma omp teams
+// expected-error@+1 {{expected expression}} expected-error@+1 {{expected ')'}} expected-note@+1 {{to match this '('}}
+#pragma omp distribute parallel for simd linear(x :, )
+  for (i = 0; i < 16; ++i)
+    ;
+#pragma omp target
+#pragma omp teams
+#pragma omp distribute parallel for simd linear(x : 1)
+  for (i = 0; i < 16; ++i)
+    ;
+#pragma omp target
+#pragma omp teams
+#pragma omp distribute parallel for simd linear(x : 2 * 2)
+  for (i = 0; i < 16; ++i)
+    ;
+#pragma omp target
+#pragma omp teams
+// expected-error@+1 {{expected ')'}} expected-note@+1 {{to match this '('}}
+#pragma omp distribute parallel for simd linear(x : 1, y)
+  for (i = 0; i < 16; ++i)
+    ;
+#pragma omp target
+#pragma omp teams
+// expected-error@+1 {{expected ')'}} expected-note@+1 {{to match this '('}}
+#pragma omp distribute parallel for simd linear(x : 1, y, z : 1)
+  for (i = 0; i < 16; ++i)
+    ;
+
+#pragma omp target
+#pragma omp teams
+// expected-note@+2 {{defined as linear}}
+// expected-error@+1 {{linear variable cannot be linear}}
+#pragma omp distribute parallel for simd linear(x) linear(x)
+  for (i = 0; i < 16; ++i)
+    ;
+
+#pragma omp target
+#pragma omp teams
+// expected-note@+2 {{defined as private}}
+// expected-error@+1 {{private variable cannot be linear}}
+#pragma omp distribute parallel for simd private(x) linear(x)
+  for (i = 0; i < 16; ++i)
+    ;
+
+#pragma omp target
+#pragma omp teams
+// expected-note@+2 {{defined as linear}}
+// expected-error@+1 {{linear variable cannot be private}}
+#pragma omp distribute parallel for simd linear(x) private(x)
+  for (i = 0; i < 16; ++i)
+    ;
+
+#pragma omp target
+#pragma omp teams
+// expected-warning@+1 {{zero linear step (x and other variables in clause should probably be const)}}
+#pragma omp distribute parallel for simd linear(x, y : 0)
+  for (i = 0; i < 16; ++i)
+    ;
+
+#pragma omp target
+#pragma omp teams
+// expected-note@+2 {{defined as linear}}
+// expected-error@+1 {{linear variable cannot be lastprivate}}
+#pragma omp distribute parallel for simd linear(x) lastprivate(x)
+  for (i = 0; i < 16; ++i)
+    ;
+
+#pragma omp target
+#pragma omp teams
+// expected-note@+2 {{defined as lastprivate}}
+// expected-error@+1 {{lastprivate variable cannot be linear}}
+#pragma omp distribute parallel for simd lastprivate(x) linear(x)
+  for (i = 0; i < 16; ++i)
+    ;
 }
 
 void test_aligned() {
@@ -862,19 +934,16 @@ void test_firstprivate() {
     ;
 
   int x, y, z;
-// expected-error@+3 {{lastprivate variable cannot be firstprivate}} expected-note@+3 {{defined as lastprivate}}
 #pragma omp target
 #pragma omp teams
 #pragma omp distribute parallel for simd lastprivate(x) firstprivate(x)
   for (i = 0; i < 16; ++i)
     ;
-// expected-error@+3 2 {{lastprivate variable cannot be firstprivate}} expected-note@+3 2 {{defined as lastprivate}}
 #pragma omp target
 #pragma omp teams
 #pragma omp distribute parallel for simd lastprivate(x, y) firstprivate(x, y)
   for (i = 0; i < 16; ++i)
     ;
-// expected-error@+3 3 {{lastprivate variable cannot be firstprivate}} expected-note@+3 3 {{defined as lastprivate}}
 #pragma omp target
 #pragma omp teams
 #pragma omp distribute parallel for simd lastprivate(x, y, z) firstprivate(x, y, z)
@@ -898,89 +967,5 @@ void test_loop_messages() {
   for (double fi = 0; fi < 10.0; fi++) {
     c[(int)fi] = a[(int)fi] + b[(int)fi];
   }
-}
-
-void test_nontemporal() {
-  int i;
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}} expected-error@+1 {{expected expression}} expected-error@+1 {{expected ')'}} expected-note@+1 {{to match this '('}}
-#pragma omp distribute parallel for simd nontemporal(
-  for (i = 0; i < 16; ++i)
-    ;
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}} expected-error@+1 2 {{expected expression}} expected-error@+1 {{expected ')'}} expected-note@+1 {{to match this '('}}
-#pragma omp distribute parallel for simd nontemporal(,
-  for (i = 0; i < 16; ++i)
-    ;
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}} expected-error@+1 2 {{expected expression}}
-#pragma omp distribute parallel for simd nontemporal(, )
-  for (i = 0; i < 16; ++i)
-    ;
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}} expected-error@+1 {{expected expression}}
-#pragma omp distribute parallel for simd nontemporal()
-  for (i = 0; i < 16; ++i)
-    ;
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}} expected-error@+1 {{expected expression}}
-#pragma omp distribute parallel for simd nontemporal(int)
-  for (i = 0; i < 16; ++i)
-    ;
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}} omp50-error@+1 {{expected variable name}}
-#pragma omp distribute parallel for simd nontemporal(0)
-  for (i = 0; i < 16; ++i)
-    ;
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}} expected-error@+1 {{use of undeclared identifier 'x'}}
-#pragma omp distribute parallel for simd nontemporal(x)
-  for (i = 0; i < 16; ++i)
-    ;
-// expected-error@+2 {{use of undeclared identifier 'x'}}
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}} expected-error@+1 {{use of undeclared identifier 'y'}}
-#pragma omp distribute parallel for simd nontemporal(x, y)
-  for (i = 0; i < 16; ++i)
-    ;
-// expected-error@+3 {{use of undeclared identifier 'x'}}
-// expected-error@+2 {{use of undeclared identifier 'y'}}
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}} expected-error@+1 {{use of undeclared identifier 'z'}}
-#pragma omp distribute parallel for simd nontemporal(x, y, z)
-  for (i = 0; i < 16; ++i)
-    ;
-
-  int x, y;
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}} expected-error@+1 {{expected ',' or ')' in 'nontemporal' clause}} expected-error@+1 {{expected ')'}} expected-note@+1 {{to match this '('}}
-#pragma omp distribute parallel for simd nontemporal(x :)
-  for (i = 0; i < 16; ++i)
-    ;
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}} expected-error@+1 {{expected ')'}} expected-note@+1 {{to match this '('}} expected-error@+1 {{expected ',' or ')' in 'nontemporal' clause}}
-#pragma omp distribute parallel for simd nontemporal(x :, )
-  for (i = 0; i < 16; ++i)
-    ;
-
-// omp50-note@+2 {{defined as nontemporal}}
-// omp45-error@+1 2 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}} omp50-error@+1 {{a variable cannot appear in more than one nontemporal clause}}
-#pragma omp distribute parallel for simd nontemporal(x) nontemporal(x)
-  for (i = 0; i < 16; ++i)
-    ;
-
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}}
-#pragma omp distribute parallel for simd private(x) nontemporal(x)
-  for (i = 0; i < 16; ++i)
-    ;
-
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}}
-#pragma omp distribute parallel for simd nontemporal(x) private(x)
-  for (i = 0; i < 16; ++i)
-    ;
-
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}} expected-note@+1 {{to match this '('}} expected-error@+1 {{expected ',' or ')' in 'nontemporal' clause}} expected-error@+1 {{expected ')'}}
-#pragma omp distribute parallel for simd nontemporal(x, y : 0)
-  for (i = 0; i < 16; ++i)
-    ;
-
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}}
-#pragma omp distribute parallel for simd nontemporal(x) lastprivate(x)
-  for (i = 0; i < 16; ++i)
-    ;
-
-// omp45-error@+1 {{unexpected OpenMP clause 'nontemporal' in directive '#pragma omp distribute parallel for simd'}}
-#pragma omp distribute parallel for simd lastprivate(x) nontemporal(x)
-  for (i = 0; i < 16; ++i)
-    ;
 }
 

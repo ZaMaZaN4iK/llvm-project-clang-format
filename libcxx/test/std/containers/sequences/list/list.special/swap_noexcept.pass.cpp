@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -52,26 +53,24 @@ struct some_alloc2
     typedef std::true_type is_always_equal;
 };
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::list<MoveOnly> C;
         static_assert(noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
     }
-#if defined(_LIBCPP_VERSION)
     {
         typedef std::list<MoveOnly, test_allocator<MoveOnly>> C;
-        static_assert(noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
+        LIBCPP_STATIC_ASSERT(noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
     }
     {
         typedef std::list<MoveOnly, other_allocator<MoveOnly>> C;
-        static_assert(noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
+        LIBCPP_STATIC_ASSERT(noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
     }
-#endif // _LIBCPP_VERSION
     {
         typedef std::list<MoveOnly, some_alloc<MoveOnly>> C;
 #if TEST_STD_VER >= 14
-    //  In C++14, if POCS is set, swapping the allocator is required not to throw
+    //  In c++14, if POCS is set, swapping the allocator is required not to throw
         static_assert( noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
 #else
         static_assert(!noexcept(swap(std::declval<C&>(), std::declval<C&>())), "");
@@ -85,6 +84,4 @@ int main(int, char**)
     }
 #endif
 
-
-  return 0;
 }

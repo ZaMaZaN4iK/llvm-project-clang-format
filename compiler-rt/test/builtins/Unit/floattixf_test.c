@@ -1,12 +1,9 @@
-// RUN: %clang_builtins %s %librt -o %t && %run %t
-// REQUIRES: librt_has_floattixf
-// REQUIRES: x86-target-arch
-
 //===-- floattixf.c - Test __floattixf ------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,7 +15,7 @@
 #include <float.h>
 #include <stdio.h>
 
-#if defined(CRT_HAS_128BIT) && HAS_80_BIT_LONG_DOUBLE
+#ifdef CRT_HAS_128BIT
 
 // Returns: convert a to a long double, rounding toward even.
 
@@ -43,15 +40,15 @@ int test__floattixf(ti_int a, long double expected)
     return x != expected;
 }
 
-COMPILE_TIME_ASSERT(sizeof(ti_int) == 2*sizeof(di_int));
-COMPILE_TIME_ASSERT(sizeof(ti_int)*CHAR_BIT == 128);
-COMPILE_TIME_ASSERT(sizeof(long double)*CHAR_BIT == 128);
+char assumption_1[sizeof(ti_int) == 2*sizeof(di_int)] = {0};
+char assumption_2[sizeof(ti_int)*CHAR_BIT == 128] = {0};
+char assumption_3[sizeof(long double)*CHAR_BIT == 128] = {0};
 
 #endif
 
 int main()
 {
-#if defined(CRT_HAS_128BIT) && HAS_80_BIT_LONG_DOUBLE
+#ifdef CRT_HAS_128BIT
     if (test__floattixf(0, 0.0))
         return 1;
 

@@ -1,8 +1,9 @@
-//===- TypeFinder.cpp - Implement the TypeFinder class --------------------===//
+//===-- TypeFinder.cpp - Implement the TypeFinder class -------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,35 +14,28 @@
 #include "llvm/IR/TypeFinder.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/Constant.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/Instruction.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/Type.h"
-#include "llvm/IR/Use.h"
-#include "llvm/IR/User.h"
-#include "llvm/IR/Value.h"
-#include "llvm/Support/Casting.h"
-#include <utility>
-
 using namespace llvm;
 
 void TypeFinder::run(const Module &M, bool onlyNamed) {
   OnlyNamed = onlyNamed;
 
   // Get types from global variables.
-  for (const auto &G : M.globals()) {
-    incorporateType(G.getType());
-    if (G.hasInitializer())
-      incorporateValue(G.getInitializer());
+  for (Module::const_global_iterator I = M.global_begin(),
+         E = M.global_end(); I != E; ++I) {
+    incorporateType(I->getType());
+    if (I->hasInitializer())
+      incorporateValue(I->getInitializer());
   }
 
   // Get types from aliases.
-  for (const auto &A : M.aliases()) {
-    incorporateType(A.getType());
-    if (const Value *Aliasee = A.getAliasee())
+  for (Module::const_alias_iterator I = M.alias_begin(),
+         E = M.alias_end(); I != E; ++I) {
+    incorporateType(I->getType());
+    if (const Value *Aliasee = I->getAliasee())
       incorporateValue(Aliasee);
   }
 
@@ -54,8 +48,9 @@ void TypeFinder::run(const Module &M, bool onlyNamed) {
       incorporateValue(U.get());
 
     // First incorporate the arguments.
-    for (const auto &A : FI.args())
-      incorporateValue(&A);
+    for (Function::const_arg_iterator AI = FI.arg_begin(), AE = FI.arg_end();
+         AI != AE; ++AI)
+      incorporateValue(&*AI);
 
     for (const BasicBlock &BB : FI)
       for (const Instruction &I : BB) {
@@ -64,21 +59,26 @@ void TypeFinder::run(const Module &M, bool onlyNamed) {
 
         // Incorporate non-instruction operand types. (We are incorporating all
         // instructions with this loop.)
-        for (const auto &O : I.operands())
-          if (&*O && !isa<Instruction>(&*O))
-            incorporateValue(&*O);
+        for (User::const_op_iterator OI = I.op_begin(), OE = I.op_end();
+             OI != OE; ++OI)
+          if (*OI && !isa<Instruction>(OI))
+            incorporateValue(*OI);
 
         // Incorporate types hiding in metadata.
         I.getAllMetadataOtherThanDebugLoc(MDForInst);
-        for (const auto &MD : MDForInst)
-          incorporateMDNode(MD.second);
+        for (unsigned i = 0, e = MDForInst.size(); i != e; ++i)
+          incorporateMDNode(MDForInst[i].second);
+
         MDForInst.clear();
       }
   }
 
-  for (const auto &NMD : M.named_metadata())
-    for (const auto *MDOp : NMD.operands())
-      incorporateMDNode(MDOp);
+  for (Module::const_named_metadata_iterator I = M.named_metadata_begin(),
+         E = M.named_metadata_end(); I != E; ++I) {
+    const NamedMDNode *NMD = &*I;
+    for (unsigned i = 0, e = NMD->getNumOperands(); i != e; ++i)
+      incorporateMDNode(NMD->getOperand(i));
+  }
 }
 
 void TypeFinder::clear() {
@@ -141,8 +141,9 @@ void TypeFinder::incorporateValue(const Value *V) {
 
   // Look in operands for types.
   const User *U = cast<User>(V);
-  for (const auto &I : U->operands())
-    incorporateValue(&*I);
+  for (Constant::const_op_iterator I = U->op_begin(),
+         E = U->op_end(); I != E;++I)
+    incorporateValue(*I);
 }
 
 /// incorporateMDNode - This method is used to walk the operands of an MDNode to
@@ -153,7 +154,8 @@ void TypeFinder::incorporateMDNode(const MDNode *V) {
     return;
 
   // Look in operands for types.
-  for (Metadata *Op : V->operands()) {
+  for (unsigned i = 0, e = V->getNumOperands(); i != e; ++i) {
+    Metadata *Op = V->getOperand(i);
     if (!Op)
       continue;
     if (auto *N = dyn_cast<MDNode>(Op)) {

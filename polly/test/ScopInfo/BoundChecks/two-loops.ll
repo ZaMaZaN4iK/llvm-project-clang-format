@@ -21,11 +21,11 @@
 ;    }
 ;
 ; CHECK: Assumed Context:
-; CHECK:  [n] -> {  : n >= 101 }
+; CHECK:  [n] -> {  : n <= 100 }
 
-; AST: if (1 && 0 == n >= 101)
-; AST:     for (int c0 = 0; c0 < n; c0 += 1)
-; AST:       for (int c1 = 0; c1 < n - c0; c1 += 1)
+; AST: if (n <= 100)
+; AST:     for (int c0 = 0; c0 <= min(99, n - 1); c0 += 1)
+; AST:       for (int c1 = 0; c1 <= min(n - c0 - 1, -c0 + 99); c1 += 1)
 ; AST:         Stmt_if_end_7(c0, c1);
 ;
 ; AST-NOT: for
@@ -92,8 +92,8 @@ for.end.10:                                       ; preds = %for.cond
 
 declare void @exception(...) #1
 
-attributes #0 = { nounwind uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { noreturn "disable-tail-calls"="false" "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { nounwind uwtable "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #1 = { noreturn "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+sse,+sse2" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #2 = { noreturn nounwind }
 
 !llvm.ident = !{!0}

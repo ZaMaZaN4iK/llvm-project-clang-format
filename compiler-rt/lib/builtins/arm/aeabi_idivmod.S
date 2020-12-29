@@ -1,8 +1,9 @@
 //===-- aeabi_idivmod.S - EABI idivmod implementation ---------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,18 +20,16 @@
 #endif
 
         .syntax unified
-        .text
-        DEFINE_CODE_STATE
         .p2align 2
 DEFINE_COMPILERRT_FUNCTION(__aeabi_idivmod)
-#if defined(USE_THUMB_1)
+#if __ARM_ARCH_ISA_THUMB == 1
         push    {r0, r1, lr}
         bl      SYMBOL_NAME(__divsi3)
         pop     {r1, r2, r3} // now r0 = quot, r1 = num, r2 = denom
-        muls    r2, r0, r2   // r2 = quot * denom
+        muls    r2, r2, r0   // r2 = quot * denom
         subs    r1, r1, r2
         JMP     (r3)
-#else  // defined(USE_THUMB_1)
+#else
         push    { lr }
         sub     sp, sp, #4
         mov     r2, sp
@@ -43,7 +42,7 @@ DEFINE_COMPILERRT_FUNCTION(__aeabi_idivmod)
         ldr     r1, [sp]
         add     sp, sp, #4
         pop     { pc }
-#endif //  defined(USE_THUMB_1)
+#endif // __ARM_ARCH_ISA_THUMB == 1
 END_COMPILERRT_FUNCTION(__aeabi_idivmod)
 
 NO_EXEC_STACK_DIRECTIVE

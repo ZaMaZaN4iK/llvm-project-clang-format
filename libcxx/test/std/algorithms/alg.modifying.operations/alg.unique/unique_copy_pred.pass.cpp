@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,29 +15,13 @@
 //         && HasAssign<InIter::value_type, InIter::reference>
 //         && Constructible<InIter::value_type, InIter::reference>
 //         && CopyConstructible<Pred>
-//   constexpr OutIter        // constexpr after C++17
+//   OutIter
 //   unique_copy(InIter first, InIter last, OutIter result, Pred pred);
 
 #include <algorithm>
 #include <cassert>
 
-#include "test_macros.h"
 #include "test_iterators.h"
-
-#if TEST_STD_VER > 17
-TEST_CONSTEXPR bool test_constexpr() {
-          int ia[]       = {0, 1, 2, 2, 4};
-          int ib[]       = {0, 0, 0, 0, 0};
-    const int expected[] = {0, 1, 2, 4};
-
-    auto it = std::unique_copy(std::begin(ia), std::end(ia), std::begin(ib),
-                         [](int a, int b) {return a == b; });
-    return it == (std::begin(ib) + std::size(expected))
-        && *it == 0 // don't overwrite final value in output
-        && std::equal(std::begin(ib), it, std::begin(expected), std::end(expected))
-        ;
-    }
-#endif
 
 struct count_equal
 {
@@ -133,7 +118,7 @@ test()
     assert(count_equal::count == si-1);
 }
 
-int main(int, char**)
+int main()
 {
     test<input_iterator<const int*>, output_iterator<int*> >();
     test<input_iterator<const int*>, forward_iterator<int*> >();
@@ -164,10 +149,4 @@ int main(int, char**)
     test<const int*, bidirectional_iterator<int*> >();
     test<const int*, random_access_iterator<int*> >();
     test<const int*, int*>();
-
-#if TEST_STD_VER > 17
-    static_assert(test_constexpr());
-#endif
-
-  return 0;
 }

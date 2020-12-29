@@ -1,8 +1,9 @@
 //==- HexagonRegisterInfo.h - Hexagon Register Information Impl --*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,7 +15,8 @@
 #ifndef LLVM_LIB_TARGET_HEXAGON_HEXAGONREGISTERINFO_H
 #define LLVM_LIB_TARGET_HEXAGON_HEXAGONREGISTERINFO_H
 
-#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/MC/MachineLocation.h"
+#include "llvm/Target/TargetRegisterInfo.h"
 
 #define GET_REGINFO_HEADER
 #include "HexagonGenRegisterInfo.inc"
@@ -28,13 +30,12 @@ namespace Hexagon {
 
 class HexagonRegisterInfo : public HexagonGenRegisterInfo {
 public:
-  HexagonRegisterInfo(unsigned HwMode);
+  HexagonRegisterInfo();
 
   /// Code Generation virtual methods...
   const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF)
         const override;
-  const uint32_t *getCallPreservedMask(const MachineFunction &MF,
-        CallingConv::ID) const override;
+
 
   BitVector getReservedRegs(const MachineFunction &MF) const override;
 
@@ -60,17 +61,13 @@ public:
     return true;
   }
 
-  bool shouldCoalesce(MachineInstr *MI, const TargetRegisterClass *SrcRC,
-        unsigned SubReg, const TargetRegisterClass *DstRC, unsigned DstSubReg,
-        const TargetRegisterClass *NewRC, LiveIntervals &LIS) const override;
-
   // Debug information queries.
   unsigned getRARegister() const;
-  Register getFrameRegister(const MachineFunction &MF) const override;
+  unsigned getFrameRegister(const MachineFunction &MF) const override;
   unsigned getFrameRegister() const;
   unsigned getStackRegister() const;
 
-  unsigned getHexagonSubRegIndex(const TargetRegisterClass &RC,
+  unsigned getHexagonSubRegIndex(const TargetRegisterClass *RC,
         unsigned GenIdx) const;
 
   const MCPhysReg *getCallerSavedRegs(const MachineFunction *MF,
@@ -78,11 +75,8 @@ public:
 
   unsigned getFirstCallerSavedNonParamReg() const;
 
-  const TargetRegisterClass *
-  getPointerRegClass(const MachineFunction &MF,
-                     unsigned Kind = 0) const override;
-
   bool isEHReturnCalleeSaveReg(unsigned Reg) const;
+  bool isCalleeSaveReg(unsigned Reg) const;
 };
 
 } // end namespace llvm

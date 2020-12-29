@@ -1,8 +1,9 @@
 //===- LLLexer.cpp - Lexer for .ll Files ----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -156,10 +157,9 @@ static const char *isLabelTail(const char *CurPtr) {
 // Lexer definition.
 //===----------------------------------------------------------------------===//
 
-LLLexer::LLLexer(StringRef StartBuf, SourceMgr &SM, SMDiagnostic &Err,
+LLLexer::LLLexer(StringRef StartBuf, SourceMgr &sm, SMDiagnostic &Err,
                  LLVMContext &C)
-    : CurBuf(StartBuf), ErrorInfo(Err), SM(SM), Context(C), APFloatVal(0.0),
-      IgnoreColonInIdentifiers(false) {
+  : CurBuf(StartBuf), ErrorInfo(Err), SM(sm), Context(C), APFloatVal(0.0) {
   CurPtr = CurBuf.begin();
 }
 
@@ -219,10 +219,6 @@ lltok::Kind LLLexer::LexToken() {
       SkipLineComment();
       continue;
     case '!': return LexExclaim();
-    case '^':
-      return LexCaret();
-    case ':':
-      return lltok::colon;
     case '#': return LexHash();
     case '0': case '1': case '2': case '3': case '4':
     case '5': case '6': case '7': case '8': case '9':
@@ -332,22 +328,6 @@ bool LLLexer::ReadVarName() {
   return false;
 }
 
-// Lex an ID: [0-9]+. On success, the ID is stored in UIntVal and Token is
-// returned, otherwise the Error token is returned.
-lltok::Kind LLLexer::LexUIntID(lltok::Kind Token) {
-  if (!isdigit(static_cast<unsigned char>(CurPtr[0])))
-    return lltok::Error;
-
-  for (++CurPtr; isdigit(static_cast<unsigned char>(CurPtr[0])); ++CurPtr)
-    /*empty*/;
-
-  uint64_t Val = atoull(TokStart + 1, CurPtr);
-  if ((unsigned)Val != Val)
-    Error("invalid value number (too large)!");
-  UIntVal = unsigned(Val);
-  return Token;
-}
-
 lltok::Kind LLLexer::LexVar(lltok::Kind Var, lltok::Kind VarID) {
   // Handle StringConstant: \"[^\"]*\"
   if (CurPtr[0] == '"') {
@@ -377,7 +357,17 @@ lltok::Kind LLLexer::LexVar(lltok::Kind Var, lltok::Kind VarID) {
     return Var;
 
   // Handle VarID: [0-9]+
-  return LexUIntID(VarID);
+  if (isdigit(static_cast<unsigned char>(CurPtr[0]))) {
+    for (++CurPtr; isdigit(static_cast<unsigned char>(CurPtr[0])); ++CurPtr)
+      /*empty*/;
+
+    uint64_t Val = atoull(TokStart+1, CurPtr);
+    if ((unsigned)Val != Val)
+      Error("invalid value number (too large)!");
+    UIntVal = unsigned(Val);
+    return VarID;
+  }
+  return lltok::Error;
 }
 
 /// Lex all tokens that start with a % character.
@@ -430,18 +420,22 @@ lltok::Kind LLLexer::LexExclaim() {
   return lltok::exclaim;
 }
 
-/// Lex all tokens that start with a ^ character.
-///    SummaryID ::= ^[0-9]+
-lltok::Kind LLLexer::LexCaret() {
-  // Handle SummaryID: ^[0-9]+
-  return LexUIntID(lltok::SummaryID);
-}
-
 /// Lex all tokens that start with a # character.
 ///    AttrGrpID ::= #[0-9]+
 lltok::Kind LLLexer::LexHash() {
   // Handle AttrGrpID: #[0-9]+
-  return LexUIntID(lltok::AttrGrpID);
+  if (isdigit(static_cast<unsigned char>(CurPtr[0]))) {
+    for (++CurPtr; isdigit(static_cast<unsigned char>(CurPtr[0])); ++CurPtr)
+      /*empty*/;
+
+    uint64_t Val = atoull(TokStart+1, CurPtr);
+    if ((unsigned)Val != Val)
+      Error("invalid value number (too large)!");
+    UIntVal = unsigned(Val);
+    return lltok::AttrGrpID;
+  }
+
+  return lltok::Error;
 }
 
 /// Lex a label, integer type, keyword, or hexadecimal integer constant.
@@ -463,9 +457,8 @@ lltok::Kind LLLexer::LexIdentifier() {
       KeywordEnd = CurPtr;
   }
 
-  // If we stopped due to a colon, unless we were directed to ignore it,
-  // this really is a label.
-  if (!IgnoreColonInIdentifiers && *CurPtr == ':') {
+  // If we stopped due to a colon, this really is a label.
+  if (*CurPtr == ':') {
     StrVal.assign(StartChar-1, CurPtr++);
     return lltok::LabelStr;
   }
@@ -500,9 +493,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(true);    KEYWORD(false);
   KEYWORD(declare); KEYWORD(define);
   KEYWORD(global);  KEYWORD(constant);
-
-  KEYWORD(dso_local);
-  KEYWORD(dso_preemptable);
 
   KEYWORD(private);
   KEYWORD(internal);
@@ -552,15 +542,12 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(release);
   KEYWORD(acq_rel);
   KEYWORD(seq_cst);
-  KEYWORD(syncscope);
+  KEYWORD(singlethread);
 
   KEYWORD(nnan);
   KEYWORD(ninf);
   KEYWORD(nsz);
   KEYWORD(arcp);
-  KEYWORD(contract);
-  KEYWORD(reassoc);
-  KEYWORD(afn);
   KEYWORD(fast);
   KEYWORD(nuw);
   KEYWORD(nsw);
@@ -570,7 +557,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(align);
   KEYWORD(addrspace);
   KEYWORD(section);
-  KEYWORD(partition);
   KEYWORD(alias);
   KEYWORD(ifunc);
   KEYWORD(module);
@@ -585,7 +571,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(ccc);
   KEYWORD(fastcc);
   KEYWORD(coldcc);
-  KEYWORD(cfguard_checkcc);
   KEYWORD(x86_stdcallcc);
   KEYWORD(x86_fastcallcc);
   KEYWORD(x86_thiscallcc);
@@ -593,8 +578,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(arm_apcscc);
   KEYWORD(arm_aapcscc);
   KEYWORD(arm_aapcs_vfpcc);
-  KEYWORD(aarch64_vector_pcs);
-  KEYWORD(aarch64_sve_vector_pcs);
   KEYWORD(msp430_intrcc);
   KEYWORD(avr_intrcc);
   KEYWORD(avr_signalcc);
@@ -604,7 +587,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(spir_func);
   KEYWORD(intel_ocl_bicc);
   KEYWORD(x86_64_sysvcc);
-  KEYWORD(win64cc);
+  KEYWORD(x86_64_win64cc);
   KEYWORD(x86_regcallcc);
   KEYWORD(webkit_jscc);
   KEYWORD(swiftcc);
@@ -617,14 +600,10 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(hhvm_ccc);
   KEYWORD(cxx_fast_tlscc);
   KEYWORD(amdgpu_vs);
-  KEYWORD(amdgpu_ls);
-  KEYWORD(amdgpu_hs);
-  KEYWORD(amdgpu_es);
   KEYWORD(amdgpu_gs);
   KEYWORD(amdgpu_ps);
   KEYWORD(amdgpu_cs);
   KEYWORD(amdgpu_kernel);
-  KEYWORD(tailcc);
 
   KEYWORD(cc);
   KEYWORD(c);
@@ -653,7 +632,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(nobuiltin);
   KEYWORD(nocapture);
   KEYWORD(noduplicate);
-  KEYWORD(nofree);
   KEYWORD(noimplicitfloat);
   KEYWORD(noinline);
   KEYWORD(norecurse);
@@ -661,10 +639,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(nonnull);
   KEYWORD(noredzone);
   KEYWORD(noreturn);
-  KEYWORD(nosync);
-  KEYWORD(nocf_check);
   KEYWORD(nounwind);
-  KEYWORD(optforfuzzing);
   KEYWORD(optnone);
   KEYWORD(optsize);
   KEYWORD(readnone);
@@ -672,27 +647,19 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(returned);
   KEYWORD(returns_twice);
   KEYWORD(signext);
-  KEYWORD(speculatable);
   KEYWORD(sret);
   KEYWORD(ssp);
   KEYWORD(sspreq);
   KEYWORD(sspstrong);
-  KEYWORD(strictfp);
   KEYWORD(safestack);
-  KEYWORD(shadowcallstack);
   KEYWORD(sanitize_address);
-  KEYWORD(sanitize_hwaddress);
-  KEYWORD(sanitize_memtag);
   KEYWORD(sanitize_thread);
   KEYWORD(sanitize_memory);
-  KEYWORD(speculative_load_hardening);
   KEYWORD(swifterror);
   KEYWORD(swiftself);
   KEYWORD(uwtable);
-  KEYWORD(willreturn);
   KEYWORD(writeonly);
   KEYWORD(zeroext);
-  KEYWORD(immarg);
 
   KEYWORD(type);
   KEYWORD(opaque);
@@ -714,7 +681,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(xchg); KEYWORD(nand); KEYWORD(max); KEYWORD(min); KEYWORD(umax);
   KEYWORD(umin);
 
-  KEYWORD(vscale);
   KEYWORD(x);
   KEYWORD(blockaddress);
 
@@ -729,80 +695,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(cleanup);
   KEYWORD(catch);
   KEYWORD(filter);
-
-  // Summary index keywords.
-  KEYWORD(path);
-  KEYWORD(hash);
-  KEYWORD(gv);
-  KEYWORD(guid);
-  KEYWORD(name);
-  KEYWORD(summaries);
-  KEYWORD(flags);
-  KEYWORD(linkage);
-  KEYWORD(notEligibleToImport);
-  KEYWORD(live);
-  KEYWORD(dsoLocal);
-  KEYWORD(canAutoHide);
-  KEYWORD(function);
-  KEYWORD(insts);
-  KEYWORD(funcFlags);
-  KEYWORD(readNone);
-  KEYWORD(readOnly);
-  KEYWORD(noRecurse);
-  KEYWORD(returnDoesNotAlias);
-  KEYWORD(noInline);
-  KEYWORD(alwaysInline);
-  KEYWORD(calls);
-  KEYWORD(callee);
-  KEYWORD(hotness);
-  KEYWORD(unknown);
-  KEYWORD(hot);
-  KEYWORD(critical);
-  KEYWORD(relbf);
-  KEYWORD(variable);
-  KEYWORD(vTableFuncs);
-  KEYWORD(virtFunc);
-  KEYWORD(aliasee);
-  KEYWORD(refs);
-  KEYWORD(typeIdInfo);
-  KEYWORD(typeTests);
-  KEYWORD(typeTestAssumeVCalls);
-  KEYWORD(typeCheckedLoadVCalls);
-  KEYWORD(typeTestAssumeConstVCalls);
-  KEYWORD(typeCheckedLoadConstVCalls);
-  KEYWORD(vFuncId);
-  KEYWORD(offset);
-  KEYWORD(args);
-  KEYWORD(typeid);
-  KEYWORD(typeidCompatibleVTable);
-  KEYWORD(summary);
-  KEYWORD(typeTestRes);
-  KEYWORD(kind);
-  KEYWORD(unsat);
-  KEYWORD(byteArray);
-  KEYWORD(inline);
-  KEYWORD(single);
-  KEYWORD(allOnes);
-  KEYWORD(sizeM1BitWidth);
-  KEYWORD(alignLog2);
-  KEYWORD(sizeM1);
-  KEYWORD(bitMask);
-  KEYWORD(inlineBits);
-  KEYWORD(wpdResolutions);
-  KEYWORD(wpdRes);
-  KEYWORD(indir);
-  KEYWORD(singleImpl);
-  KEYWORD(branchFunnel);
-  KEYWORD(singleImplName);
-  KEYWORD(resByArg);
-  KEYWORD(byArg);
-  KEYWORD(uniformRetVal);
-  KEYWORD(uniqueRetVal);
-  KEYWORD(virtualConstProp);
-  KEYWORD(info);
-  KEYWORD(byte);
-  KEYWORD(bit);
-  KEYWORD(varFlags);
 
 #undef KEYWORD
 
@@ -838,8 +730,6 @@ lltok::Kind LLLexer::LexIdentifier() {
     }                                                                          \
   } while (false)
 
-  INSTKEYWORD(fneg,  FNeg);
-
   INSTKEYWORD(add,   Add);  INSTKEYWORD(fadd,   FAdd);
   INSTKEYWORD(sub,   Sub);  INSTKEYWORD(fsub,   FSub);
   INSTKEYWORD(mul,   Mul);  INSTKEYWORD(fmul,   FMul);
@@ -873,7 +763,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   INSTKEYWORD(invoke,      Invoke);
   INSTKEYWORD(resume,      Resume);
   INSTKEYWORD(unreachable, Unreachable);
-  INSTKEYWORD(callbr,      CallBr);
 
   INSTKEYWORD(alloca,      Alloca);
   INSTKEYWORD(load,        Load);
@@ -894,8 +783,6 @@ lltok::Kind LLLexer::LexIdentifier() {
   INSTKEYWORD(catchswitch,  CatchSwitch);
   INSTKEYWORD(catchpad,     CatchPad);
   INSTKEYWORD(cleanuppad,   CleanupPad);
-
-  INSTKEYWORD(freeze,       Freeze);
 
 #undef INSTKEYWORD
 
@@ -922,25 +809,15 @@ lltok::Kind LLLexer::LexIdentifier() {
     return lltok::DIFlag;
   }
 
-  if (Keyword.startswith("DISPFlag")) {
-    StrVal.assign(Keyword.begin(), Keyword.end());
-    return lltok::DISPFlag;
-  }
-
   if (Keyword.startswith("CSK_")) {
     StrVal.assign(Keyword.begin(), Keyword.end());
     return lltok::ChecksumKind;
   }
 
   if (Keyword == "NoDebug" || Keyword == "FullDebug" ||
-      Keyword == "LineTablesOnly" || Keyword == "DebugDirectivesOnly") {
+      Keyword == "LineTablesOnly") {
     StrVal.assign(Keyword.begin(), Keyword.end());
     return lltok::EmissionKind;
-  }
-
-  if (Keyword == "GNU" || Keyword == "None" || Keyword == "Default") {
-    StrVal.assign(Keyword.begin(), Keyword.end());
-    return lltok::NameTableKind;
   }
 
   // Check for [us]0x[0-9A-Fa-f]+ which are Hexadecimal constant generated by
@@ -1064,17 +941,7 @@ lltok::Kind LLLexer::LexDigitOrNegative() {
   for (; isdigit(static_cast<unsigned char>(CurPtr[0])); ++CurPtr)
     /*empty*/;
 
-  // Check if this is a fully-numeric label:
-  if (isdigit(TokStart[0]) && CurPtr[0] == ':') {
-    uint64_t Val = atoull(TokStart, CurPtr);
-    ++CurPtr; // Skip the colon.
-    if ((unsigned)Val != Val)
-      Error("invalid value number (too large)!");
-    UIntVal = unsigned(Val);
-    return lltok::LabelID;
-  }
-
-  // Check to see if this really is a string label, e.g. "-1:".
+  // Check to see if this really is a label afterall, e.g. "-1:".
   if (isLabelChar(CurPtr[0]) || CurPtr[0] == ':') {
     if (const char *End = isLabelTail(CurPtr)) {
       StrVal.assign(TokStart, End-1);

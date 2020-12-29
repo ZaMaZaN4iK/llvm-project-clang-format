@@ -1,15 +1,14 @@
 // -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
-
-// XFAIL: dylib-has-no-bad_variant_access && !libcpp-no-exceptions
 
 // <variant>
 
@@ -22,10 +21,9 @@
 #include <string>
 #include <type_traits>
 #include <variant>
-#include <memory>
 
 #include "test_macros.h"
-#include "variant_test_helpers.h"
+#include "variant_test_helpers.hpp"
 
 namespace MetaHelpers {
 
@@ -58,28 +56,6 @@ struct ThrowsCtorT {
   ThrowsCtorT() : value(0) {}
   ThrowsCtorT(int) noexcept(false) { throw 42; }
   ThrowsCtorT &operator=(int v) noexcept {
-    value = v;
-    return *this;
-  }
-};
-
-struct MoveCrashes {
-  int value;
-  MoveCrashes(int v = 0) noexcept : value{v} {}
-  MoveCrashes(MoveCrashes &&) noexcept { assert(false); }
-  MoveCrashes &operator=(MoveCrashes &&) noexcept { assert(false); return *this; }
-  MoveCrashes &operator=(int v) noexcept {
-    value = v;
-    return *this;
-  }
-};
-
-struct ThrowsCtorTandMove {
-  int value;
-  ThrowsCtorTandMove() : value(0) {}
-  ThrowsCtorTandMove(int) noexcept(false) { throw 42; }
-  ThrowsCtorTandMove(ThrowsCtorTandMove &&) noexcept(false) { assert(false); }
-  ThrowsCtorTandMove &operator=(int v) noexcept {
     value = v;
     return *this;
   }
@@ -123,7 +99,7 @@ void test_T_assignment_noexcept() {
 
 void test_T_assignment_sfinae() {
   {
-    using V = std::variant<long, long long>;
+    using V = std::variant<long, unsigned>;
     static_assert(!std::is_assignable<V, int>::value, "ambiguous");
   }
   {
@@ -134,32 +110,6 @@ void test_T_assignment_sfinae() {
     using V = std::variant<std::string, void *>;
     static_assert(!std::is_assignable<V, int>::value, "no matching operator=");
   }
-  {
-    using V = std::variant<std::string, float>;
-    static_assert(std::is_assignable<V, int>::value == VariantAllowsNarrowingConversions,
-    "no matching operator=");
-  }
-  {
-    using V = std::variant<std::unique_ptr<int>, bool>;
-    static_assert(!std::is_assignable<V, std::unique_ptr<char>>::value,
-                  "no explicit bool in operator=");
-    struct X {
-      operator void*();
-    };
-    static_assert(!std::is_assignable<V, X>::value,
-                  "no boolean conversion in operator=");
-    static_assert(!std::is_assignable<V, std::false_type>::value,
-                  "no converted to bool in operator=");
-  }
-  {
-    struct X {};
-    struct Y {
-      operator X();
-    };
-    using V = std::variant<X>;
-    static_assert(std::is_assignable<V, Y>::value,
-                  "regression on user-defined conversions in operator=");
-  }
 #if !defined(TEST_VARIANT_HAS_NO_REFERENCES)
   {
     using V = std::variant<int, int &&>;
@@ -169,7 +119,7 @@ void test_T_assignment_sfinae() {
     using V = std::variant<int, const int &>;
     static_assert(!std::is_assignable<V, int>::value, "ambiguous");
   }
-#endif // TEST_VARIANT_HAS_NO_REFERENCES
+#endif
 }
 
 void test_T_assignment_basic() {
@@ -187,39 +137,6 @@ void test_T_assignment_basic() {
     v = 43l;
     assert(v.index() == 1);
     assert(std::get<1>(v) == 43);
-  }
-#ifndef TEST_VARIANT_ALLOWS_NARROWING_CONVERSIONS
-  {
-    std::variant<unsigned, long> v;
-    v = 42;
-    assert(v.index() == 1);
-    assert(std::get<1>(v) == 42);
-    v = 43u;
-    assert(v.index() == 0);
-    assert(std::get<0>(v) == 43);
-  }
-#endif
-  {
-    std::variant<std::string, bool> v = true;
-    v = "bar";
-    assert(v.index() == 0);
-    assert(std::get<0>(v) == "bar");
-  }
-  {
-    std::variant<bool, std::unique_ptr<int>> v;
-    v = nullptr;
-    assert(v.index() == 1);
-    assert(std::get<1>(v) == nullptr);
-  }
-  {
-    std::variant<bool volatile, int> v = 42;
-    v = false;
-    assert(v.index() == 0);
-    assert(!std::get<0>(v));
-    bool lvt = true;
-    v = lvt;
-    assert(v.index() == 0);
-    assert(std::get<0>(v));
   }
 #if !defined(TEST_VARIANT_HAS_NO_REFERENCES)
   {
@@ -239,7 +156,7 @@ void test_T_assignment_basic() {
     assert(v.index() == 2);
     assert(std::get<2>(v) == 42);
   }
-#endif // TEST_VARIANT_HAS_NO_REFERENCES
+#endif
 }
 
 void test_T_assignment_performs_construction() {
@@ -250,11 +167,9 @@ void test_T_assignment_performs_construction() {
     V v(std::in_place_type<std::string>, "hello");
     try {
       v = 42;
-      assert(false);
     } catch (...) { /* ... */
     }
-    assert(v.index() == 0);
-    assert(std::get<0>(v) == "hello");
+    assert(v.valueless_by_exception());
   }
   {
     using V = std::variant<ThrowsAssignT, std::string>;
@@ -263,7 +178,7 @@ void test_T_assignment_performs_construction() {
     assert(v.index() == 0);
     assert(std::get<0>(v).value == 42);
   }
-#endif // TEST_HAS_NO_EXCEPTIONS
+#endif
 }
 
 void test_T_assignment_performs_assignment() {
@@ -305,15 +220,13 @@ void test_T_assignment_performs_assignment() {
     assert(v.index() == 1);
     assert(std::get<1>(v).value == 100);
   }
-#endif // TEST_HAS_NO_EXCEPTIONS
+#endif
 }
 
-int main(int, char**) {
+int main() {
   test_T_assignment_basic();
   test_T_assignment_performs_construction();
   test_T_assignment_performs_assignment();
   test_T_assignment_noexcept();
   test_T_assignment_sfinae();
-
-  return 0;
 }

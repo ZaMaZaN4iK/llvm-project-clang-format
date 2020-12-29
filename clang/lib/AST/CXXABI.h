@@ -1,8 +1,9 @@
 //===----- CXXABI.h - Interface to C++ ABIs ---------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -30,16 +31,9 @@ class CXXABI {
 public:
   virtual ~CXXABI();
 
-  struct MemberPointerInfo {
-    uint64_t Width;
-    unsigned Align;
-    bool HasPadding;
-  };
-
-  /// Returns the width and alignment of a member pointer in bits, as well as
-  /// whether it has padding.
-  virtual MemberPointerInfo
-  getMemberPointerInfo(const MemberPointerType *MPT) const = 0;
+  /// Returns the width and alignment of a member pointer in bits.
+  virtual std::pair<uint64_t, unsigned>
+  getMemberPointerWidthAndAlign(const MemberPointerType *MPT) const = 0;
 
   /// Returns the default calling convention for C++ methods.
   virtual CallingConv getDefaultMethodCallConv(bool isVariadic) const = 0;

@@ -1,30 +1,31 @@
 //===-- Opcode.h ------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef lldb_Opcode_h
 #define lldb_Opcode_h
 
-#include "lldb/Utility/Endian.h"
-#include "lldb/lldb-enumerations.h"
+// C Includes
+#include <string.h>
 
+// C++ Includes
+// Other libraries and framework includes
 #include "llvm/Support/MathExtras.h"
 
-#include <assert.h>
-#include <stdint.h>
-#include <string.h>
+// Project includes
+#include "lldb/Host/Endian.h"
+#include "lldb/lldb-public.h"
 
 namespace lldb {
 class SBInstruction;
-}
+} // namespace lldb
 
 namespace lldb_private {
-class DataExtractor;
-class Stream;
 
 class Opcode {
 public:

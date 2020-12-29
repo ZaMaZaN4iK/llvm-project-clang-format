@@ -1,10 +1,9 @@
-// RUN: %clang_builtins %s %librt -o %t && %run %t
-// REQUIRES: librt_has_negdf2vfp
 //===-- negdf2vfp_test.c - Test __negdf2vfp -------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,7 +17,7 @@
 #include <math.h>
 
 
-#if __arm__ && __VFP_FP__
+#if __arm__
 extern COMPILER_RT_ABI double __negdf2vfp(double a);
 
 int test__negdf2vfp(double a)
@@ -34,7 +33,7 @@ int test__negdf2vfp(double a)
 
 int main()
 {
-#if __arm__ && __VFP_FP__
+#if __arm__
     if (test__negdf2vfp(1.0))
         return 1;
     if (test__negdf2vfp(HUGE_VALF))

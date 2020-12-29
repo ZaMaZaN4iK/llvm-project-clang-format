@@ -1,8 +1,9 @@
 //===-- Timeout.h -----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,8 +11,7 @@
 #define liblldb_Timeout_h_
 
 #include "llvm/ADT/Optional.h"
-#include "llvm/Support/Chrono.h"
-#include "llvm/Support/FormatProviders.h"
+#include <chrono>
 
 namespace lldb_private {
 
@@ -21,9 +21,9 @@ namespace lldb_private {
 // from Timeout<std::milli> to Timeout<std::micro>.
 //
 // The intended meaning of the values is:
-// - llvm::None - no timeout, the call should wait forever - 0 - poll, only
-// complete the call if it will not block - >0 - wait for a given number of
-// units for the result
+// - llvm::None - no timeout, the call should wait forever
+// - 0 - poll, only complete the call if it will not block
+// - >0 - wait for a given number of units for the result
 template <typename Ratio>
 class Timeout : public llvm::Optional<std::chrono::duration<int64_t, Ratio>> {
 private:
@@ -51,20 +51,5 @@ public:
 };
 
 } // namespace lldb_private
-
-namespace llvm {
-template<typename Ratio>
-struct format_provider<lldb_private::Timeout<Ratio>, void> {
-  static void format(const lldb_private::Timeout<Ratio> &timeout,
-                     raw_ostream &OS, StringRef Options) {
-    typedef typename lldb_private::Timeout<Ratio>::value_type Dur;
-
-    if (!timeout)
-      OS << "<infinite>";
-    else
-      format_provider<Dur>::format(*timeout, OS, Options);
-  }
-};
-}
 
 #endif // liblldb_Timeout_h_

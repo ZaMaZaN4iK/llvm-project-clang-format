@@ -1,4 +1,4 @@
-// RUN: %clang_analyze_cc1 -Wno-conversion -Wno-tautological-constant-compare -analyzer-checker=core,apiModeling,alpha.core.Conversion -verify %s
+// RUN: %clang_cc1 -Wno-conversion -analyze -analyzer-checker=core,alpha.core.Conversion -verify %s
 
 unsigned char U8;
 signed char S8;
@@ -9,67 +9,9 @@ void assign(unsigned U, signed S) {
   if (U > 300)
     S8 = U; // expected-warning {{Loss of precision in implicit conversion}}
   if (S > 10)
-    U8 = S; // no-warning
+    U8 = S;
   if (U < 200)
-    S8 = U; // no-warning
-}
-
-void addAssign() {
-  unsigned long L = 1000;
-  int I = -100;
-  U8 += L; // expected-warning {{Loss of precision in implicit conversion}}
-  L += I; // no-warning
-}
-
-void subAssign() {
-  unsigned long L = 1000;
-  int I = -100;
-  U8 -= L; // expected-warning {{Loss of precision in implicit conversion}}
-  L -= I; // no-warning
-}
-
-void mulAssign() {
-  unsigned long L = 1000;
-  int I = -1;
-  U8 *= L; // expected-warning {{Loss of precision in implicit conversion}}
-  L *= I;  // expected-warning {{Loss of sign in implicit conversion}}
-  I = 10;
-  L *= I; // no-warning
-}
-
-void divAssign() {
-  unsigned long L = 1000;
-  int I = -1;
-  U8 /= L; // no-warning
-  L /= I; // expected-warning {{Loss of sign in implicit conversion}}
-}
-
-void remAssign() {
-  unsigned long L = 1000;
-  int I = -1;
-  U8 %= L; // no-warning
-  L %= I; // expected-warning {{Loss of sign in implicit conversion}}
-}
-
-void andAssign() {
-  unsigned long L = 1000;
-  int I = -1;
-  U8 &= L; // no-warning
-  L &= I; // expected-warning {{Loss of sign in implicit conversion}}
-}
-
-void orAssign() {
-  unsigned long L = 1000;
-  int I = -1;
-  U8 |= L; // expected-warning {{Loss of precision in implicit conversion}}
-  L |= I;  // expected-warning {{Loss of sign in implicit conversion}}
-}
-
-void xorAssign() {
-  unsigned long L = 1000;
-  int I = -1;
-  U8 ^= L; // expected-warning {{Loss of precision in implicit conversion}}
-  L ^= I;  // expected-warning {{Loss of sign in implicit conversion}}
+    S8 = U;
 }
 
 void init1() {
@@ -79,7 +21,7 @@ void init1() {
 
 void relational(unsigned U, signed S) {
   if (S > 10) {
-    if (U < S) { // no-warning
+    if (U < S) {
     }
   }
   if (S < -10) {
@@ -90,14 +32,14 @@ void relational(unsigned U, signed S) {
 
 void multiplication(unsigned U, signed S) {
   if (S > 5)
-    S = U * S; // no-warning
+    S = U * S;
   if (S < -10)
     S = U * S; // expected-warning {{Loss of sign}}
 }
 
 void division(unsigned U, signed S) {
   if (S > 5)
-    S = U / S; // no-warning
+    S = U / S;
   if (S < -10)
     S = U / S; // expected-warning {{Loss of sign}}
 }
@@ -137,21 +79,16 @@ void dontwarn5() {
   U8 = S + 10;
 }
 
-char dontwarn6(long long x) {
-  long long y = 42;
-  y += x;
-  return y == 42;
-}
 
-
-// C library functions, handled via apiModeling.StdCLibraryFunctions
+// false positives..
 
 int isascii(int c);
-void libraryFunction1() {
+void falsePositive1() {
   char kb2[5];
   int X = 1000;
   if (isascii(X)) {
-    kb2[0] = X; // no-warning
+    // FIXME: should not warn here:
+    kb2[0] = X; // expected-warning {{Loss of precision}}
   }
 }
 
@@ -160,8 +97,8 @@ typedef struct FILE {} FILE; int getc(FILE *stream);
 # define EOF (-1)
 char reply_string[8192];
 FILE *cin;
-extern int dostuff(void);
-int libraryFunction2() {
+extern int dostuff (void);
+int falsePositive2() {
   int c, n;
   int dig;
   char *cp = reply_string;
@@ -180,31 +117,9 @@ int libraryFunction2() {
       if (c == EOF)
         return(4);
       if (cp < &reply_string[sizeof(reply_string) - 1])
-        *cp++ = c; // no-warning
+        // FIXME: should not warn here:
+        *cp++ = c; // expected-warning {{Loss of precision}}
     }
   }
 }
 
-double floating_point(long long a, int b) {
-  if (a > 1LL << 55) {
-    double r = a; // expected-warning {{Loss of precision}}
-    return r;
-  } else if (b > 1 << 25) {
-    float f = b; // expected-warning {{Loss of precision}}
-    return f;
-  }
-  return 137;
-}
-
-double floating_point2() {
-  int a = 1 << 24;
-  long long b = 1LL << 53;
-  float f = a; // no-warning
-  double d = b; // no-warning
-  return d - f;
-}
-
-int floating_point_3(unsigned long long a) {
-  double b = a; // no-warning
-  return 42;
-}

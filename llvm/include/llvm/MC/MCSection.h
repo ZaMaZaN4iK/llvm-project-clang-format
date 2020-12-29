@@ -1,8 +1,9 @@
 //===- MCSection.h - Machine Code Sections ----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,20 +16,20 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/ilist.h"
+#include "llvm/ADT/ilist_node.h"
 #include "llvm/MC/MCFragment.h"
 #include "llvm/MC/SectionKind.h"
-#include "llvm/Support/Alignment.h"
-#include <cassert>
-#include <utility>
+#include "llvm/Support/Compiler.h"
 
 namespace llvm {
-
 class MCAsmInfo;
+class MCAssembler;
 class MCContext;
 class MCExpr;
+class MCFragment;
+class MCSection;
 class MCSymbol;
 class raw_ostream;
-class Triple;
 
 template <> struct ilist_alloc_traits<MCFragment> {
   static void deleteNode(MCFragment *V);
@@ -38,47 +39,50 @@ template <> struct ilist_alloc_traits<MCFragment> {
 /// current translation unit.  The MCContext class uniques and creates these.
 class MCSection {
 public:
-  enum SectionVariant { SV_COFF = 0, SV_ELF, SV_MachO, SV_Wasm, SV_XCOFF };
+  enum SectionVariant { SV_COFF = 0, SV_ELF, SV_MachO };
 
-  /// Express the state of bundle locked groups while emitting code.
+  /// \brief Express the state of bundle locked groups while emitting code.
   enum BundleLockStateType {
     NotBundleLocked,
     BundleLocked,
     BundleLockedAlignToEnd
   };
 
-  using FragmentListType = iplist<MCFragment>;
+  typedef iplist<MCFragment> FragmentListType;
 
-  using const_iterator = FragmentListType::const_iterator;
-  using iterator = FragmentListType::iterator;
+  typedef FragmentListType::const_iterator const_iterator;
+  typedef FragmentListType::iterator iterator;
 
-  using const_reverse_iterator = FragmentListType::const_reverse_iterator;
-  using reverse_iterator = FragmentListType::reverse_iterator;
+  typedef FragmentListType::const_reverse_iterator const_reverse_iterator;
+  typedef FragmentListType::reverse_iterator reverse_iterator;
 
 private:
+  MCSection(const MCSection &) = delete;
+  void operator=(const MCSection &) = delete;
+
   MCSymbol *Begin;
   MCSymbol *End = nullptr;
   /// The alignment requirement of this section.
-  Align Alignment;
+  unsigned Alignment = 1;
   /// The section index in the assemblers section list.
   unsigned Ordinal = 0;
   /// The index of this section in the layout order.
   unsigned LayoutOrder;
 
-  /// Keeping track of bundle-locked state.
+  /// \brief Keeping track of bundle-locked state.
   BundleLockStateType BundleLockState = NotBundleLocked;
 
-  /// Current nesting depth of bundle_lock directives.
+  /// \brief Current nesting depth of bundle_lock directives.
   unsigned BundleLockNestingDepth = 0;
 
-  /// We've seen a bundle_lock directive but not its first instruction
+  /// \brief We've seen a bundle_lock directive but not its first instruction
   /// yet.
-  bool BundleGroupBeforeFirstInst : 1;
+  unsigned BundleGroupBeforeFirstInst : 1;
 
   /// Whether this section has had instructions emitted into it.
-  bool HasInstructions : 1;
+  unsigned HasInstructions : 1;
 
-  bool IsRegistered : 1;
+  unsigned IsRegistered : 1;
 
   MCDummyFragment DummyFragment;
 
@@ -88,26 +92,13 @@ private:
   /// below that number.
   SmallVector<std::pair<unsigned, MCFragment *>, 1> SubsectionFragmentMap;
 
-  /// State for tracking labels that don't yet have Fragments
-  struct PendingLabel {
-    MCSymbol* Sym;
-    unsigned Subsection;
-    PendingLabel(MCSymbol* Sym, unsigned Subsection = 0)
-      : Sym(Sym), Subsection(Subsection) {}
-  };
-  SmallVector<PendingLabel, 2> PendingLabels;
-
 protected:
+  MCSection(SectionVariant V, SectionKind K, MCSymbol *Begin);
   SectionVariant Variant;
   SectionKind Kind;
-
-  MCSection(SectionVariant V, SectionKind K, MCSymbol *Begin);
   ~MCSection();
 
 public:
-  MCSection(const MCSection &) = delete;
-  MCSection &operator=(const MCSection &) = delete;
-
   SectionKind getKind() const { return Kind; }
 
   SectionVariant getVariant() const { return Variant; }
@@ -123,8 +114,8 @@ public:
   MCSymbol *getEndSymbol(MCContext &Ctx);
   bool hasEnded() const;
 
-  unsigned getAlignment() const { return Alignment.value(); }
-  void setAlignment(Align Value) { Alignment = Value; }
+  unsigned getAlignment() const { return Alignment; }
+  void setAlignment(unsigned Value) { Alignment = Value; }
 
   unsigned getOrdinal() const { return Ordinal; }
   void setOrdinal(unsigned Value) { Ordinal = Value; }
@@ -168,12 +159,17 @@ public:
   iterator end() { return Fragments.end(); }
   const_iterator end() const { return Fragments.end(); }
 
+  reverse_iterator rbegin() { return Fragments.rbegin(); }
+  const_reverse_iterator rbegin() const { return Fragments.rbegin(); }
+
+  reverse_iterator rend() { return Fragments.rend(); }
+  const_reverse_iterator rend() const  { return Fragments.rend(); }
+
   MCSection::iterator getSubsectionInsertionPoint(unsigned Subsection);
 
-  void dump() const;
+  void dump();
 
-  virtual void PrintSwitchToSection(const MCAsmInfo &MAI, const Triple &T,
-                                    raw_ostream &OS,
+  virtual void PrintSwitchToSection(const MCAsmInfo &MAI, raw_ostream &OS,
                                     const MCExpr *Subsection) const = 0;
 
   /// Return true if a .align directive should use "optimized nops" to fill
@@ -183,20 +179,8 @@ public:
   /// Check whether this section is "virtual", that is has no actual object
   /// file contents.
   virtual bool isVirtualSection() const = 0;
-
-  /// Add a pending label for the requested subsection. This label will be
-  /// associated with a fragment in flushPendingLabels()
-  void addPendingLabel(MCSymbol* label, unsigned Subsection = 0);
-
-  /// Associate all pending labels in a subsection with a fragment.
-  void flushPendingLabels(MCFragment *F, uint64_t FOffset = 0,
-			  unsigned Subsection = 0);
-
-  /// Associate all pending labels with empty data fragments. One fragment
-  /// will be created for each subsection as necessary.
-  void flushPendingLabels();
 };
 
 } // end namespace llvm
 
-#endif // LLVM_MC_MCSECTION_H
+#endif

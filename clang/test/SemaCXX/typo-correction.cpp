@@ -1,5 +1,4 @@
 // RUN: %clang_cc1 -fspell-checking-limit 0 -verify -Wno-c++11-extensions %s
-// RUN: %clang_cc1 -fspell-checking-limit 0 -verify -Wno-c++11-extensions -std=c++20 %s
 
 namespace PR21817{
 int a(-rsing[2]); // expected-error {{undeclared identifier 'rsing'; did you mean 'using'?}}
@@ -345,20 +344,20 @@ void zif::nab(int) {
 
 namespace TemplateFunction {
 template <class T>
-void fnA(T) { }  // expected-note {{'::TemplateFunction::fnA' declared here}}
+void A(T) { }  // expected-note {{'::TemplateFunction::A' declared here}}
 
 template <class T>
-void fnB(T) { }  // expected-note {{'::TemplateFunction::fnB' declared here}}
+void B(T) { }  // expected-note {{'::TemplateFunction::B' declared here}}
 
 class Foo {
  public:
-  void fnA(int, int) {}
-  void fnB() {}
+  void A(int, int) {}
+  void B() {}
 };
 
 void test(Foo F, int num) {
-  F.fnA(num);  // expected-error {{too few arguments to function call, expected 2, have 1; did you mean '::TemplateFunction::fnA'?}}
-  F.fnB(num);  // expected-error {{too many arguments to function call, expected 0, have 1; did you mean '::TemplateFunction::fnB'?}}
+  F.A(num);  // expected-error {{too few arguments to function call, expected 2, have 1; did you mean '::TemplateFunction::A'?}}
+  F.B(num);  // expected-error {{too many arguments to function call, expected 0, have 1; did you mean '::TemplateFunction::B'?}}
 }
 }
 namespace using_suggestion_val_dropped_specifier {
@@ -412,7 +411,7 @@ public:
 
 void testAccess() {
   Figure obj;
-  switch (obj.type()) {
+  switch (obj.type()) {  // expected-warning {{enumeration values 'SQUARE', 'TRIANGLE', and 'CIRCLE' not handled in switch}}
   case SQUARE:  // expected-error-re {{use of undeclared identifier 'SQUARE'{{$}}}}
   case TRIANGLE:  // expected-error-re {{use of undeclared identifier 'TRIANGLE'{{$}}}}
   case CIRCE:  // expected-error-re {{use of undeclared identifier 'CIRCE'{{$}}}}
@@ -439,7 +438,7 @@ namespace PR17394 {
     long zzzzzzzzzz;
   };
   class B : private A {};
-  B zzzzzzzzzy<>; // expected-error {{template specialization requires 'template<>'}} expected-error {{no variable template matches specialization}}
+  B zzzzzzzzzy<>; // expected-error {{expected ';' after top level declarator}}{}
 }
 
 namespace correct_fields_in_member_funcs {
@@ -524,23 +523,20 @@ PR18685::BitVector Map;  // expected-error-re {{no type named 'BitVector' in nam
 namespace shadowed_template {
 template <typename T> class Fizbin {};  // expected-note {{'::shadowed_template::Fizbin' declared here}}
 class Baz {
-   int Fizbin;
-   Fizbin<int> qux; // expected-error {{no template named 'Fizbin'; did you mean '::shadowed_template::Fizbin'?}}
+   int Fizbin();
+   // TODO: Teach the parser to recover from the typo correction instead of
+   // continuing to treat the template name as an implicit-int declaration.
+   Fizbin<int> qux;  // expected-error {{unknown type name 'Fizbin'; did you mean '::shadowed_template::Fizbin'?}} \
+                     // expected-error {{expected member name or ';' after declaration specifiers}}
 };
-}
-
-namespace no_correct_template_id_to_non_template {
-  struct Frobnatz {}; // expected-note {{declared here}}
-  Frobnats fn; // expected-error {{unknown type name 'Frobnats'; did you mean 'Frobnatz'?}}
-  Frobnats<int> fni; // expected-error-re {{no template named 'Frobnats'{{$}}}}
 }
 
 namespace PR18852 {
 void func() {
   struct foo {
-    void barberry() {}
+    void bar() {}
   };
-  barberry();  // expected-error-re {{use of undeclared identifier 'barberry'{{$}}}}
+  bar();  // expected-error-re {{use of undeclared identifier 'bar'{{$}}}}
 }
 
 class Thread {
@@ -648,7 +644,7 @@ namespace testArraySubscriptIndex {
 
 namespace crash_has_include {
 int has_include(int); // expected-note {{'has_include' declared here}}
-// expected-error@+1 {{'__has_include' must be used within a preprocessing directive}}
+// expected-error@+1 {{__has_include must be used within a preprocessing directive}}
 int foo = __has_include(42); // expected-error {{use of undeclared identifier '__has_include'; did you mean 'has_include'?}}
 }
 
@@ -679,34 +675,7 @@ namespace {
 struct a0is0 {};
 struct b0is0 {};
 int g() {
-  0 [
+  0 [                 // expected-error {{subscripted value is not an array}}
       sizeof(c0is0)]; // expected-error {{use of undeclared identifier}}
 };
-}
-
-namespace avoidRedundantRedefinitionErrors {
-class Class {
-  void function(int pid); // expected-note {{'function' declared here}}
-};
-
-void Class::function2(int pid) { // expected-error {{out-of-line definition of 'function2' does not match any declaration in 'avoidRedundantRedefinitionErrors::Class'; did you mean 'function'?}}
-}
-
-// Expected no redefinition error here.
-void Class::function(int pid) { // expected-note {{previous definition is here}}
-}
-
-void Class::function(int pid) { // expected-error {{redefinition of 'function'}}
-}
-
-namespace ns {
-void create_test(); // expected-note {{'create_test' declared here}}
-}
-
-void ns::create_test2() { // expected-error {{out-of-line definition of 'create_test2' does not match any declaration in namespace 'avoidRedundantRedefinitionErrors::ns'; did you mean 'create_test'?}}
-}
-
-// Expected no redefinition error here.
-void ns::create_test() {
-}
 }

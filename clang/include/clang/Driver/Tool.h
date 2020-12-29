@@ -1,8 +1,9 @@
 //===--- Tool.h - Compilation Tools -----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -34,7 +35,7 @@ class Tool {
 public:
   // Documents the level of support for response files in this tool.
   // Response files are necessary if the command line gets too large,
-  // requiring the arguments to be transferred to a file.
+  // requiring the arguments to be transfered to a file.
   enum ResponseFileSupport {
     // Provides full support for response files, which means we can transfer
     // all tool input arguments to a file. E.g.: clang, gcc, binutils and MSVC
@@ -87,12 +88,12 @@ public:
   virtual bool hasIntegratedCPP() const = 0;
   virtual bool isLinkJob() const { return false; }
   virtual bool isDsymutilJob() const { return false; }
-  /// Returns the level of support for response files of this tool,
+  /// \brief Returns the level of support for response files of this tool,
   /// whether it accepts arguments to be passed via a file on disk.
   ResponseFileSupport getResponseFilesSupport() const {
     return ResponseSupport;
   }
-  /// Returns which encoding the response file should use. This is only
+  /// \brief Returns which encoding the response file should use. This is only
   /// relevant on Windows platforms where there are different encodings being
   /// accepted for different tools. On UNIX, UTF8 is universal.
   ///
@@ -107,11 +108,11 @@ public:
   llvm::sys::WindowsEncodingMethod getResponseFileEncoding() const {
     return ResponseEncoding;
   }
-  /// Returns which prefix to use when passing the name of a response
+  /// \brief Returns which prefix to use when passing the name of a response
   /// file as a parameter to this tool.
   const char *getResponseFileFlag() const { return ResponseFlag; }
 
-  /// Does this tool have "good" standardized diagnostics, or should the
+  /// \brief Does this tool have "good" standardized diagnostics, or should the
   /// driver add an additional "command failed" diagnostic on failures.
   virtual bool hasGoodDiagnostics() const { return false; }
 

@@ -1,16 +1,23 @@
 //===-- ProcessKDPLog.h -----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ProcessKDPLog_h_
 #define liblldb_ProcessKDPLog_h_
 
-#include "lldb/Utility/Log.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
 
+// Project includes
+#include "lldb/Core/Log.h"
+
+#define KDP_LOG_VERBOSE (1u << 0)
 #define KDP_LOG_PROCESS (1u << 1)
 #define KDP_LOG_THREAD (1u << 2)
 #define KDP_LOG_PACKETS (1u << 3)
@@ -26,17 +33,21 @@
 #define KDP_LOG_ALL (UINT32_MAX)
 #define KDP_LOG_DEFAULT KDP_LOG_PACKETS
 
-namespace lldb_private {
 class ProcessKDPLog {
-  static Log::Channel g_channel;
-
 public:
-  static void Initialize();
+  static lldb_private::Log *GetLogIfAllCategoriesSet(uint32_t mask = 0);
 
-  static Log *GetLogIfAllCategoriesSet(uint32_t mask) {
-    return g_channel.GetLogIfAll(mask);
-  }
+  static void DisableLog(const char **categories,
+                         lldb_private::Stream *feedback_strm);
+
+  static lldb_private::Log *EnableLog(lldb::StreamSP &log_stream_sp,
+                                      uint32_t log_options,
+                                      const char **categories,
+                                      lldb_private::Stream *feedback_strm);
+
+  static void ListLogCategories(lldb_private::Stream *strm);
+
+  static void LogIf(uint32_t mask, const char *format, ...);
 };
-}
 
 #endif // liblldb_ProcessKDPLog_h_

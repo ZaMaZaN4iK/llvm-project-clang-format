@@ -1,8 +1,9 @@
 //===-- llvm/Target/ARMTargetObjectFile.h - ARM Object Info -----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,14 +11,19 @@
 #define LLVM_LIB_TARGET_ARM_ARMTARGETOBJECTFILE_H
 
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
-#include "llvm/MC/MCExpr.h"
 
 namespace llvm {
 
+class MCContext;
+class TargetMachine;
+
 class ARMElfTargetObjectFile : public TargetLoweringObjectFileELF {
+  mutable bool genExecuteOnly = false;
+protected:
+  const MCSection *AttributesSection;
 public:
   ARMElfTargetObjectFile()
-      : TargetLoweringObjectFileELF() {
+      : TargetLoweringObjectFileELF(), AttributesSection(nullptr) {
     PLTRelativeVariantKind = MCSymbolRefExpr::VK_ARM_PREL31;
   }
 
@@ -29,7 +35,7 @@ public:
                                         MachineModuleInfo *MMI,
                                         MCStreamer &Streamer) const override;
 
-  /// Describe a TLS variable address within debug info.
+  /// \brief Describe a TLS variable address within debug info.
   const MCExpr *getDebugThreadLocalSymbol(const MCSymbol *Sym) const override;
 
   MCSection *getExplicitSectionGlobal(const GlobalObject *GO, SectionKind Kind,
@@ -41,4 +47,4 @@ public:
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_TARGET_ARM_ARMTARGETOBJECTFILE_H
+#endif

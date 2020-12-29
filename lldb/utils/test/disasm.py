@@ -6,8 +6,6 @@ and display the disassembly result.
 
 """
 
-from __future__ import print_function
-
 import os
 import sys
 from optparse import OptionParser
@@ -39,7 +37,7 @@ def do_llvm_mc_disassembly(
         func,
         mc,
         mc_options):
-    from io import StringIO
+    from cStringIO import StringIO
     import pexpect
 
     gdb_prompt = "\r\n\(gdb\) "
@@ -109,7 +107,7 @@ def do_llvm_mc_disassembly(
                 os.linesep)[-1].partition('>:')[2].strip()
             # print "\nbytes:", memory_dump
             disasm_str = prev_line.partition('>:')[2]
-            print('%s # %s' % (memory_dump, disasm_str), file=mc_input)
+            print >> mc_input, '%s # %s' % (memory_dump, disasm_str)
 
         # We're done with the processing.  Assign the current line to be
         # prev_line.
@@ -125,7 +123,7 @@ def do_llvm_mc_disassembly(
         f.write(mc_input.getvalue())
 
     mc_cmd = '%s -disassemble %s disasm-input.txt' % (mc, mc_options)
-    print("\nExecuting command:", mc_cmd)
+    print "\nExecuting command:", mc_cmd
     os.system(mc_cmd)
 
     # And invoke llvm-mc with the just recorded file.
@@ -219,12 +217,12 @@ Usage: %prog [options]
     llvm_mc_options = opts.llvm_mc_options
 
     # We have parsed the options.
-    print("gdb commands:", gdb_commands)
-    print("gdb options:", gdb_options)
-    print("executable:", executable)
-    print("function:", function)
-    print("llvm-mc:", llvm_mc)
-    print("llvm-mc options:", llvm_mc_options)
+    print "gdb commands:", gdb_commands
+    print "gdb options:", gdb_options
+    print "executable:", executable
+    print "function:", function
+    print "llvm-mc:", llvm_mc
+    print "llvm-mc options:", llvm_mc_options
 
     do_llvm_mc_disassembly(
         gdb_commands,

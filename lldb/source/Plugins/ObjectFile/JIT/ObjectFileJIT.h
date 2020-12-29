@@ -1,19 +1,26 @@
 //===-- ObjectFileJIT.h -----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ObjectFileJIT_h_
 #define liblldb_ObjectFileJIT_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Core/Address.h"
 #include "lldb/Symbol/ObjectFile.h"
 
+//----------------------------------------------------------------------
 // This class needs to be hidden as eventually belongs in a plugin that
 // will export the ObjectFile protocol
+//----------------------------------------------------------------------
 class ObjectFileJIT : public lldb_private::ObjectFile {
 public:
   ObjectFileJIT(const lldb::ModuleSP &module_sp,
@@ -21,7 +28,9 @@ public:
 
   ~ObjectFileJIT() override;
 
+  //------------------------------------------------------------------
   // Static Functions
+  //------------------------------------------------------------------
   static void Initialize();
 
   static void Terminate();
@@ -46,14 +55,9 @@ public:
                                         lldb::offset_t length,
                                         lldb_private::ModuleSpecList &specs);
 
-  // LLVM RTTI support
-  static char ID;
-  bool isA(const void *ClassID) const override {
-    return ClassID == &ID || ObjectFile::isA(ClassID);
-  }
-  static bool classof(const ObjectFile *obj) { return obj->isA(&ID); }
-
+  //------------------------------------------------------------------
   // Member Functions
+  //------------------------------------------------------------------
   bool ParseHeader() override;
 
   bool SetLoadAddress(lldb_private::Target &target, lldb::addr_t value,
@@ -73,29 +77,31 @@ public:
 
   void Dump(lldb_private::Stream *s) override;
 
-  lldb_private::ArchSpec GetArchitecture() override;
+  bool GetArchitecture(lldb_private::ArchSpec &arch) override;
 
-  lldb_private::UUID GetUUID() override;
+  bool GetUUID(lldb_private::UUID *uuid) override;
 
   uint32_t GetDependentModules(lldb_private::FileSpecList &files) override;
 
-  size_t ReadSectionData(lldb_private::Section *section,
+  size_t ReadSectionData(const lldb_private::Section *section,
                          lldb::offset_t section_offset, void *dst,
-                         size_t dst_len) override;
+                         size_t dst_len) const override;
 
   size_t
-  ReadSectionData(lldb_private::Section *section,
-                  lldb_private::DataExtractor &section_data) override;
+  ReadSectionData(const lldb_private::Section *section,
+                  lldb_private::DataExtractor &section_data) const override;
 
   lldb_private::Address GetEntryPointAddress() override;
 
-  lldb_private::Address GetBaseAddress() override;
+  lldb_private::Address GetHeaderAddress() override;
 
   ObjectFile::Type CalculateType() override;
 
   ObjectFile::Strata CalculateStrata() override;
 
+  //------------------------------------------------------------------
   // PluginInterface protocol
+  //------------------------------------------------------------------
   lldb_private::ConstString GetPluginName() override;
 
   uint32_t GetPluginVersion() override;

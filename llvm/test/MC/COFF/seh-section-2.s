@@ -1,4 +1,4 @@
-# RUN: llvm-mc -filetype=obj -triple x86_64-pc-win32 %s | llvm-readobj --symbols | FileCheck %s
+# RUN: llvm-mc -filetype=obj -triple x86_64-pc-win32 %s | llvm-readobj -symbols | FileCheck %s
 
 # This assembly should make an object with two .text sections, two .xdata
 # sections, and two .pdata sections.
@@ -13,7 +13,7 @@
 f:                                      # @f
 .Ltmp0:
 .seh_proc f
-# %bb.0:
+# BB#0:
         subq    $40, %rsp
 .Ltmp1:
         .seh_stackalloc 40
@@ -37,7 +37,7 @@ f:                                      # @f
 g:                                      # @g
 .Ltmp4:
 .seh_proc g
-# %bb.0:
+# BB#0:
 .Ltmp5:
         .seh_endprologue
         retq

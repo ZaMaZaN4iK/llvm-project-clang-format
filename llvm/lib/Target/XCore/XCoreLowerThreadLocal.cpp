@@ -1,13 +1,14 @@
 //===-- XCoreLowerThreadLocal - Lower thread local variables --------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file contains a pass that lowers thread local variables on the
+/// \brief This file contains a pass that lowers thread local variables on the
 ///        XCore.
 ///
 //===----------------------------------------------------------------------===//
@@ -18,7 +19,6 @@
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/IntrinsicsXCore.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/NoFolder.h"
 #include "llvm/IR/ValueHandle.h"
@@ -128,11 +128,11 @@ createReplacementInstr(ConstantExpr *CE, Instruction *Instr) {
 
 static bool replaceConstantExprOp(ConstantExpr *CE, Pass *P) {
   do {
-    SmallVector<WeakTrackingVH, 8> WUsers(CE->user_begin(), CE->user_end());
-    llvm::sort(WUsers);
+    SmallVector<WeakVH,8> WUsers(CE->user_begin(), CE->user_end());
+    std::sort(WUsers.begin(), WUsers.end());
     WUsers.erase(std::unique(WUsers.begin(), WUsers.end()), WUsers.end());
     while (!WUsers.empty())
-      if (WeakTrackingVH WU = WUsers.pop_back_val()) {
+      if (WeakVH WU = WUsers.pop_back_val()) {
         if (PHINode *PN = dyn_cast<PHINode>(WU)) {
           for (int I = 0, E = PN->getNumIncomingValues(); I < E; ++I)
             if (PN->getIncomingValue(I) == CE) {
@@ -159,12 +159,12 @@ static bool replaceConstantExprOp(ConstantExpr *CE, Pass *P) {
 }
 
 static bool rewriteNonInstructionUses(GlobalVariable *GV, Pass *P) {
-  SmallVector<WeakTrackingVH, 8> WUsers;
+  SmallVector<WeakVH,8> WUsers;
   for (User *U : GV->users())
     if (!isa<Instruction>(U))
-      WUsers.push_back(WeakTrackingVH(U));
+      WUsers.push_back(WeakVH(U));
   while (!WUsers.empty())
-    if (WeakTrackingVH WU = WUsers.pop_back_val()) {
+    if (WeakVH WU = WUsers.pop_back_val()) {
       ConstantExpr *CE = dyn_cast<ConstantExpr>(WU);
       if (!CE || !replaceConstantExprOp(CE, P))
         return false;

@@ -1,8 +1,9 @@
-//===- LoopInstSimplify.h - Loop Inst Simplify Pass -------------*- C++ -*-===//
+//===- LoopInstSimplify.h - Loop Inst Simplify Pass -------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,13 +14,11 @@
 #ifndef LLVM_TRANSFORMS_SCALAR_LOOPINSTSIMPLIFY_H
 #define LLVM_TRANSFORMS_SCALAR_LOOPINSTSIMPLIFY_H
 
-#include "llvm/Analysis/LoopAnalysisManager.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/PassManager.h"
+#include "llvm/Transforms/Scalar/LoopPassManager.h"
 
 namespace llvm {
-
-class Loop;
-class LPMUpdater;
 
 /// Performs Loop Inst Simplify Pass.
 class LoopInstSimplifyPass : public PassInfoMixin<LoopInstSimplifyPass> {
@@ -27,7 +26,6 @@ public:
   PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
                         LoopStandardAnalysisResults &AR, LPMUpdater &U);
 };
-
 } // end namespace llvm
 
 #endif // LLVM_TRANSFORMS_SCALAR_LOOPINSTSIMPLIFY_H

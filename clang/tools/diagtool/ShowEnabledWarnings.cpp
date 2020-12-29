@@ -1,8 +1,9 @@
 //===- ShowEnabledWarnings - diagtool tool for printing enabled flags -----===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -111,14 +112,17 @@ int ShowEnabledWarnings::run(unsigned int argc, char **argv, raw_ostream &Out) {
   // which ones are turned on.
   // FIXME: It would be very nice to print which flags are turning on which
   // diagnostics, but this can be done with a diff.
+  ArrayRef<DiagnosticRecord> AllDiagnostics = getBuiltinDiagnosticsByName();
   std::vector<PrettyDiag> Active;
 
-  for (const DiagnosticRecord &DR : getBuiltinDiagnosticsByName()) {
-    unsigned DiagID = DR.DiagID;
-
+  for (ArrayRef<DiagnosticRecord>::iterator I = AllDiagnostics.begin(),
+                                            E = AllDiagnostics.end();
+       I != E; ++I) {
+    unsigned DiagID = I->DiagID;
+    
     if (DiagnosticIDs::isBuiltinNote(DiagID))
       continue;
-
+    
     if (!DiagnosticIDs::isBuiltinWarningOrExtension(DiagID))
       continue;
 
@@ -128,16 +132,17 @@ int ShowEnabledWarnings::run(unsigned int argc, char **argv, raw_ostream &Out) {
       continue;
 
     StringRef WarningOpt = DiagnosticIDs::getWarningOptionForDiag(DiagID);
-    Active.push_back(PrettyDiag(DR.getName(), WarningOpt, DiagLevel));
+    Active.push_back(PrettyDiag(I->getName(), WarningOpt, DiagLevel));
   }
 
   // Print them all out.
-  for (const PrettyDiag &PD : Active) {
+  for (std::vector<PrettyDiag>::const_iterator I = Active.begin(),
+       E = Active.end(); I != E; ++I) {
     if (ShouldShowLevels)
-      Out << getCharForLevel(PD.Level) << "  ";
-    Out << PD.Name;
-    if (!PD.Flag.empty())
-      Out << " [-W" << PD.Flag << "]";
+      Out << getCharForLevel(I->Level) << "  ";
+    Out << I->Name;
+    if (!I->Flag.empty())
+      Out << " [-W" << I->Flag << "]";
     Out << '\n';
   }
 

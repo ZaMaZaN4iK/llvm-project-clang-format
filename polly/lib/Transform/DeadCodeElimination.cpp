@@ -1,8 +1,9 @@
 //===- DeadCodeElimination.cpp - Eliminate dead iteration  ----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -33,10 +34,13 @@
 
 #include "polly/DependenceInfo.h"
 #include "polly/LinkAllPasses.h"
-#include "polly/Options.h"
 #include "polly/ScopInfo.h"
 #include "llvm/Support/CommandLine.h"
-#include "isl/isl-noexceptions.h"
+#include "isl/flow.h"
+#include "isl/map.h"
+#include "isl/set.h"
+#include "isl/union_map.h"
+#include "isl/union_set.h"
 
 using namespace llvm;
 using namespace polly;
@@ -48,7 +52,7 @@ cl::opt<int> DCEPreciseSteps(
     cl::desc("The number of precise steps between two approximating "
              "iterations. (A value of -1 schedules another approximation stage "
              "before the actual dead code elimination."),
-    cl::ZeroOrMore, cl::init(-1), cl::cat(PollyCategory));
+    cl::ZeroOrMore, cl::init(-1));
 
 class DeadCodeElim : public ScopPass {
 public:
@@ -69,7 +73,7 @@ private:
   /// overwrite the same memory location and is consequently the only one that
   /// is visible after the execution of the SCoP.
   ///
-  isl::union_set getLiveOut(Scop &S);
+  isl_union_set *getLiveOut(Scop &S);
   bool eliminateDeadCode(Scop &S, int PreciseSteps);
 };
 } // namespace
@@ -86,20 +90,21 @@ char DeadCodeElim::ID = 0;
 // bounded write accesses can not overwrite all of the data-locations. As
 // this means may-writes are in the current situation always live, there is
 // no point in trying to remove them from the live-out set.
-isl::union_set DeadCodeElim::getLiveOut(Scop &S) {
-  isl::union_map Schedule = S.getSchedule();
-  isl::union_map MustWrites = S.getMustWrites();
-  isl::union_map WriteIterations = MustWrites.reverse();
-  isl::union_map WriteTimes = WriteIterations.apply_range(Schedule);
+__isl_give isl_union_set *DeadCodeElim::getLiveOut(Scop &S) {
+  isl_union_map *Schedule = S.getSchedule();
+  assert(Schedule &&
+         "Schedules that contain extension nodes require special handling.");
+  isl_union_map *WriteIterations = isl_union_map_reverse(S.getMustWrites());
+  isl_union_map *WriteTimes =
+      isl_union_map_apply_range(WriteIterations, isl_union_map_copy(Schedule));
 
-  isl::union_map LastWriteTimes = WriteTimes.lexmax();
-  isl::union_map LastWriteIterations =
-      LastWriteTimes.apply_range(Schedule.reverse());
+  isl_union_map *LastWriteTimes = isl_union_map_lexmax(WriteTimes);
+  isl_union_map *LastWriteIterations = isl_union_map_apply_range(
+      LastWriteTimes, isl_union_map_reverse(Schedule));
 
-  isl::union_set Live = LastWriteIterations.range();
-  isl::union_map MayWrites = S.getMayWrites();
-  Live = Live.unite(MayWrites.domain());
-  return Live.coalesce();
+  isl_union_set *Live = isl_union_map_range(LastWriteIterations);
+  Live = isl_union_set_union(Live, isl_union_map_domain(S.getMayWrites()));
+  return isl_union_set_coalesce(Live);
 }
 
 /// Performs polyhedral dead iteration elimination by:
@@ -117,37 +122,41 @@ bool DeadCodeElim::eliminateDeadCode(Scop &S, int PreciseSteps) {
   if (!D.hasValidDependences())
     return false;
 
-  isl::union_set Live = getLiveOut(S);
-  isl::union_map Dep =
+  isl_union_set *Live = getLiveOut(S);
+  isl_union_map *Dep =
       D.getDependences(Dependences::TYPE_RAW | Dependences::TYPE_RED);
-  Dep = Dep.reverse();
+  Dep = isl_union_map_reverse(Dep);
 
   if (PreciseSteps == -1)
-    Live = Live.affine_hull();
+    Live = isl_union_set_affine_hull(Live);
 
-  isl::union_set OriginalDomain = S.getDomains();
+  isl_union_set *OriginalDomain = S.getDomains();
   int Steps = 0;
   while (true) {
+    isl_union_set *Extra;
     Steps++;
 
-    isl::union_set Extra = Live.apply(Dep);
+    Extra =
+        isl_union_set_apply(isl_union_set_copy(Live), isl_union_map_copy(Dep));
 
-    if (Extra.is_subset(Live))
+    if (isl_union_set_is_subset(Extra, Live)) {
+      isl_union_set_free(Extra);
       break;
+    }
 
-    Live = Live.unite(Extra);
+    Live = isl_union_set_union(Live, Extra);
 
     if (Steps > PreciseSteps) {
       Steps = 0;
-      Live = Live.affine_hull();
+      Live = isl_union_set_affine_hull(Live);
     }
 
-    Live = Live.intersect(OriginalDomain);
+    Live = isl_union_set_intersect(Live, isl_union_set_copy(OriginalDomain));
   }
+  isl_union_map_free(Dep);
+  isl_union_set_free(OriginalDomain);
 
-  Live = Live.coalesce();
-
-  bool Changed = S.restrictDomains(Live);
+  bool Changed = S.restrictDomains(isl_union_set_coalesce(Live));
 
   // FIXME: We can probably avoid the recomputation of all dependences by
   // updating them explicitly.

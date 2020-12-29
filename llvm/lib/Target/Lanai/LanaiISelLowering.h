@@ -1,8 +1,9 @@
 //===-- LanaiISelLowering.h - Lanai DAG Lowering Interface -....-*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,7 +18,7 @@
 #include "Lanai.h"
 #include "LanaiRegisterInfo.h"
 #include "llvm/CodeGen/SelectionDAG.h"
-#include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/Target/TargetLowering.h"
 
 namespace llvm {
 namespace LanaiISD {
@@ -86,12 +87,13 @@ public:
   SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSETCC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerSETCCE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSHL_PARTS(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSRL_PARTS(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
 
-  Register getRegisterByName(const char *RegName, LLT VT,
-                             const MachineFunction &MF) const override;
+  unsigned getRegisterByName(const char *RegName, EVT VT,
+                             SelectionDAG &DAG) const override;
   std::pair<unsigned, const TargetRegisterClass *>
   getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                StringRef Constraint, MVT VT) const override;
@@ -103,11 +105,6 @@ public:
                                     SelectionDAG &DAG) const override;
 
   SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
-
-  void computeKnownBitsForTargetNode(const SDValue Op, KnownBits &Known,
-                                     const APInt &DemandedElts,
-                                     const SelectionDAG &DAG,
-                                     unsigned Depth = 0) const override;
 
 private:
   SDValue LowerCCCCallTo(SDValue Chain, SDValue Callee,

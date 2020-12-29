@@ -1,8 +1,7 @@
 // RUN: %clang_cc1 -std=c++98 %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
 // RUN: %clang_cc1 -std=c++11 %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
 // RUN: %clang_cc1 -std=c++14 %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
-// RUN: %clang_cc1 -std=c++17 %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
-// RUN: %clang_cc1 -std=c++20 %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
+// RUN: %clang_cc1 -std=c++1z %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
 
 // PR13819 -- __SIZE_TYPE__ is incompatible.
 typedef __SIZE_TYPE__ size_t; // expected-error 0-1 {{extension}}
@@ -225,17 +224,11 @@ namespace dr222 { // dr222: dup 637
     void((a += b) += c);
     void((a += b) + (a += c)); // expected-warning {{multiple unsequenced modifications to 'a'}}
 
-    x[a++] = a;
-#if __cplusplus < 201703L
-    // expected-warning@-2 {{unsequenced modification and access to 'a'}}
-#endif
+    x[a++] = a; // expected-warning {{unsequenced modification and access to 'a'}}
 
     a = b = 0; // ok, read and write of 'b' are sequenced
 
-    a = (b = a++);
-#if __cplusplus < 201703L
-    // expected-warning@-2 {{multiple unsequenced modifications to 'a'}}
-#endif
+    a = (b = a++); // expected-warning {{multiple unsequenced modifications to 'a'}}
     a = (b = ++a);
 #pragma clang diagnostic pop
   }
@@ -441,7 +434,7 @@ namespace dr239 { // dr239: yes
 namespace dr241 { // dr241: yes
   namespace A {
     struct B {};
-    template <int X> void f(); // expected-note 3{{candidate}}
+    template <int X> void f(); // expected-note 2{{candidate}}
     template <int X> void g(B);
   }
   namespace C {
@@ -449,8 +442,8 @@ namespace dr241 { // dr241: yes
     template <class T> void g(T t); // expected-note {{candidate}}
   }
   void h(A::B b) {
-    f<3>(b); // expected-error 0-1{{C++20 extension}} expected-error {{no matching}}
-    g<3>(b); // expected-error 0-1{{C++20 extension}}
+    f<3>(b); // expected-error {{undeclared identifier}}
+    g<3>(b); // expected-error {{undeclared identifier}}
     A::f<3>(b); // expected-error {{no matching}}
     A::g<3>(b);
     C::f<3>(b); // expected-error {{no matching}}
@@ -725,7 +718,7 @@ namespace dr261 { // dr261: no
     A() {}
   };
 
-  // FIXME: This is ill-formed, with a required diagnostic, for the same
+  // FIXME: These are ill-formed, with a required diagnostic, for the same
   // reason.
   struct B {
     inline void operator delete(void*) __attribute__((unused));
@@ -733,7 +726,7 @@ namespace dr261 { // dr261: no
   };
   struct C {
     inline void operator delete(void*) __attribute__((unused));
-    virtual ~C() {} // expected-warning {{'operator delete' was marked unused but was used}}
+    virtual ~C() {}
   };
 
   struct D {
@@ -757,12 +750,9 @@ namespace dr263 { // dr263: yes
 #if __cplusplus < 201103L
     friend X::X() throw();
     friend X::~X() throw();
-#elif __cplusplus <= 201703L
-    friend constexpr X::X() noexcept;
-    friend X::~X();
 #else
     friend constexpr X::X() noexcept;
-    friend constexpr X::~X();
+    friend X::~X();
 #endif
     Y::Y(); // expected-error {{extra qualification}}
     Y::~Y(); // expected-error {{extra qualification}}
@@ -994,7 +984,7 @@ namespace dr289 { // dr289: yes
 namespace dr294 { // dr294: no
   void f() throw(int);
 #if __cplusplus > 201402L
-    // expected-error@-2 {{ISO C++17 does not allow}} expected-note@-2 {{use 'noexcept}}
+    // expected-error@-2 {{ISO C++1z does not allow}} expected-note@-2 {{use 'noexcept}}
 #endif
   int main() {
     (void)static_cast<void (*)() throw()>(f); // FIXME: ill-formed in C++14 and before
@@ -1011,20 +1001,20 @@ namespace dr294 { // dr294: no
 #endif
     (void)static_cast<void (*)() throw(int)>(f); // FIXME: ill-formed in C++14 and before
 #if __cplusplus > 201402L
-    // expected-error@-2 {{ISO C++17 does not allow}} expected-note@-2 {{use 'noexcept}}
+    // expected-error@-2 {{ISO C++1z does not allow}} expected-note@-2 {{use 'noexcept}}
 #endif
 
     void (*p)() throw() = f; // expected-error-re {{{{not superset|different exception specification}}}}
     void (*q)() throw(int) = f;
 #if __cplusplus > 201402L
-    // expected-error@-2 {{ISO C++17 does not allow}} expected-note@-2 {{use 'noexcept}}
+    // expected-error@-2 {{ISO C++1z does not allow}} expected-note@-2 {{use 'noexcept}}
 #endif
   }
 }
 
 namespace dr295 { // dr295: 3.7
   typedef int f();
-  const f g; // expected-warning {{'const' qualifier on function type 'dr295::f' (aka 'int ()') has no effect}}
+  const f g; // expected-warning {{'const' qualifier on function type 'f' (aka 'int ()') has no effect}}
   f &r = g;
   template<typename T> struct X {
     const T &f;
@@ -1032,10 +1022,10 @@ namespace dr295 { // dr295: 3.7
   X<f> x = {g};
 
   typedef int U();
-  typedef const U U; // expected-warning {{'const' qualifier on function type 'dr295::U' (aka 'int ()') has no effect}}
+  typedef const U U; // expected-warning {{'const' qualifier on function type 'U' (aka 'int ()') has no effect}}
 
   typedef int (*V)();
-  typedef volatile U *V; // expected-warning {{'volatile' qualifier on function type 'dr295::U' (aka 'int ()') has no effect}}
+  typedef volatile U *V; // expected-warning {{'volatile' qualifier on function type 'U' (aka 'int ()') has no effect}}
 }
 
 namespace dr296 { // dr296: yes
@@ -1063,7 +1053,7 @@ namespace dr298 { // dr298: yes
 
   B::B() {} // expected-error {{requires a type specifier}}
   B::A() {} // ok
-  C::~C() {} // expected-error {{destructor cannot be declared using a typedef 'dr298::C' (aka 'const dr298::A') of the class name}}
+  C::~C() {} // expected-error {{destructor cannot be declared using a typedef 'C' (aka 'const dr298::A') of the class name}}
 
   typedef struct D E; // expected-note {{here}}
   struct E {}; // expected-error {{conflicts with typedef}}

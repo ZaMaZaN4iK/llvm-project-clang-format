@@ -1,8 +1,9 @@
 //===- llvm/unittest/IR/LegacyPassManager.cpp - Legacy PassManager tests --===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,15 +19,18 @@
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CallingConv.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/IRPrintingPasses.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/OptBisect.h"
-#include "llvm/InitializePasses.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/Pass.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include "gtest/gtest.h"
@@ -38,6 +42,7 @@ namespace llvm {
   void initializeFPassPass(PassRegistry&);
   void initializeCGPassPass(PassRegistry&);
   void initializeLPassPass(PassRegistry&);
+  void initializeBPassPass(PassRegistry&);
 
   namespace {
     // ND = no deps
@@ -218,6 +223,47 @@ namespace llvm {
     int LPass::initcount=0;
     int LPass::fincount=0;
 
+    struct BPass : public PassTestBase<BasicBlockPass> {
+    private:
+      static int inited;
+      static int fin;
+    public:
+      static void finishedOK(int run, int N) {
+        PassTestBase<BasicBlockPass>::finishedOK(run);
+        EXPECT_EQ(inited, N);
+        EXPECT_EQ(fin, N);
+      }
+      BPass() {
+        inited = 0;
+        fin = 0;
+      }
+      bool doInitialization(Module &M) override {
+        EXPECT_FALSE(initialized);
+        initialized = true;
+        return false;
+      }
+      bool doInitialization(Function &F) override {
+        inited++;
+        return false;
+      }
+      bool runOnBasicBlock(BasicBlock &BB) override {
+        run();
+        return false;
+      }
+      bool doFinalization(Function &F) override {
+        fin++;
+        return false;
+      }
+      bool doFinalization(Module &M) override {
+        EXPECT_FALSE(finalized);
+        finalized = true;
+        EXPECT_EQ(0, allocated);
+        return false;
+      }
+    };
+    int BPass::inited=0;
+    int BPass::fin=0;
+
     struct OnTheFlyTest: public ModulePass {
     public:
       static char ID;
@@ -332,6 +378,10 @@ namespace llvm {
         SCOPED_TRACE("Loop pass");
         MemoryTestHelper<LPass>(2, 1); //2 loops, 1 function
       }
+      {
+        SCOPED_TRACE("Basic block pass");
+        MemoryTestHelper<BPass>(7, 4); //9 basic blocks
+      }
 
     }
 
@@ -348,72 +398,6 @@ namespace llvm {
         FPass::finishedOK(4);
       }
       delete M;
-    }
-
-    // Skips or runs optional passes.
-    struct CustomOptPassGate : public OptPassGate {
-      bool Skip;
-      CustomOptPassGate(bool Skip) : Skip(Skip) { }
-      bool shouldRunPass(const Pass *P, StringRef IRDescription) {
-        if (P->getPassKind() == PT_Module)
-          return !Skip;
-        return OptPassGate::shouldRunPass(P, IRDescription);
-      }
-      bool isEnabled() const { return true; }
-    };
-
-    // Optional module pass.
-    struct ModuleOpt: public ModulePass {
-      char run = 0;
-      static char ID;
-      ModuleOpt() : ModulePass(ID) { }
-      bool runOnModule(Module &M) override {
-        if (!skipModule(M))
-          run++;
-        return false;
-      }
-    };
-    char ModuleOpt::ID=0;
-
-    TEST(PassManager, CustomOptPassGate) {
-      LLVMContext Context0;
-      LLVMContext Context1;
-      LLVMContext Context2;
-      CustomOptPassGate SkipOptionalPasses(true);
-      CustomOptPassGate RunOptionalPasses(false);
-
-      Module M0("custom-opt-bisect", Context0);
-      Module M1("custom-opt-bisect", Context1);
-      Module M2("custom-opt-bisect2", Context2);
-      struct ModuleOpt *mOpt0 = new ModuleOpt();
-      struct ModuleOpt *mOpt1 = new ModuleOpt();
-      struct ModuleOpt *mOpt2 = new ModuleOpt();
-
-      mOpt0->run = mOpt1->run = mOpt2->run = 0;
-
-      legacy::PassManager Passes0;
-      legacy::PassManager Passes1;
-      legacy::PassManager Passes2;
-
-      Passes0.add(mOpt0);
-      Passes1.add(mOpt1);
-      Passes2.add(mOpt2);
-
-      Context1.setOptPassGate(SkipOptionalPasses);
-      Context2.setOptPassGate(RunOptionalPasses);
-
-      Passes0.run(M0);
-      Passes1.run(M1);
-      Passes2.run(M2);
-
-      // By default optional passes are run.
-      EXPECT_EQ(1, mOpt0->run);
-
-      // The first context skips optional passes.
-      EXPECT_EQ(0, mOpt1->run);
-
-      // The second context runs optional passes.
-      EXPECT_EQ(1, mOpt2->run);
     }
 
     Module *makeLLVMModule(LLVMContext &Context) {
@@ -445,7 +429,7 @@ namespace llvm {
         /*Linkage=*/GlobalValue::ExternalLinkage,
         /*Name=*/"test1", mod);
       func_test1->setCallingConv(CallingConv::C);
-      AttributeList func_test1_PAL;
+      AttributeSet func_test1_PAL;
       func_test1->setAttributes(func_test1_PAL);
 
       Function* func_test2 = Function::Create(
@@ -453,7 +437,7 @@ namespace llvm {
         /*Linkage=*/GlobalValue::ExternalLinkage,
         /*Name=*/"test2", mod);
       func_test2->setCallingConv(CallingConv::C);
-      AttributeList func_test2_PAL;
+      AttributeSet func_test2_PAL;
       func_test2->setAttributes(func_test2_PAL);
 
       Function* func_test3 = Function::Create(
@@ -461,7 +445,7 @@ namespace llvm {
         /*Linkage=*/GlobalValue::ExternalLinkage,
         /*Name=*/"test3", mod);
       func_test3->setCallingConv(CallingConv::C);
-      AttributeList func_test3_PAL;
+      AttributeSet func_test3_PAL;
       func_test3->setAttributes(func_test3_PAL);
 
       Function* func_test4 = Function::Create(
@@ -469,7 +453,7 @@ namespace llvm {
         /*Linkage=*/GlobalValue::ExternalLinkage,
         /*Name=*/"test4", mod);
       func_test4->setCallingConv(CallingConv::C);
-      AttributeList func_test4_PAL;
+      AttributeSet func_test4_PAL;
       func_test4->setAttributes(func_test4_PAL);
 
       // Global Variable Declarations
@@ -490,8 +474,7 @@ namespace llvm {
         // Block entry (label_entry)
         CallInst* int32_3 = CallInst::Create(func_test2, "", label_entry);
         int32_3->setCallingConv(CallingConv::C);
-        int32_3->setTailCall(false);
-        AttributeList int32_3_PAL;
+        int32_3->setTailCall(false);AttributeSet int32_3_PAL;
         int32_3->setAttributes(int32_3_PAL);
 
         ReturnInst::Create(Context, int32_3, label_entry);
@@ -506,8 +489,7 @@ namespace llvm {
         // Block entry (label_entry_5)
         CallInst* int32_6 = CallInst::Create(func_test3, "", label_entry_5);
         int32_6->setCallingConv(CallingConv::C);
-        int32_6->setTailCall(false);
-        AttributeList int32_6_PAL;
+        int32_6->setTailCall(false);AttributeSet int32_6_PAL;
         int32_6->setAttributes(int32_6_PAL);
 
         ReturnInst::Create(Context, int32_6, label_entry_5);
@@ -522,8 +504,7 @@ namespace llvm {
         // Block entry (label_entry_8)
         CallInst* int32_9 = CallInst::Create(func_test1, "", label_entry_8);
         int32_9->setCallingConv(CallingConv::C);
-        int32_9->setTailCall(false);
-        AttributeList int32_9_PAL;
+        int32_9->setTailCall(false);AttributeSet int32_9_PAL;
         int32_9->setAttributes(int32_9_PAL);
 
         ReturnInst::Create(Context, int32_9, label_entry_8);
@@ -570,3 +551,4 @@ INITIALIZE_PASS(FPass, "fp","fp", false, false)
 INITIALIZE_PASS_BEGIN(LPass, "lp","lp", false, false)
 INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
 INITIALIZE_PASS_END(LPass, "lp","lp", false, false)
+INITIALIZE_PASS(BPass, "bp","bp", false, false)

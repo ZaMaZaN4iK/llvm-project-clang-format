@@ -1,13 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-//
-// NetBSD does not support LC_COLLATE at the moment
-// XFAIL: netbsd
 
 // REQUIRES: locale.cs_CZ.ISO8859-2
 
@@ -30,7 +28,7 @@
 
 #include "platform_support.h" // locale name macros
 
-int main(int, char**)
+int main()
 {
     {
         std::cmatch m;
@@ -1547,30 +1545,4 @@ int main(int, char**)
         assert(m.position(0) == 0);
         assert(m.str(0) == s);
     }
-    { // LWG 2273
-        std::regex re("Foo|FooBar");
-        std::cmatch m;
-        {
-            assert(std::regex_search("FooBar", m, re));
-            assert(m.size() == 1);
-            assert(m[0] == "Foo");
-        }
-        {
-            assert(std::regex_search("Foo", m, re));
-            assert(m.size() == 1);
-            assert(m[0] == "Foo");
-        }
-        {
-            assert(std::regex_search("FooBarBaz", m, re));
-            assert(m.size() == 1);
-            assert(m[0] == "Foo");
-        }
-        {
-            assert(std::regex_search("FooBa", m, re));
-            assert(m.size() == 1);
-            assert(m[0] == "Foo");
-        }
-    }
-
-  return 0;
 }

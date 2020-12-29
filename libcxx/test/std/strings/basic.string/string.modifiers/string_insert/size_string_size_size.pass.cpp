@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,11 +13,6 @@
 //   insert(size_type pos1, const basic_string<charT,traits,Allocator>& str,
 //          size_type pos2, size_type n=npos);
 // the "=npos" was added in C++14
-
-// When back-deploying to macosx10.7, the RTTI for exception classes
-// incorrectly provided by libc++.dylib is mixed with the one in
-// libc++abi.dylib and exceptions are not caught properly.
-// XFAIL: with_system_cxx_lib=macosx10.7
 
 #include <string>
 #include <stdexcept>
@@ -1732,7 +1728,7 @@ void test30()
     test_npos(S("abcdefghijklmnopqrst"), 10, S("12345"), 6, S("can't happen"));
 }
 
-int main(int, char**)
+int main()
 {
     {
     typedef std::string S;
@@ -1804,6 +1800,4 @@ int main(int, char**)
     test30<S>();
     }
 #endif
-
-  return 0;
 }

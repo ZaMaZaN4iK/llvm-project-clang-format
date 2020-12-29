@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -98,15 +99,15 @@
 
 #include <cstdarg>
 
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(__GNUC__)
 #pragma GCC diagnostic ignored "-Wformat-zero-length"
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations" // for tmpnam
 #endif
 
-int main(int, char**)
+int main()
 {
     FILE* fp = 0;
-    fpos_t fpos = fpos_t();
+    fpos_t fpos = {};
     size_t s = 0;
     char* cp = 0;
     char arr[] = {'a', 'b'};
@@ -165,6 +166,4 @@ int main(int, char**)
     static_assert((std::is_same<decltype(feof(fp)), int>::value), "");
     static_assert((std::is_same<decltype(ferror(fp)), int>::value), "");
     static_assert((std::is_same<decltype(perror("")), void>::value), "");
-
-  return 0;
 }

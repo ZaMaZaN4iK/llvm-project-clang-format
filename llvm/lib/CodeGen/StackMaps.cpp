@@ -1,47 +1,37 @@
-//===- StackMaps.cpp ------------------------------------------------------===//
+//===---------------------------- StackMaps.cpp ---------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/CodeGen/StackMaps.h"
-#include "llvm/ADT/DenseMapInfo.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/MachineOperand.h"
-#include "llvm/CodeGen/TargetOpcodes.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCObjectFileInfo.h"
-#include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/MC/MCSectionMachO.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/MathExtras.h"
-#include "llvm/Support/raw_ostream.h"
-#include <algorithm>
-#include <cassert>
-#include <cstdint>
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOpcodes.h"
+#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include <iterator>
-#include <utility>
 
 using namespace llvm;
 
 #define DEBUG_TYPE "stackmaps"
 
 static cl::opt<int> StackMapVersion(
-    "stackmap-version", cl::init(3), cl::Hidden,
-    cl::desc("Specify the stackmap encoding version (default = 3)"));
+    "stackmap-version", cl::init(2),
+    cl::desc("Specify the stackmap encoding version (default = 2)"));
 
 const char *StackMaps::WSMP = "Stack Maps: ";
 
@@ -84,7 +74,7 @@ unsigned PatchPointOpers::getNextScratchIdx(unsigned StartIdx) const {
 }
 
 StackMaps::StackMaps(AsmPrinter &AP) : AP(AP) {
-  if (StackMapVersion != 3)
+  if (StackMapVersion != 2)
     llvm_unreachable("Unsupported stackmap version!");
 }
 
@@ -113,7 +103,7 @@ StackMaps::parseOperand(MachineInstr::const_mop_iterator MOI,
       unsigned Size = DL.getPointerSizeInBits();
       assert((Size % 8) == 0 && "Need pointer size in bytes.");
       Size /= 8;
-      Register Reg = (++MOI)->getReg();
+      unsigned Reg = (++MOI)->getReg();
       int64_t Imm = (++MOI)->getImm();
       Locs.emplace_back(StackMaps::Location::Direct, Size,
                         getDwarfRegNum(Reg, TRI), Imm);
@@ -122,7 +112,7 @@ StackMaps::parseOperand(MachineInstr::const_mop_iterator MOI,
     case StackMaps::IndirectMemRefOp: {
       int64_t Size = (++MOI)->getImm();
       assert(Size > 0 && "Need a valid size for indirect memory locations.");
-      Register Reg = (++MOI)->getReg();
+      unsigned Reg = (++MOI)->getReg();
       int64_t Imm = (++MOI)->getImm();
       Locs.emplace_back(StackMaps::Location::Indirect, Size,
                         getDwarfRegNum(Reg, TRI), Imm);
@@ -148,20 +138,19 @@ StackMaps::parseOperand(MachineInstr::const_mop_iterator MOI,
     if (MOI->isImplicit())
       return ++MOI;
 
-    assert(Register::isPhysicalRegister(MOI->getReg()) &&
+    assert(TargetRegisterInfo::isPhysicalRegister(MOI->getReg()) &&
            "Virtreg operands should have been rewritten before now.");
     const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(MOI->getReg());
     assert(!MOI->getSubReg() && "Physical subreg still around.");
 
     unsigned Offset = 0;
     unsigned DwarfRegNum = getDwarfRegNum(MOI->getReg(), TRI);
-    unsigned LLVMRegNum = *TRI->getLLVMRegNum(DwarfRegNum, false);
+    unsigned LLVMRegNum = TRI->getLLVMRegNum(DwarfRegNum, false);
     unsigned SubRegIdx = TRI->getSubRegIndex(LLVMRegNum, MOI->getReg());
     if (SubRegIdx)
       Offset = TRI->getSubRegIdxOffset(SubRegIdx);
 
-    Locs.emplace_back(Location::Register, TRI->getSpillSize(*RC),
-                      DwarfRegNum, Offset);
+    Locs.emplace_back(Location::Register, RC->getSize(), DwarfRegNum, Offset);
     return ++MOI;
   }
 
@@ -192,14 +181,14 @@ void StackMaps::print(raw_ostream &OS) {
       case Location::Register:
         OS << "Register ";
         if (TRI)
-          OS << printReg(Loc.Reg, TRI);
+          OS << TRI->getName(Loc.Reg);
         else
           OS << Loc.Reg;
         break;
       case Location::Direct:
         OS << "Direct ";
         if (TRI)
-          OS << printReg(Loc.Reg, TRI);
+          OS << TRI->getName(Loc.Reg);
         else
           OS << Loc.Reg;
         if (Loc.Offset)
@@ -208,7 +197,7 @@ void StackMaps::print(raw_ostream &OS) {
       case Location::Indirect:
         OS << "Indirect ";
         if (TRI)
-          OS << printReg(Loc.Reg, TRI);
+          OS << TRI->getName(Loc.Reg);
         else
           OS << Loc.Reg;
         OS << "+" << Loc.Offset;
@@ -220,9 +209,8 @@ void StackMaps::print(raw_ostream &OS) {
         OS << "Constant Index " << Loc.Offset;
         break;
       }
-      OS << "\t[encoding: .byte " << Loc.Type << ", .byte 0"
-         << ", .short " << Loc.Size << ", .short " << Loc.Reg << ", .short 0"
-         << ", .int " << Loc.Offset << "]\n";
+      OS << "\t[encoding: .byte " << Loc.Type << ", .byte " << Loc.Size
+         << ", .short " << Loc.Reg << ", .int " << Loc.Offset << "]\n";
       Idx++;
     }
 
@@ -232,7 +220,7 @@ void StackMaps::print(raw_ostream &OS) {
     for (const auto &LO : LiveOuts) {
       OS << WSMP << "\t\tLO " << Idx << ": ";
       if (TRI)
-        OS << printReg(LO.Reg, TRI);
+        OS << TRI->getName(LO.Reg);
       else
         OS << LO.Reg;
       OS << "\t[encoding: .short " << LO.DwarfRegNum << ", .byte 0, .byte "
@@ -246,7 +234,7 @@ void StackMaps::print(raw_ostream &OS) {
 StackMaps::LiveOutReg
 StackMaps::createLiveOutReg(unsigned Reg, const TargetRegisterInfo *TRI) const {
   unsigned DwarfRegNum = getDwarfRegNum(Reg, TRI);
-  unsigned Size = TRI->getSpillSize(*TRI->getMinimalPhysRegClass(Reg));
+  unsigned Size = TRI->getMinimalPhysRegClass(Reg)->getSize();
   return LiveOutReg(Reg, DwarfRegNum, Size);
 }
 
@@ -260,17 +248,18 @@ StackMaps::parseRegisterLiveOutMask(const uint32_t *Mask) const {
 
   // Create a LiveOutReg for each bit that is set in the register mask.
   for (unsigned Reg = 0, NumRegs = TRI->getNumRegs(); Reg != NumRegs; ++Reg)
-    if ((Mask[Reg / 32] >> (Reg % 32)) & 1)
+    if ((Mask[Reg / 32] >> Reg % 32) & 1)
       LiveOuts.push_back(createLiveOutReg(Reg, TRI));
 
   // We don't need to keep track of a register if its super-register is already
   // in the list. Merge entries that refer to the same dwarf register and use
   // the maximum size that needs to be spilled.
 
-  llvm::sort(LiveOuts, [](const LiveOutReg &LHS, const LiveOutReg &RHS) {
-    // Only sort by the dwarf register number.
-    return LHS.DwarfRegNum < RHS.DwarfRegNum;
-  });
+  std::sort(LiveOuts.begin(), LiveOuts.end(),
+            [](const LiveOutReg &LHS, const LiveOutReg &RHS) {
+              // Only sort by the dwarf register number.
+              return LHS.DwarfRegNum < RHS.DwarfRegNum;
+            });
 
   for (auto I = LiveOuts.begin(), E = LiveOuts.end(); I != E; ++I) {
     for (auto II = std::next(I); II != E; ++II) {
@@ -287,20 +276,21 @@ StackMaps::parseRegisterLiveOutMask(const uint32_t *Mask) const {
   }
 
   LiveOuts.erase(
-      llvm::remove_if(LiveOuts,
-                      [](const LiveOutReg &LO) { return LO.Reg == 0; }),
+      remove_if(LiveOuts, [](const LiveOutReg &LO) { return LO.Reg == 0; }),
       LiveOuts.end());
 
   return LiveOuts;
 }
 
-void StackMaps::recordStackMapOpers(const MCSymbol &MILabel,
-                                    const MachineInstr &MI, uint64_t ID,
+void StackMaps::recordStackMapOpers(const MachineInstr &MI, uint64_t ID,
                                     MachineInstr::const_mop_iterator MOI,
                                     MachineInstr::const_mop_iterator MOE,
                                     bool recordResult) {
+
   MCContext &OutContext = AP.OutStreamer->getContext();
-  
+  MCSymbol *MILabel = OutContext.createTempSymbol();
+  AP.OutStreamer->EmitLabel(MILabel);
+
   LocationVec Locations;
   LiveOutVec LiveOuts;
 
@@ -339,7 +329,7 @@ void StackMaps::recordStackMapOpers(const MCSymbol &MILabel,
   // Create an expression to calculate the offset of the callsite from function
   // entry.
   const MCExpr *CSOffsetExpr = MCBinaryExpr::createSub(
-      MCSymbolRefExpr::create(&MILabel, OutContext),
+      MCSymbolRefExpr::create(MILabel, OutContext),
       MCSymbolRefExpr::create(AP.CurrentFnSymForSize, OutContext), OutContext);
 
   CSInfos.emplace_back(CSOffsetExpr, ID, std::move(Locations),
@@ -359,23 +349,22 @@ void StackMaps::recordStackMapOpers(const MCSymbol &MILabel,
     FnInfos.insert(std::make_pair(AP.CurrentFnSym, FunctionInfo(FrameSize)));
 }
 
-void StackMaps::recordStackMap(const MCSymbol &L, const MachineInstr &MI) {
+void StackMaps::recordStackMap(const MachineInstr &MI) {
   assert(MI.getOpcode() == TargetOpcode::STACKMAP && "expected stackmap");
 
   StackMapOpers opers(&MI);
   const int64_t ID = MI.getOperand(PatchPointOpers::IDPos).getImm();
-  recordStackMapOpers(L, MI, ID, std::next(MI.operands_begin(),
-                                           opers.getVarIdx()),
+  recordStackMapOpers(MI, ID, std::next(MI.operands_begin(), opers.getVarIdx()),
                       MI.operands_end());
 }
 
-void StackMaps::recordPatchPoint(const MCSymbol &L, const MachineInstr &MI) {
+void StackMaps::recordPatchPoint(const MachineInstr &MI) {
   assert(MI.getOpcode() == TargetOpcode::PATCHPOINT && "expected patchpoint");
 
   PatchPointOpers opers(&MI);
   const int64_t ID = opers.getID();
   auto MOI = std::next(MI.operands_begin(), opers.getStackMapStartIdx());
-  recordStackMapOpers(L, MI, ID, MOI, MI.operands_end(),
+  recordStackMapOpers(MI, ID, MOI, MI.operands_end(),
                       opers.isAnyReg() && opers.hasDef());
 
 #ifndef NDEBUG
@@ -389,15 +378,14 @@ void StackMaps::recordPatchPoint(const MCSymbol &L, const MachineInstr &MI) {
   }
 #endif
 }
-
-void StackMaps::recordStatepoint(const MCSymbol &L, const MachineInstr &MI) {
+void StackMaps::recordStatepoint(const MachineInstr &MI) {
   assert(MI.getOpcode() == TargetOpcode::STATEPOINT && "expected statepoint");
 
   StatepointOpers opers(&MI);
   // Record all the deopt and gc operands (they're contiguous and run from the
   // initial index to the end of the operand list)
   const unsigned StartIdx = opers.getVarIdx();
-  recordStackMapOpers(L, MI, opers.getID(), MI.operands_begin() + StartIdx,
+  recordStackMapOpers(MI, opers.getID(), MI.operands_begin() + StartIdx,
                       MI.operands_end(), false);
 }
 
@@ -418,13 +406,13 @@ void StackMaps::emitStackmapHeader(MCStreamer &OS) {
   OS.EmitIntValue(0, 2);               // Reserved.
 
   // Num functions.
-  LLVM_DEBUG(dbgs() << WSMP << "#functions = " << FnInfos.size() << '\n');
+  DEBUG(dbgs() << WSMP << "#functions = " << FnInfos.size() << '\n');
   OS.EmitIntValue(FnInfos.size(), 4);
   // Num constants.
-  LLVM_DEBUG(dbgs() << WSMP << "#constants = " << ConstPool.size() << '\n');
+  DEBUG(dbgs() << WSMP << "#constants = " << ConstPool.size() << '\n');
   OS.EmitIntValue(ConstPool.size(), 4);
   // Num callsites.
-  LLVM_DEBUG(dbgs() << WSMP << "#callsites = " << CSInfos.size() << '\n');
+  DEBUG(dbgs() << WSMP << "#callsites = " << CSInfos.size() << '\n');
   OS.EmitIntValue(CSInfos.size(), 4);
 }
 
@@ -437,11 +425,11 @@ void StackMaps::emitStackmapHeader(MCStreamer &OS) {
 /// }
 void StackMaps::emitFunctionFrameRecords(MCStreamer &OS) {
   // Function Frame records.
-  LLVM_DEBUG(dbgs() << WSMP << "functions:\n");
+  DEBUG(dbgs() << WSMP << "functions:\n");
   for (auto const &FR : FnInfos) {
-    LLVM_DEBUG(dbgs() << WSMP << "function addr: " << FR.first
-                      << " frame size: " << FR.second.StackSize
-                      << " callsite count: " << FR.second.RecordCount << '\n');
+    DEBUG(dbgs() << WSMP << "function addr: " << FR.first
+                 << " frame size: " << FR.second.StackSize
+                 << " callsite count: " << FR.second.RecordCount << '\n');
     OS.EmitSymbolValue(FR.first, 8);
     OS.EmitIntValue(FR.second.StackSize, 8);
     OS.EmitIntValue(FR.second.RecordCount, 8);
@@ -453,9 +441,9 @@ void StackMaps::emitFunctionFrameRecords(MCStreamer &OS) {
 /// int64  : Constants[NumConstants]
 void StackMaps::emitConstantPoolEntries(MCStreamer &OS) {
   // Constant pool entries.
-  LLVM_DEBUG(dbgs() << WSMP << "constants:\n");
+  DEBUG(dbgs() << WSMP << "constants:\n");
   for (const auto &ConstEntry : ConstPool) {
-    LLVM_DEBUG(dbgs() << WSMP << ConstEntry.second << '\n');
+    DEBUG(dbgs() << WSMP << ConstEntry.second << '\n');
     OS.EmitIntValue(ConstEntry.second, 8);
   }
 }
@@ -490,7 +478,7 @@ void StackMaps::emitConstantPoolEntries(MCStreamer &OS) {
 ///   0x4, Constant, Offset              (small constant)
 ///   0x5, ConstIndex, Constants[Offset] (large constant)
 void StackMaps::emitCallsiteEntries(MCStreamer &OS) {
-  LLVM_DEBUG(print(dbgs()));
+  DEBUG(print(dbgs()));
   // Callsite entries.
   for (const auto &CSI : CSInfos) {
     const LocationVec &CSLocs = CSI.Locations;
@@ -520,15 +508,10 @@ void StackMaps::emitCallsiteEntries(MCStreamer &OS) {
 
     for (const auto &Loc : CSLocs) {
       OS.EmitIntValue(Loc.Type, 1);
-      OS.EmitIntValue(0, 1);  // Reserved
-      OS.EmitIntValue(Loc.Size, 2);
+      OS.EmitIntValue(Loc.Size, 1);
       OS.EmitIntValue(Loc.Reg, 2);
-      OS.EmitIntValue(0, 2);  // Reserved
       OS.EmitIntValue(Loc.Offset, 4);
     }
-
-    // Emit alignment to 8 byte.
-    OS.EmitValueToAlignment(8);
 
     // Num live-out registers and padding to align to 4 byte.
     OS.EmitIntValue(0, 2);
@@ -567,7 +550,7 @@ void StackMaps::serializeToStackMapSection() {
   OS.EmitLabel(OutContext.getOrCreateSymbol(Twine("__LLVM_StackMaps")));
 
   // Serialize data.
-  LLVM_DEBUG(dbgs() << "********** Stack Map Output **********\n");
+  DEBUG(dbgs() << "********** Stack Map Output **********\n");
   emitStackmapHeader(OS);
   emitFunctionFrameRecords(OS);
   emitConstantPoolEntries(OS);

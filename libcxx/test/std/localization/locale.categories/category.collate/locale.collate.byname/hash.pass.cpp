@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,10 +21,9 @@
 #include <string>
 #include <cassert>
 
-#include "test_macros.h"
 #include "platform_support.h" // locale name macros
 
-int main(int, char**)
+int main()
 {
     std::locale l(LOCALE_en_US_UTF_8);
     {
@@ -40,6 +40,4 @@ int main(int, char**)
         assert(f.hash(x1.data(), x1.data() + x1.size())
             != f.hash(x2.data(), x2.data() + x2.size()));
     }
-
-  return 0;
 }

@@ -5,6 +5,9 @@ Use lldb Python SBWatchpoint API to set the ignore count.
 from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -14,7 +17,6 @@ from lldbsuite.test import lldbutil
 class WatchpointIgnoreCountTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
-    NO_DEBUG_INFO_TESTCASE = True
 
     def setUp(self):
         # Call super's setUp().
@@ -26,12 +28,17 @@ class WatchpointIgnoreCountTestCase(TestBase):
             self.source, '// Set break point at this line.')
 
     @add_test_categories(['pyapi'])
+    # Watchpoints not supported
+    @expectedFailureAndroid(archs=['arm', 'aarch64'])
+    @expectedFailureAll(
+        oslist=["windows"],
+        bugnumber="llvm.org/pr24446: WINDOWS XFAIL TRIAGE - Watchpoints not supported on Windows")
     # Read-write watchpoints not supported on SystemZ
     @expectedFailureAll(archs=['s390x'])
     def test_set_watch_ignore_count(self):
         """Test SBWatchpoint.SetIgnoreCount() API."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)
@@ -49,7 +56,7 @@ class WatchpointIgnoreCountTestCase(TestBase):
 
         # We should be stopped due to the breakpoint.  Get frame #0.
         process = target.GetProcess()
-        self.assertEqual(process.GetState(), lldb.eStateStopped,
+        self.assertTrue(process.GetState() == lldb.eStateStopped,
                         PROCESS_STOPPED)
         thread = lldbutil.get_stopped_thread(
             process, lldb.eStopReasonBreakpoint)
@@ -68,12 +75,12 @@ class WatchpointIgnoreCountTestCase(TestBase):
             self.HideStdout()
 
         # There should be only 1 watchpoint location under the target.
-        self.assertEqual(target.GetNumWatchpoints(), 1)
+        self.assertTrue(target.GetNumWatchpoints() == 1)
         watchpoint = target.GetWatchpointAtIndex(0)
         self.assertTrue(watchpoint.IsEnabled())
-        self.assertEqual(watchpoint.GetIgnoreCount(), 0)
+        self.assertTrue(watchpoint.GetIgnoreCount() == 0)
         watch_id = watchpoint.GetID()
-        self.assertNotEqual(watch_id, 0)
+        self.assertTrue(watch_id != 0)
         print(watchpoint)
 
         # Now immediately set the ignore count to 2.  When we continue, expect the
@@ -83,10 +90,12 @@ class WatchpointIgnoreCountTestCase(TestBase):
         process.Continue()
 
         # At this point, the inferior process should have exited.
-        self.assertEqual(process.GetState(), lldb.eStateExited, PROCESS_EXITED)
+        self.assertTrue(
+            process.GetState() == lldb.eStateExited,
+            PROCESS_EXITED)
 
         # Verify some vital statistics.
         self.assertTrue(watchpoint)
-        self.assertEqual(watchpoint.GetWatchSize(), 4)
-        self.assertEqual(watchpoint.GetHitCount(), 2)
+        self.assertTrue(watchpoint.GetWatchSize() == 4)
+        self.assertTrue(watchpoint.GetHitCount() == 2)
         print(watchpoint)

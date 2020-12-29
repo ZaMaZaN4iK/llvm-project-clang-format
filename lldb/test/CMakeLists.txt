@@ -1,177 +1,114 @@
-# Test runner infrastructure for LLDB. This configures the LLDB test trees
-# for use by Lit, and delegates to LLVM's lit test handlers.
+function(add_python_test_target name test_script args comment)
+  set(PYTHON_TEST_COMMAND
+    ${PYTHON_EXECUTABLE}
+    ${test_script}
+    ${args}
+    )
 
-# Configure the build directory.
-set(LLDB_TEST_BUILD_DIRECTORY "${PROJECT_BINARY_DIR}/lldb-test-build.noindex" CACHE PATH "The build root for building tests.")
+  add_custom_target(${name}
+    COMMAND ${PYTHON_TEST_COMMAND} ${ARG_DEFAULT_ARGS}
+    COMMENT "${comment}"
+    DEPENDS ${LLDB_TEST_DEPS}
+    USES_TERMINAL
+    )
+endfunction()
 
-# Configure and create module cache directories.
-set(LLDB_TEST_MODULE_CACHE_LLDB "${LLDB_TEST_BUILD_DIRECTORY}/module-cache-lldb" CACHE PATH "The Clang module cache used by the Clang embedded in LLDB while running tests.")
-set(LLDB_TEST_MODULE_CACHE_CLANG "${LLDB_TEST_BUILD_DIRECTORY}/module-cache-clang" CACHE PATH "The Clang module cache used by the Clang while building tests.")
-file(MAKE_DIRECTORY ${LLDB_TEST_MODULE_CACHE_LLDB})
-file(MAKE_DIRECTORY ${LLDB_TEST_MODULE_CACHE_CLANG})
-
-# LLVM_BUILD_MODE is used in lit.site.cfg
-if (CMAKE_CFG_INTDIR STREQUAL ".")
-  set(LLVM_BUILD_MODE ".")
-else ()
-  set(LLVM_BUILD_MODE "%(build_mode)s")
-endif ()
-
-string(REPLACE ${CMAKE_CFG_INTDIR} ${LLVM_BUILD_MODE} LLDB_LIBS_DIR ${LLVM_LIBRARY_OUTPUT_INTDIR})
-string(REPLACE ${CMAKE_CFG_INTDIR} ${LLVM_BUILD_MODE} LLDB_TOOLS_DIR ${LLVM_RUNTIME_OUTPUT_INTDIR})
-
-# Create a custom target to track test dependencies.
-add_custom_target(lldb-test-deps)
-set_target_properties(lldb-test-deps PROPERTIES FOLDER "lldb misc")
-
-function(add_lldb_test_dependency)
-  foreach(dependency ${ARGN})
-    add_dependencies(lldb-test-deps ${dependency})
-  endforeach()
-endfunction(add_lldb_test_dependency)
-
-# lldb itself and lldb-test is an hard dependency for the testsuites.
-add_lldb_test_dependency(lldb)
-add_lldb_test_dependency(lldb-test)
-
-# On Darwin, darwin-debug is an hard dependency for the testsuites.
-if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
-  add_lldb_test_dependency(darwin-debug)
-endif()
+set(LLDB_TEST_DEPS lldb)
 
 if(TARGET lldb-server)
-  add_lldb_test_dependency(lldb-server)
+  list(APPEND LLDB_TEST_DEPS lldb-server)
+endif()
+  
+if(TARGET debugserver)
+  list(APPEND LLDB_TEST_DEPS debugserver)
 endif()
 
-if(TARGET lldb-vscode)
-  add_lldb_test_dependency(lldb-vscode)
+if(TARGET lldb-mi)
+  list(APPEND LLDB_TEST_DEPS lldb-mi)
 endif()
 
-if(TARGET lldb-instr)
-  add_lldb_test_dependency(lldb-instr)
+if ("${LLDB_TEST_COMPILER}" STREQUAL "")
+    string(REGEX REPLACE ".*ccache\ +" "" LLDB_TEST_COMPILER ${CMAKE_C_COMPILER} ${CMAKE_C_COMPILER_ARG1})
 endif()
 
-if(TARGET liblldb)
-  add_lldb_test_dependency(liblldb)
+# The default architecture with which to compile test executables is the default LLVM target
+# architecture, which itself defaults to the host architecture.
+string(TOLOWER "${LLVM_TARGET_ARCH}" LLDB_DEFAULT_TEST_ARCH)
+if( LLDB_DEFAULT_TEST_ARCH STREQUAL "host" )
+  string(REGEX MATCH "^[^-]*" LLDB_DEFAULT_TEST_ARCH ${LLVM_HOST_TRIPLE})
+endif ()
+
+# Allow the user to override the default by setting LLDB_TEST_ARCH
+set(LLDB_TEST_ARCH
+	${LLDB_DEFAULT_TEST_ARCH}
+	CACHE STRING "Specify the architecture to run LLDB tests as (x86|x64).  Determines whether tests are compiled with -m32 or -m64")
+
+# Scrub LLDB_TEST_COMPILER out of the CMake caches
+# TODO: remove the replace lines and the FORCE parameter in a few days once the
+# change has made its way through bots to clean up their CMake caches.
+string(REPLACE "-C;${LLDB_TEST_COMPILER}" "" LLDB_TEST_USER_ARGS_New "${LLDB_TEST_USER_ARGS}")
+
+if(LLDB_TEST_CLANG)
+  set(LLDB_TEST_COMPILER $<TARGET_FILE:clang>)
 endif()
 
-if(TARGET lldb-framework)
-  add_lldb_test_dependency(lldb-framework)
-endif()
+# Users can override LLDB_TEST_USER_ARGS to specify arbitrary arguments to pass to the script
+set(LLDB_TEST_USER_ARGS
+  "${LLDB_TEST_USER_ARGS_New}"
+  CACHE STRING "Specify additional arguments to pass to test runner. For example: '-C gcc -C clang -A i386 -A x86_64'" FORCE)
 
-# Add dependencies that are not exported targets when building standalone.
-if(NOT LLDB_BUILT_STANDALONE)
-  add_lldb_test_dependency(
-    FileCheck
-    count
-    dsymutil
-    llvm-strip
-    not
-    yaml2obj
-  )
-endif()
-
-# Add dependencies if we test with the in-tree clang.
-# This works with standalone builds as they import the clang target.
-if(TARGET clang)
-  add_lldb_test_dependency(clang)
-
-  if(TARGET asan)
-    add_lldb_test_dependency(asan)
-  endif()
-
-  if(TARGET tsan)
-    add_lldb_test_dependency(tsan)
-  endif()
-
-  if(APPLE)
-    # FIXME: Standalone builds should import the cxx target as well.
-    if(LLDB_BUILT_STANDALONE)
-      # For now check that the include directory exists.
-      set(cxx_dir "${LLVM_BINARY_DIR}/include/c++")
-      if(NOT EXISTS ${cxx_dir})
-        message(WARNING "LLDB test suite requires libc++ in llvm/projects/libcxx or an existing build symlinked to ${cxx_dir}")
-      endif()
-    else()
-      # We require libcxx for the test suite, so if we aren't building it,
-      # try to provide a helpful error about how to resolve the situation.
-      if(NOT TARGET cxx)
-        if(LLVM_ENABLE_PROJECTS STREQUAL "")
-          # If `LLVM_ENABLE_PROJECTS` is not being used (implying that we are
-          # using the old layout), suggest checking it out.
-          message(FATAL_ERROR
-            "LLDB test suite requires libc++, but it is currently disabled. "
-            "Please checkout `libcxx` in `llvm/projects` or disable tests "
-            "via `LLDB_INCLUDE_TESTS=OFF`.")
-        else()
-          # If `LLVM_ENABLE_PROJECTS` is being used, suggest adding it.
-          message(FATAL_ERROR
-            "LLDB test suite requires libc++, but it is currently disabled. "
-            "Please add `libcxx` to `LLVM_ENABLE_PROJECTS` or disable tests "
-            "via `LLDB_INCLUDE_TESTS=OFF`.")
-        endif()
-      endif()
-      add_lldb_test_dependency(cxx)
-    endif()
-  endif()
-endif()
-
-add_lldb_test_dependency(
-  lit-cpuid
-  llc
-  lli
-  llvm-config
-  llvm-dwarfdump
-  llvm-nm
-  llvm-mc
-  llvm-objcopy
-  llvm-readobj
+set(LLDB_TEST_COMMON_ARGS
+  --arch=${LLDB_TEST_ARCH}
+  --executable $<TARGET_FILE:lldb>
+  -s
+  ${CMAKE_BINARY_DIR}/lldb-test-traces
+  -S nm
+  -u CXXFLAGS
+  -u CFLAGS
+  -C ${LLDB_TEST_COMPILER}
   )
 
-if(TARGET lld)
-  add_lldb_test_dependency(lld)
-else()
-  # LLD is required to link test executables on Windows.
-  if (CMAKE_SYSTEM_NAME MATCHES "Windows")
-    message(WARNING "lld required to test LLDB on Windows")
+if ( CMAKE_SYSTEM_NAME MATCHES "Windows" )
+  # All tests are currently flaky on Windows, so rerun them all once when they fail.
+  set(LLDB_TEST_COMMON_ARGS ${LLDB_TEST_COMMON_ARGS} --rerun-all-issues)
+  
+  set(LLDB_TEST_DEBUG_TEST_CRASHES
+    0
+    CACHE BOOL "(Windows only) Enables debugging of tests in the test suite by showing the crash dialog when lldb crashes")
+
+  set(LLDB_TEST_HIDE_CONSOLE_WINDOWS
+    1
+    CACHE BOOL "(Windows only) Hides the console window for an inferior when it is launched through the test suite")
+
+  if (LLDB_TEST_DEBUG_TEST_CRASHES)
+    set(LLDB_TEST_COMMON_ARGS ${LLDB_TEST_COMMON_ARGS} --enable-crash-dialog)
+  endif()
+
+  if (NOT LLDB_TEST_HIDE_CONSOLE_WINDOWS)
+    set(LLDB_TEST_COMMON_ARGS ${LLDB_TEST_COMMON_ARGS} --show-inferior-console)
   endif()
 endif()
 
-if (CMAKE_SIZEOF_VOID_P EQUAL 8)
-  set(LLDB_IS_64_BITS 1)
+if(LLDB_CODESIGN_IDENTITY)
+  list(APPEND LLDB_TEST_COMMON_ARGS --codesign-identity "${LLDB_CODESIGN_IDENTITY}")
 endif()
 
-# These values are not canonicalized within LLVM.
-llvm_canonicalize_cmake_booleans(
-  LLDB_ENABLE_PYTHON
-  LLDB_ENABLE_LUA
-  LLDB_ENABLE_LZMA
-  LLVM_ENABLE_ZLIB
-  LLVM_ENABLE_SHARED_LIBS
-  LLDB_IS_64_BITS)
+if(LLDB_BUILD_FRAMEWORK)
+  list(APPEND LLDB_TEST_COMMON_ARGS --framework $<TARGET_FILE_DIR:liblldb>)
+endif()
 
-# Configure the individual test suites.
-add_subdirectory(API)
-add_subdirectory(Shell)
-add_subdirectory(Unit)
+add_python_test_target(check-lldb-single
+  ${LLDB_SOURCE_DIR}/test/dotest.py
+  "--no-multiprocess;${LLDB_TEST_COMMON_ARGS};${LLDB_TEST_USER_ARGS}"
+  "Testing LLDB with args: ${LLDB_TEST_COMMON_ARGS};${LLDB_TEST_USER_ARGS}"
+  )
 
-# Configure the top level test suite.
-configure_lit_site_cfg(
-  ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
-  ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py
-  MAIN_CONFIG
-  ${CMAKE_CURRENT_SOURCE_DIR}/lit.cfg.py)
+set(LLDB_DOTEST_ARGS -q;${LLDB_TEST_COMMON_ARGS};${LLDB_TEST_USER_ARGS})
 
-add_lit_testsuites(LLDB
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  DEPENDS lldb-test-deps)
-
-add_lit_testsuite(check-lldb-lit "Running lldb lit test suite"
-  ${CMAKE_CURRENT_BINARY_DIR}
-  DEPENDS lldb-test-deps)
-set_target_properties(check-lldb-lit PROPERTIES FOLDER "lldb tests")
-
-add_custom_target(check-lldb)
-add_dependencies(check-lldb lldb-test-deps)
-set_target_properties(check-lldb PROPERTIES FOLDER "lldb misc")
-add_dependencies(check-lldb check-lldb-lit)
+# If tests crash cause LLDB to crash, or things are otherwise unstable, or if machine-parsable
+# output is desired (i.e. in continuous integration contexts) check-lldb-single is a better target.
+add_python_test_target(check-lldb
+  ${LLDB_SOURCE_DIR}/test/dotest.py
+  "${LLDB_DOTEST_ARGS}"
+  "Testing LLDB (parallel execution, with a separate subprocess per test)"
+  )

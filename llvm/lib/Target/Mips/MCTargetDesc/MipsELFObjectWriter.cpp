@@ -1,45 +1,39 @@
 //===-- MipsELFObjectWriter.cpp - Mips ELF Writer -------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <list>
+#include "MCTargetDesc/MipsBaseInfo.h"
 #include "MCTargetDesc/MipsFixupKinds.h"
+#include "MCTargetDesc/MipsMCExpr.h"
 #include "MCTargetDesc/MipsMCTargetDesc.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/BinaryFormat/ELF.h"
-#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCELFObjectWriter.h"
-#include "llvm/MC/MCFixup.h"
-#include "llvm/MC/MCObjectWriter.h"
+#include "llvm/MC/MCExpr.h"
+#include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCSymbolELF.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/Compiler.h"
+#include "llvm/MC/MCValue.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/MathExtras.h"
-#include "llvm/Support/raw_ostream.h"
-#include <algorithm>
-#include <cassert>
-#include <cstdint>
-#include <iterator>
-#include <list>
-#include <utility>
 
 #define DEBUG_TYPE "mips-elf-object-writer"
 
 using namespace llvm;
 
 namespace {
-
 /// Holds additional information needed by the relocation ordering algorithm.
 struct MipsRelocationEntry {
   const ELFRelocationEntry R; ///< The relocation.
-  bool Matched = false;       ///< Is this relocation part of a match.
+  bool Matched;               ///< Is this relocation part of a match.
 
-  MipsRelocationEntry(const ELFRelocationEntry &R) : R(R) {}
+  MipsRelocationEntry(const ELFRelocationEntry &R) : R(R), Matched(false) {}
 
   void print(raw_ostream &Out) const {
     R.print(Out);
@@ -56,35 +50,26 @@ raw_ostream &operator<<(raw_ostream &OS, const MipsRelocationEntry &RHS) {
 
 class MipsELFObjectWriter : public MCELFObjectTargetWriter {
 public:
-  MipsELFObjectWriter(uint8_t OSABI, bool HasRelocationAddend, bool Is64);
+  MipsELFObjectWriter(bool _is64Bit, uint8_t OSABI, bool _isN64,
+                      bool IsLittleEndian);
 
-  ~MipsELFObjectWriter() override = default;
+  ~MipsELFObjectWriter() override;
 
   unsigned getRelocType(MCContext &Ctx, const MCValue &Target,
                         const MCFixup &Fixup, bool IsPCRel) const override;
   bool needsRelocateWithSymbol(const MCSymbol &Sym,
                                unsigned Type) const override;
-  void sortRelocs(const MCAssembler &Asm,
-                  std::vector<ELFRelocationEntry> &Relocs) override;
+  virtual void sortRelocs(const MCAssembler &Asm,
+                          std::vector<ELFRelocationEntry> &Relocs) override;
 };
-
-/// The possible results of the Predicate function used by find_best.
-enum FindBestPredicateResult {
-  FindBest_NoMatch = 0,  ///< The current element is not a match.
-  FindBest_Match,        ///< The current element is a match but better ones are
-                         ///  possible.
-  FindBest_PerfectMatch, ///< The current element is an unbeatable match.
-};
-
-} // end anonymous namespace
 
 /// Copy elements in the range [First, Last) to d1 when the predicate is true or
 /// d2 when the predicate is false. This is essentially both std::copy_if and
 /// std::remove_copy_if combined into a single pass.
 template <class InputIt, class OutputIt1, class OutputIt2, class UnaryPredicate>
-static std::pair<OutputIt1, OutputIt2> copy_if_else(InputIt First, InputIt Last,
-                                                    OutputIt1 d1, OutputIt2 d2,
-                                                    UnaryPredicate Predicate) {
+std::pair<OutputIt1, OutputIt2> copy_if_else(InputIt First, InputIt Last,
+                                             OutputIt1 d1, OutputIt2 d2,
+                                             UnaryPredicate Predicate) {
   for (InputIt I = First; I != Last; ++I) {
     if (Predicate(*I)) {
       *d1 = *I;
@@ -98,6 +83,14 @@ static std::pair<OutputIt1, OutputIt2> copy_if_else(InputIt First, InputIt Last,
   return std::make_pair(d1, d2);
 }
 
+/// The possible results of the Predicate function used by find_best.
+enum FindBestPredicateResult {
+  FindBest_NoMatch = 0,  ///< The current element is not a match.
+  FindBest_Match,        ///< The current element is a match but better ones are
+                         ///  possible.
+  FindBest_PerfectMatch, ///< The current element is an unbeatable match.
+};
+
 /// Find the best match in the range [First, Last).
 ///
 /// An element matches when Predicate(X) returns FindBest_Match or
@@ -108,22 +101,22 @@ static std::pair<OutputIt1, OutputIt2> copy_if_else(InputIt First, InputIt Last,
 /// This is similar to std::find_if but finds the best of multiple possible
 /// matches.
 template <class InputIt, class UnaryPredicate, class Comparator>
-static InputIt find_best(InputIt First, InputIt Last, UnaryPredicate Predicate,
-                         Comparator BetterThan) {
+InputIt find_best(InputIt First, InputIt Last, UnaryPredicate Predicate,
+                  Comparator BetterThan) {
   InputIt Best = Last;
 
   for (InputIt I = First; I != Last; ++I) {
     unsigned Matched = Predicate(*I);
     if (Matched != FindBest_NoMatch) {
-      LLVM_DEBUG(dbgs() << std::distance(First, I) << " is a match (";
-                 I->print(dbgs()); dbgs() << ")\n");
+      DEBUG(dbgs() << std::distance(First, I) << " is a match (";
+            I->print(dbgs()); dbgs() << ")\n");
       if (Best == Last || BetterThan(*I, *Best)) {
-        LLVM_DEBUG(dbgs() << ".. and it beats the last one\n");
+        DEBUG(dbgs() << ".. and it beats the last one\n");
         Best = I;
       }
     }
     if (Matched == FindBest_PerfectMatch) {
-      LLVM_DEBUG(dbgs() << ".. and it is unbeatable\n");
+      DEBUG(dbgs() << ".. and it is unbeatable\n");
       break;
     }
   }
@@ -147,8 +140,7 @@ static unsigned getMatchingLoType(const ELFRelocationEntry &Reloc) {
   if (Type == ELF::R_MIPS16_HI16)
     return ELF::R_MIPS16_LO16;
 
-  if (Reloc.OriginalSymbol &&
-      Reloc.OriginalSymbol->getBinding() != ELF::STB_LOCAL)
+  if (Reloc.OriginalSymbol->getBinding() != ELF::STB_LOCAL)
     return ELF::R_MIPS_NONE;
 
   if (Type == ELF::R_MIPS_GOT16)
@@ -210,23 +202,25 @@ static void dumpRelocs(const char *Prefix, const Container &Relocs) {
 }
 #endif
 
-MipsELFObjectWriter::MipsELFObjectWriter(uint8_t OSABI,
-                                         bool HasRelocationAddend, bool Is64)
-    : MCELFObjectTargetWriter(Is64, OSABI, ELF::EM_MIPS, HasRelocationAddend) {}
+} // end anonymous namespace
+
+MipsELFObjectWriter::MipsELFObjectWriter(bool _is64Bit, uint8_t OSABI,
+                                         bool _isN64, bool IsLittleEndian)
+    : MCELFObjectTargetWriter(_is64Bit, OSABI, ELF::EM_MIPS,
+                              /*HasRelocationAddend*/ _isN64,
+                              /*IsN64*/ _isN64) {}
+
+MipsELFObjectWriter::~MipsELFObjectWriter() {}
 
 unsigned MipsELFObjectWriter::getRelocType(MCContext &Ctx,
                                            const MCValue &Target,
                                            const MCFixup &Fixup,
                                            bool IsPCRel) const {
   // Determine the type of the relocation.
-  unsigned Kind = Fixup.getTargetKind();
+  unsigned Kind = (unsigned)Fixup.getKind();
 
   switch (Kind) {
-  case FK_NONE:
-    return ELF::R_MIPS_NONE;
-  case FK_Data_1:
-    Ctx.reportError(Fixup.getLoc(),
-                    "MIPS does not support one byte relocations");
+  case Mips::fixup_Mips_NONE:
     return ELF::R_MIPS_NONE;
   case Mips::fixup_Mips_16:
   case FK_Data_2:
@@ -238,10 +232,6 @@ unsigned MipsELFObjectWriter::getRelocType(MCContext &Ctx,
 
   if (IsPCRel) {
     switch (Kind) {
-    case FK_Data_8:
-      Ctx.reportError(Fixup.getLoc(),
-                      "MIPS does not support 64-bit PC-relative relocations");
-      return ELF::R_MIPS_NONE;
     case Mips::fixup_Mips_Branch_PCRel:
     case Mips::fixup_Mips_PC16:
       return ELF::R_MIPS_PC16;
@@ -289,7 +279,7 @@ unsigned MipsELFObjectWriter::getRelocType(MCContext &Ctx,
   case FK_TPRel_8:
     return ELF::R_MIPS_TLS_TPREL64;
   case FK_GPRel_4:
-    if (is64Bit()) {
+    if (isN64()) {
       unsigned Type = (unsigned)ELF::R_MIPS_NONE;
       Type = setRType((unsigned)ELF::R_MIPS_GPREL32, Type);
       Type = setRType2((unsigned)ELF::R_MIPS_64, Type);
@@ -336,25 +326,11 @@ unsigned MipsELFObjectWriter::getRelocType(MCContext &Ctx,
     Type = setRType3((unsigned)ELF::R_MIPS_HI16, Type);
     return Type;
   }
-  case Mips::fixup_MICROMIPS_GPOFF_HI: {
-    unsigned Type = (unsigned)ELF::R_MIPS_NONE;
-    Type = setRType((unsigned)ELF::R_MICROMIPS_GPREL16, Type);
-    Type = setRType2((unsigned)ELF::R_MICROMIPS_SUB, Type);
-    Type = setRType3((unsigned)ELF::R_MICROMIPS_HI16, Type);
-    return Type;
-  }
   case Mips::fixup_Mips_GPOFF_LO: {
     unsigned Type = (unsigned)ELF::R_MIPS_NONE;
     Type = setRType((unsigned)ELF::R_MIPS_GPREL16, Type);
     Type = setRType2((unsigned)ELF::R_MIPS_SUB, Type);
     Type = setRType3((unsigned)ELF::R_MIPS_LO16, Type);
-    return Type;
-  }
-  case Mips::fixup_MICROMIPS_GPOFF_LO: {
-    unsigned Type = (unsigned)ELF::R_MIPS_NONE;
-    Type = setRType((unsigned)ELF::R_MICROMIPS_GPREL16, Type);
-    Type = setRType2((unsigned)ELF::R_MICROMIPS_SUB, Type);
-    Type = setRType3((unsigned)ELF::R_MICROMIPS_LO16, Type);
     return Type;
   }
   case Mips::fixup_Mips_HIGHER:
@@ -395,22 +371,12 @@ unsigned MipsELFObjectWriter::getRelocType(MCContext &Ctx,
     return ELF::R_MICROMIPS_TLS_DTPREL_HI16;
   case Mips::fixup_MICROMIPS_TLS_DTPREL_LO16:
     return ELF::R_MICROMIPS_TLS_DTPREL_LO16;
-  case Mips::fixup_MICROMIPS_GOTTPREL:
-    return ELF::R_MICROMIPS_TLS_GOTTPREL;
   case Mips::fixup_MICROMIPS_TLS_TPREL_HI16:
     return ELF::R_MICROMIPS_TLS_TPREL_HI16;
   case Mips::fixup_MICROMIPS_TLS_TPREL_LO16:
     return ELF::R_MICROMIPS_TLS_TPREL_LO16;
   case Mips::fixup_MICROMIPS_SUB:
     return ELF::R_MICROMIPS_SUB;
-  case Mips::fixup_MICROMIPS_HIGHER:
-    return ELF::R_MICROMIPS_HIGHER;
-  case Mips::fixup_MICROMIPS_HIGHEST:
-    return ELF::R_MICROMIPS_HIGHEST;
-  case Mips::fixup_Mips_JALR:
-    return ELF::R_MIPS_JALR;
-  case Mips::fixup_MICROMIPS_JALR:
-    return ELF::R_MICROMIPS_JALR;
   }
 
   llvm_unreachable("invalid fixup kind!");
@@ -453,6 +419,7 @@ unsigned MipsELFObjectWriter::getRelocType(MCContext &Ctx,
 /// always match using the expressions from the source.
 void MipsELFObjectWriter::sortRelocs(const MCAssembler &Asm,
                                      std::vector<ELFRelocationEntry> &Relocs) {
+
   // We do not need to sort the relocation table for RELA relocations which
   // N32/N64 uses as the relocation addend contains the value we require,
   // rather than it being split across a pair of relocations.
@@ -463,15 +430,15 @@ void MipsELFObjectWriter::sortRelocs(const MCAssembler &Asm,
     return;
 
   // Sort relocations by the address they are applied to.
-  llvm::sort(Relocs,
-             [](const ELFRelocationEntry &A, const ELFRelocationEntry &B) {
-               return A.Offset < B.Offset;
-             });
+  std::sort(Relocs.begin(), Relocs.end(),
+            [](const ELFRelocationEntry &A, const ELFRelocationEntry &B) {
+              return A.Offset < B.Offset;
+            });
 
   std::list<MipsRelocationEntry> Sorted;
   std::list<ELFRelocationEntry> Remainder;
 
-  LLVM_DEBUG(dumpRelocs("R: ", Relocs));
+  DEBUG(dumpRelocs("R: ", Relocs));
 
   // Separate the movable relocations (AHL relocations using the high bits) from
   // the immobile relocations (everything else). This does not preserve high/low
@@ -482,7 +449,7 @@ void MipsELFObjectWriter::sortRelocs(const MCAssembler &Asm,
                });
 
   for (auto &R : Remainder) {
-    LLVM_DEBUG(dbgs() << "Matching: " << R << "\n");
+    DEBUG(dbgs() << "Matching: " << R << "\n");
 
     unsigned MatchingType = getMatchingLoType(R);
     assert(MatchingType != ELF::R_MIPS_NONE &&
@@ -517,7 +484,7 @@ void MipsELFObjectWriter::sortRelocs(const MCAssembler &Asm,
     Sorted.insert(InsertionPoint, R)->Matched = true;
   }
 
-  LLVM_DEBUG(dumpRelocs("S: ", Sorted));
+  DEBUG(dumpRelocs("S: ", Sorted));
 
   assert(Relocs.size() == Sorted.size() && "Some relocs were not consumed");
 
@@ -557,8 +524,6 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
   case ELF::R_MIPS_GOT16:
   case ELF::R_MIPS16_GOT16:
   case ELF::R_MICROMIPS_GOT16:
-  case ELF::R_MIPS_HIGHER:
-  case ELF::R_MIPS_HIGHEST:
   case ELF::R_MIPS_HI16:
   case ELF::R_MIPS16_HI16:
   case ELF::R_MICROMIPS_HI16:
@@ -602,6 +567,8 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
   case ELF::R_MIPS_INSERT_A:
   case ELF::R_MIPS_INSERT_B:
   case ELF::R_MIPS_DELETE:
+  case ELF::R_MIPS_HIGHER:
+  case ELF::R_MIPS_HIGHEST:
   case ELF::R_MIPS_CALL_HI16:
   case ELF::R_MIPS_CALL_LO16:
   case ELF::R_MIPS_SCN_DISP:
@@ -685,11 +652,11 @@ bool MipsELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
   }
 }
 
-std::unique_ptr<MCObjectTargetWriter>
-llvm::createMipsELFObjectWriter(const Triple &TT, bool IsN32) {
-  uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TT.getOS());
-  bool IsN64 = TT.isArch64Bit() && !IsN32;
-  bool HasRelocationAddend = TT.isArch64Bit();
-  return std::make_unique<MipsELFObjectWriter>(OSABI, HasRelocationAddend,
-                                                IsN64);
+MCObjectWriter *llvm::createMipsELFObjectWriter(raw_pwrite_stream &OS,
+                                                uint8_t OSABI,
+                                                bool IsLittleEndian,
+                                                bool Is64Bit) {
+  MCELFObjectTargetWriter *MOTW =
+      new MipsELFObjectWriter(Is64Bit, OSABI, Is64Bit, IsLittleEndian);
+  return createELFObjectWriter(MOTW, OS, IsLittleEndian);
 }

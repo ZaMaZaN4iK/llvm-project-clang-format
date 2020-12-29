@@ -5,6 +5,8 @@ Test lldb data formatter subsystem.
 from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -38,7 +40,7 @@ class PythonSynthDataFormatterTestCase(TestBase):
 
     def data_formatter_commands(self):
         """Test using Python synthetic children provider."""
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(
             self, "main.cpp", self.line, num_expected_locations=1, loc_exact=True)
@@ -220,7 +222,7 @@ class PythonSynthDataFormatterTestCase(TestBase):
 
     def rdar10960550_formatter_commands(self):
         """Test that synthetic children persist stoppoints."""
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         # The second breakpoint is on a multi-line expression, so the comment
         # can't be on the right line...

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,9 +16,7 @@
 #include <type_traits>
 #include <cassert>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     typedef std::bit_not<int> F;
     const F f = F();
@@ -44,6 +43,4 @@ int main(int, char**)
 
     constexpr int bar = std::bit_not<> () (0xEA95) & 0xFFFF;
     static_assert ( bar == 0x156A, "" );
-
-  return 0;
 }

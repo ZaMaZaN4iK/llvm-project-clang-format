@@ -2,6 +2,8 @@
 
 from __future__ import print_function
 
+import os
+import time
 import re
 import lldb
 from lldbsuite.test.decorators import *
@@ -112,7 +114,7 @@ class RegisterVariableTestCase(TestBase):
         register_variables_count = 0
 
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Break inside the main.

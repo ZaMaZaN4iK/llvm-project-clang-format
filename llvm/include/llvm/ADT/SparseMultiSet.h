@@ -1,8 +1,9 @@
-//===- llvm/ADT/SparseMultiSet.h - Sparse multiset --------------*- C++ -*-===//
+//===--- llvm/ADT/SparseMultiSet.h - Sparse multiset ------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,9 +21,9 @@
 #ifndef LLVM_ADT_SPARSEMULTISET_H
 #define LLVM_ADT_SPARSEMULTISET_H
 
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SparseSet.h"
+#include "llvm/ADT/STLExtras.h"
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -100,7 +101,7 @@ class SparseMultiSet {
     unsigned Prev;
     unsigned Next;
 
-    SMSNode(ValueT D, unsigned P, unsigned N) : Data(D), Prev(P), Next(N) {}
+    SMSNode(ValueT D, unsigned P, unsigned N) : Data(D), Prev(P), Next(N) { }
 
     /// List tails have invalid Nexts.
     bool isTail() const {
@@ -117,8 +118,8 @@ class SparseMultiSet {
     bool isValid() const { return Prev != INVALID; }
   };
 
-  using KeyT = typename KeyFunctorT::argument_type;
-  using DenseT = SmallVector<SMSNode, 8>;
+  typedef typename KeyFunctorT::argument_type KeyT;
+  typedef SmallVector<SMSNode, 8> DenseT;
   DenseT Dense;
   SparseT *Sparse = nullptr;
   unsigned Universe = 0;
@@ -182,12 +183,12 @@ class SparseMultiSet {
   }
 
 public:
-  using value_type = ValueT;
-  using reference = ValueT &;
-  using const_reference = const ValueT &;
-  using pointer = ValueT *;
-  using const_pointer = const ValueT *;
-  using size_type = unsigned;
+  typedef ValueT value_type;
+  typedef ValueT &reference;
+  typedef const ValueT &const_reference;
+  typedef ValueT *pointer;
+  typedef const ValueT *const_pointer;
+  typedef unsigned size_type;
 
   SparseMultiSet() = default;
   SparseMultiSet(const SparseMultiSet &) = delete;
@@ -210,7 +211,7 @@ public:
     // The Sparse array doesn't actually need to be initialized, so malloc
     // would be enough here, but that will cause tools like valgrind to
     // complain about branching on uninitialized data.
-    Sparse = static_cast<SparseT*>(safe_calloc(U, sizeof(SparseT)));
+    Sparse = reinterpret_cast<SparseT*>(calloc(U, sizeof(SparseT)));
     Universe = U;
   }
 
@@ -226,7 +227,7 @@ public:
     unsigned SparseIdx;
 
     iterator_base(SMSPtrTy P, unsigned I, unsigned SI)
-      : SMS(P), Idx(I), SparseIdx(SI) {}
+      : SMS(P), Idx(I), SparseIdx(SI) { }
 
     /// Whether our iterator has fallen outside our dense vector.
     bool isEnd() const {
@@ -247,11 +248,11 @@ public:
     void setNext(unsigned N) { SMS->Dense[Idx].Next = N; }
 
   public:
-    using super = std::iterator<std::bidirectional_iterator_tag, ValueT>;
-    using value_type = typename super::value_type;
-    using difference_type = typename super::difference_type;
-    using pointer = typename super::pointer;
-    using reference = typename super::reference;
+    typedef std::iterator<std::bidirectional_iterator_tag, ValueT> super;
+    typedef typename super::value_type value_type;
+    typedef typename super::difference_type difference_type;
+    typedef typename super::pointer pointer;
+    typedef typename super::reference reference;
 
     reference operator*() const {
       assert(isKeyed() && SMS->sparseIndex(SMS->Dense[Idx].Data) == SparseIdx &&
@@ -307,12 +308,11 @@ public:
       return I;
     }
   };
-
-  using iterator = iterator_base<SparseMultiSet *>;
-  using const_iterator = iterator_base<const SparseMultiSet *>;
+  typedef iterator_base<SparseMultiSet *> iterator;
+  typedef iterator_base<const SparseMultiSet *> const_iterator;
 
   // Convenience types
-  using RangePair = std::pair<iterator, iterator>;
+  typedef std::pair<iterator, iterator> RangePair;
 
   /// Returns an iterator past this container. Note that such an iterator cannot
   /// be decremented, but will compare equal to other end iterators.

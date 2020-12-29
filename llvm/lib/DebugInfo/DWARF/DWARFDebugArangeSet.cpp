@@ -1,36 +1,27 @@
-//===- DWARFDebugArangeSet.cpp --------------------------------------------===//
+//===-- DWARFDebugArangeSet.cpp -------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/DebugInfo/DWARF/DWARFDebugArangeSet.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
+#include <algorithm>
 #include <cassert>
-#include <cinttypes>
-#include <cstdint>
-#include <cstring>
-
 using namespace llvm;
 
-void DWARFDebugArangeSet::Descriptor::dump(raw_ostream &OS,
-                                           uint32_t AddressSize) const {
-  OS << format("[0x%*.*" PRIx64 ", ", AddressSize * 2, AddressSize * 2, Address)
-     << format(" 0x%*.*" PRIx64 ")", AddressSize * 2, AddressSize * 2,
-               getEndAddress());
-}
-
 void DWARFDebugArangeSet::clear() {
-  Offset = -1ULL;
+  Offset = -1U;
   std::memset(&HeaderData, 0, sizeof(Header));
   ArangeDescriptors.clear();
 }
 
 bool
-DWARFDebugArangeSet::extract(DataExtractor data, uint64_t *offset_ptr) {
+DWARFDebugArangeSet::extract(DataExtractor data, uint32_t *offset_ptr) {
   if (data.isValidOffset(*offset_ptr)) {
     ArangeDescriptors.clear();
     Offset = *offset_ptr;
@@ -104,8 +95,10 @@ void DWARFDebugArangeSet::dump(raw_ostream &OS) const {
      << format("cu_offset = 0x%8.8x, addr_size = 0x%2.2x, seg_size = 0x%2.2x\n",
                HeaderData.CuOffset, HeaderData.AddrSize, HeaderData.SegSize);
 
+  const uint32_t hex_width = HeaderData.AddrSize * 2;
   for (const auto &Desc : ArangeDescriptors) {
-    Desc.dump(OS, HeaderData.AddrSize);
-    OS << '\n';
+    OS << format("[0x%*.*" PRIx64 " -", hex_width, hex_width, Desc.Address)
+       << format(" 0x%*.*" PRIx64 ")\n",
+                 hex_width, hex_width, Desc.getEndAddress());
   }
 }

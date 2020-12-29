@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,25 +22,7 @@
 
 #include "test_macros.h"
 
-#if TEST_STD_VER > 11
-constexpr bool test_tie_constexpr() {
-    {
-        int i = 42;
-        double f = 1.1;
-        using ExpectT = std::tuple<int&, decltype(std::ignore)&, double&>;
-        auto res = std::tie(i, std::ignore, f);
-        static_assert(std::is_same<ExpectT, decltype(res)>::value, "");
-        assert(&std::get<0>(res) == &i);
-        assert(&std::get<1>(res) == &std::ignore);
-        assert(&std::get<2>(res) == &f);
-        // FIXME: If/when tuple gets constexpr assignment
-        //res = std::make_tuple(101, nullptr, -1.0);
-    }
-    return true;
-}
-#endif
-
-int main(int, char**)
+int main()
 {
     {
         int i = 0;
@@ -56,10 +39,5 @@ int main(int, char**)
         static_assert ( std::get<0>(t) == 42, "" );
         static_assert ( std::get<1>(t) == 1.1, "" );
     }
-    {
-        static_assert(test_tie_constexpr(), "");
-    }
 #endif
-
-  return 0;
 }

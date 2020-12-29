@@ -1,22 +1,21 @@
-//===-- StreamAsynchronousIO.h -----------------------------------*- C++-*-===//
+//===-- StreamAsynchronousIO.h -----------------------------------*- C++
+//-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_StreamAsynchronousIO_h_
 #define liblldb_StreamAsynchronousIO_h_
 
-#include "lldb/Utility/Stream.h"
-
 #include <string>
 
-#include <stddef.h>
+#include "lldb/Core/Stream.h"
 
 namespace lldb_private {
-class Debugger;
 
 class StreamAsynchronousIO : public Stream {
 public:
@@ -26,8 +25,7 @@ public:
 
   void Flush() override;
 
-protected:
-  size_t WriteImpl(const void *src, size_t src_len) override;
+  size_t Write(const void *src, size_t src_len) override;
 
 private:
   Debugger &m_debugger;

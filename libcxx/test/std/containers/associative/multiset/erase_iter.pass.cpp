@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,7 +16,6 @@
 #include <set>
 #include <cassert>
 
-#include "test_macros.h"
 #include "min_allocator.h"
 
 struct TemplateConstructor
@@ -26,7 +26,7 @@ struct TemplateConstructor
 
 bool operator<(const TemplateConstructor&, const TemplateConstructor&) { return false; }
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::multiset<int> M;
@@ -200,6 +200,4 @@ int main(int, char**)
             c.erase(it);
     }
 #endif
-
-  return 0;
 }

@@ -1,8 +1,9 @@
 //===-- AVRISelDAGToDAG.cpp - A dag to dag inst selector for AVR ----------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -251,7 +252,7 @@ bool AVRDAGToDAGISel::SelectInlineAsmMemoryOperand(const SDValue &Op,
       RegisterSDNode *RegNode =
           cast<RegisterSDNode>(CopyFromRegOp->getOperand(1));
       Reg = RegNode->getReg();
-      CanHandleRegImmOpt &= (Register::isVirtualRegister(Reg) ||
+      CanHandleRegImmOpt &= (TargetRegisterInfo::isVirtualRegister(Reg) ||
                              AVR::PTRDISPREGSRegClass.contains(Reg));
     } else {
       CanHandleRegImmOpt = false;
@@ -349,7 +350,9 @@ template <> bool AVRDAGToDAGISel::select<ISD::STORE>(SDNode *N) {
   SDNode *ResNode = CurDAG->getMachineNode(Opc, DL, MVT::Other, Ops);
 
   // Transfer memory operands.
-  CurDAG->setNodeMemRefs(cast<MachineSDNode>(ResNode), {ST->getMemOperand()});
+  MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(1);
+  MemOp[0] = ST->getMemOperand();
+  cast<MachineSDNode>(ResNode)->setMemRefs(MemOp, MemOp + 1);
 
   ReplaceUses(SDValue(N, 0), SDValue(ResNode, 0));
   CurDAG->RemoveDeadNode(N);
@@ -404,7 +407,9 @@ template <> bool AVRDAGToDAGISel::select<ISD::LOAD>(SDNode *N) {
   }
 
   // Transfer memory operands.
-  CurDAG->setNodeMemRefs(cast<MachineSDNode>(ResNode), {LD->getMemOperand()});
+  MachineSDNode::mmo_iterator MemOp = MF->allocateMemRefsArray(1);
+  MemOp[0] = LD->getMemOperand();
+  cast<MachineSDNode>(ResNode)->setMemRefs(MemOp, MemOp + 1);
 
   ReplaceUses(SDValue(N, 0), SDValue(ResNode, 0));
   ReplaceUses(SDValue(N, 1), SDValue(ResNode, 1));
@@ -514,9 +519,12 @@ bool AVRDAGToDAGISel::selectMultiplication(llvm::SDNode *N) {
 }
 
 void AVRDAGToDAGISel::Select(SDNode *N) {
+  // Dump information about the Node being selected
+  DEBUG(errs() << "Selecting: "; N->dump(CurDAG); errs() << "\n");
+
   // If we have a custom node, we already have selected!
   if (N->isMachineOpcode()) {
-    LLVM_DEBUG(errs() << "== "; N->dump(CurDAG); errs() << "\n");
+    DEBUG(errs() << "== "; N->dump(CurDAG); errs() << "\n");
     N->setNodeId(-1);
     return;
   }

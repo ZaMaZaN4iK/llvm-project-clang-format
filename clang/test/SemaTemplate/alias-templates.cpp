@@ -77,12 +77,14 @@ namespace PR11848 {
     return i + f1<Ts...>(is...);
   }
 
+  // FIXME: This note is technically correct, but could be better. We
+  // should really say that we couldn't infer template argument 'Ts'.
   template<typename ...Ts>
-  void f2(U<Ts> ...is) { } // expected-note {{deduced incomplete pack <(no value)> for template parameter 'Ts'}}
+  void f2(U<Ts> ...is) { } // expected-note {{requires 0 arguments, but 1 was provided}}
 
   template<typename...> struct type_tuple {};
   template<typename ...Ts>
-  void f3(type_tuple<Ts...>, U<Ts> ...is) {} // expected-note {{deduced packs of different lengths for parameter 'Ts' (<void, void, void> vs. <(no value), (no value)>)}}
+  void f3(type_tuple<Ts...>, U<Ts> ...is) {} // expected-note {{requires 4 arguments, but 3 were provided}}
 
   void g() {
     f1(U<void>()); // expected-error {{no match}}
@@ -251,17 +253,4 @@ namespace PR31514 {
   template<typename T> struct tuple_size<EnableTupleSize<volatile T, decltype(tuple_size<T>::value)>> {};
 
   tuple_size<const int> t;
-}
-
-namespace an_alias_template_is_not_a_class_template {
-  template<typename T> using Foo = int; // expected-note 3{{here}}
-  Foo x; // expected-error {{use of alias template 'Foo' requires template arguments}}
-  Foo<> y; // expected-error {{too few template arguments for alias template 'Foo'}}
-  int z = Foo(); // expected-error {{use of alias template 'Foo' requires template arguments}}
-
-  template<template<typename> class Bar> void f() { // expected-note 3{{here}}
-    Bar x; // expected-error {{use of template template parameter 'Bar' requires template arguments}}
-    Bar<> y; // expected-error {{too few template arguments for template template parameter 'Bar'}}
-    int z = Bar(); // expected-error {{use of template template parameter 'Bar' requires template arguments}}
-  }
 }

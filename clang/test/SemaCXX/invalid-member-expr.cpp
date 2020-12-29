@@ -1,7 +1,6 @@
 // RUN: %clang_cc1 -fsyntax-only -verify %s
 // RUN: %clang_cc1 -fsyntax-only -verify -std=c++98 %s
 // RUN: %clang_cc1 -fsyntax-only -verify -std=c++11 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -std=c++20 %s
 
 class X {};
 
@@ -54,10 +53,9 @@ namespace test3 {
 namespace rdar11293995 {
 
 struct Length {
-  // FIXME: We try to annotate the template-id here during tentative parsing,
-  // and fail, then try again during the actual parse. This results in the same
-  // diagnostic being produced twice. :(
-  explicit Length(PassRefPtr<CalculationValue>); // expected-error 2{{undeclared identifier 'CalculationValue'}}
+  explicit Length(PassRefPtr<CalculationValue>); // expected-error {{unknown type name}} \
+                    expected-error {{expected ')'}} \
+                    expected-note {{to match this '('}}
 };
 
 struct LengthSize {

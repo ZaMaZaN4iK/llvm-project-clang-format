@@ -2,6 +2,12 @@
 Test symbol table access for main.m.
 """
 
+from __future__ import print_function
+
+
+import os
+import time
+
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -30,7 +36,7 @@ class FoundationSymtabTestCase(TestBase):
     def test_with_python_api(self):
         """Test symbol table access with Python APIs."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         target = self.dbg.CreateTarget(exe)

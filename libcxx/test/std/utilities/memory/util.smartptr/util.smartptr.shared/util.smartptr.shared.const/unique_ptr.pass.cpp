@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,7 +19,7 @@
 #include <cassert>
 
 #include "test_macros.h"
-#include "count_new.h"
+#include "count_new.hpp"
 
 struct B
 {
@@ -49,7 +50,7 @@ void fn ( const std::shared_ptr<B> &) { assert (false); }
 template <typename T>
 void assert_deleter ( T * ) { assert(false); }
 
-int main(int, char**)
+int main()
 {
     {
         std::unique_ptr<A> ptr(new A);
@@ -79,7 +80,6 @@ int main(int, char**)
             assert(B::count == 1);
             assert(ptr.get() == raw_ptr);
 #else
-            (void) raw_ptr; // silence 'unused variable' warning
             assert(A::count == 0);
             assert(B::count == 0);
             assert(ptr.get() == 0);
@@ -97,6 +97,4 @@ int main(int, char**)
         std::shared_ptr<int> p2(std::move(p)); // should not call deleter when going out of scope
     }
 #endif
-
-  return 0;
 }

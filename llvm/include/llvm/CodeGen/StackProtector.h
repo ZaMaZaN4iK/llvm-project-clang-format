@@ -1,8 +1,9 @@
-//===- StackProtector.h - Stack Protector Insertion -------------*- C++ -*-===//
+//===-- StackProtector.h - Stack Protector Insertion ----------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,34 +19,41 @@
 
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Triple.h"
-#include "llvm/CodeGen/MachineFrameInfo.h"
-#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/ValueMap.h"
 #include "llvm/Pass.h"
+#include "llvm/Target/TargetLowering.h"
 
 namespace llvm {
-
-class BasicBlock;
-class DominatorTree;
 class Function;
-class Instruction;
 class Module;
-class TargetLoweringBase;
-class TargetMachine;
-class Type;
+class PHINode;
 
 class StackProtector : public FunctionPass {
-private:
-  /// A mapping of AllocaInsts to their required SSP layout.
-  using SSPLayoutMap = DenseMap<const AllocaInst *,
-                                MachineFrameInfo::SSPLayoutKind>;
+public:
+  /// SSPLayoutKind.  Stack Smashing Protection (SSP) rules require that
+  /// vulnerable stack allocations are located close the stack protector.
+  enum SSPLayoutKind {
+    SSPLK_None,       ///< Did not trigger a stack protector.  No effect on data
+                      ///< layout.
+    SSPLK_LargeArray, ///< Array or nested array >= SSP-buffer-size.  Closest
+                      ///< to the stack protector.
+    SSPLK_SmallArray, ///< Array or nested array < SSP-buffer-size. 2nd closest
+                      ///< to the stack protector.
+    SSPLK_AddrOf      ///< The address of this allocation is exposed and
+                      ///< triggered protection.  3rd closest to the protector.
+  };
 
-  const TargetMachine *TM = nullptr;
+  /// A mapping of AllocaInsts to their required SSP layout.
+  typedef ValueMap<const AllocaInst *, SSPLayoutKind> SSPLayoutMap;
+
+private:
+  const TargetMachine *TM;
 
   /// TLI - Keep a pointer of a TargetLowering to consult for determining
   /// target type sizes.
-  const TargetLoweringBase *TLI = nullptr;
-  Triple Trip;
+  const TargetLoweringBase *TLI;
+  const Triple Trip;
 
   Function *F;
   Module *M;
@@ -57,9 +65,9 @@ private:
   /// AllocaInst triggers a stack protector.
   SSPLayoutMap Layout;
 
-  /// The minimum size of buffers that will receive stack smashing
+  /// \brief The minimum size of buffers that will receive stack smashing
   /// protection when -fstack-protection is used.
-  unsigned SSPBufferSize = 0;
+  unsigned SSPBufferSize;
 
   /// VisitedPHIs - The set of PHI nodes visited when determining
   /// if a variable's reference has been taken.  This set
@@ -94,7 +102,7 @@ private:
   bool ContainsProtectableArray(Type *Ty, bool &IsLarge, bool Strong = false,
                                 bool InStruct = false) const;
 
-  /// Check whether a stack allocation has its address taken.
+  /// \brief Check whether a stack allocation has its address taken.
   bool HasAddressTaken(const Instruction *AI);
 
   /// RequiresStackProtector - Check whether or not this function needs a
@@ -103,19 +111,29 @@ private:
 
 public:
   static char ID; // Pass identification, replacement for typeid.
+  StackProtector()
+      : FunctionPass(ID), TM(nullptr), TLI(nullptr), SSPBufferSize(0) {
+    initializeStackProtectorPass(*PassRegistry::getPassRegistry());
+  }
+  StackProtector(const TargetMachine *TM)
+      : FunctionPass(ID), TM(TM), TLI(nullptr), Trip(TM->getTargetTriple()),
+        SSPBufferSize(8) {
+    initializeStackProtectorPass(*PassRegistry::getPassRegistry());
+  }
 
-  StackProtector();
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.addPreserved<DominatorTreeWrapperPass>();
+  }
 
-  void getAnalysisUsage(AnalysisUsage &AU) const override;
+  SSPLayoutKind getSSPLayout(const AllocaInst *AI) const;
 
   // Return true if StackProtector is supposed to be handled by SelectionDAG.
   bool shouldEmitSDCheck(const BasicBlock &BB) const;
 
+  void adjustForColoring(const AllocaInst *From, const AllocaInst *To);
+
   bool runOnFunction(Function &Fn) override;
-
-  void copyToMachineFrameInfo(MachineFrameInfo &MFI) const;
 };
-
 } // end namespace llvm
 
 #endif // LLVM_CODEGEN_STACKPROTECTOR_H

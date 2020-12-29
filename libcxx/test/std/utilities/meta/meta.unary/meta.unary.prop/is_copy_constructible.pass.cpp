@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -70,7 +71,7 @@ struct C
     void operator=(C&);  // not const
 };
 
-int main(int, char**)
+int main()
 {
     test_is_copy_constructible<A>();
     test_is_copy_constructible<int&>();
@@ -91,6 +92,4 @@ int main(int, char**)
 #if TEST_STD_VER >= 11
     test_is_not_copy_constructible<B>();
 #endif
-
-  return 0;
 }

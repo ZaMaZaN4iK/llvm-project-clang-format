@@ -1,8 +1,9 @@
 //===--- ImmutableMap.h - Immutable (functional) map interface --*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -25,12 +26,12 @@ namespace llvm {
 /// only the first element (the key) is used by isEqual and isLess.
 template <typename T, typename S>
 struct ImutKeyValueInfo {
-  using value_type = const std::pair<T,S>;
-  using value_type_ref = const value_type&;
-  using key_type = const T;
-  using key_type_ref = const T&;
-  using data_type = const S;
-  using data_type_ref = const S&;
+  typedef const std::pair<T,S> value_type;
+  typedef const value_type& value_type_ref;
+  typedef const T   key_type;
+  typedef const T&  key_type_ref;
+  typedef const S   data_type;
+  typedef const S&  data_type_ref;
 
   static inline key_type_ref KeyOfValue(value_type_ref V) {
     return V.first;
@@ -61,13 +62,13 @@ template <typename KeyT, typename ValT,
           typename ValInfo = ImutKeyValueInfo<KeyT,ValT>>
 class ImmutableMap {
 public:
-  using value_type = typename ValInfo::value_type;
-  using value_type_ref = typename ValInfo::value_type_ref;
-  using key_type = typename ValInfo::key_type;
-  using key_type_ref = typename ValInfo::key_type_ref;
-  using data_type = typename ValInfo::data_type;
-  using data_type_ref = typename ValInfo::data_type_ref;
-  using TreeTy = ImutAVLTree<ValInfo>;
+  typedef typename ValInfo::value_type      value_type;
+  typedef typename ValInfo::value_type_ref  value_type_ref;
+  typedef typename ValInfo::key_type        key_type;
+  typedef typename ValInfo::key_type_ref    key_type_ref;
+  typedef typename ValInfo::data_type       data_type;
+  typedef typename ValInfo::data_type_ref   data_type_ref;
+  typedef ImutAVLTree<ValInfo>              TreeTy;
 
 protected:
   TreeTy* Root;
@@ -85,10 +86,6 @@ public:
     if (Root) { Root->retain(); }
   }
 
-  ~ImmutableMap() {
-    if (Root) { Root->release(); }
-  }
-
   ImmutableMap &operator=(const ImmutableMap &X) {
     if (Root != X.Root) {
       if (X.Root) { X.Root->retain(); }
@@ -96,6 +93,10 @@ public:
       Root = X.Root;
     }
     return *this;
+  }
+
+  ~ImmutableMap() {
+    if (Root) { Root->release(); }
   }
 
   class Factory {
@@ -113,13 +114,12 @@ public:
 
     ImmutableMap getEmptyMap() { return ImmutableMap(F.getEmptyTree()); }
 
-    LLVM_NODISCARD ImmutableMap add(ImmutableMap Old, key_type_ref K,
-                                    data_type_ref D) {
+    ImmutableMap add(ImmutableMap Old, key_type_ref K, data_type_ref D) {
       TreeTy *T = F.add(Old.Root, std::pair<key_type,data_type>(K,D));
       return ImmutableMap(Canonicalize ? F.getCanonicalTree(T): T);
     }
 
-    LLVM_NODISCARD ImmutableMap remove(ImmutableMap Old, key_type_ref K) {
+    ImmutableMap remove(ImmutableMap Old, key_type_ref K) {
       TreeTy *T = F.remove(Old.Root,K);
       return ImmutableMap(Canonicalize ? F.getCanonicalTree(T): T);
     }
@@ -166,14 +166,12 @@ private:
   template <typename Callback>
   struct CBWrapper {
     Callback C;
-
     void operator()(value_type_ref V) { C(V.first,V.second); }
   };
 
   template <typename Callback>
   struct CBWrapperRef {
     Callback &C;
-
     CBWrapperRef(Callback& c) : C(c) {}
 
     void operator()(value_type_ref V) { C(V.first,V.second); }
@@ -256,14 +254,14 @@ template <typename KeyT, typename ValT,
 typename ValInfo = ImutKeyValueInfo<KeyT,ValT>>
 class ImmutableMapRef {
 public:
-  using value_type = typename ValInfo::value_type;
-  using value_type_ref = typename ValInfo::value_type_ref;
-  using key_type = typename ValInfo::key_type;
-  using key_type_ref = typename ValInfo::key_type_ref;
-  using data_type = typename ValInfo::data_type;
-  using data_type_ref = typename ValInfo::data_type_ref;
-  using TreeTy = ImutAVLTree<ValInfo>;
-  using FactoryTy = typename TreeTy::Factory;
+  typedef typename ValInfo::value_type      value_type;
+  typedef typename ValInfo::value_type_ref  value_type_ref;
+  typedef typename ValInfo::key_type        key_type;
+  typedef typename ValInfo::key_type_ref    key_type_ref;
+  typedef typename ValInfo::data_type       data_type;
+  typedef typename ValInfo::data_type_ref   data_type_ref;
+  typedef ImutAVLTree<ValInfo>              TreeTy;
+  typedef typename TreeTy::Factory          FactoryTy;
 
 protected:
   TreeTy *Root;
@@ -294,11 +292,6 @@ public:
     }
   }
 
-  ~ImmutableMapRef() {
-    if (Root)
-      Root->release();
-  }
-
   ImmutableMapRef &operator=(const ImmutableMapRef &X) {
     if (Root != X.Root) {
       if (X.Root)
@@ -311,6 +304,11 @@ public:
       Factory = X.Factory;
     }
     return *this;
+  }
+
+  ~ImmutableMapRef() {
+    if (Root)
+      Root->release();
   }
 
   static inline ImmutableMapRef getEmptyMap(FactoryTy *F) {

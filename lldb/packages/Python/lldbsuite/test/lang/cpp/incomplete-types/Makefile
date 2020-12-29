@@ -1,3 +1,5 @@
+LEVEL = ../../../make
+
 CXX_SOURCES = main.cpp length.cpp a.cpp
 
 CFLAGS_LIMIT = -c $(CXXFLAGS)
@@ -11,23 +13,23 @@ endif
 all: limit nolimit
 
 limit: main.o length_limit.o a.o
-	$(CXX) main.o length_limit.o a.o -o limit $(LDFLAGS)
+	$(CXX) $(LDFLAGS) main.o length_limit.o a.o -o limit
 
 nolimit: main.o length_nolimit.o a.o
-	$(CXX) main.o length_nolimit.o a.o -o nolimit $(LDFLAGS)
+	$(CXX) $(LDFLAGS) main.o length_nolimit.o a.o -o nolimit
 
 main.o: main.cpp
-	$(CXX) $(CFLAGS_LIMIT) $(SRCDIR)/main.cpp -o main.o
+	$(CXX) $(CFLAGS_LIMIT) main.cpp -o main.o
 
 length_limit.o: length.cpp
-	$(CXX) $(CFLAGS_LIMIT) $(SRCDIR)/length.cpp -o length_limit.o
+	$(CXX) $(CFLAGS_LIMIT) length.cpp -o length_limit.o
 
 length_nolimit.o: length.cpp
-	$(CXX) $(CFLAGS_NO_LIMIT) $(SRCDIR)/length.cpp -o length_nolimit.o
+	$(CXX) $(CFLAGS_NO_LIMIT) length.cpp -o length_nolimit.o
 
 a.o: a.cpp
-	$(CXX) $(CFLAGS_NO_DEBUG) -c $(SRCDIR)/a.cpp -o a.o
+	$(CXX) $(CFLAGS_NO_DEBUG) -c a.cpp -o a.o
 
 clean: OBJECTS += limit nolimit length_limit.o length_nolimit.o length_limit.dwo length_nolimit.dwo
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

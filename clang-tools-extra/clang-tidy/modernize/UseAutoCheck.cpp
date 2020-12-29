@@ -1,8 +1,9 @@
 //===--- UseAutoCheck.cpp - clang-tidy-------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,8 +11,6 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
-#include "clang/Basic/CharInfo.h"
-#include "clang/Tooling/FixIt.h"
 
 using namespace clang;
 using namespace clang::ast_matchers;
@@ -27,35 +26,7 @@ const char DeclWithNewId[] = "decl_new";
 const char DeclWithCastId[] = "decl_cast";
 const char DeclWithTemplateCastId[] = "decl_template";
 
-size_t GetTypeNameLength(bool RemoveStars, StringRef Text) {
-  enum CharType { Space, Alpha, Punctuation };
-  CharType LastChar = Space, BeforeSpace = Punctuation;
-  size_t NumChars = 0;
-  int TemplateTypenameCntr = 0;
-  for (const unsigned char C : Text) {
-    if (C == '<')
-      ++TemplateTypenameCntr;
-    else if (C == '>')
-      --TemplateTypenameCntr;
-    const CharType NextChar =
-        isAlphanumeric(C)
-            ? Alpha
-            : (isWhitespace(C) ||
-               (!RemoveStars && TemplateTypenameCntr == 0 && C == '*'))
-                  ? Space
-                  : Punctuation;
-    if (NextChar != Space) {
-      ++NumChars; // Count the non-space character.
-      if (LastChar == Space && NextChar == Alpha && BeforeSpace == Alpha)
-        ++NumChars; // Count a single space character between two words.
-      BeforeSpace = NextChar;
-    }
-    LastChar = NextChar;
-  }
-  return NumChars;
-}
-
-/// Matches variable declarations that have explicit initializers that
+/// \brief Matches variable declarations that have explicit initializers that
 /// are not initializer lists.
 ///
 /// Given
@@ -84,7 +55,7 @@ AST_MATCHER(VarDecl, hasWrittenNonListInitializer) {
   return Node.getInitStyle() != VarDecl::ListInit;
 }
 
-/// Matches QualTypes that are type sugar for QualTypes that match \c
+/// \brief Matches QualTypes that are type sugar for QualTypes that match \c
 /// SugarMatcher.
 ///
 /// Given
@@ -109,7 +80,7 @@ AST_MATCHER_P(QualType, isSugarFor, Matcher<QualType>, SugarMatcher) {
   }
 }
 
-/// Matches named declarations that have one of the standard iterator
+/// \brief Matches named declarations that have one of the standard iterator
 /// names: iterator, reverse_iterator, const_iterator, const_reverse_iterator.
 ///
 /// Given
@@ -131,7 +102,7 @@ AST_MATCHER(NamedDecl, hasStdIteratorName) {
   return false;
 }
 
-/// Matches named declarations that have one of the standard container
+/// \brief Matches named declarations that have one of the standard container
 /// names.
 ///
 /// Given
@@ -207,32 +178,32 @@ AST_POLYMORPHIC_MATCHER(hasExplicitTemplateArgs,
   return Node.hasExplicitTemplateArgs();
 }
 
-/// Returns a DeclarationMatcher that matches standard iterators nested
+/// \brief Returns a DeclarationMatcher that matches standard iterators nested
 /// inside records with a standard container name.
 DeclarationMatcher standardIterator() {
-  return decl(
+  return allOf(
       namedDecl(hasStdIteratorName()),
       hasDeclContext(recordDecl(hasStdContainerName(), isFromStdNamespace())));
 }
 
-/// Returns a TypeMatcher that matches typedefs for standard iterators
+/// \brief Returns a TypeMatcher that matches typedefs for standard iterators
 /// inside records with a standard container name.
 TypeMatcher typedefIterator() {
   return typedefType(hasDeclaration(standardIterator()));
 }
 
-/// Returns a TypeMatcher that matches records named for standard
+/// \brief Returns a TypeMatcher that matches records named for standard
 /// iterators nested inside records named for standard containers.
 TypeMatcher nestedIterator() {
   return recordType(hasDeclaration(standardIterator()));
 }
 
-/// Returns a TypeMatcher that matches types declared with using
+/// \brief Returns a TypeMatcher that matches types declared with using
 /// declarations and which name standard iterators for standard containers.
 TypeMatcher iteratorFromUsingDeclaration() {
   auto HasIteratorDecl = hasDeclaration(namedDecl(hasStdIteratorName()));
   // Types resulting from using declarations are represented by elaboratedType.
-  return elaboratedType(
+  return elaboratedType(allOf(
       // Unwrap the nested name specifier to test for one of the standard
       // containers.
       hasQualifier(specifiesType(templateSpecializationType(hasDeclaration(
@@ -240,10 +211,10 @@ TypeMatcher iteratorFromUsingDeclaration() {
       // the named type is what comes after the final '::' in the type. It
       // should name one of the standard iterator names.
       namesType(
-          anyOf(typedefType(HasIteratorDecl), recordType(HasIteratorDecl))));
+          anyOf(typedefType(HasIteratorDecl), recordType(HasIteratorDecl)))));
 }
 
-/// This matcher returns declaration statements that contain variable
+/// \brief This matcher returns declaration statements that contain variable
 /// declarations with written non-list initializer for standard iterators.
 StatementMatcher makeIteratorDeclMatcher() {
   return declStmt(unless(has(
@@ -316,11 +287,9 @@ StatementMatcher makeCombinedMatcher() {
 
 UseAutoCheck::UseAutoCheck(StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
-      MinTypeNameLength(Options.get("MinTypeNameLength", 5)),
       RemoveStars(Options.get("RemoveStars", 0)) {}
 
 void UseAutoCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
-  Options.store(Opts, "MinTypeNameLength", MinTypeNameLength);
   Options.store(Opts, "RemoveStars", RemoveStars ? 1 : 0);
 }
 
@@ -359,7 +328,7 @@ void UseAutoCheck::replaceIterators(const DeclStmt *D, ASTContext *Context) {
     }
 
     if (const auto *NestedConstruct = dyn_cast<CXXConstructExpr>(E)) {
-      // If we ran into an implicit conversion constructor, can't convert.
+      // If we ran into an implicit conversion contructor, can't convert.
       //
       // FIXME: The following only checks if the constructor can be used
       // implicitly, not if it actually was. Cases where the converting
@@ -383,9 +352,9 @@ void UseAutoCheck::replaceIterators(const DeclStmt *D, ASTContext *Context) {
       << FixItHint::CreateReplacement(Range, "auto");
 }
 
-void UseAutoCheck::replaceExpr(
-    const DeclStmt *D, ASTContext *Context,
-    llvm::function_ref<QualType(const Expr *)> GetType, StringRef Message) {
+void UseAutoCheck::replaceExpr(const DeclStmt *D, ASTContext *Context,
+                               std::function<QualType(const Expr *)> GetType,
+                               StringRef Message) {
   const auto *FirstDecl = dyn_cast<VarDecl>(*D->decl_begin());
   // Ensure that there is at least one VarDecl within the DeclStmt.
   if (!FirstDecl)
@@ -445,14 +414,6 @@ void UseAutoCheck::replaceExpr(
     Loc = Loc.getNextTypeLoc();
   }
   SourceRange Range(Loc.getSourceRange());
-
-  if (MinTypeNameLength != 0 &&
-      GetTypeNameLength(RemoveStars,
-                        tooling::fixit::getText(Loc.getSourceRange(),
-                                                FirstDecl->getASTContext())) <
-          MinTypeNameLength)
-    return;
-
   auto Diag = diag(Range.getBegin(), Message);
 
   // Space after 'auto' to handle cases where the '*' in the pointer type is

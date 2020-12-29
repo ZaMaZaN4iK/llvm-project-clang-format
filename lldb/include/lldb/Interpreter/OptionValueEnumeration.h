@@ -1,21 +1,25 @@
 //===-- OptionValueEnumeration.h --------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_OptionValueEnumeration_h_
 #define liblldb_OptionValueEnumeration_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Stream.h"
+#include "lldb/Core/StreamString.h"
 #include "lldb/Core/UniqueCStringMap.h"
 #include "lldb/Interpreter/OptionValue.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/Stream.h"
-#include "lldb/Utility/StreamString.h"
-#include "lldb/lldb-private-types.h"
 
 namespace lldb_private {
 
@@ -29,21 +33,24 @@ public:
   typedef UniqueCStringMap<EnumeratorInfo> EnumerationMap;
   typedef EnumerationMap::Entry EnumerationMapEntry;
 
-  OptionValueEnumeration(const OptionEnumValues &enumerators, enum_type value);
+  OptionValueEnumeration(const OptionEnumValueElement *enumerators,
+                         enum_type value);
 
   ~OptionValueEnumeration() override;
 
+  //---------------------------------------------------------------------
   // Virtual subclass pure virtual overrides
+  //---------------------------------------------------------------------
 
   OptionValue::Type GetType() const override { return eTypeEnum; }
 
   void DumpValue(const ExecutionContext *exe_ctx, Stream &strm,
                  uint32_t dump_mask) override;
 
-  Status
+  Error
   SetValueFromString(llvm::StringRef value,
                      VarSetOperationType op = eVarSetOperationAssign) override;
-  Status
+  Error
   SetValueFromString(const char *,
                      VarSetOperationType = eVarSetOperationAssign) = delete;
 
@@ -55,10 +62,13 @@ public:
 
   lldb::OptionValueSP DeepCopy() const override;
 
-  void AutoComplete(CommandInterpreter &interpreter,
-                    CompletionRequest &request) override;
+  size_t AutoComplete(CommandInterpreter &interpreter, llvm::StringRef s,
+                      int match_start_point, int max_return_elements,
+                      bool &word_complete, StringList &matches) override;
 
+  //---------------------------------------------------------------------
   // Subclass specific functions
+  //---------------------------------------------------------------------
 
   enum_type operator=(enum_type value) {
     m_current_value = value;
@@ -74,7 +84,7 @@ public:
   void SetDefaultValue(enum_type value) { m_default_value = value; }
 
 protected:
-  void SetEnumerations(const OptionEnumValues &enumerators);
+  void SetEnumerations(const OptionEnumValueElement *enumerators);
 
   enum_type m_current_value;
   enum_type m_default_value;

@@ -1,14 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
-
-// XFAIL: dylib-has-no-bad_any_cast && !libcpp-no-exceptions
 
 // <any>
 
@@ -27,9 +26,9 @@
 #include <cassert>
 
 #include "any_helpers.h"
-#include "count_new.h"
+#include "count_new.hpp"
 #include "test_macros.h"
-#include "test_convertible.h"
+#include "test_convertible.hpp"
 
 using std::any;
 using std::any_cast;
@@ -181,7 +180,7 @@ void test_constructor_explicit() {
     static_assert(std::is_constructible<std::any, IT, std::initializer_list<int>&, int>::value, "");
 }
 
-int main(int, char**) {
+int main() {
     test_in_place_type<small>();
     test_in_place_type<large>();
     test_in_place_type<small_throws_on_copy>();
@@ -192,6 +191,4 @@ int main(int, char**) {
     test_in_place_type_decayed();
     test_ctor_sfinae();
     test_constructor_explicit();
-
-  return 0;
 }

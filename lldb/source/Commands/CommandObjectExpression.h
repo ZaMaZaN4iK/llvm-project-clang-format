@@ -1,19 +1,25 @@
 //===-- CommandObjectExpression.h -------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_CommandObjectExpression_h_
 #define liblldb_CommandObjectExpression_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Core/IOHandler.h"
 #include "lldb/Interpreter/CommandObject.h"
 #include "lldb/Interpreter/OptionGroupBoolean.h"
 #include "lldb/Interpreter/OptionGroupFormat.h"
 #include "lldb/Interpreter/OptionGroupValueObjectDisplay.h"
+#include "lldb/Target/ExecutionContext.h"
 #include "lldb/lldb-private-enumerations.h"
 namespace lldb_private {
 
@@ -28,11 +34,14 @@ public:
 
     llvm::ArrayRef<OptionDefinition> GetDefinitions() override;
 
-    Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
-                          ExecutionContext *execution_context) override;
+    Error SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
+                         ExecutionContext *execution_context) override;
 
     void OptionParsingStarting(ExecutionContext *execution_context) override;
 
+    // Options table: Required for subclasses of Options.
+
+    static OptionDefinition g_option_table[];
     bool top_level;
     bool unwind_on_error;
     bool ignore_breakpoints;
@@ -53,21 +62,21 @@ public:
 
   Options *GetOptions() override;
 
-  void HandleCompletion(CompletionRequest &request) override;
-
 protected:
+  //------------------------------------------------------------------
   // IOHandler::Delegate functions
+  //------------------------------------------------------------------
   void IOHandlerInputComplete(IOHandler &io_handler,
                               std::string &line) override;
 
   bool IOHandlerIsInputComplete(IOHandler &io_handler,
                                 StringList &lines) override;
 
-  bool DoExecute(llvm::StringRef command, CommandReturnObject &result) override;
+  bool DoExecute(const char *command, CommandReturnObject &result) override;
 
-  bool EvaluateExpression(llvm::StringRef expr, Stream *output_stream,
+  bool EvaluateExpression(const char *expr, Stream *output_stream,
                           Stream *error_stream,
-                          CommandReturnObject *result = nullptr);
+                          CommandReturnObject *result = NULL);
 
   void GetMultilineExpression();
 

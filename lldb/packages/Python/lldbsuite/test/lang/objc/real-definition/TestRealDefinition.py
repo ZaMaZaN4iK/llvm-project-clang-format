@@ -1,7 +1,10 @@
 """Test that types defined in shared libraries work correctly."""
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -89,7 +92,7 @@ class TestRealDefinition(TestBase):
                 "foo->_bar->_hidden_ivar = 0x"])
 
     def common_setup(self):
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Break inside the foo function which takes a bar_ptr argument.

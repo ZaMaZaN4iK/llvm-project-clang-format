@@ -1,8 +1,9 @@
 //===-- ARMBaseRegisterInfo.h - ARM Register Information Impl ---*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,35 +15,24 @@
 #define LLVM_LIB_TARGET_ARM_ARMBASEREGISTERINFO_H
 
 #include "MCTargetDesc/ARMBaseInfo.h"
-#include "llvm/CodeGen/MachineBasicBlock.h"
-#include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/IR/CallingConv.h"
-#include "llvm/MC/MCRegisterInfo.h"
-#include <cstdint>
+#include "llvm/Target/TargetRegisterInfo.h"
 
 #define GET_REGINFO_HEADER
 #include "ARMGenRegisterInfo.inc"
 
 namespace llvm {
-
-class LiveIntervals;
-
 /// Register allocation hints.
 namespace ARMRI {
-
   enum {
     RegPairOdd  = 1,
     RegPairEven = 2
   };
-
-} // end namespace ARMRI
+}
 
 /// isARMArea1Register - Returns true if the register is a low register (r0-r7)
 /// or a stack/pc register that we should push/pop.
 static inline bool isARMArea1Register(unsigned Reg, bool isIOS) {
   using namespace ARM;
-
   switch (Reg) {
     case R0:  case R1:  case R2:  case R3:
     case R4:  case R5:  case R6:  case R7:
@@ -58,7 +48,6 @@ static inline bool isARMArea1Register(unsigned Reg, bool isIOS) {
 
 static inline bool isARMArea2Register(unsigned Reg, bool isIOS) {
   using namespace ARM;
-
   switch (Reg) {
     case R8: case R9: case R10: case R11: case R12:
       // iOS has this second area.
@@ -70,7 +59,6 @@ static inline bool isARMArea2Register(unsigned Reg, bool isIOS) {
 
 static inline bool isARMArea3Register(unsigned Reg, bool isIOS) {
   using namespace ARM;
-
   switch (Reg) {
     case D15: case D14: case D13: case D12:
     case D11: case D10: case D9:  case D8:
@@ -99,7 +87,7 @@ protected:
   /// BasePtr - ARM physical register used as a base ptr in complex stack
   /// frames. I.e., when we need a 3rd base, not just SP and FP, due to
   /// variable size stack objects.
-  unsigned BasePtr = ARM::R6;
+  unsigned BasePtr;
 
   // Can be only subclassed.
   explicit ARMBaseRegisterInfo();
@@ -129,12 +117,7 @@ public:
   const uint32_t *getThisReturnPreservedMask(const MachineFunction &MF,
                                              CallingConv::ID) const;
 
-  ArrayRef<MCPhysReg>
-  getIntraCallClobberedRegs(const MachineFunction *MF) const override;
-
   BitVector getReservedRegs(const MachineFunction &MF) const override;
-  bool isAsmClobberable(const MachineFunction &MF,
-                       unsigned PhysReg) const override;
 
   const TargetRegisterClass *
   getPointerRegClass(const MachineFunction &MF,
@@ -149,7 +132,7 @@ public:
   unsigned getRegPressureLimit(const TargetRegisterClass *RC,
                                MachineFunction &MF) const override;
 
-  bool getRegAllocationHints(unsigned VirtReg,
+  void getRegAllocationHints(unsigned VirtReg,
                              ArrayRef<MCPhysReg> Order,
                              SmallVectorImpl<MCPhysReg> &Hints,
                              const MachineFunction &MF,
@@ -176,8 +159,10 @@ public:
   bool cannotEliminateFrame(const MachineFunction &MF) const;
 
   // Debug information queries.
-  Register getFrameRegister(const MachineFunction &MF) const override;
+  unsigned getFrameRegister(const MachineFunction &MF) const override;
   unsigned getBaseRegister() const { return BasePtr; }
+
+  bool isLowRegister(unsigned Reg) const;
 
 
   /// emitLoadConstPool - Emits a load from constpool to materialize the
@@ -202,16 +187,15 @@ public:
                            int SPAdj, unsigned FIOperandNum,
                            RegScavenger *RS = nullptr) const override;
 
-  /// SrcRC and DstRC will be morphed into NewRC if this returns true
+  /// \brief SrcRC and DstRC will be morphed into NewRC if this returns true
   bool shouldCoalesce(MachineInstr *MI,
                       const TargetRegisterClass *SrcRC,
                       unsigned SubReg,
                       const TargetRegisterClass *DstRC,
                       unsigned DstSubReg,
-                      const TargetRegisterClass *NewRC,
-                      LiveIntervals &LIS) const override;
+                      const TargetRegisterClass *NewRC) const override;
 };
 
 } // end namespace llvm
 
-#endif // LLVM_LIB_TARGET_ARM_ARMBASEREGISTERINFO_H
+#endif

@@ -2,96 +2,128 @@
 # Check LA25 stubs creation. This stub code is necessary when
 # non-PIC code calls PIC function.
 
-# RUN: echo "SECTIONS { \
-# RUN:         . = 0x20000; .text ALIGN(0x100) : { *(.text) *(.text.*) } \
-# RUN:       }" > %t.script
-
-# RUN: llvm-mc -filetype=obj -triple=mips-unknown-linux -mcpu=mips32r2 \
+# RUN: llvm-mc -filetype=obj -triple=mips-unknown-linux \
 # RUN:   %p/Inputs/mips-fpic.s -o %t-fpic.o
-# RUN: llvm-mc -filetype=obj -triple=mips-unknown-linux -mcpu=mips32r2 \
+# RUN: llvm-mc -filetype=obj -triple=mips-unknown-linux \
 # RUN:   %p/Inputs/mips-fnpic.s -o %t-fnpic.o
-# RUN: ld.lld -r %t-fpic.o %t-fnpic.o -o %t-sto-pic-r2.o
-# RUN: llvm-mc -filetype=obj -triple=mips-unknown-linux -mcpu=mips32r2 \
-# RUN:   %p/Inputs/mips-pic.s -o %t-pic-r2.o
-# RUN: llvm-mc -filetype=obj -triple=mips-unknown-linux -mcpu=mips32r2 \
-# RUN:   %s -o %t-npic-r2.o
-# RUN: ld.lld %t-npic-r2.o %t-pic-r2.o %t-sto-pic-r2.o \
-# RUN:        -script %t.script -o %t-r2.exe
-# RUN: llvm-objdump -d --no-show-raw-insn %t-r2.exe \
-# RUN:   | FileCheck --check-prefixes=CHECK,R2 %s
-
-# RUN: llvm-mc -filetype=obj -triple=mips-unknown-linux -mcpu=mips32r6 \
-# RUN:   %p/Inputs/mips-fpic.s -o %t-fpic.o
-# RUN: llvm-mc -filetype=obj -triple=mips-unknown-linux -mcpu=mips32r6 \
-# RUN:   %p/Inputs/mips-fnpic.s -o %t-fnpic.o
-# RUN: ld.lld -r %t-fpic.o %t-fnpic.o -o %t-sto-pic-r6.o
-# RUN: llvm-mc -filetype=obj -triple=mips-unknown-linux -mcpu=mips32r6 \
-# RUN:   %p/Inputs/mips-pic.s -o %t-pic-r6.o
-# RUN: llvm-mc -filetype=obj -triple=mips-unknown-linux -mcpu=mips32r6 \
-# RUN:   %s -o %t-npic-r6.o
-# RUN: ld.lld %t-npic-r6.o %t-pic-r6.o %t-sto-pic-r6.o \
-# RUN:        -script %t.script -o %t-r6.exe
-# RUN: llvm-objdump -d --no-show-raw-insn %t-r6.exe \
-# RUN:   | FileCheck --check-prefixes=CHECK,R6 %s
+# RUN: ld.lld -r %t-fpic.o %t-fnpic.o -o %t-sto-pic.o
+# RUN: llvm-mc -filetype=obj -triple=mips-unknown-linux \
+# RUN:   %p/Inputs/mips-pic.s -o %t-pic.o
+# RUN: llvm-mc -filetype=obj -triple=mips-unknown-linux %s -o %t-npic.o
+# RUN: ld.lld %t-npic.o %t-pic.o %t-sto-pic.o -o %t.exe
+# RUN: llvm-objdump -d %t.exe | FileCheck %s
 
 # CHECK:     Disassembly of section .text:
-# CHECK-EMPTY:
 # CHECK-NEXT: __start:
-# CHECK-NEXT:    20100:       jal     131412 <__LA25Thunk_foo1a>
-# CHECK-NEXT:                 nop
-# CHECK-NEXT:                 jal     131464 <__LA25Thunk_foo2>
-# CHECK-NEXT:                 nop
-# CHECK-NEXT:                 jal     131428 <__LA25Thunk_foo1b>
-# CHECK-NEXT:                 nop
-# CHECK-NEXT:                 jal     131464 <__LA25Thunk_foo2>
-# CHECK-NEXT:                 nop
-# CHECK-NEXT:                 jal     131376 <__LA25Thunk_fpic>
-# CHECK-NEXT:                 nop
-# CHECK-NEXT:                 jal     131408 <fnpic>
-# CHECK-NEXT:                 nop
+# CHECK-NEXT:    20000:       0c 00 80 0e     jal     131128 <foo1b+0x4>
+#                                                            ^-- .pic.foo1a
+# CHECK-NEXT:    20004:       00 00 00 00     nop
+# CHECK-NEXT:    20008:       0c 00 80 19     jal     131172 <foo2+0x4>
+#                                                            ^-- .pic.foo2
+# CHECK-NEXT:    2000c:       00 00 00 00     nop
+# CHECK-NEXT:    20010:       0c 00 80 12     jal     131144 <foo1b+0x14>
+#                                                            ^-- .pic.foo1b
+# CHECK-NEXT:    20014:       00 00 00 00     nop
+# CHECK-NEXT:    20018:       0c 00 80 19     jal     131172 <foo2+0x4>
+#                                                            ^-- .pic.foo2
+# CHECK-NEXT:    2001c:       00 00 00 00     nop
+# CHECK-NEXT:    20020:       0c 00 80 25     jal     131220 <fnpic+0x4>
+#                                                            ^-- .pic.fpic
+# CHECK-NEXT:    20024:       00 00 00 00     nop
+# CHECK-NEXT:    20028:       0c 00 80 24     jal     131216 <fnpic>
+# CHECK-NEXT:    2002c:       00 00 00 00     nop
+#
+# CHECK:      foo1a:
+# CHECK-NEXT:    20030:       00 00 00 00     nop
+#
+# CHECK:      foo1b:
+# CHECK-NEXT:    20034:       00 00 00 00     nop
+#
+# CHECK-NEXT:    20038:       3c 19 00 02     lui     $25, 2
+# CHECK-NEXT:    2003c:       08 00 80 0c     j       131120 <foo1a>
+# CHECK-NEXT:    20040:       27 39 00 30     addiu   $25, $25, 48
+# CHECK-NEXT:    20044:       00 00 00 00     nop
+# CHECK-NEXT:    20048:       3c 19 00 02     lui     $25, 2
+# CHECK-NEXT:    2004c:       08 00 80 0d     j       131124 <foo1b>
+# CHECK-NEXT:    20050:       27 39 00 34     addiu   $25, $25, 52
+# CHECK-NEXT:    20054:       00 00 00 00     nop
+# CHECK-NEXT:    20058:       00 00 00 00     nop
+# CHECK-NEXT:    2005c:       00 00 00 00     nop
+#
+# CHECK:      foo2:
+# CHECK-NEXT:    20060:       00 00 00 00     nop
+#
+# CHECK-NEXT:    20064:       3c 19 00 02     lui     $25, 2
+# CHECK-NEXT:    20068:       08 00 80 18     j       131168 <foo2>
+# CHECK-NEXT:    2006c:       27 39 00 60     addiu   $25, $25, 96
+# CHECK-NEXT:    20070:       00 00 00 00     nop
+# CHECK-NEXT:    20074:       00 00 00 00     nop
+# CHECK-NEXT:    20078:       00 00 00 00     nop
+# CHECK-NEXT:    2007c:       00 00 00 00     nop
+#
+# CHECK:       fpic:
+# CHECK-NEXT:    20080:	      00 00 00 00     nop
+#
+# CHECK:       fnpic:
+# CHECK-NEXT:    20090:       00 00 00 00     nop
+# CHECK-NEXT:    20094:       3c 19 00 02     lui     $25, 2
+# CHECK-NEXT:    20098:       08 00 80 20     j       131200 <fpic>
+# CHECK-NEXT:    2009c:       27 39 00 80     addiu   $25, $25, 128
 
-# CHECK: __LA25Thunk_fpic:
-# R2:            20130:       lui     $25, 2
-# R6:            20130:       aui     $25, $zero, 2
-# CHECK-NEXT:                 j       131392 <fpic>
-# CHECK-NEXT:                 addiu   $25, $25, 320
-# CHECK-NEXT:                 nop
+# Make sure the thunks are created properly no matter how
+# objects are laid out.
+#
+# RUN: ld.lld %t-pic.o %t-npic.o %t-sto-pic.o -o %t.exe
+# RUN: llvm-objdump -d %t.exe | FileCheck -check-prefix=REVERSE %s
 
-# CHECK: fpic:
-# CHECK-NEXT:    20140:       nop
-
-# CHECK: fnpic:
-# CHECK-NEXT:    20150:       nop
-
-# CHECK: __LA25Thunk_foo1a:
-# R2:            20154:       lui     $25, 2
-# R6:            20154:       aui     $25, $zero, 2
-# CHECK:                      j       131456 <foo1a>
-# CHECK-NEXT:                 addiu   $25, $25, 384
-# CHECK-NEXT:                 nop
-
-# CHECK: __LA25Thunk_foo1b:
-# R2:            20164:       lui     $25, 2
-# R6:                         aui     $25, $zero, 2
-# CHECK-NEXT:                 j       131460 <foo1b>
-# CHECK-NEXT:                 addiu   $25, $25, 388
-# CHECK-NEXT:                 nop
-
-# CHECK: foo1a:
-# CHECK-NEXT:    20180:       nop
-
-# CHECK: foo1b:
-# CHECK-NEXT:    20184:       nop
-
-# CHECK: __LA25Thunk_foo2:
-# R2:            20188:       lui     $25, 2
-# R6:                         aui     $25, $zero, 2
-# CHECK-NEXT:                 j       131488 <foo2>
-# CHECK-NEXT:                 addiu   $25, $25, 416
-# CHECK-NEXT:                 nop
-
-# CHECK: foo2:
-# CHECK-NEXT:    201a0:       nop
+# REVERSE:      foo1a:
+# REVERSE-NEXT:    20000:       00 00 00 00     nop
+#
+# REVERSE:      foo1b:
+# REVERSE-NEXT:    20004:       00 00 00 00     nop
+# REVERSE-NEXT:    20008:       3c 19 00 02     lui     $25, 2
+# REVERSE-NEXT:    2000c:       08 00 80 00     j       131072 <foo1a>
+# REVERSE-NEXT:    20010:       27 39 00 00     addiu   $25, $25, 0
+# REVERSE-NEXT:    20014:       00 00 00 00     nop
+# REVERSE-NEXT:    20018:       3c 19 00 02     lui     $25, 2
+# REVERSE-NEXT:    2001c:       08 00 80 01     j       131076 <foo1b>
+# REVERSE-NEXT:    20020:       27 39 00 04     addiu   $25, $25, 4
+# REVERSE-NEXT:    20024:       00 00 00 00     nop
+# REVERSE-NEXT:    20028:       00 00 00 00     nop
+# REVERSE-NEXT:    2002c:       00 00 00 00     nop
+#
+# REVERSE:      foo2:
+# REVERSE-NEXT:    20030:       00 00 00 00     nop
+# REVERSE-NEXT:    20034:       3c 19 00 02     lui     $25, 2
+# REVERSE-NEXT:    20038:       08 00 80 0c     j       131120 <foo2>
+# REVERSE-NEXT:    2003c:       27 39 00 30     addiu   $25, $25, 48
+# REVERSE-NEXT:    20040:       00 00 00 00     nop
+# REVERSE-NEXT:    20044:       00 00 00 00     nop
+# REVERSE-NEXT:    20048:       00 00 00 00     nop
+# REVERSE-NEXT:    2004c:       00 00 00 00     nop
+#
+# REVERSE:      __start:
+# REVERSE-NEXT:    20050:       0c 00 80 02     jal     131080 <foo1b+0x4>
+# REVERSE-NEXT:    20054:       00 00 00 00     nop
+# REVERSE-NEXT:    20058:       0c 00 80 0d     jal     131124 <foo2+0x4>
+# REVERSE-NEXT:    2005c:       00 00 00 00     nop
+# REVERSE-NEXT:    20060:       0c 00 80 06     jal     131096 <foo1b+0x14>
+# REVERSE-NEXT:    20064:       00 00 00 00     nop
+# REVERSE-NEXT:    20068:       0c 00 80 0d     jal     131124 <foo2+0x4>
+# REVERSE-NEXT:    2006c:       00 00 00 00     nop
+# REVERSE-NEXT:    20070:       0c 00 80 25     jal     131220 <fnpic+0x4>
+# REVERSE-NEXT:    20074:       00 00 00 00     nop
+# REVERSE-NEXT:    20078:       0c 00 80 24     jal     131216 <fnpic>
+# REVERSE-NEXT:    2007c:       00 00 00 00     nop
+#
+# REVERSE:       fpic:
+# REVERSE-NEXT:    20080:       00 00 00 00     nop
+#
+# REVERSE:       fnpic:
+# REVERSE-NEXT:    20090:       00 00 00 00     nop
+# REVERSE-NEXT:    20094:       3c 19 00 02     lui     $25, 2
+# REVERSE-NEXT:    20098:       08 00 80 20     j       131200 <fpic>
+# REVERSE-NEXT:    2009c:       27 39 00 80     addiu   $25, $25, 128
 
   .text
   .globl __start

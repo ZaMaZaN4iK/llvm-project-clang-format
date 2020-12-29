@@ -1,8 +1,9 @@
 //===- Core/Resolver.h - Resolves Atom References -------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -27,7 +28,7 @@ namespace lld {
 class Atom;
 class LinkingContext;
 
-/// The Resolver is responsible for merging all input object files
+/// \brief The Resolver is responsible for merging all input object files
 /// and producing a merged graph.
 class Resolver {
 public:
@@ -49,7 +50,7 @@ public:
   // Handle a shared library file.
   llvm::Error handleSharedLibrary(File &);
 
-  /// do work of merging and resolving and return list
+  /// @brief do work of merging and resolving and return list
   bool resolve();
 
   std::unique_ptr<SimpleFile> resultFile() { return std::move(_result); }
@@ -60,7 +61,7 @@ private:
   bool undefinesAdded(int begin, int end);
   File *getFile(int &index);
 
-  /// The main function that iterates over the files to resolve
+  /// \brief The main function that iterates over the files to resolve
   bool resolveUndefines();
   void updateReferences();
   void deadStripOptimize();

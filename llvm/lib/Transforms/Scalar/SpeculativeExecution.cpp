@@ -1,8 +1,9 @@
 //===- SpeculativeExecution.cpp ---------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -61,13 +62,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Scalar/SpeculativeExecution.h"
-#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 
@@ -137,7 +137,6 @@ INITIALIZE_PASS_END(SpeculativeExecutionLegacyPass, "speculative-execution",
 void SpeculativeExecutionLegacyPass::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<TargetTransformInfoWrapperPass>();
   AU.addPreserved<GlobalsAAWrapperPass>();
-  AU.setPreservesCFG();
 }
 
 bool SpeculativeExecutionLegacyPass::runOnFunction(Function &F) {
@@ -152,8 +151,8 @@ namespace llvm {
 
 bool SpeculativeExecutionPass::runImpl(Function &F, TargetTransformInfo *TTI) {
   if (OnlyIfDivergentTarget && !TTI->hasBranchDivergence()) {
-    LLVM_DEBUG(dbgs() << "Not running SpeculativeExecution because "
-                         "TTI->hasBranchDivergence() is false.\n");
+    DEBUG(dbgs() << "Not running SpeculativeExecution because "
+                    "TTI->hasBranchDivergence() is false.\n");
     return false;
   }
 
@@ -241,7 +240,6 @@ static unsigned ComputeSpeculationCost(const Instruction *I,
     case Instruction::FMul:
     case Instruction::FDiv:
     case Instruction::FRem:
-    case Instruction::FNeg:
     case Instruction::ICmp:
     case Instruction::FCmp:
       return TTI.getUserCost(I);
@@ -253,7 +251,7 @@ static unsigned ComputeSpeculationCost(const Instruction *I,
 
 bool SpeculativeExecutionPass::considerHoistingFromTo(
     BasicBlock &FromBlock, BasicBlock &ToBlock) {
-  SmallPtrSet<const Instruction *, 8> NotHoisted;
+  SmallSet<const Instruction *, 8> NotHoisted;
   const auto AllPrecedingUsesFromBlockHoisted = [&NotHoisted](User *U) {
     for (Value* V : U->operand_values()) {
       if (Instruction *I = dyn_cast<Instruction>(V)) {
@@ -316,7 +314,6 @@ PreservedAnalyses SpeculativeExecutionPass::run(Function &F,
     return PreservedAnalyses::all();
   PreservedAnalyses PA;
   PA.preserve<GlobalsAA>();
-  PA.preserveSet<CFGAnalyses>();
   return PA;
 }
 }  // namespace llvm

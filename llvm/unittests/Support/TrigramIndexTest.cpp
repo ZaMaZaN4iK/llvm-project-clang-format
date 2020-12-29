@@ -1,13 +1,14 @@
 //===- TrigramIndexTest.cpp - Unit tests for TrigramIndex -----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Support/TrigramIndex.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/TrigramIndex.h"
 #include "gtest/gtest.h"
 
 #include <string>
@@ -22,7 +23,7 @@ protected:
   std::unique_ptr<TrigramIndex> makeTrigramIndex(
       std::vector<std::string> Rules) {
     std::unique_ptr<TrigramIndex> TI =
-        std::make_unique<TrigramIndex>();
+        make_unique<TrigramIndex>();
     for (auto &Rule : Rules)
       TI->insert(Rule);
     return TI;

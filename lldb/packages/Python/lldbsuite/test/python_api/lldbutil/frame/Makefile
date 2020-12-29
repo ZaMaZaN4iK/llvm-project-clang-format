@@ -1,4 +1,6 @@
+LEVEL = ../../../make
+
 C_SOURCES := main.c
 MAKE_DSYM :=NO
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

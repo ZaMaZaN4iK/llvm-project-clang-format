@@ -1,8 +1,9 @@
 //===----------------------- cxa_bad_cast.pass.cpp ------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,7 +21,7 @@ class Base {
 
 class Derived : public Base {};
 
-Derived &test_bad_cast(Base& b) {
+Derived &test_bad_cast(Base b) {
   return dynamic_cast<Derived&>(b);
 }
 

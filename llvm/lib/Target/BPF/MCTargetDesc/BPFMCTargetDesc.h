@@ -1,8 +1,9 @@
 //===-- BPFMCTargetDesc.h - BPF Target Descriptions -------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,17 +14,15 @@
 #ifndef LLVM_LIB_TARGET_BPF_MCTARGETDESC_BPFMCTARGETDESC_H
 #define LLVM_LIB_TARGET_BPF_MCTARGETDESC_BPFMCTARGETDESC_H
 
-#include "llvm/Config/config.h"
 #include "llvm/Support/DataTypes.h"
-
-#include <memory>
+#include "llvm/Config/config.h"
 
 namespace llvm {
 class MCAsmBackend;
 class MCCodeEmitter;
 class MCContext;
 class MCInstrInfo;
-class MCObjectTargetWriter;
+class MCObjectWriter;
 class MCRegisterInfo;
 class MCSubtargetInfo;
 class MCTargetOptions;
@@ -33,6 +32,10 @@ class Triple;
 class raw_ostream;
 class raw_pwrite_stream;
 
+Target &getTheBPFleTarget();
+Target &getTheBPFbeTarget();
+Target &getTheBPFTarget();
+
 MCCodeEmitter *createBPFMCCodeEmitter(const MCInstrInfo &MCII,
                                       const MCRegisterInfo &MRI,
                                       MCContext &Ctx);
@@ -40,14 +43,15 @@ MCCodeEmitter *createBPFbeMCCodeEmitter(const MCInstrInfo &MCII,
                                         const MCRegisterInfo &MRI,
                                         MCContext &Ctx);
 
-MCAsmBackend *createBPFAsmBackend(const Target &T, const MCSubtargetInfo &STI,
-                                  const MCRegisterInfo &MRI,
+MCAsmBackend *createBPFAsmBackend(const Target &T, const MCRegisterInfo &MRI,
+                                  const Triple &TT, StringRef CPU,
                                   const MCTargetOptions &Options);
-MCAsmBackend *createBPFbeAsmBackend(const Target &T, const MCSubtargetInfo &STI,
-                                    const MCRegisterInfo &MRI,
+MCAsmBackend *createBPFbeAsmBackend(const Target &T, const MCRegisterInfo &MRI,
+                                    const Triple &TT, StringRef CPU,
                                     const MCTargetOptions &Options);
 
-std::unique_ptr<MCObjectTargetWriter> createBPFELFObjectWriter(uint8_t OSABI);
+MCObjectWriter *createBPFELFObjectWriter(raw_pwrite_stream &OS,
+                                         uint8_t OSABI, bool IsLittleEndian);
 }
 
 // Defines symbolic names for BPF registers.  This defines a mapping from

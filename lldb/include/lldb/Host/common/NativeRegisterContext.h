@@ -1,14 +1,19 @@
 //===-- NativeRegisterContext.h ---------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_NativeRegisterContext_h_
 #define liblldb_NativeRegisterContext_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Host/common/NativeWatchpointList.h"
 #include "lldb/lldb-private.h"
 
@@ -19,15 +24,20 @@ class NativeThreadProtocol;
 class NativeRegisterContext
     : public std::enable_shared_from_this<NativeRegisterContext> {
 public:
+  //------------------------------------------------------------------
   // Constructors and Destructors
-  NativeRegisterContext(NativeThreadProtocol &thread);
+  //------------------------------------------------------------------
+  NativeRegisterContext(NativeThreadProtocol &thread,
+                        uint32_t concrete_frame_idx);
 
   virtual ~NativeRegisterContext();
 
   // void
   // InvalidateIfNeeded (bool force);
 
+  //------------------------------------------------------------------
   // Subclasses must override these functions
+  //------------------------------------------------------------------
   // virtual void
   // InvalidateAllRegisters () = 0;
 
@@ -43,30 +53,27 @@ public:
 
   virtual const RegisterSet *GetRegisterSet(uint32_t set_index) const = 0;
 
-  virtual Status ReadRegister(const RegisterInfo *reg_info,
-                              RegisterValue &reg_value) = 0;
+  virtual Error ReadRegister(const RegisterInfo *reg_info,
+                             RegisterValue &reg_value) = 0;
 
-  virtual Status WriteRegister(const RegisterInfo *reg_info,
-                               const RegisterValue &reg_value) = 0;
+  virtual Error WriteRegister(const RegisterInfo *reg_info,
+                              const RegisterValue &reg_value) = 0;
 
-  virtual Status ReadAllRegisterValues(lldb::DataBufferSP &data_sp) = 0;
+  virtual Error ReadAllRegisterValues(lldb::DataBufferSP &data_sp) = 0;
 
-  virtual Status WriteAllRegisterValues(const lldb::DataBufferSP &data_sp) = 0;
+  virtual Error WriteAllRegisterValues(const lldb::DataBufferSP &data_sp) = 0;
 
   uint32_t ConvertRegisterKindToRegisterNumber(uint32_t kind,
                                                uint32_t num) const;
 
+  //------------------------------------------------------------------
   // Subclasses can override these functions if desired
+  //------------------------------------------------------------------
   virtual uint32_t NumSupportedHardwareBreakpoints();
 
   virtual uint32_t SetHardwareBreakpoint(lldb::addr_t addr, size_t size);
 
   virtual bool ClearHardwareBreakpoint(uint32_t hw_idx);
-
-  virtual Status ClearAllHardwareBreakpoints();
-
-  virtual Status GetHardwareBreakHitIndex(uint32_t &bp_index,
-                                          lldb::addr_t trap_addr);
 
   virtual uint32_t NumSupportedHardwareWatchpoints();
 
@@ -75,41 +82,46 @@ public:
 
   virtual bool ClearHardwareWatchpoint(uint32_t hw_index);
 
-  virtual Status ClearAllHardwareWatchpoints();
+  virtual Error ClearAllHardwareWatchpoints();
 
-  virtual Status IsWatchpointHit(uint32_t wp_index, bool &is_hit);
+  virtual Error IsWatchpointHit(uint32_t wp_index, bool &is_hit);
 
-  virtual Status GetWatchpointHitIndex(uint32_t &wp_index,
-                                       lldb::addr_t trap_addr);
+  virtual Error GetWatchpointHitIndex(uint32_t &wp_index,
+                                      lldb::addr_t trap_addr);
 
-  virtual Status IsWatchpointVacant(uint32_t wp_index, bool &is_vacant);
+  virtual Error IsWatchpointVacant(uint32_t wp_index, bool &is_vacant);
 
   virtual lldb::addr_t GetWatchpointAddress(uint32_t wp_index);
 
   // MIPS Linux kernel returns a masked address (last 3bits are masked)
-  // when a HW watchpoint is hit. However user may not have set a watchpoint on
-  // this address. This function emulates the instruction at PC and finds the
-  // base address used in the load/store instruction. This gives the exact
-  // address used to read/write the variable being watched. For example: 'n' is
-  // at 0x120010d00 and 'm' is 0x120010d04. When a watchpoint is set at 'm',
+  // when a HW watchpoint is hit. However user may not have set a watchpoint
+  // on this address. This function emulates the instruction at PC and
+  // finds the base address used in the load/store instruction. This gives the
+  // exact address used to read/write the variable being watched.
+  // For example:
+  // 'n' is at 0x120010d00 and 'm' is 0x120010d04. When a watchpoint is set at
+  // 'm',
   // then watch exception is generated even when 'n' is read/written. This
-  // function returns address of 'n' so that client can check whether a
-  // watchpoint is set on this address or not.
+  // function
+  // returns address of 'n' so that client can check whether a watchpoint is set
+  // on this address or not.
   virtual lldb::addr_t GetWatchpointHitAddress(uint32_t wp_index);
 
   virtual bool HardwareSingleStep(bool enable);
 
-  virtual Status
+  virtual Error
   ReadRegisterValueFromMemory(const lldb_private::RegisterInfo *reg_info,
                               lldb::addr_t src_addr, size_t src_len,
                               RegisterValue &reg_value);
 
-  virtual Status
+  virtual Error
   WriteRegisterValueToMemory(const lldb_private::RegisterInfo *reg_info,
                              lldb::addr_t dst_addr, size_t dst_len,
                              const RegisterValue &reg_value);
 
+  //------------------------------------------------------------------
   // Subclasses should not override these
+  //------------------------------------------------------------------
   virtual lldb::tid_t GetThreadID() const;
 
   virtual NativeThreadProtocol &GetThread() { return m_thread; }
@@ -124,15 +136,15 @@ public:
   virtual lldb::addr_t
   GetPCfromBreakpointLocation(lldb::addr_t fail_value = LLDB_INVALID_ADDRESS);
 
-  Status SetPC(lldb::addr_t pc);
+  Error SetPC(lldb::addr_t pc);
 
   lldb::addr_t GetSP(lldb::addr_t fail_value = LLDB_INVALID_ADDRESS);
 
-  Status SetSP(lldb::addr_t sp);
+  Error SetSP(lldb::addr_t sp);
 
   lldb::addr_t GetFP(lldb::addr_t fail_value = LLDB_INVALID_ADDRESS);
 
-  Status SetFP(lldb::addr_t fp);
+  Error SetFP(lldb::addr_t fp);
 
   const char *GetRegisterName(uint32_t reg);
 
@@ -145,9 +157,9 @@ public:
   lldb::addr_t ReadRegisterAsUnsigned(const RegisterInfo *reg_info,
                                       lldb::addr_t fail_value);
 
-  Status WriteRegisterFromUnsigned(uint32_t reg, uint64_t uval);
+  Error WriteRegisterFromUnsigned(uint32_t reg, uint64_t uval);
 
-  Status WriteRegisterFromUnsigned(const RegisterInfo *reg_info, uint64_t uval);
+  Error WriteRegisterFromUnsigned(const RegisterInfo *reg_info, uint64_t uval);
 
   // uint32_t
   // GetStopID () const
@@ -162,14 +174,20 @@ public:
   // }
 
 protected:
+  //------------------------------------------------------------------
   // Classes that inherit from RegisterContext can see and modify these
+  //------------------------------------------------------------------
   NativeThreadProtocol
       &m_thread; // The thread that this register context belongs to.
+  uint32_t m_concrete_frame_idx; // The concrete frame index for this register
+                                 // context
   // uint32_t m_stop_id;             // The stop ID that any data in this
   // context is valid for
 
 private:
+  //------------------------------------------------------------------
   // For RegisterContext only
+  //------------------------------------------------------------------
   DISALLOW_COPY_AND_ASSIGN(NativeRegisterContext);
 };
 

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,13 +11,12 @@
 
 // shared_ptr
 
-// template <class U> bool owner_before(weak_ptr<U> const& b) const noexcept;
+// template <class U> bool owner_before(weak_ptr<U> const& b) const;
 
 #include <memory>
 #include <cassert>
-#include "test_macros.h"
 
-int main(int, char**)
+int main()
 {
     const std::shared_ptr<int> p1(new int);
     const std::shared_ptr<int> p2 = p1;
@@ -28,7 +28,4 @@ int main(int, char**)
     assert(!p2.owner_before(w1));
     assert(p1.owner_before(w3) || p3.owner_before(w1));
     assert(p3.owner_before(w1) == p3.owner_before(w2));
-    ASSERT_NOEXCEPT(p1.owner_before(w2));
-
-  return 0;
 }

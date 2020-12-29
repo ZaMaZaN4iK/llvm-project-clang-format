@@ -1,22 +1,10 @@
 set(LLVM_LINK_COMPONENTS
-  ${LLVM_TARGETS_TO_BUILD}
-  CodeGen
-  Core
   GlobalISel
-  MC
-  MIRParser
-  Support
-  Target
+  CodeGen
   )
 
-add_llvm_unittest(GlobalISelTests
-  ConstantFoldingTest.cpp
-  CSETest.cpp
-  LegalizerTest.cpp
-  LegalizerHelperTest.cpp
-  LegalizerInfoTest.cpp
-  MachineIRBuilderTest.cpp
-  GISelMITest.cpp
-  PatternMatchTest.cpp
-  KnownBitsTest.cpp
-  )
+if(LLVM_BUILD_GLOBAL_ISEL)
+  add_llvm_unittest(GlobalISelTests
+          LegalizerInfoTest.cpp
+          )
+endif()

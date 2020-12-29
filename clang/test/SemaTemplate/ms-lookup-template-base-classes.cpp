@@ -1,5 +1,4 @@
 // RUN: %clang_cc1 -fcxx-exceptions -fexceptions -std=c++1y -fms-compatibility -fno-spell-checking -fsyntax-only -verify %s
-// RUN: %clang_cc1 -fcxx-exceptions -fexceptions -std=c++20 -fms-compatibility -fno-spell-checking -fsyntax-only -verify %s
 
 
 template <class T>
@@ -348,7 +347,8 @@ template <typename T> struct B : A<T> {
 };
 template <typename T> struct C : A<T> {
   // Incorrect form.
-  NameFromBase<T> m; // expected-error {{no template named 'NameFromBase'}}
+  NameFromBase<T> m; // expected-error {{unknown type name 'NameFromBase'}}
+  //expected-error@-1 {{expected member name or ';' after declaration specifiers}}
 };
 }
 

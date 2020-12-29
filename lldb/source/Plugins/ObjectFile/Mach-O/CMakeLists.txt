@@ -1,13 +1,3 @@
-add_lldb_library(lldbPluginObjectFileMachO PLUGIN
+add_lldb_library(lldbPluginObjectFileMachO
   ObjectFileMachO.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbHost
-    lldbSymbol
-    lldbTarget
-    lldbUtility
-    lldbPluginProcessUtility
-  LINK_COMPONENTS
-    Support
   )

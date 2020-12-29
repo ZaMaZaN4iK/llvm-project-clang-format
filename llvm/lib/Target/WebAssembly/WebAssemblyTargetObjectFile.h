@@ -1,13 +1,14 @@
 //===-- WebAssemblyTargetObjectFile.h - WebAssembly Object Info -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file declares the WebAssembly-specific subclass of
+/// \brief This file declares the WebAssembly-specific subclass of
 /// TargetLoweringObjectFile.
 ///
 //===----------------------------------------------------------------------===//
@@ -19,7 +20,7 @@
 
 namespace llvm {
 
-class WebAssemblyTargetObjectFile final : public TargetLoweringObjectFileWasm {
+class WebAssemblyTargetObjectFile final : public TargetLoweringObjectFileELF {
 public:
   void Initialize(MCContext &Ctx, const TargetMachine &TM) override;
 };

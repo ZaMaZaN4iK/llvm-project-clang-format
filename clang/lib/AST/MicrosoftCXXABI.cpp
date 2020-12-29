@@ -1,8 +1,9 @@
 //===------- MicrosoftCXXABI.cpp - AST support for the Microsoft C++ ABI --===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,7 +15,6 @@
 #include "CXXABI.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
-#include "clang/AST/CXXInheritance.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/MangleNumberingContext.h"
 #include "clang/AST/RecordLayout.h"
@@ -25,7 +25,7 @@ using namespace clang;
 
 namespace {
 
-/// Numbers things which need to correspond across multiple TUs.
+/// \brief Numbers things which need to correspond across multiple TUs.
 /// Typically these are things like static locals, lambdas, or blocks.
 class MicrosoftNumberingContext : public MangleNumberingContext {
   llvm::DenseMap<const Type *, unsigned> ManglingNumbers;
@@ -76,14 +76,14 @@ class MicrosoftCXXABI : public CXXABI {
 public:
   MicrosoftCXXABI(ASTContext &Ctx) : Context(Ctx) { }
 
-  MemberPointerInfo
-  getMemberPointerInfo(const MemberPointerType *MPT) const override;
+  std::pair<uint64_t, unsigned>
+  getMemberPointerWidthAndAlign(const MemberPointerType *MPT) const override;
 
   CallingConv getDefaultMethodCallConv(bool isVariadic) const override {
     if (!isVariadic &&
         Context.getTargetInfo().getTriple().getArch() == llvm::Triple::x86)
       return CC_X86ThisCall;
-    return Context.getTargetInfo().getDefaultCallingConv();
+    return CC_C;
   }
 
   bool isNearlyEmpty(const CXXRecordDecl *RD) const override {
@@ -106,7 +106,7 @@ public:
   void addTypedefNameForUnnamedTagDecl(TagDecl *TD,
                                        TypedefNameDecl *DD) override {
     TD = TD->getCanonicalDecl();
-    DD = DD->getCanonicalDecl();
+    DD = cast<TypedefNameDecl>(DD->getCanonicalDecl());
     TypedefNameDecl *&I = UnnamedTagDeclToTypedefNameDecl[TD];
     if (!I)
       I = DD;
@@ -133,7 +133,7 @@ public:
 
   std::unique_ptr<MangleNumberingContext>
   createMangleNumberingContext() const override {
-    return std::make_unique<MicrosoftNumberingContext>();
+    return llvm::make_unique<MicrosoftNumberingContext>();
   }
 };
 }
@@ -155,32 +155,27 @@ static bool usesMultipleInheritanceModel(const CXXRecordDecl *RD) {
   return false;
 }
 
-MSInheritanceModel CXXRecordDecl::calculateInheritanceModel() const {
+MSInheritanceAttr::Spelling CXXRecordDecl::calculateInheritanceModel() const {
   if (!hasDefinition() || isParsingBaseSpecifiers())
-    return MSInheritanceModel::Unspecified;
+    return MSInheritanceAttr::Keyword_unspecified_inheritance;
   if (getNumVBases() > 0)
-    return MSInheritanceModel::Virtual;
+    return MSInheritanceAttr::Keyword_virtual_inheritance;
   if (usesMultipleInheritanceModel(this))
-    return MSInheritanceModel::Multiple;
-  return MSInheritanceModel::Single;
+    return MSInheritanceAttr::Keyword_multiple_inheritance;
+  return MSInheritanceAttr::Keyword_single_inheritance;
 }
 
-MSInheritanceModel CXXRecordDecl::getMSInheritanceModel() const {
+MSInheritanceAttr::Spelling
+CXXRecordDecl::getMSInheritanceModel() const {
   MSInheritanceAttr *IA = getAttr<MSInheritanceAttr>();
   assert(IA && "Expected MSInheritanceAttr on the CXXRecordDecl!");
-  return IA->getInheritanceModel();
+  return IA->getSemanticSpelling();
 }
 
-bool CXXRecordDecl::nullFieldOffsetIsZero() const {
-  return !inheritanceModelHasOnlyOneField(/*IsMemberFunction=*/false,
-                                          getMSInheritanceModel()) ||
-         (hasDefinition() && isPolymorphic());
-}
-
-MSVtorDispMode CXXRecordDecl::getMSVtorDispMode() const {
+MSVtorDispAttr::Mode CXXRecordDecl::getMSVtorDispMode() const {
   if (MSVtorDispAttr *VDA = getAttr<MSVtorDispAttr>())
     return VDA->getVtorDispMode();
-  return getASTContext().getLangOpts().getVtorDispMode();
+  return MSVtorDispAttr::Mode(getASTContext().getLangOpts().VtorDispMode);
 }
 
 // Returns the number of pointer and integer slots used to represent a member
@@ -215,24 +210,24 @@ MSVtorDispMode CXXRecordDecl::getMSVtorDispMode() const {
 static std::pair<unsigned, unsigned>
 getMSMemberPointerSlots(const MemberPointerType *MPT) {
   const CXXRecordDecl *RD = MPT->getMostRecentCXXRecordDecl();
-  MSInheritanceModel Inheritance = RD->getMSInheritanceModel();
+  MSInheritanceAttr::Spelling Inheritance = RD->getMSInheritanceModel();
   unsigned Ptrs = 0;
   unsigned Ints = 0;
   if (MPT->isMemberFunctionPointer())
     Ptrs = 1;
   else
     Ints = 1;
-  if (inheritanceModelHasNVOffsetField(MPT->isMemberFunctionPointer(),
+  if (MSInheritanceAttr::hasNVOffsetField(MPT->isMemberFunctionPointer(),
                                           Inheritance))
     Ints++;
-  if (inheritanceModelHasVBPtrOffsetField(Inheritance))
+  if (MSInheritanceAttr::hasVBPtrOffsetField(Inheritance))
     Ints++;
-  if (inheritanceModelHasVBTableOffsetField(Inheritance))
+  if (MSInheritanceAttr::hasVBTableOffsetField(Inheritance))
     Ints++;
   return std::make_pair(Ptrs, Ints);
 }
 
-CXXABI::MemberPointerInfo MicrosoftCXXABI::getMemberPointerInfo(
+std::pair<uint64_t, unsigned> MicrosoftCXXABI::getMemberPointerWidthAndAlign(
     const MemberPointerType *MPT) const {
   // The nominal struct is laid out with pointers followed by ints and aligned
   // to a pointer width if any are present and an int width otherwise.
@@ -242,25 +237,22 @@ CXXABI::MemberPointerInfo MicrosoftCXXABI::getMemberPointerInfo(
 
   unsigned Ptrs, Ints;
   std::tie(Ptrs, Ints) = getMSMemberPointerSlots(MPT);
-  MemberPointerInfo MPI;
-  MPI.HasPadding = false;
-  MPI.Width = Ptrs * PtrSize + Ints * IntSize;
+  uint64_t Width = Ptrs * PtrSize + Ints * IntSize;
+  unsigned Align;
 
   // When MSVC does x86_32 record layout, it aligns aggregate member pointers to
   // 8 bytes.  However, __alignof usually returns 4 for data memptrs and 8 for
   // function memptrs.
   if (Ptrs + Ints > 1 && Target.getTriple().isArch32Bit())
-    MPI.Align = 64;
+    Align = 64;
   else if (Ptrs)
-    MPI.Align = Target.getPointerAlign(0);
+    Align = Target.getPointerAlign(0);
   else
-    MPI.Align = Target.getIntAlign();
+    Align = Target.getIntAlign();
 
-  if (Target.getTriple().isArch64Bit()) {
-    MPI.Width = llvm::alignTo(MPI.Width, MPI.Align);
-    MPI.HasPadding = MPI.Width != (Ptrs * PtrSize + Ints * IntSize);
-  }
-  return MPI;
+  if (Target.getTriple().isArch64Bit())
+    Width = llvm::alignTo(Width, Align);
+  return std::make_pair(Width, Align);
 }
 
 CXXABI *clang::CreateMicrosoftCXXABI(ASTContext &Ctx) {

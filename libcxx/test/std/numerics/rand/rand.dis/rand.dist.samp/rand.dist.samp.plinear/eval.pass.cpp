@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,6 +16,8 @@
 
 // template<class _URNG> result_type operator()(_URNG& g);
 
+#include <iostream>
+
 #include <random>
 #include <algorithm>
 #include <vector>
@@ -22,8 +25,6 @@
 #include <numeric>
 #include <cassert>
 #include <limits>
-
-#include "test_macros.h"
 
 template <class T>
 inline
@@ -43,6 +44,7 @@ void
 test1()
 {
     typedef std::piecewise_linear_distribution<> D;
+    typedef D::param_type P;
     typedef std::mt19937_64 G;
     G g;
     double b[] = {10, 14, 16, 17};
@@ -95,6 +97,7 @@ void
 test2()
 {
     typedef std::piecewise_linear_distribution<> D;
+    typedef D::param_type P;
     typedef std::mt19937_64 G;
     G g;
     double b[] = {10, 14, 16, 17};
@@ -147,6 +150,7 @@ void
 test3()
 {
     typedef std::piecewise_linear_distribution<> D;
+    typedef D::param_type P;
     typedef std::mt19937_64 G;
     G g;
     double b[] = {10, 14, 16, 17};
@@ -199,6 +203,7 @@ void
 test4()
 {
     typedef std::piecewise_linear_distribution<> D;
+    typedef D::param_type P;
     typedef std::mt19937_64 G;
     G g;
     double b[] = {10, 14, 16};
@@ -252,6 +257,7 @@ void
 test5()
 {
     typedef std::piecewise_linear_distribution<> D;
+    typedef D::param_type P;
     typedef std::mt19937_64 G;
     G g;
     double b[] = {10, 14};
@@ -306,6 +312,7 @@ void
 test6()
 {
     typedef std::piecewise_linear_distribution<> D;
+    typedef D::param_type P;
     typedef std::mt19937_64 G;
     G g;
     double b[] = {10, 14, 16, 17};
@@ -354,7 +361,7 @@ test6()
     }
 }
 
-int main(int, char**)
+int main()
 {
     test1();
     test2();
@@ -362,6 +369,4 @@ int main(int, char**)
     test4();
     test5();
     test6();
-
-  return 0;
 }

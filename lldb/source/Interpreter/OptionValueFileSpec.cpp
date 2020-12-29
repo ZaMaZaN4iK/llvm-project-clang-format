@@ -1,19 +1,20 @@
 //===-- OptionValueFileSpec.cpp ---------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Interpreter/OptionValueFileSpec.h"
 
+#include "lldb/Core/State.h"
 #include "lldb/DataFormatters/FormatManager.h"
 #include "lldb/Host/FileSystem.h"
+#include "lldb/Interpreter/Args.h"
 #include "lldb/Interpreter/CommandCompletions.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
-#include "lldb/Utility/Args.h"
-#include "lldb/Utility/State.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -52,9 +53,9 @@ void OptionValueFileSpec::DumpValue(const ExecutionContext *exe_ctx,
   }
 }
 
-Status OptionValueFileSpec::SetValueFromString(llvm::StringRef value,
-                                               VarSetOperationType op) {
-  Status error;
+Error OptionValueFileSpec::SetValueFromString(llvm::StringRef value,
+                                              VarSetOperationType op) {
+  Error error;
   switch (op) {
   case eVarSetOperationClear:
     Clear();
@@ -65,17 +66,18 @@ Status OptionValueFileSpec::SetValueFromString(llvm::StringRef value,
   case eVarSetOperationAssign:
     if (value.size() > 0) {
       // The setting value may have whitespace, double-quotes, or single-quotes
-      // around the file path to indicate that internal spaces are not word
-      // breaks.  Strip off any ws & quotes from the start and end of the file
-      // path - we aren't doing any word // breaking here so the quoting is
-      // unnecessary.  NB this will cause a problem if someone tries to specify
+      // around the file
+      // path to indicate that internal spaces are not word breaks.  Strip off
+      // any ws & quotes
+      // from the start and end of the file path - we aren't doing any word //
+      // breaking here so
+      // the quoting is unnecessary.  NB this will cause a problem if someone
+      // tries to specify
       // a file path that legitimately begins or ends with a " or ' character,
       // or whitespace.
       value = value.trim("\"' \t");
       m_value_was_set = true;
-      m_current_value.SetFile(value.str(), FileSpec::Style::native);
-      if (m_resolve)
-        FileSystem::Instance().Resolve(m_current_value);
+      m_current_value.SetFile(value.str(), m_resolve);
       m_data_sp.reset();
       m_data_mod_time = llvm::sys::TimePoint<>();
       NotifyValueChanged();
@@ -99,19 +101,27 @@ lldb::OptionValueSP OptionValueFileSpec::DeepCopy() const {
   return OptionValueSP(new OptionValueFileSpec(*this));
 }
 
-void OptionValueFileSpec::AutoComplete(CommandInterpreter &interpreter,
-                                       CompletionRequest &request) {
+size_t OptionValueFileSpec::AutoComplete(
+    CommandInterpreter &interpreter, llvm::StringRef s, int match_start_point,
+    int max_return_elements, bool &word_complete, StringList &matches) {
+  word_complete = false;
+  matches.Clear();
   CommandCompletions::InvokeCommonCompletionCallbacks(
-      interpreter, m_completion_mask, request, nullptr);
+      interpreter, m_completion_mask, s, match_start_point, max_return_elements,
+      nullptr, word_complete, matches);
+  return matches.GetSize();
 }
 
-const lldb::DataBufferSP &OptionValueFileSpec::GetFileContents() {
+const lldb::DataBufferSP &
+OptionValueFileSpec::GetFileContents(bool null_terminate) {
   if (m_current_value) {
-    const auto file_mod_time = FileSystem::Instance().GetModificationTime(m_current_value);
+    const auto file_mod_time = FileSystem::GetModificationTime(m_current_value);
     if (m_data_sp && m_data_mod_time == file_mod_time)
       return m_data_sp;
-    m_data_sp =
-        FileSystem::Instance().CreateDataBuffer(m_current_value.GetPath());
+    if (null_terminate)
+      m_data_sp = m_current_value.ReadFileContentsAsCString();
+    else
+      m_data_sp = m_current_value.ReadFileContents();
     m_data_mod_time = file_mod_time;
   }
   return m_data_sp;

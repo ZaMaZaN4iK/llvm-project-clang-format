@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -55,7 +56,7 @@ test()
     static_assert((std::is_same<typename R::iterator_category, typename T::iterator_category>::value), "");
 }
 
-int main(int, char**)
+int main()
 {
     test<input_iterator<char*> >();
     test<forward_iterator<char*> >();
@@ -91,6 +92,4 @@ int main(int, char**)
         static_assert(std::is_same<It::reference, int&&>::value, "");
     }
 #endif
-
-  return 0;
 }

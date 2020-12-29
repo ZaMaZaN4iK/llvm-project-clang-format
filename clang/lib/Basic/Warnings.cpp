@@ -1,8 +1,9 @@
 //===--- Warnings.cpp - C-Language Front-end ------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -50,7 +51,7 @@ void clang::ProcessWarningOptions(DiagnosticsEngine &Diags,
   Diags.setElideType(Opts.ElideType);
   Diags.setPrintTemplateTree(Opts.ShowTemplateTree);
   Diags.setShowColors(Opts.ShowColors);
-
+ 
   // Handle -ferror-limit
   if (Opts.ErrorLimit)
     Diags.setErrorLimit(Opts.ErrorLimit);
@@ -74,7 +75,7 @@ void clang::ProcessWarningOptions(DiagnosticsEngine &Diags,
     Diags.getDiagnosticIDs();
   // We parse the warning options twice.  The first pass sets diagnostic state,
   // while the second pass reports warnings/errors.  This has the effect that
-  // we follow the more canonical "last option wins" paradigm when there are
+  // we follow the more canonical "last option wins" paradigm when there are 
   // conflicting options.
   for (unsigned Report = 0, ReportEnd = 2; Report != ReportEnd; ++Report) {
     bool SetDiagnostic = (Report == 0);
@@ -113,7 +114,7 @@ void clang::ProcessWarningOptions(DiagnosticsEngine &Diags,
           Diags.setSuppressSystemWarnings(!isPositive);
         continue;
       }
-
+      
       // -Weverything is a special case as well.  It implicitly enables all
       // warnings, including ones not explicitly in a warning group.
       if (Opt == "everything") {
@@ -127,8 +128,8 @@ void clang::ProcessWarningOptions(DiagnosticsEngine &Diags,
         }
         continue;
       }
-
-      // -Werror/-Wno-error is a special case, not controlled by the option
+      
+      // -Werror/-Wno-error is a special case, not controlled by the option 
       // table. It also has the "specifier" form of -Werror=foo and -Werror-foo.
       if (Opt.startswith("error")) {
         StringRef Specifier;
@@ -141,13 +142,13 @@ void clang::ProcessWarningOptions(DiagnosticsEngine &Diags,
           }
           Specifier = Opt.substr(6);
         }
-
+        
         if (Specifier.empty()) {
           if (SetDiagnostic)
             Diags.setWarningsAsErrors(isPositive);
           continue;
         }
-
+        
         if (SetDiagnostic) {
           // Set the warning as error flag for this specifier.
           Diags.setDiagnosticGroupWarningAsError(Specifier, isPositive);
@@ -156,7 +157,7 @@ void clang::ProcessWarningOptions(DiagnosticsEngine &Diags,
         }
         continue;
       }
-
+      
       // -Wfatal-errors is yet another special case.
       if (Opt.startswith("fatal-errors")) {
         StringRef Specifier;
@@ -175,7 +176,7 @@ void clang::ProcessWarningOptions(DiagnosticsEngine &Diags,
             Diags.setErrorsAsFatal(isPositive);
           continue;
         }
-
+        
         if (SetDiagnostic) {
           // Set the error as fatal flag for this specifier.
           Diags.setDiagnosticGroupErrorAsFatal(Specifier, isPositive);
@@ -184,7 +185,7 @@ void clang::ProcessWarningOptions(DiagnosticsEngine &Diags,
         }
         continue;
       }
-
+      
       if (Report) {
         if (DiagIDs->getDiagnosticsInGroup(Flavor, Opt, _Diags))
           EmitUnknownDiagWarning(Diags, Flavor, isPositive ? "-W" : "-Wno-",

@@ -1,8 +1,9 @@
 //===-- lib/CodeGen/MachineInstrBundle.cpp --------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,11 +13,10 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/Passes.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/InitializePasses.h"
+#include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 #include <utility>
 using namespace llvm;
 
@@ -105,16 +105,6 @@ bool FinalizeMachineBundles::runOnMachineFunction(MachineFunction &MF) {
   return llvm::finalizeBundles(MF);
 }
 
-/// Return the first found DebugLoc that has a DILocation, given a range of
-/// instructions. The search range is from FirstMI to LastMI (exclusive). If no
-/// DILocation is found, then an empty location is returned.
-static DebugLoc getDebugLoc(MachineBasicBlock::instr_iterator FirstMI,
-                            MachineBasicBlock::instr_iterator LastMI) {
-  for (auto MII = FirstMI; MII != LastMI; ++MII)
-    if (MII->getDebugLoc().get())
-      return MII->getDebugLoc();
-  return DebugLoc();
-}
 
 /// finalizeBundle - Finalize a machine instruction bundle which includes
 /// a sequence of instructions starting from FirstMI to LastMI (exclusive).
@@ -133,7 +123,7 @@ void llvm::finalizeBundle(MachineBasicBlock &MBB,
   const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
 
   MachineInstrBuilder MIB =
-      BuildMI(MF, getDebugLoc(FirstMI, LastMI), TII->get(TargetOpcode::BUNDLE));
+      BuildMI(MF, FirstMI->getDebugLoc(), TII->get(TargetOpcode::BUNDLE));
   Bundle.prepend(MIB);
 
   SmallVector<unsigned, 32> LocalDefs;
@@ -145,9 +135,9 @@ void llvm::finalizeBundle(MachineBasicBlock &MBB,
   SmallSet<unsigned, 8> KilledUseSet;
   SmallSet<unsigned, 8> UndefUseSet;
   SmallVector<MachineOperand*, 4> Defs;
-  for (auto MII = FirstMI; MII != LastMI; ++MII) {
-    for (unsigned i = 0, e = MII->getNumOperands(); i != e; ++i) {
-      MachineOperand &MO = MII->getOperand(i);
+  for (; FirstMI != LastMI; ++FirstMI) {
+    for (unsigned i = 0, e = FirstMI->getNumOperands(); i != e; ++i) {
+      MachineOperand &MO = FirstMI->getOperand(i);
       if (!MO.isReg())
         continue;
       if (MO.isDef()) {
@@ -155,10 +145,10 @@ void llvm::finalizeBundle(MachineBasicBlock &MBB,
         continue;
       }
 
-      Register Reg = MO.getReg();
+      unsigned Reg = MO.getReg();
       if (!Reg)
         continue;
-
+      assert(TargetRegisterInfo::isPhysicalRegister(Reg));
       if (LocalDefSet.count(Reg)) {
         MO.setIsInternalRead();
         if (MO.isKill())
@@ -178,7 +168,7 @@ void llvm::finalizeBundle(MachineBasicBlock &MBB,
 
     for (unsigned i = 0, e = Defs.size(); i != e; ++i) {
       MachineOperand &MO = *Defs[i];
-      Register Reg = MO.getReg();
+      unsigned Reg = MO.getReg();
       if (!Reg)
         continue;
 
@@ -195,7 +185,7 @@ void llvm::finalizeBundle(MachineBasicBlock &MBB,
           DeadDefSet.erase(Reg);
       }
 
-      if (!MO.isDead() && Register::isPhysicalRegister(Reg)) {
+      if (!MO.isDead()) {
         for (MCSubRegIterator SubRegs(Reg, TRI); SubRegs.isValid(); ++SubRegs) {
           unsigned SubReg = *SubRegs;
           if (LocalDefSet.insert(SubReg).second)
@@ -224,15 +214,6 @@ void llvm::finalizeBundle(MachineBasicBlock &MBB,
     bool isUndef = UndefUseSet.count(Reg);
     MIB.addReg(Reg, getKillRegState(isKill) | getUndefRegState(isUndef) |
                getImplRegState(true));
-  }
-
-  // Set FrameSetup/FrameDestroy for the bundle. If any of the instructions got
-  // the property, then also set it on the bundle.
-  for (auto MII = FirstMI; MII != LastMI; ++MII) {
-    if (MII->getFlag(MachineInstr::FrameSetup))
-      MIB.setMIFlag(MachineInstr::FrameSetup);
-    if (MII->getFlag(MachineInstr::FrameDestroy))
-      MIB.setMIFlag(MachineInstr::FrameDestroy);
   }
 }
 
@@ -278,18 +259,22 @@ bool llvm::finalizeBundles(MachineFunction &MF) {
   return Changed;
 }
 
-VirtRegInfo llvm::AnalyzeVirtRegInBundle(
-    MachineInstr &MI, unsigned Reg,
-    SmallVectorImpl<std::pair<MachineInstr *, unsigned>> *Ops) {
-  VirtRegInfo RI = {false, false, false};
-  for (MIBundleOperands O(MI); O.isValid(); ++O) {
-    MachineOperand &MO = *O;
+//===----------------------------------------------------------------------===//
+// MachineOperand iterator
+//===----------------------------------------------------------------------===//
+
+MachineOperandIteratorBase::VirtRegInfo
+MachineOperandIteratorBase::analyzeVirtReg(unsigned Reg,
+                    SmallVectorImpl<std::pair<MachineInstr*, unsigned> > *Ops) {
+  VirtRegInfo RI = { false, false, false };
+  for(; isValid(); ++*this) {
+    MachineOperand &MO = deref();
     if (!MO.isReg() || MO.getReg() != Reg)
       continue;
 
     // Remember each (MI, OpNo) that refers to Reg.
     if (Ops)
-      Ops->push_back(std::make_pair(MO.getParent(), O.getOperandNo()));
+      Ops->push_back(std::make_pair(MO.getParent(), getOperandNo()));
 
     // Both defs and uses can read virtual registers.
     if (MO.readsReg()) {
@@ -301,22 +286,22 @@ VirtRegInfo llvm::AnalyzeVirtRegInBundle(
     // Only defs can write.
     if (MO.isDef())
       RI.Writes = true;
-    else if (!RI.Tied &&
-             MO.getParent()->isRegTiedToDefOperand(O.getOperandNo()))
+    else if (!RI.Tied && MO.getParent()->isRegTiedToDefOperand(getOperandNo()))
       RI.Tied = true;
   }
   return RI;
 }
 
-PhysRegInfo llvm::AnalyzePhysRegInBundle(const MachineInstr &MI, unsigned Reg,
-                                         const TargetRegisterInfo *TRI) {
+MachineOperandIteratorBase::PhysRegInfo
+MachineOperandIteratorBase::analyzePhysReg(unsigned Reg,
+                                           const TargetRegisterInfo *TRI) {
   bool AllDefsDead = true;
   PhysRegInfo PRI = {false, false, false, false, false, false, false, false};
 
-  assert(Register::isPhysicalRegister(Reg) &&
+  assert(TargetRegisterInfo::isPhysicalRegister(Reg) &&
          "analyzePhysReg not given a physical register!");
-  for (ConstMIBundleOperands O(MI); O.isValid(); ++O) {
-    const MachineOperand &MO = *O;
+  for (; isValid(); ++*this) {
+    MachineOperand &MO = deref();
 
     if (MO.isRegMask() && MO.clobbersPhysReg(Reg)) {
       PRI.Clobbered = true;
@@ -326,8 +311,8 @@ PhysRegInfo llvm::AnalyzePhysRegInBundle(const MachineInstr &MI, unsigned Reg,
     if (!MO.isReg())
       continue;
 
-    Register MOReg = MO.getReg();
-    if (!MOReg || !Register::isPhysicalRegister(MOReg))
+    unsigned MOReg = MO.getReg();
+    if (!MOReg || !TargetRegisterInfo::isPhysicalRegister(MOReg))
       continue;
 
     if (!TRI->regsOverlap(MOReg, Reg))

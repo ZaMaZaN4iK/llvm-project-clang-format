@@ -1,8 +1,9 @@
 //===--- CommentToXML.cpp - Convert comments to XML representation --------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -188,8 +189,11 @@ FullCommentParts::FullCommentParts(const FullComment *C,
   // Sort params in order they are declared in the function prototype.
   // Unresolved parameters are put at the end of the list in the same order
   // they were seen in the comment.
-  llvm::stable_sort(Params, ParamCommandCommentCompareIndex());
-  llvm::stable_sort(TParams, TParamCommandCommentComparePosition());
+  std::stable_sort(Params.begin(), Params.end(),
+                   ParamCommandCommentCompareIndex());
+
+  std::stable_sort(TParams.begin(), TParams.end(),
+                   TParamCommandCommentComparePosition());
 }
 
 void printHTMLStartTagComment(const HTMLStartTagComment *C,
@@ -296,10 +300,6 @@ void CommentASTToHTMLConverter::visitInlineCommandComment(
     Result << "<em>";
     appendToResultWithHTMLEscaping(Arg0);
     Result << "</em>";
-    return;
-  case InlineCommandComment::RenderAnchor:
-    assert(C->getNumArgs() == 1);
-    Result << "<span id=\"" << Arg0 << "\"></span>";
     return;
   }
 }
@@ -579,7 +579,6 @@ void getSourceTextOfDeclaration(const DeclInfo *ThisDecl,
   PrintingPolicy PPolicy(LangOpts);
   PPolicy.PolishForDeclaration = true;
   PPolicy.TerseOutput = true;
-  PPolicy.ConstantsAsWritten = true;
   ThisDecl->CurrentDecl->print(OS, PPolicy,
                                /*Indentation*/0, /*PrintInstantiation*/false);
 }
@@ -593,10 +592,10 @@ void CommentASTToXMLConverter::formatTextOfDeclaration(
   unsigned Offset = 0;
   unsigned Length = Declaration.size();
 
-  format::FormatStyle Style = format::getLLVMStyle();
-  Style.FixNamespaceComments = false;
+  bool IncompleteFormat = false;
   tooling::Replacements Replaces =
-      reformat(Style, StringDecl, tooling::Range(Offset, Length), "xmldecl.xd");
+      reformat(format::getLLVMStyle(), StringDecl,
+               tooling::Range(Offset, Length), "xmldecl.xd", &IncompleteFormat);
   auto FormattedStringDecl = applyAllReplacements(StringDecl, Replaces);
   if (static_cast<bool>(FormattedStringDecl)) {
     Declaration = *FormattedStringDecl;
@@ -644,10 +643,6 @@ void CommentASTToXMLConverter::visitInlineCommandComment(
     Result << "<emphasized>";
     appendToResultWithXMLEscaping(Arg0);
     Result << "</emphasized>";
-    return;
-  case InlineCommandComment::RenderAnchor:
-    assert(C->getNumArgs() == 1);
-    Result << "<anchor id=\"" << Arg0 << "\"></anchor>";
     return;
   }
 }
@@ -724,7 +719,6 @@ void CommentASTToXMLConverter::visitBlockCommandComment(
   case CommandTraits::KCI_version:
   case CommandTraits::KCI_warning:
     ParagraphKind = C->getCommandName(Traits);
-    break;
   default:
     break;
   }

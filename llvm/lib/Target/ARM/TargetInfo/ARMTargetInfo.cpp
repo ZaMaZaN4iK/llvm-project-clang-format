@@ -1,12 +1,13 @@
 //===-- ARMTargetInfo.cpp - ARM Target Implementation ---------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "TargetInfo/ARMTargetInfo.h"
+#include "MCTargetDesc/ARMMCTargetDesc.h"
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 
@@ -27,14 +28,14 @@ Target &llvm::getTheThumbBETarget() {
   return TheThumbBETarget;
 }
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeARMTargetInfo() {
+extern "C" void LLVMInitializeARMTargetInfo() {
   RegisterTarget<Triple::arm, /*HasJIT=*/true> X(getTheARMLETarget(), "arm",
-                                                 "ARM", "ARM");
+                                                 "ARM");
   RegisterTarget<Triple::armeb, /*HasJIT=*/true> Y(getTheARMBETarget(), "armeb",
-                                                   "ARM (big endian)", "ARM");
+                                                   "ARM (big endian)");
 
   RegisterTarget<Triple::thumb, /*HasJIT=*/true> A(getTheThumbLETarget(),
-                                                   "thumb", "Thumb", "ARM");
+                                                   "thumb", "Thumb");
   RegisterTarget<Triple::thumbeb, /*HasJIT=*/true> B(
-      getTheThumbBETarget(), "thumbeb", "Thumb (big endian)", "ARM");
+      getTheThumbBETarget(), "thumbeb", "Thumb (big endian)");
 }

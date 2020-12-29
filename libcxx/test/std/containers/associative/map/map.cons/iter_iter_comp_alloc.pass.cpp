@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,7 +23,7 @@
 #include "test_allocator.h"
 #include "min_allocator.h"
 
-int main(int, char**)
+int main()
 {
     {
     typedef std::pair<const int, double> V;
@@ -91,6 +92,7 @@ int main(int, char**)
         V(3, 2),
     };
     {
+    typedef std::pair<const int, double> V;
     typedef min_allocator<V> A;
     typedef test_compare<std::less<int> > C;
     A a;
@@ -104,6 +106,7 @@ int main(int, char**)
     assert(m.get_allocator() == a);
     }
     {
+    typedef std::pair<const int, double> V;
     typedef explicit_allocator<V> A;
     typedef test_compare<std::less<int> > C;
     A a;
@@ -119,6 +122,4 @@ int main(int, char**)
     }
 #endif
 #endif
-
-  return 0;
 }

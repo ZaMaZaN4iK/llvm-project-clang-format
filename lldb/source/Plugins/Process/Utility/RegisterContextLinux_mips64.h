@@ -1,10 +1,13 @@
 //===-- RegisterContextLinux_mips64.h ---------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
+
+#if defined(__mips__)
 
 #ifndef liblldb_RegisterContextLinux_mips64_H_
 #define liblldb_RegisterContextLinux_mips64_H_
@@ -21,10 +24,6 @@ public:
 
   const lldb_private::RegisterInfo *GetRegisterInfo() const override;
 
-  const lldb_private::RegisterSet *GetRegisterSet(size_t set) const;
-
-  size_t GetRegisterSetCount() const;
-
   uint32_t GetRegisterCount() const override;
 
   uint32_t GetUserRegisterCount() const override;
@@ -37,3 +36,4 @@ private:
 
 #endif
 
+#endif

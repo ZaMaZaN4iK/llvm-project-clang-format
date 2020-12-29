@@ -1,8 +1,9 @@
 //===--- DefinitionsInHeadersCheck.cpp - clang-tidy------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,7 +22,7 @@ namespace {
 AST_MATCHER_P(NamedDecl, usesHeaderFileExtension,
               utils::HeaderFileExtensionsSet, HeaderFileExtensions) {
   return utils::isExpansionLocInHeaderFile(
-      Node.getBeginLoc(), Finder->getASTContext().getSourceManager(),
+      Node.getLocStart(), Finder->getASTContext().getSourceManager(),
       HeaderFileExtensions);
 }
 
@@ -31,8 +32,8 @@ DefinitionsInHeadersCheck::DefinitionsInHeadersCheck(StringRef Name,
                                                      ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
       UseHeaderFileExtension(Options.get("UseHeaderFileExtension", true)),
-      RawStringHeaderFileExtensions(Options.getLocalOrGlobal(
-          "HeaderFileExtensions", utils::defaultHeaderFileExtensions())) {
+      RawStringHeaderFileExtensions(
+          Options.getLocalOrGlobal("HeaderFileExtensions", ",h,hh,hpp,hxx")) {
   if (!utils::parseHeaderFileExtensions(RawStringHeaderFileExtensions,
                                         HeaderFileExtensions, ',')) {
     // FIXME: Find a more suitable way to handle invalid configuration
@@ -71,7 +72,7 @@ void DefinitionsInHeadersCheck::registerMatchers(MatchFinder *Finder) {
 
 void DefinitionsInHeadersCheck::check(const MatchFinder::MatchResult &Result) {
   // Don't run the check in failing TUs.
-  if (Result.Context->getDiagnostics().hasUncompilableErrorOccurred())
+  if (Result.Context->getDiagnostics().hasErrorOccurred())
     return;
 
   // C++ [basic.def.odr] p6:
@@ -93,10 +94,7 @@ void DefinitionsInHeadersCheck::check(const MatchFinder::MatchResult &Result) {
   //
   // Although these might also cause ODR violations, we can be less certain and
   // should try to keep the false-positive rate down.
-  //
-  // FIXME: Should declarations in anonymous namespaces get the same treatment
-  // as static / const declarations?
-  if (!ND->hasExternalFormalLinkage() && !ND->isInAnonymousNamespace())
+  if (ND->getLinkageInternal() == InternalLinkage)
     return;
 
   if (const auto *FD = dyn_cast<FunctionDecl>(ND)) {
@@ -106,8 +104,8 @@ void DefinitionsInHeadersCheck::check(const MatchFinder::MatchResult &Result) {
     // Function templates are allowed.
     if (FD->getTemplatedKind() == FunctionDecl::TK_FunctionTemplate)
       return;
-    // Ignore instantiated functions.
-    if (FD->isTemplateInstantiation())
+    // Function template full specialization is prohibited in header file.
+    if (FD->getTemplateSpecializationKind() == TSK_ImplicitInstantiation)
       return;
     // Member function of a class template and member function of a nested class
     // in a class template are allowed.
@@ -124,27 +122,19 @@ void DefinitionsInHeadersCheck::check(const MatchFinder::MatchResult &Result) {
       }
     }
 
-    bool IsFullSpec = FD->getTemplateSpecializationKind() != TSK_Undeclared;
     diag(FD->getLocation(),
-         "%select{function|full function template specialization}0 %1 defined "
-         "in a header file; function definitions in header files can lead to "
-         "ODR violations")
-        << IsFullSpec << FD;
-    diag(FD->getLocation(), /*FixDescription=*/"make as 'inline'",
-         DiagnosticIDs::Note)
-        << FixItHint::CreateInsertion(FD->getInnerLocStart(), "inline ");
+         "function %0 defined in a header file; "
+         "function definitions in header files can lead to ODR violations")
+        << FD << FixItHint::CreateInsertion(
+                     FD->getReturnTypeSourceRange().getBegin(), "inline ");
   } else if (const auto *VD = dyn_cast<VarDecl>(ND)) {
     // Static data members of a class template are allowed.
     if (VD->getDeclContext()->isDependentContext() && VD->isStaticDataMember())
       return;
-    // Ignore instantiated static data members of classes.
-    if (isTemplateInstantiation(VD->getTemplateSpecializationKind()))
+    if (VD->getTemplateSpecializationKind() == TSK_ImplicitInstantiation)
       return;
     // Ignore variable definition within function scope.
     if (VD->hasLocalStorage() || VD->isStaticLocal())
-      return;
-    // Ignore inline variables.
-    if (VD->isInline())
       return;
 
     diag(VD->getLocation(),

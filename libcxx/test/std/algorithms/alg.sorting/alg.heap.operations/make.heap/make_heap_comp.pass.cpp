@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,12 +17,10 @@
 #include <algorithm>
 #include <functional>
 #include <memory>
-#include <random>
 #include <cassert>
 
 #include "test_macros.h"
-#include "counting_predicates.h"
-#include "test_iterators.h"
+#include "counting_predicates.hpp"
 
 struct indirect_less
 {
@@ -30,7 +29,6 @@ struct indirect_less
         {return *x < *y;}
 };
 
-std::mt19937 randomness;
 
 void test(int N)
 {
@@ -38,13 +36,8 @@ void test(int N)
     {
     for (int i = 0; i < N; ++i)
         ia[i] = i;
-    std::shuffle(ia, ia+N, randomness);
+    std::random_shuffle(ia, ia+N);
     std::make_heap(ia, ia+N, std::greater<int>());
-    assert(std::is_heap(ia, ia+N, std::greater<int>()));
-
-    std::shuffle(ia, ia+N, randomness);
-    std::make_heap(random_access_iterator<int *>(ia),
-                   random_access_iterator<int *>(ia+N), std::greater<int>());
     assert(std::is_heap(ia, ia+N, std::greater<int>()));
     }
 
@@ -71,7 +64,7 @@ void test(int N)
 //  Random
     {
     binary_counting_predicate<std::greater<int>, int, int> pred ((std::greater<int>()));
-    std::shuffle(ia, ia+N, randomness);
+    std::random_shuffle(ia, ia+N);
     std::make_heap(ia, ia+N, std::ref(pred));
     assert(pred.count() <= 3u*N);
     assert(std::is_heap(ia, ia+N, pred));
@@ -80,7 +73,7 @@ void test(int N)
     delete [] ia;
 }
 
-int main(int, char**)
+int main()
 {
     test(0);
     test(1);
@@ -97,12 +90,10 @@ int main(int, char**)
     std::unique_ptr<int>* ia = new std::unique_ptr<int> [N];
     for (int i = 0; i < N; ++i)
         ia[i].reset(new int(i));
-    std::shuffle(ia, ia+N, randomness);
+    std::random_shuffle(ia, ia+N);
     std::make_heap(ia, ia+N, indirect_less());
     assert(std::is_heap(ia, ia+N, indirect_less()));
     delete [] ia;
     }
 #endif
-
-  return 0;
 }

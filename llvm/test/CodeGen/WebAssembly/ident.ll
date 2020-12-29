@@ -1,4 +1,4 @@
-; RUN: llc < %s -asm-verbose=false -wasm-keep-registers | FileCheck %s
+; RUN: llc < %s -asm-verbose=false | FileCheck %s
 
 ; Test llvm.ident.
 

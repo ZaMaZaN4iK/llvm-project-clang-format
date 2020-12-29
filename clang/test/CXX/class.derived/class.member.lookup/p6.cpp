@@ -1,24 +1,24 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s -Wshadow-field
+// RUN: %clang_cc1 -fsyntax-only -verify %s
 
 class V { 
 public: 
   int f(); 
-  int x; // expected-note {{declared here}}
+  int x; 
 };
 
 class W { 
 public: 
   int g(); // expected-note{{member found by ambiguous name lookup}}
-  int y; // expected-note{{member found by ambiguous name lookup}} expected-note {{declared here}}
+  int y; // expected-note{{member found by ambiguous name lookup}}
 };
 
 class B : public virtual V, public W
 {
 public:
   int f(); 
-  int x;  // expected-warning {{non-static data member 'x' of 'B' shadows member inherited from type 'V'}}
+  int x;
   int g();  // expected-note{{member found by ambiguous name lookup}}
-  int y; // expected-note{{member found by ambiguous name lookup}} expected-warning {{non-static data member 'y' of 'B' shadows member inherited from type 'W'}}
+  int y; // expected-note{{member found by ambiguous name lookup}}
 };
 
 class C : public virtual V, public W { };

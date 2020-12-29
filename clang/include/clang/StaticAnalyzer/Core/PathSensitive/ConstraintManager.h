@@ -1,8 +1,9 @@
-//===- ConstraintManager.h - Constraints on symbolic values. ----*- C++ -*-===//
+//== ConstraintManager.h - Constraints on symbolic values.-------*- C++ -*--==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,44 +14,28 @@
 #ifndef LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_CONSTRAINTMANAGER_H
 #define LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_CONSTRAINTMANAGER_H
 
-#include "clang/Basic/LLVM.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState_Fwd.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
-#include "clang/StaticAnalyzer/Core/PathSensitive/SymExpr.h"
-#include "llvm/ADT/Optional.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SymbolManager.h"
 #include "llvm/Support/SaveAndRestore.h"
-#include <memory>
-#include <utility>
 
 namespace llvm {
-
 class APSInt;
-
-} // namespace llvm
+}
 
 namespace clang {
 namespace ento {
 
-class ProgramStateManager;
 class SubEngine;
-class SymbolReaper;
 
 class ConditionTruthVal {
   Optional<bool> Val;
-
 public:
   /// Construct a ConditionTruthVal indicating the constraint is constrained
   /// to either true or false, depending on the boolean value provided.
   ConditionTruthVal(bool constraint) : Val(constraint) {}
 
   /// Construct a ConstraintVal indicating the constraint is underconstrained.
-  ConditionTruthVal() = default;
-
-  /// \return Stored value, assuming that the value is known.
-  /// Crashes otherwise.
-  bool getValue() const {
-    return *Val;
-  }
+  ConditionTruthVal() {}
 
   /// Return true if the constraint is perfectly constrained to 'true'.
   bool isConstrainedTrue() const {
@@ -76,17 +61,14 @@ public:
 
 class ConstraintManager {
 public:
-  ConstraintManager() = default;
+  ConstraintManager() : NotifyAssumeClients(true) {}
+
   virtual ~ConstraintManager();
-
-  virtual bool haveEqualConstraints(ProgramStateRef S1,
-                                    ProgramStateRef S2) const = 0;
-
   virtual ProgramStateRef assume(ProgramStateRef state,
                                  DefinedSVal Cond,
                                  bool Assumption) = 0;
 
-  using ProgramStatePair = std::pair<ProgramStateRef, ProgramStateRef>;
+  typedef std::pair<ProgramStateRef, ProgramStateRef> ProgramStatePair;
 
   /// Returns a pair of states (StTrue, StFalse) where the given condition is
   /// assumed to be true or false, respectively.
@@ -147,7 +129,7 @@ public:
     return ProgramStatePair(StInRange, StOutOfRange);
   }
 
-  /// If a symbol is perfectly constrained to a constant, attempt
+  /// \brief If a symbol is perfectly constrained to a constant, attempt
   /// to return the concrete value.
   ///
   /// Note that a ConstraintManager is not obligated to return a concretized
@@ -157,14 +139,15 @@ public:
     return nullptr;
   }
 
-  /// Scan all symbols referenced by the constraints. If the symbol is not
-  /// alive, remove it.
   virtual ProgramStateRef removeDeadBindings(ProgramStateRef state,
                                                  SymbolReaper& SymReaper) = 0;
 
-  virtual void printJson(raw_ostream &Out, ProgramStateRef State,
-                         const char *NL, unsigned int Space,
-                         bool IsDot) const = 0;
+  virtual void print(ProgramStateRef state,
+                     raw_ostream &Out,
+                     const char* nl,
+                     const char *sep) = 0;
+
+  virtual void EndPath(ProgramStateRef state) {}
 
   /// Convenience method to query the state to see if a symbol is null or
   /// not null, or if neither assumption can be made.
@@ -181,7 +164,7 @@ protected:
   ///
   /// Note that this flag allows the ConstraintManager to be re-entrant,
   /// but not thread-safe.
-  bool NotifyAssumeClients = true;
+  bool NotifyAssumeClients;
 
   /// canReasonAbout - Not all ConstraintManagers can accurately reason about
   ///  all SVal values.  This method returns true if the ConstraintManager can
@@ -199,10 +182,8 @@ std::unique_ptr<ConstraintManager>
 CreateRangeConstraintManager(ProgramStateManager &statemgr,
                              SubEngine *subengine);
 
-std::unique_ptr<ConstraintManager>
-CreateZ3ConstraintManager(ProgramStateManager &statemgr, SubEngine *subengine);
+} // end GR namespace
 
-} // namespace ento
-} // namespace clang
+} // end clang namespace
 
-#endif // LLVM_CLANG_STATICANALYZER_CORE_PATHSENSITIVE_CONSTRAINTMANAGER_H
+#endif

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,7 +21,6 @@
 #include <experimental/functional>
 #include <cassert>
 
-#include "test_macros.h"
 #include "test_iterators.h"
 
 struct count_equal
@@ -75,7 +75,7 @@ test()
     do_search(Iter1(ih), Iter1(ih+sh), Iter2(ii), Iter2(ii+3), Iter1(ih+3),  sh*3);
 }
 
-int main(int, char**) {
+int main() {
     test<forward_iterator<const int*>, forward_iterator<const int*> >();
     test<forward_iterator<const int*>, bidirectional_iterator<const int*> >();
     test<forward_iterator<const int*>, random_access_iterator<const int*> >();
@@ -85,6 +85,4 @@ int main(int, char**) {
     test<random_access_iterator<const int*>, forward_iterator<const int*> >();
     test<random_access_iterator<const int*>, bidirectional_iterator<const int*> >();
     test<random_access_iterator<const int*>, random_access_iterator<const int*> >();
-
-  return 0;
 }

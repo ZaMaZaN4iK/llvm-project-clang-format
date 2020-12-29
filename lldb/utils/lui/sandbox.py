@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 ##===-- sandbox.py -------------------------------------------*- Python -*-===##
 ##
-# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-# See https://llvm.org/LICENSE.txt for license information.
-# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# The LLVM Compiler Infrastructure
+##
+# This file is distributed under the University of Illinois Open Source
+# License. See LICENSE.TXT for details.
 ##
 ##===----------------------------------------------------------------------===##
 
@@ -14,10 +15,7 @@ import os
 import signal
 import sys
 
-try:
-    import queue
-except ImportError:
-    import Queue as queue
+import Queue
 
 import cui
 
@@ -65,7 +63,7 @@ class SandboxUI(cui.CursesUI):
 
 def main(screen):
     global event_queue
-    event_queue = queue.Queue()
+    event_queue = Queue.Queue()
 
     sandbox = SandboxUI(screen, event_queue)
     sandbox.eventLoop()

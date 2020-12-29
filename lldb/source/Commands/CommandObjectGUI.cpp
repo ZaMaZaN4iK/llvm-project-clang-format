@@ -1,22 +1,28 @@
 //===-- CommandObjectGUI.cpp ------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "CommandObjectGUI.h"
 
-#include "lldb/Core/IOHandlerCursesGUI.h"
-#include "lldb/Host/Config.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Interpreter/CommandInterpreter.h"
 #include "lldb/Interpreter/CommandReturnObject.h"
+#include "lldb/lldb-private.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
+//-------------------------------------------------------------------------
 // CommandObjectGUI
+//-------------------------------------------------------------------------
 
 CommandObjectGUI::CommandObjectGUI(CommandInterpreter &interpreter)
     : CommandObjectParsed(interpreter, "gui",
@@ -25,14 +31,13 @@ CommandObjectGUI::CommandObjectGUI(CommandInterpreter &interpreter)
 CommandObjectGUI::~CommandObjectGUI() {}
 
 bool CommandObjectGUI::DoExecute(Args &args, CommandReturnObject &result) {
-#if LLDB_ENABLE_CURSES
+#ifndef LLDB_DISABLE_CURSES
   if (args.GetArgumentCount() == 0) {
-    Debugger &debugger = GetDebugger();
+    Debugger &debugger = m_interpreter.GetDebugger();
 
-    File &input = debugger.GetInputFile();
-    File &output = debugger.GetOutputFile();
-    if (input.GetStream() && output.GetStream() && input.GetIsRealTerminal() &&
-        input.GetIsInteractive()) {
+    lldb::StreamFileSP input_sp = debugger.GetInputFile();
+    if (input_sp && input_sp->GetFile().GetIsRealTerminal() &&
+        input_sp->GetFile().GetIsInteractive()) {
       IOHandlerSP io_handler_sp(new IOHandlerCursesGUI(debugger));
       if (io_handler_sp)
         debugger.PushIOHandler(io_handler_sp);

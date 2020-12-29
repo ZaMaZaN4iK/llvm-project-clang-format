@@ -1,50 +1,36 @@
 //===-- ValueObjectVariable.cpp ---------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Core/ValueObjectVariable.h"
 
-#include "lldb/Core/Address.h"
-#include "lldb/Core/AddressRange.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Core/Module.h"
+#include "lldb/Core/RegisterValue.h"
 #include "lldb/Core/Value.h"
-#include "lldb/Expression/DWARFExpression.h"
-#include "lldb/Symbol/Declaration.h"
+#include "lldb/Core/ValueObjectList.h"
+
 #include "lldb/Symbol/Function.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Symbol/SymbolContextScope.h"
 #include "lldb/Symbol/Type.h"
 #include "lldb/Symbol/Variable.h"
+
 #include "lldb/Target/ExecutionContext.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/RegisterValue.h"
-#include "lldb/Utility/Scalar.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/lldb-private-enumerations.h"
-#include "lldb/lldb-types.h"
+#include "lldb/Target/Thread.h"
 
-#include "llvm/ADT/StringRef.h"
-
-#include <assert.h>
-#include <memory>
-
-namespace lldb_private {
-class ExecutionContextScope;
-}
-namespace lldb_private {
-class StackFrame;
-}
-namespace lldb_private {
-struct RegisterInfo;
-}
 using namespace lldb_private;
 
 lldb::ValueObjectSP
@@ -57,7 +43,7 @@ ValueObjectVariable::ValueObjectVariable(ExecutionContextScope *exe_scope,
                                          const lldb::VariableSP &var_sp)
     : ValueObject(exe_scope), m_variable_sp(var_sp) {
   // Do not attempt to construct one of these objects with no variable!
-  assert(m_variable_sp.get() != nullptr);
+  assert(m_variable_sp.get() != NULL);
   m_name = var_sp->GetName();
 }
 
@@ -97,9 +83,8 @@ size_t ValueObjectVariable::CalculateNumChildren(uint32_t max) {
   if (!type.IsValid())
     return 0;
 
-  ExecutionContext exe_ctx(GetExecutionContextRef());
   const bool omit_empty_base_classes = true;
-  auto child_count = type.GetNumChildren(omit_empty_base_classes, &exe_ctx);
+  auto child_count = type.GetNumChildren(omit_empty_base_classes);
   return child_count <= max ? child_count : max;
 }
 
@@ -111,7 +96,7 @@ uint64_t ValueObjectVariable::GetByteSize() {
   if (!type.IsValid())
     return 0;
 
-  return type.GetByteSize(exe_ctx.GetBestExecutionContextScope()).getValueOr(0);
+  return type.GetByteSize(exe_ctx.GetBestExecutionContextScope());
 }
 
 lldb::ValueType ValueObjectVariable::GetValueType() const {
@@ -135,7 +120,7 @@ bool ValueObjectVariable::UpdateValue() {
     else
       m_error.SetErrorString("empty constant data");
     // constant bytes can't be edited - sorry
-    m_resolved_value.SetContext(Value::eContextTypeInvalid, nullptr);
+    m_resolved_value.SetContext(Value::eContextTypeInvalid, NULL);
   } else {
     lldb::addr_t loclist_base_load_addr = LLDB_INVALID_ADDRESS;
     ExecutionContext exe_ctx(GetExecutionContextRef());
@@ -155,8 +140,9 @@ bool ValueObjectVariable::UpdateValue() {
                 target);
     }
     Value old_value(m_value);
-    if (expr.Evaluate(&exe_ctx, nullptr, loclist_base_load_addr, nullptr,
-                      nullptr, m_value, &m_error)) {
+    if (expr.Evaluate(&exe_ctx, nullptr, nullptr, nullptr,
+                      loclist_base_load_addr, nullptr, nullptr, m_value,
+                      &m_error)) {
       m_resolved_value = m_value;
       m_value.SetContext(Value::eContextTypeVariable, variable);
 
@@ -168,44 +154,113 @@ bool ValueObjectVariable::UpdateValue() {
 
       Process *process = exe_ctx.GetProcessPtr();
       const bool process_is_alive = process && process->IsAlive();
+      const uint32_t type_info = compiler_type.GetTypeInfo();
+      const bool is_pointer_or_ref =
+          (type_info & (lldb::eTypeIsPointer | lldb::eTypeIsReference)) != 0;
+
+      switch (value_type) {
+      case Value::eValueTypeFileAddress:
+        // If this type is a pointer, then its children will be considered load
+        // addresses
+        // if the pointer or reference is dereferenced, but only if the process
+        // is alive.
+        //
+        // There could be global variables like in the following code:
+        // struct LinkedListNode { Foo* foo; LinkedListNode* next; };
+        // Foo g_foo1;
+        // Foo g_foo2;
+        // LinkedListNode g_second_node = { &g_foo2, NULL };
+        // LinkedListNode g_first_node = { &g_foo1, &g_second_node };
+        //
+        // When we aren't running, we should be able to look at these variables
+        // using
+        // the "target variable" command. Children of the "g_first_node" always
+        // will
+        // be of the same address type as the parent. But children of the "next"
+        // member of
+        // LinkedListNode will become load addresses if we have a live process,
+        // or remain
+        // what a file address if it what a file address.
+        if (process_is_alive && is_pointer_or_ref)
+          SetAddressTypeOfChildren(eAddressTypeLoad);
+        else
+          SetAddressTypeOfChildren(eAddressTypeFile);
+        break;
+      case Value::eValueTypeHostAddress:
+        // Same as above for load addresses, except children of pointer or refs
+        // are always
+        // load addresses. Host addresses are used to store freeze dried
+        // variables. If this
+        // type is a struct, the entire struct contents will be copied into the
+        // heap of the
+        // LLDB process, but we do not currrently follow any pointers.
+        if (is_pointer_or_ref)
+          SetAddressTypeOfChildren(eAddressTypeLoad);
+        else
+          SetAddressTypeOfChildren(eAddressTypeHost);
+        break;
+      case Value::eValueTypeLoadAddress:
+      case Value::eValueTypeScalar:
+      case Value::eValueTypeVector:
+        SetAddressTypeOfChildren(eAddressTypeLoad);
+        break;
+      }
 
       switch (value_type) {
       case Value::eValueTypeVector:
       // fall through
       case Value::eValueTypeScalar:
-        // The variable value is in the Scalar value inside the m_value. We can
-        // point our m_data right to it.
+        // The variable value is in the Scalar value inside the m_value.
+        // We can point our m_data right to it.
         m_error =
-            m_value.GetValueAsData(&exe_ctx, m_data, GetModule().get());
+            m_value.GetValueAsData(&exe_ctx, m_data, 0, GetModule().get());
         break;
 
       case Value::eValueTypeFileAddress:
       case Value::eValueTypeLoadAddress:
       case Value::eValueTypeHostAddress:
-        // The DWARF expression result was an address in the inferior process.
-        // If this variable is an aggregate type, we just need the address as
-        // the main value as all child variable objects will rely upon this
-        // location and add an offset and then read their own values as needed.
-        // If this variable is a simple type, we read all data for it into
-        // m_data. Make sure this type has a value before we try and read it
+        // The DWARF expression result was an address in the inferior
+        // process. If this variable is an aggregate type, we just need
+        // the address as the main value as all child variable objects
+        // will rely upon this location and add an offset and then read
+        // their own values as needed. If this variable is a simple
+        // type, we read all data for it into m_data.
+        // Make sure this type has a value before we try and read it
 
         // If we have a file address, convert it to a load address if we can.
-        if (value_type == Value::eValueTypeFileAddress && process_is_alive)
-          m_value.ConvertToLoadAddress(GetModule().get(), target);
+        if (value_type == Value::eValueTypeFileAddress && process_is_alive) {
+          lldb::addr_t file_addr =
+              m_value.GetScalar().ULongLong(LLDB_INVALID_ADDRESS);
+          if (file_addr != LLDB_INVALID_ADDRESS) {
+            SymbolContext var_sc;
+            variable->CalculateSymbolContext(&var_sc);
+            if (var_sc.module_sp) {
+              ObjectFile *objfile = var_sc.module_sp->GetObjectFile();
+              if (objfile) {
+                Address so_addr(file_addr, objfile->GetSectionList());
+                lldb::addr_t load_addr = so_addr.GetLoadAddress(target);
+                if (load_addr != LLDB_INVALID_ADDRESS) {
+                  m_value.SetValueType(Value::eValueTypeLoadAddress);
+                  m_value.GetScalar() = load_addr;
+                }
+              }
+            }
+          }
+        }
 
         if (!CanProvideValue()) {
-          // this value object represents an aggregate type whose children have
-          // values, but this object does not. So we say we are changed if our
-          // location has changed.
+          // this value object represents an aggregate type whose
+          // children have values, but this object does not. So we
+          // say we are changed if our location has changed.
           SetValueDidChange(value_type != old_value.GetValueType() ||
                             m_value.GetScalar() != old_value.GetScalar());
         } else {
-          // Copy the Value and set the context to use our Variable so it can
-          // extract read its value into m_data appropriately
+          // Copy the Value and set the context to use our Variable
+          // so it can extract read its value into m_data appropriately
           Value value(m_value);
           value.SetContext(Value::eContextTypeVariable, variable);
           m_error =
-              value.GetValueAsData(&exe_ctx, m_data, GetModule().get());
+              value.GetValueAsData(&exe_ctx, m_data, 0, GetModule().get());
 
           SetValueDidChange(value_type != old_value.GetValueType() ||
                             m_value.GetScalar() != old_value.GetScalar());
@@ -216,7 +271,7 @@ bool ValueObjectVariable::UpdateValue() {
       SetValueIsValid(m_error.Success());
     } else {
       // could not find location, won't allow editing
-      m_resolved_value.SetContext(Value::eContextTypeInvalid, nullptr);
+      m_resolved_value.SetContext(Value::eContextTypeInvalid, NULL);
     }
   }
   return m_error.Success();
@@ -230,13 +285,14 @@ bool ValueObjectVariable::IsInScope() {
     if (frame) {
       return m_variable_sp->IsInScope(frame);
     } else {
-      // This ValueObject had a frame at one time, but now we can't locate it,
-      // so return false since we probably aren't in scope.
+      // This ValueObject had a frame at one time, but now we
+      // can't locate it, so return false since we probably aren't
+      // in scope.
       return false;
     }
   }
-  // We have a variable that wasn't tied to a frame, which means it is a global
-  // and is always in scope.
+  // We have a variable that wasn't tied to a frame, which
+  // means it is a global and is always in scope.
   return true;
 }
 
@@ -253,7 +309,7 @@ lldb::ModuleSP ValueObjectVariable::GetModule() {
 SymbolContextScope *ValueObjectVariable::GetSymbolContextScope() {
   if (m_variable_sp)
     return m_variable_sp->GetSymbolContextScope();
-  return nullptr;
+  return NULL;
 }
 
 bool ValueObjectVariable::GetDeclaration(Declaration &decl) {
@@ -272,7 +328,7 @@ const char *ValueObjectVariable::GetLocationAsCString() {
 }
 
 bool ValueObjectVariable::SetValueFromCString(const char *value_str,
-                                              Status &error) {
+                                              Error &error) {
   if (!UpdateValueIfNeeded()) {
     error.SetErrorString("unable to update value before writing");
     return false;
@@ -301,7 +357,7 @@ bool ValueObjectVariable::SetValueFromCString(const char *value_str,
     return ValueObject::SetValueFromCString(value_str, error);
 }
 
-bool ValueObjectVariable::SetData(DataExtractor &data, Status &error) {
+bool ValueObjectVariable::SetData(DataExtractor &data, Error &error) {
   if (!UpdateValueIfNeeded()) {
     error.SetErrorString("unable to update value before writing");
     return false;

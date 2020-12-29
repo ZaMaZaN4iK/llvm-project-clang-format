@@ -1,41 +1,33 @@
 //===-- EmulateInstruction.cpp ----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Core/EmulateInstruction.h"
 
+// C Includes
+// C++ Includes
+#include <cstring>
+
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Core/Address.h"
-#include "lldb/Core/DumpRegisterValue.h"
+#include "lldb/Core/DataExtractor.h"
+#include "lldb/Core/Error.h"
 #include "lldb/Core/PluginManager.h"
+#include "lldb/Core/RegisterValue.h"
 #include "lldb/Core/StreamFile.h"
+#include "lldb/Core/StreamString.h"
+#include "lldb/Host/Endian.h"
 #include "lldb/Symbol/UnwindPlan.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/RegisterContext.h"
-#include "lldb/Target/StackFrame.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/RegisterValue.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/Stream.h"
-#include "lldb/Utility/StreamString.h"
-#include "lldb/lldb-forward.h"
-#include "lldb/lldb-private-interfaces.h"
-
-#include "llvm/ADT/StringRef.h"
-
-#include <cstring>
-#include <memory>
-
-#include <inttypes.h>
-#include <stdio.h>
-
-namespace lldb_private {
-class Target;
-}
+#include "lldb/Target/Target.h"
+#include "lldb/Target/Thread.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -71,7 +63,14 @@ EmulateInstruction::FindPlugin(const ArchSpec &arch,
   return nullptr;
 }
 
-EmulateInstruction::EmulateInstruction(const ArchSpec &arch) : m_arch(arch) {}
+EmulateInstruction::EmulateInstruction(const ArchSpec &arch)
+    : m_arch(arch), m_baton(nullptr), m_read_mem_callback(&ReadMemoryDefault),
+      m_write_mem_callback(&WriteMemoryDefault),
+      m_read_reg_callback(&ReadRegisterDefault),
+      m_write_reg_callback(&WriteRegisterDefault),
+      m_addr(LLDB_INVALID_ADDRESS) {
+  ::memset(&m_opcode, 0, sizeof(m_opcode));
+}
 
 bool EmulateInstruction::ReadRegister(const RegisterInfo *reg_info,
                                       RegisterValue &reg_value) {
@@ -256,7 +255,7 @@ size_t EmulateInstruction::ReadMemoryFrame(EmulateInstruction *instruction,
 
   ProcessSP process_sp(frame->CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     return process_sp->ReadMemory(addr, dst, dst_len, error);
   }
   return 0;
@@ -273,7 +272,7 @@ size_t EmulateInstruction::WriteMemoryFrame(EmulateInstruction *instruction,
 
   ProcessSP process_sp(frame->CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     return process_sp->WriteMemory(addr, src, src_len, error);
   }
 
@@ -354,7 +353,7 @@ bool EmulateInstruction::WriteRegisterDefault(EmulateInstruction *instruction,
                                               const RegisterValue &reg_value) {
   StreamFile strm(stdout, false);
   strm.Printf("    Write to Register (name = %s, value = ", reg_info->name);
-  DumpRegisterValue(reg_value, &strm, reg_info, false, false, eFormatDefault);
+  reg_value.Dump(&strm, reg_info, false, false, eFormatDefault);
   strm.PutCString(", context = ");
   context.Dump(strm, instruction);
   strm.EOL();

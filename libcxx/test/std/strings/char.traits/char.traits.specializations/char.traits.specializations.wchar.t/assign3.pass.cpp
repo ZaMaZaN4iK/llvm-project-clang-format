@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,9 +16,7 @@
 #include <string>
 #include <cassert>
 
-#include "test_macros.h"
-
-TEST_CONSTEXPR_CXX20 bool test()
+int main()
 {
     wchar_t s2[3] = {0};
     assert(std::char_traits<wchar_t>::assign(s2, 3, wchar_t(5)) == s2);
@@ -25,17 +24,4 @@ TEST_CONSTEXPR_CXX20 bool test()
     assert(s2[1] == wchar_t(5));
     assert(s2[2] == wchar_t(5));
     assert(std::char_traits<wchar_t>::assign(NULL, 0, wchar_t(5)) == NULL);
-
-  return true;
-}
-
-int main(int, char**)
-{
-  test();
-
-#if TEST_STD_VER > 17 && !defined(_LIBCPP_HAS_NO_BUILTIN_IS_CONSTANT_EVALUATED)
-    static_assert(test());
-#endif
-
-  return 0;
 }

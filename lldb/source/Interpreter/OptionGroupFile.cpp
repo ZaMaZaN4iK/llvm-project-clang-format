@@ -1,14 +1,18 @@
 //===-- OptionGroupFile.cpp -------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Interpreter/OptionGroupFile.h"
 
-#include "lldb/Host/OptionParser.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 
 using namespace lldb;
 using namespace lldb_private;
@@ -25,7 +29,7 @@ OptionGroupFile::OptionGroupFile(uint32_t usage_mask, bool required,
   m_option_definition.short_option = short_option;
   m_option_definition.validator = nullptr;
   m_option_definition.option_has_arg = OptionParser::eRequiredArgument;
-  m_option_definition.enum_values = {};
+  m_option_definition.enum_values = nullptr;
   m_option_definition.completion_type = completion_type;
   m_option_definition.argument_type = argument_type;
   m_option_definition.usage_text = usage_text;
@@ -33,10 +37,10 @@ OptionGroupFile::OptionGroupFile(uint32_t usage_mask, bool required,
 
 OptionGroupFile::~OptionGroupFile() {}
 
-Status OptionGroupFile::SetOptionValue(uint32_t option_idx,
-                                       llvm::StringRef option_arg,
-                                       ExecutionContext *execution_context) {
-  Status error(m_file.SetValueFromString(option_arg));
+Error OptionGroupFile::SetOptionValue(uint32_t option_idx,
+                                      llvm::StringRef option_arg,
+                                      ExecutionContext *execution_context) {
+  Error error(m_file.SetValueFromString(option_arg));
   return error;
 }
 
@@ -56,7 +60,7 @@ OptionGroupFileList::OptionGroupFileList(
   m_option_definition.short_option = short_option;
   m_option_definition.validator = nullptr;
   m_option_definition.option_has_arg = OptionParser::eRequiredArgument;
-  m_option_definition.enum_values = {};
+  m_option_definition.enum_values = nullptr;
   m_option_definition.completion_type = completion_type;
   m_option_definition.argument_type = argument_type;
   m_option_definition.usage_text = usage_text;
@@ -64,11 +68,10 @@ OptionGroupFileList::OptionGroupFileList(
 
 OptionGroupFileList::~OptionGroupFileList() {}
 
-Status
-OptionGroupFileList::SetOptionValue(uint32_t option_idx,
-                                    llvm::StringRef option_value,
-                                    ExecutionContext *execution_context) {
-  Status error(m_file_list.SetValueFromString(option_value));
+Error OptionGroupFileList::SetOptionValue(uint32_t option_idx,
+                                          llvm::StringRef option_value,
+                                          ExecutionContext *execution_context) {
+  Error error(m_file_list.SetValueFromString(option_value));
   return error;
 }
 

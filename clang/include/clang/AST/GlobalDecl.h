@@ -1,8 +1,9 @@
-//===- GlobalDecl.h - Global declaration holder -----------------*- C++ -*-===//
+//===--- GlobalDecl.h - Global declaration holder ---------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,28 +19,15 @@
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclOpenMP.h"
 #include "clang/Basic/ABI.h"
-#include "clang/Basic/LLVM.h"
-#include "llvm/ADT/DenseMapInfo.h"
-#include "llvm/ADT/PointerIntPair.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/type_traits.h"
-#include <cassert>
 
 namespace clang {
-
-enum class DynamicInitKind : unsigned {
-  NoStub = 0,
-  Initializer,
-  AtExit,
-};
 
 /// GlobalDecl - represents a global declaration. This can either be a
 /// CXXConstructorDecl and the constructor type (Base, Complete).
 /// a CXXDestructorDecl and the destructor type (Base, Complete) or
 /// a VarDecl, a FunctionDecl or a BlockDecl.
 class GlobalDecl {
-  llvm::PointerIntPair<const Decl *, 2> Value;
-  unsigned MultiVersionIndex = 0;
+  llvm::PointerIntPair<const Decl*, 2> Value;
 
   void Init(const Decl *D) {
     assert(!isa<CXXConstructorDecl>(D) && "Use other ctor with ctor decls!");
@@ -49,28 +37,25 @@ class GlobalDecl {
   }
 
 public:
-  GlobalDecl() = default;
+  GlobalDecl() {}
+
   GlobalDecl(const VarDecl *D) { Init(D);}
-  GlobalDecl(const FunctionDecl *D, unsigned MVIndex = 0)
-      : MultiVersionIndex(MVIndex) {
-    Init(D);
-  }
+  GlobalDecl(const FunctionDecl *D) { Init(D); }
   GlobalDecl(const BlockDecl *D) { Init(D); }
   GlobalDecl(const CapturedDecl *D) { Init(D); }
   GlobalDecl(const ObjCMethodDecl *D) { Init(D); }
   GlobalDecl(const OMPDeclareReductionDecl *D) { Init(D); }
-  GlobalDecl(const OMPDeclareMapperDecl *D) { Init(D); }
-  GlobalDecl(const CXXConstructorDecl *D, CXXCtorType Type) : Value(D, Type) {}
-  GlobalDecl(const CXXDestructorDecl *D, CXXDtorType Type) : Value(D, Type) {}
-  GlobalDecl(const VarDecl *D, DynamicInitKind StubKind)
-      : Value(D, unsigned(StubKind)) {}
+
+  GlobalDecl(const CXXConstructorDecl *D, CXXCtorType Type)
+  : Value(D, Type) {}
+  GlobalDecl(const CXXDestructorDecl *D, CXXDtorType Type)
+  : Value(D, Type) {}
 
   GlobalDecl getCanonicalDecl() const {
     GlobalDecl CanonGD;
     CanonGD.Value.setPointer(Value.getPointer()->getCanonicalDecl());
     CanonGD.Value.setInt(Value.getInt());
-    CanonGD.MultiVersionIndex = MultiVersionIndex;
-
+    
     return CanonGD;
   }
 
@@ -85,27 +70,11 @@ public:
     assert(isa<CXXDestructorDecl>(getDecl()) && "Decl is not a dtor!");
     return static_cast<CXXDtorType>(Value.getInt());
   }
-
-  DynamicInitKind getDynamicInitKind() const {
-    assert(isa<VarDecl>(getDecl()) &&
-           cast<VarDecl>(getDecl())->hasGlobalStorage() &&
-           "Decl is not a global variable!");
-    return static_cast<DynamicInitKind>(Value.getInt());
-  }
-
-  unsigned getMultiVersionIndex() const {
-    assert(isa<FunctionDecl>(getDecl()) &&
-           !isa<CXXConstructorDecl>(getDecl()) &&
-           !isa<CXXDestructorDecl>(getDecl()) &&
-           "Decl is not a plain FunctionDecl!");
-    return MultiVersionIndex;
-  }
-
+  
   friend bool operator==(const GlobalDecl &LHS, const GlobalDecl &RHS) {
-    return LHS.Value == RHS.Value &&
-           LHS.MultiVersionIndex == RHS.MultiVersionIndex;
+    return LHS.Value == RHS.Value;
   }
-
+  
   void *getAsOpaquePtr() const { return Value.getOpaqueValue(); }
 
   static GlobalDecl getFromOpaquePtr(void *P) {
@@ -113,47 +82,24 @@ public:
     GD.Value.setFromOpaqueValue(P);
     return GD;
   }
-
+  
   GlobalDecl getWithDecl(const Decl *D) {
     GlobalDecl Result(*this);
     Result.Value.setPointer(D);
     return Result;
   }
-
-  GlobalDecl getWithCtorType(CXXCtorType Type) {
-    assert(isa<CXXConstructorDecl>(getDecl()));
-    GlobalDecl Result(*this);
-    Result.Value.setInt(Type);
-    return Result;
-  }
-
-  GlobalDecl getWithDtorType(CXXDtorType Type) {
-    assert(isa<CXXDestructorDecl>(getDecl()));
-    GlobalDecl Result(*this);
-    Result.Value.setInt(Type);
-    return Result;
-  }
-
-  GlobalDecl getWithMultiVersionIndex(unsigned Index) {
-    assert(isa<FunctionDecl>(getDecl()) &&
-           !isa<CXXConstructorDecl>(getDecl()) &&
-           !isa<CXXDestructorDecl>(getDecl()) &&
-           "Decl is not a plain FunctionDecl!");
-    GlobalDecl Result(*this);
-    Result.MultiVersionIndex = Index;
-    return Result;
-  }
 };
 
-} // namespace clang
+} // end namespace clang
 
 namespace llvm {
+  template<class> struct DenseMapInfo;
 
   template<> struct DenseMapInfo<clang::GlobalDecl> {
     static inline clang::GlobalDecl getEmptyKey() {
       return clang::GlobalDecl();
     }
-
+  
     static inline clang::GlobalDecl getTombstoneKey() {
       return clang::GlobalDecl::
         getFromOpaquePtr(reinterpret_cast<void*>(-1));
@@ -162,13 +108,20 @@ namespace llvm {
     static unsigned getHashValue(clang::GlobalDecl GD) {
       return DenseMapInfo<void*>::getHashValue(GD.getAsOpaquePtr());
     }
-
-    static bool isEqual(clang::GlobalDecl LHS,
+    
+    static bool isEqual(clang::GlobalDecl LHS, 
                         clang::GlobalDecl RHS) {
       return LHS == RHS;
     }
+      
   };
+  
+  // GlobalDecl isn't *technically* a POD type. However, its copy constructor,
+  // copy assignment operator, and destructor are all trivial.
+  template <>
+  struct isPodLike<clang::GlobalDecl> {
+    static const bool value = true;
+  };
+} // end namespace llvm
 
-} // namespace llvm
-
-#endif // LLVM_CLANG_AST_GLOBALDECL_H
+#endif

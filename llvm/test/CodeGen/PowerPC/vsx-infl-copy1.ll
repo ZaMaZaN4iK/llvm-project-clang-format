@@ -11,11 +11,15 @@ entry:
   br label %vector.body
 
 ; CHECK-LABEL: @_Z8example9Pj
-; CHECK: xxlxor 
-; CHECK: xxlxor 
-; CHECK: xxlxor 
-; CHECK: xxlxor 
-; CHECK: xxlxor 
+; CHECK: vor
+; CHECK: vor
+; CHECK: vor
+; CHECK: vor
+; CHECK: vor
+; CHECK: vor
+; CHECK: vor
+; CHECK: vor
+; CHECK: vor
 
 vector.body:                                      ; preds = %vector.body, %entry
   %index = phi i64 [ 0, %entry ], [ %index.next, %vector.body ]

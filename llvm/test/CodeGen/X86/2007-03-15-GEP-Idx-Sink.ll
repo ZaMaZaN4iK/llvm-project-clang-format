@@ -1,4 +1,5 @@
-; RUN: llc < %s -mtriple=i686-darwin | FileCheck %s
+; RUN: llc < %s -march=x86 -mtriple=i686-darwin | FileCheck %s
+; RUN: llc < %s -march=x86 -mtriple=i686-darwin -addr-sink-using-gep=1 | FileCheck %s
 
 define void @foo(i8** %buf, i32 %size, i32 %col, i8* %p) nounwind {
 entry:

@@ -1,8 +1,9 @@
 //===------ OrcError.h - Reject symbol lookup requests ------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,8 +15,6 @@
 #define LLVM_EXECUTIONENGINE_ORC_ORCERROR_H
 
 #include "llvm/Support/Error.h"
-#include "llvm/Support/raw_ostream.h"
-#include <string>
 #include <system_error>
 
 namespace llvm {
@@ -23,48 +22,18 @@ namespace orc {
 
 enum class OrcErrorCode : int {
   // RPC Errors
-  UnknownORCError = 1,
-  DuplicateDefinition,
-  JITSymbolNotFound,
-  RemoteAllocatorDoesNotExist,
+  RemoteAllocatorDoesNotExist = 1,
   RemoteAllocatorIdAlreadyInUse,
   RemoteMProtectAddrUnrecognized,
   RemoteIndirectStubsOwnerDoesNotExist,
   RemoteIndirectStubsOwnerIdAlreadyInUse,
-  RPCConnectionClosed,
-  RPCCouldNotNegotiateFunction,
   RPCResponseAbandoned,
   UnexpectedRPCCall,
   UnexpectedRPCResponse,
-  UnknownErrorCodeFromRemote,
-  UnknownResourceHandle
+  UnknownRPCFunction
 };
 
-std::error_code orcError(OrcErrorCode ErrCode);
-
-class DuplicateDefinition : public ErrorInfo<DuplicateDefinition> {
-public:
-  static char ID;
-
-  DuplicateDefinition(std::string SymbolName);
-  std::error_code convertToErrorCode() const override;
-  void log(raw_ostream &OS) const override;
-  const std::string &getSymbolName() const;
-private:
-  std::string SymbolName;
-};
-
-class JITSymbolNotFound : public ErrorInfo<JITSymbolNotFound> {
-public:
-  static char ID;
-
-  JITSymbolNotFound(std::string SymbolName);
-  std::error_code convertToErrorCode() const override;
-  void log(raw_ostream &OS) const override;
-  const std::string &getSymbolName() const;
-private:
-  std::string SymbolName;
-};
+Error orcError(OrcErrorCode ErrCode);
 
 } // End namespace orc.
 } // End namespace llvm.

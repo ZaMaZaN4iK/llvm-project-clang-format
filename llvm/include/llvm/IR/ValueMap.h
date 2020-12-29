@@ -1,8 +1,9 @@
 //===- ValueMap.h - Safe map from Values to data ----------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -33,11 +34,11 @@
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Mutex.h"
+#include "llvm/Support/UniqueLock.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <iterator>
-#include <mutex>
 #include <type_traits>
 #include <utility>
 
@@ -45,6 +46,7 @@ namespace llvm {
 
 template<typename KeyT, typename ValueT, typename Config>
 class ValueMapCallbackVH;
+
 template<typename DenseMapT, typename KeyT>
 class ValueMapIterator;
 template<typename DenseMapT, typename KeyT>
@@ -55,7 +57,7 @@ class ValueMapConstIterator;
 /// as possible with future versions of ValueMap.
 template<typename KeyT, typename MutexT = sys::Mutex>
 struct ValueMapConfig {
-  using mutex_type = MutexT;
+  typedef MutexT mutex_type;
 
   /// If FollowRAUW is true, the ValueMap will update mappings on RAUW. If it's
   /// false, the ValueMap will leave the original mapping in place.
@@ -85,31 +87,28 @@ template<typename KeyT, typename ValueT, typename Config =ValueMapConfig<KeyT>>
 class ValueMap {
   friend class ValueMapCallbackVH<KeyT, ValueT, Config>;
 
-  using ValueMapCVH = ValueMapCallbackVH<KeyT, ValueT, Config>;
-  using MapT = DenseMap<ValueMapCVH, ValueT, DenseMapInfo<ValueMapCVH>>;
-  using MDMapT = DenseMap<const Metadata *, TrackingMDRef>;
-  using ExtraData = typename Config::ExtraData;
-
+  typedef ValueMapCallbackVH<KeyT, ValueT, Config> ValueMapCVH;
+  typedef DenseMap<ValueMapCVH, ValueT, DenseMapInfo<ValueMapCVH>> MapT;
+  typedef DenseMap<const Metadata *, TrackingMDRef> MDMapT;
+  typedef typename Config::ExtraData ExtraData;
   MapT Map;
   Optional<MDMapT> MDMap;
   ExtraData Data;
 
+  bool MayMapMetadata = true;
+
 public:
-  using key_type = KeyT;
-  using mapped_type = ValueT;
-  using value_type = std::pair<KeyT, ValueT>;
-  using size_type = unsigned;
+  typedef KeyT key_type;
+  typedef ValueT mapped_type;
+  typedef std::pair<KeyT, ValueT> value_type;
+  typedef unsigned size_type;
 
   explicit ValueMap(unsigned NumInitBuckets = 64)
       : Map(NumInitBuckets), Data() {}
   explicit ValueMap(const ExtraData &Data, unsigned NumInitBuckets = 64)
       : Map(NumInitBuckets), Data(Data) {}
-  // ValueMap can't be copied nor moved, beucase the callbacks store pointer
-  // to it.
   ValueMap(const ValueMap &) = delete;
-  ValueMap(ValueMap &&) = delete;
   ValueMap &operator=(const ValueMap &) = delete;
-  ValueMap &operator=(ValueMap &&) = delete;
 
   bool hasMD() const { return bool(MDMap); }
   MDMapT &MD() {
@@ -118,6 +117,10 @@ public:
     return *MDMap;
   }
   Optional<MDMapT> &getMDMap() { return MDMap; }
+
+  bool mayMapMetadata() const { return MayMapMetadata; }
+  void enableMapMetadata() { MayMapMetadata = true; }
+  void disableMapMetadata() { MayMapMetadata = false; }
 
   /// Get the mapped metadata, if it's in the map.
   Optional<Metadata *> getMappedMD(const Metadata *MD) const {
@@ -129,9 +132,8 @@ public:
     return Where->second.get();
   }
 
-  using iterator = ValueMapIterator<MapT, KeyT>;
-  using const_iterator = ValueMapConstIterator<MapT, KeyT>;
-
+  typedef ValueMapIterator<MapT, KeyT> iterator;
+  typedef ValueMapConstIterator<MapT, KeyT> const_iterator;
   inline iterator begin() { return iterator(Map.begin()); }
   inline iterator end() { return iterator(Map.end()); }
   inline const_iterator begin() const { return const_iterator(Map.begin()); }
@@ -242,8 +244,8 @@ class ValueMapCallbackVH final : public CallbackVH {
   friend class ValueMap<KeyT, ValueT, Config>;
   friend struct DenseMapInfo<ValueMapCallbackVH>;
 
-  using ValueMapT = ValueMap<KeyT, ValueT, Config>;
-  using KeySansPointerT = typename std::remove_pointer<KeyT>::type;
+  typedef ValueMap<KeyT, ValueT, Config> ValueMapT;
+  typedef typename std::remove_pointer<KeyT>::type KeySansPointerT;
 
   ValueMapT *Map;
 
@@ -261,9 +263,9 @@ public:
     // Make a copy that won't get changed even when *this is destroyed.
     ValueMapCallbackVH Copy(*this);
     typename Config::mutex_type *M = Config::getMutex(Copy.Map->Data);
-    std::unique_lock<typename Config::mutex_type> Guard;
+    unique_lock<typename Config::mutex_type> Guard;
     if (M)
-      Guard = std::unique_lock<typename Config::mutex_type>(*M);
+      Guard = unique_lock<typename Config::mutex_type>(*M);
     Config::onDelete(Copy.Map->Data, Copy.Unwrap());  // May destroy *this.
     Copy.Map->Map.erase(Copy);  // Definitely destroys *this.
   }
@@ -274,9 +276,9 @@ public:
     // Make a copy that won't get changed even when *this is destroyed.
     ValueMapCallbackVH Copy(*this);
     typename Config::mutex_type *M = Config::getMutex(Copy.Map->Data);
-    std::unique_lock<typename Config::mutex_type> Guard;
+    unique_lock<typename Config::mutex_type> Guard;
     if (M)
-      Guard = std::unique_lock<typename Config::mutex_type>(*M);
+      Guard = unique_lock<typename Config::mutex_type>(*M);
 
     KeyT typed_new_key = cast<KeySansPointerT>(new_key);
     // Can destroy *this:
@@ -296,7 +298,7 @@ public:
 
 template<typename KeyT, typename ValueT, typename Config>
 struct DenseMapInfo<ValueMapCallbackVH<KeyT, ValueT, Config>> {
-  using VH = ValueMapCallbackVH<KeyT, ValueT, Config>;
+  typedef ValueMapCallbackVH<KeyT, ValueT, Config> VH;
 
   static inline VH getEmptyKey() {
     return VH(DenseMapInfo<Value *>::getEmptyKey());
@@ -328,8 +330,8 @@ class ValueMapIterator :
     public std::iterator<std::forward_iterator_tag,
                          std::pair<KeyT, typename DenseMapT::mapped_type>,
                          ptrdiff_t> {
-  using BaseT = typename DenseMapT::iterator;
-  using ValueT = typename DenseMapT::mapped_type;
+  typedef typename DenseMapT::iterator BaseT;
+  typedef typename DenseMapT::mapped_type ValueT;
 
   BaseT I;
 
@@ -342,9 +344,7 @@ public:
   struct ValueTypeProxy {
     const KeyT first;
     ValueT& second;
-
     ValueTypeProxy *operator->() { return this; }
-
     operator std::pair<KeyT, ValueT>() const {
       return std::make_pair(first, second);
     }
@@ -380,8 +380,8 @@ class ValueMapConstIterator :
     public std::iterator<std::forward_iterator_tag,
                          std::pair<KeyT, typename DenseMapT::mapped_type>,
                          ptrdiff_t> {
-  using BaseT = typename DenseMapT::const_iterator;
-  using ValueT = typename DenseMapT::mapped_type;
+  typedef typename DenseMapT::const_iterator BaseT;
+  typedef typename DenseMapT::mapped_type ValueT;
 
   BaseT I;
 

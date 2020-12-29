@@ -1,8 +1,5 @@
 set(LLVM_LINK_COMPONENTS
-  AllTargetsAsmParsers
-  AllTargetsCodeGens
-  AllTargetsDescs
-  AllTargetsInfos
+  ${LLVM_TARGETS_TO_BUILD}
   AsmPrinter
   DebugInfoDWARF
   MC
@@ -18,7 +15,3 @@ add_llvm_tool(llvm-dwp
   DEPENDS
   intrinsics_gen
   )
-
-if(LLVM_INSTALL_BINUTILS_SYMLINKS)
-  add_llvm_tool_symlink(dwp llvm-dwp)
-endif()

@@ -1,19 +1,24 @@
 //===-- TypeCategoryMap.h ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef lldb_TypeCategoryMap_h_
 #define lldb_TypeCategoryMap_h_
 
+// C Includes
+// C++ Includes
 #include <functional>
 #include <list>
 #include <map>
 #include <mutex>
 
+// Other libraries and framework includes
+// Project includes
 #include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-public.h"
 
@@ -77,7 +82,16 @@ public:
 
   uint32_t GetCount() { return m_map.size(); }
 
-  template <typename ImplSP> void Get(FormattersMatchData &, ImplSP &);
+  lldb::TypeFormatImplSP GetFormat(FormattersMatchData &match_data);
+
+  lldb::TypeSummaryImplSP GetSummaryFormat(FormattersMatchData &match_data);
+
+#ifndef LLDB_DISABLE_PYTHON
+  lldb::SyntheticChildrenSP
+  GetSyntheticChildren(FormattersMatchData &match_data);
+#endif
+
+  lldb::TypeValidatorImplSP GetValidator(FormattersMatchData &match_data);
 
 private:
   class delete_matching_categories {

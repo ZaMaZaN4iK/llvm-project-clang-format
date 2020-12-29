@@ -1,14 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
-
-// XFAIL: dylib-has-no-bad_any_cast && !libcpp-no-exceptions
 
 // <any>
 
@@ -20,7 +19,7 @@
 #include <cassert>
 
 #include "any_helpers.h"
-#include "count_new.h"
+#include "count_new.hpp"
 #include "test_macros.h"
 
 using std::any;
@@ -96,7 +95,7 @@ void test_copy_assign_self() {
     // empty
     {
         any a;
-        a = (any &)a;
+        a = a;
         assertEmpty(a);
         assert(globalMemCounter.checkOutstandingNewEq(0));
     }
@@ -106,7 +105,7 @@ void test_copy_assign_self() {
         any a((small(1)));
         assert(small::count == 1);
 
-        a = (any &)a;
+        a = a;
 
         assert(small::count == 1);
         assertContains<small>(a, 1);
@@ -119,7 +118,7 @@ void test_copy_assign_self() {
         any a(large(1));
         assert(large::count == 1);
 
-        a = (any &)a;
+        a = a;
 
         assert(large::count == 1);
         assertContains<large>(a, 1);
@@ -185,7 +184,7 @@ void test_copy_assign_throws()
 #endif
 }
 
-int main(int, char**) {
+int main() {
     test_copy_assign<small1, small2>();
     test_copy_assign<large1, large2>();
     test_copy_assign<small, large>();
@@ -195,6 +194,4 @@ int main(int, char**) {
     test_copy_assign_self();
     test_copy_assign_throws<small_throws_on_copy>();
     test_copy_assign_throws<large_throws_on_copy>();
-
-  return 0;
 }

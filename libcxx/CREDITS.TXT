@@ -41,10 +41,6 @@ N: Jonathan B Coe
 E: jbcoe@me.com
 D: Implementation of propagate_const.
 
-N: Glen Joseph Fernandes
-E: glenjofe@gmail.com
-D: Implementation of to_address.
-
 N: Eric Fiselier
 E: eric@efcs.ca
 D: LFTS support, patches and bug fixes.
@@ -63,10 +59,6 @@ D: Copyright owner and contributor of the CityHash algorithm
 N: Howard Hinnant
 E: hhinnant@apple.com
 D: Architect and primary author of libc++
-
-N: Sergej Jaskiewicz
-E: jaskiewiczs@icloud.com
-D: Minor improvements in the testing infrastructure
 
 N: Hyeon-bin Jeong
 E: tuhertz@gmail.com
@@ -89,7 +81,7 @@ E: andrew.c.morrow@gmail.com
 D: Minor patches and Linux fixes.
 
 N: Michael Park
-E: mcypark@gmail.com
+E: mpark@apache.org
 D: Implementation of <variant>.
 
 N: Arvid Picciani
@@ -105,7 +97,7 @@ E: nico.rieck@gmail.com
 D: Windows fixes
 
 N: Jon Roelofs
-E: jroelofS@jroelofs.com
+E: jonathan@codesourcery.com
 D: Remote testing, Newlib port, baremetal/single-threaded support.
 
 N: Jonathan Sauer

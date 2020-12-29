@@ -3,8 +3,11 @@
 Test that the C++11 support for char16_t and char32_t works correctly.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -29,7 +32,7 @@ class Char1632TestCase(TestBase):
     def test(self):
         """Test that the C++11 support for char16_t and char32_t works correctly."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)

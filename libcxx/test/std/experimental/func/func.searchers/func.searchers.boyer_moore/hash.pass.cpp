@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -35,11 +36,10 @@
 #include <experimental/functional>
 #include <cassert>
 
-#include "test_macros.h"
 #include "test_iterators.h"
 
 template <typename T> struct MyHash {
-    size_t operator () (T t) const { return static_cast<size_t>(t); }
+	size_t operator () (T t) const { return static_cast<size_t>(t); }
 };
 
 template <typename Iter1, typename Iter2>
@@ -118,9 +118,7 @@ test2()
     do_search(Iter1(ih), Iter1(ih+sh), Iter2(ii), Iter2(ii+3), Iter1(ih+3),  sh*3);
 }
 
-int main(int, char**) {
+int main() {
     test<random_access_iterator<const int*>, random_access_iterator<const int*> >();
     test2<random_access_iterator<const char*>, random_access_iterator<const char*> >();
-
-  return 0;
 }

@@ -7,7 +7,7 @@ target triple = "i686-pc-windows-msvc18.0.0"
 
 define void @f(i8* %c) {
 entry:
-  ; CHECK: cmpl $_foo, 4(%esp)
+  ; CHECK: subl $_foo, %eax
   %cmp = icmp eq i8* %c, @foo
   br i1 %cmp, label %if.then, label %if.end
 

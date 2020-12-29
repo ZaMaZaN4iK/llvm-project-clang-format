@@ -2,8 +2,12 @@
 Test some SBValue APIs.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -34,7 +38,7 @@ class ChangeValueAPITestCase(TestBase):
         d = {'EXE': self.exe_name}
         self.build(dictionary=d)
         self.setTearDownCleanup(dictionary=d)
-        exe = self.getBuildArtifact(self.exe_name)
+        exe = os.path.join(os.getcwd(), self.exe_name)
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)

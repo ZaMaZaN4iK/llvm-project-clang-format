@@ -1,8 +1,9 @@
 //===-- AVRISelLowering.h - AVR DAG Lowering Interface ----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,7 +16,7 @@
 #define LLVM_AVR_ISEL_LOWERING_H
 
 #include "llvm/CodeGen/CallingConvLower.h"
-#include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/Target/TargetLowering.h"
 
 namespace llvm {
 
@@ -42,8 +43,6 @@ enum NodeType {
   ROL,     ///< Bit rotate left.
   LSLLOOP, ///< A loop of single logical shift left instructions.
   LSRLOOP, ///< A loop of single logical shift right instructions.
-  ROLLOOP, ///< A loop of single left bit rotate instructions.
-  RORLOOP, ///< A loop of single right bit rotate instructions.
   ASRLOOP, ///< A loop of single arithmetic shift right instructions.
   /// AVR conditional branches. Operand 0 is the chain operand, operand 1
   /// is the block to branch if condition is true, operand 2 is the
@@ -63,24 +62,17 @@ enum NodeType {
 
 } // end of namespace AVRISD
 
-class AVRSubtarget;
 class AVRTargetMachine;
 
 /// Performs target lowering for the AVR.
 class AVRTargetLowering : public TargetLowering {
 public:
-  explicit AVRTargetLowering(const AVRTargetMachine &TM,
-                             const AVRSubtarget &STI);
+  explicit AVRTargetLowering(AVRTargetMachine &TM);
 
 public:
   MVT getScalarShiftAmountTy(const DataLayout &, EVT LHSTy) const override {
     return MVT::i8;
   }
-
-  MVT::SimpleValueType getCmpLibcallReturnType() const override {
-    return MVT::i8;
-  }
-
   const char *getTargetNodeName(unsigned Opcode) const override;
 
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
@@ -89,8 +81,7 @@ public:
                           SelectionDAG &DAG) const override;
 
   bool isLegalAddressingMode(const DataLayout &DL, const AddrMode &AM, Type *Ty,
-                             unsigned AS,
-                             Instruction *I = nullptr) const override;
+                             unsigned AS) const override;
 
   bool getPreIndexedAddressParts(SDNode *N, SDValue &Base, SDValue &Offset,
                                  ISD::MemIndexedMode &AM,
@@ -125,13 +116,8 @@ public:
                                     std::vector<SDValue> &Ops,
                                     SelectionDAG &DAG) const override;
 
-  Register getRegisterByName(const char* RegName, LLT VT,
-                             const MachineFunction &MF) const override;
-
-  bool shouldSplitFunctionArgumentsAsLittleEndian(const DataLayout &DL)
-    const override {
-    return false;
-  }
+  unsigned getRegisterByName(const char* RegName, EVT VT,
+                             SelectionDAG &DAG) const override;
 
 private:
   SDValue getAVRCmp(SDValue LHS, SDValue RHS, ISD::CondCode CC, SDValue &AVRcc,
@@ -169,10 +155,6 @@ private:
                           const SmallVectorImpl<ISD::InputArg> &Ins,
                           const SDLoc &dl, SelectionDAG &DAG,
                           SmallVectorImpl<SDValue> &InVals) const;
-
-protected:
-
-  const AVRSubtarget &Subtarget;
 
 private:
   MachineBasicBlock *insertShift(MachineInstr &MI, MachineBasicBlock *BB) const;

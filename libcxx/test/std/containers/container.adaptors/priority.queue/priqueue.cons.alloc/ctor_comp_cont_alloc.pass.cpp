@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -51,7 +52,7 @@ struct test
     using base::c;
 };
 
-int main(int, char**)
+int main()
 {
     typedef std::vector<int, test_allocator<int> > C;
     C v = make<C>(5);
@@ -59,6 +60,4 @@ int main(int, char**)
     assert(q.c.get_allocator() == test_allocator<int>(3));
     assert(q.size() == 5);
     assert(q.top() == 4);
-
-  return 0;
 }

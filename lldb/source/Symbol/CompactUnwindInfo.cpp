@@ -1,27 +1,30 @@
 //===-- CompactUnwindInfo.cpp -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "lldb/Symbol/CompactUnwindInfo.h"
+// C Includes
+// C++ Includes
+#include <algorithm>
+
+#include "lldb/Core/ArchSpec.h"
+#include "lldb/Core/DataBufferHeap.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/Section.h"
+#include "lldb/Core/Section.h"
+#include "lldb/Core/StreamString.h"
+#include "lldb/Symbol/CompactUnwindInfo.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Symbol/UnwindPlan.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/ArchSpec.h"
-#include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/StreamString.h"
 
 #include "llvm/Support/MathExtras.h"
-
-#include <algorithm>
-#include <memory>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -157,7 +160,9 @@ FLAGS_ANONYMOUS_ENUM(){
     llvm::countTrailingZeros(static_cast<uint32_t>(mask), llvm::ZB_Width)) &   \
    (((1 << llvm::countPopulation(static_cast<uint32_t>(mask)))) - 1))
 
+//----------------------
 // constructor
+//----------------------
 
 CompactUnwindInfo::CompactUnwindInfo(ObjectFile &objfile, SectionSP &section_sp)
     : m_objfile(objfile), m_section_sp(section_sp),
@@ -165,7 +170,9 @@ CompactUnwindInfo::CompactUnwindInfo(ObjectFile &objfile, SectionSP &section_sp)
       m_indexes_computed(eLazyBoolCalculate), m_unwindinfo_data(),
       m_unwindinfo_data_computed(false), m_unwind_header() {}
 
+//----------------------
 // destructor
+//----------------------
 
 CompactUnwindInfo::~CompactUnwindInfo() {}
 
@@ -180,18 +187,19 @@ bool CompactUnwindInfo::GetUnwindPlan(Target &target, Address addr,
     if (function_info.encoding == 0)
       return false;
 
-    if (ArchSpec arch = m_objfile.GetArchitecture()) {
+    ArchSpec arch;
+    if (m_objfile.GetArchitecture(arch)) {
 
       Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_UNWIND));
       if (log && log->GetVerbose()) {
         StreamString strm;
         addr.Dump(
-            &strm, nullptr,
+            &strm, NULL,
             Address::DumpStyle::DumpStyleResolvedDescriptionNoFunctionArguments,
             Address::DumpStyle::DumpStyleFileAddress,
             arch.GetAddressByteSize());
-        LLDB_LOGF(log, "Got compact unwind encoding 0x%x for function %s",
-                  function_info.encoding, strm.GetData());
+        log->Printf("Got compact unwind encoding 0x%x for function %s",
+                    function_info.encoding, strm.GetData());
       }
 
       if (function_info.valid_range_offset_start != 0 &&
@@ -200,7 +208,7 @@ bool CompactUnwindInfo::GetUnwindPlan(Target &target, Address addr,
         if (sl) {
           addr_t func_range_start_file_addr =
               function_info.valid_range_offset_start +
-              m_objfile.GetBaseAddress().GetFileAddress();
+              m_objfile.GetHeaderAddress().GetFileAddress();
           AddressRange func_range(func_range_start_file_addr,
                                   function_info.valid_range_offset_end -
                                       function_info.valid_range_offset_start,
@@ -213,8 +221,7 @@ bool CompactUnwindInfo::GetUnwindPlan(Target &target, Address addr,
         return CreateUnwindPlan_x86_64(target, function_info, unwind_plan,
                                        addr);
       }
-      if (arch.GetTriple().getArch() == llvm::Triple::aarch64 ||
-          arch.GetTriple().getArch() == llvm::Triple::aarch64_32) {
+      if (arch.GetTriple().getArch() == llvm::Triple::aarch64) {
         return CreateUnwindPlan_arm64(target, function_info, unwind_plan, addr);
       }
       if (arch.GetTriple().getArch() == llvm::Triple::x86) {
@@ -256,15 +263,16 @@ void CompactUnwindInfo::ScanIndex(const ProcessSP &process_sp) {
     m_objfile.GetModule()->LogMessage(
         log, "Reading compact unwind first-level indexes");
 
-  if (!m_unwindinfo_data_computed) {
+  if (m_unwindinfo_data_computed == false) {
     if (m_section_sp->IsEncrypted()) {
       // Can't get section contents of a protected/encrypted section until we
-      // have a live process and can read them out of memory.
+      // have a live
+      // process and can read them out of memory.
       if (process_sp.get() == nullptr)
         return;
-      m_section_contents_if_encrypted =
-          std::make_shared<DataBufferHeap>(m_section_sp->GetByteSize(), 0);
-      Status error;
+      m_section_contents_if_encrypted.reset(
+          new DataBufferHeap(m_section_sp->GetByteSize(), 0));
+      Error error;
       if (process_sp->ReadMemory(
               m_section_sp->GetLoadBaseAddress(&process_sp->GetTarget()),
               m_section_contents_if_encrypted->GetBytes(),
@@ -325,17 +333,19 @@ void CompactUnwindInfo::ScanIndex(const ProcessSP &process_sp) {
       return;
     }
 
-    // Parse the basic information from the indexes We wait to scan the second
-    // level page info until it's needed
+    // Parse the basic information from the indexes
+    // We wait to scan the second level page info until it's needed
 
-    // struct unwind_info_section_header_index_entry {
+    // struct unwind_info_section_header_index_entry
+    // {
     //     uint32_t        functionOffset;
     //     uint32_t        secondLevelPagesSectionOffset;
     //     uint32_t        lsdaIndexArraySectionOffset;
     // };
 
     bool clear_address_zeroth_bit = false;
-    if (ArchSpec arch = m_objfile.GetArchitecture()) {
+    ArchSpec arch;
+    if (m_objfile.GetArchitecture(arch)) {
       if (arch.GetTriple().getArch() == llvm::Triple::arm ||
           arch.GetTriple().getArch() == llvm::Triple::thumb)
         clear_address_zeroth_bit = true;
@@ -382,7 +392,8 @@ void CompactUnwindInfo::ScanIndex(const ProcessSP &process_sp) {
 uint32_t CompactUnwindInfo::GetLSDAForFunctionOffset(uint32_t lsda_offset,
                                                      uint32_t lsda_count,
                                                      uint32_t function_offset) {
-  // struct unwind_info_section_header_lsda_index_entry {
+  // struct unwind_info_section_header_lsda_index_entry
+  // {
   //         uint32_t        functionOffset;
   //         uint32_t        lsdaOffset;
   // };
@@ -412,7 +423,8 @@ lldb::offset_t CompactUnwindInfo::BinarySearchRegularSecondPage(
     uint32_t entry_page_offset, uint32_t entry_count, uint32_t function_offset,
     uint32_t *entry_func_start_offset, uint32_t *entry_func_end_offset) {
   // typedef uint32_t compact_unwind_encoding_t;
-  // struct unwind_info_regular_second_level_entry {
+  // struct unwind_info_regular_second_level_entry
+  // {
   //     uint32_t                    functionOffset;
   //     compact_unwind_encoding_t    encoding;
 
@@ -509,7 +521,7 @@ bool CompactUnwindInfo::GetCompactUnwindInfoForFunction(
     return false;
 
   addr_t function_offset =
-      address.GetFileAddress() - m_objfile.GetBaseAddress().GetFileAddress();
+      address.GetFileAddress() - m_objfile.GetHeaderAddress().GetFileAddress();
 
   UnwindIndex key;
   key.function_offset = function_offset;
@@ -525,15 +537,15 @@ bool CompactUnwindInfo::GetCompactUnwindInfoForFunction(
       --it;
   }
 
-  if (it->sentinal_entry) {
+  if (it->sentinal_entry == true) {
     return false;
   }
 
   auto next_it = it + 1;
   if (next_it != m_indexes.end()) {
-    // initialize the function offset end range to be the start of the next
-    // index offset.  If we find an entry which is at the end of the index
-    // table, this will establish the range end.
+    // initialize the function offset end range to be the start of the
+    // next index offset.  If we find an entry which is at the end of
+    // the index table, this will establish the range end.
     unwind_info.valid_range_offset_end = next_it->function_offset;
   }
 
@@ -546,13 +558,15 @@ bool CompactUnwindInfo::GetCompactUnwindInfoForFunction(
       &offset); // UNWIND_SECOND_LEVEL_REGULAR or UNWIND_SECOND_LEVEL_COMPRESSED
 
   if (kind == UNWIND_SECOND_LEVEL_REGULAR) {
-    // struct unwind_info_regular_second_level_page_header {
+    // struct unwind_info_regular_second_level_page_header
+    // {
     //     uint32_t    kind;    // UNWIND_SECOND_LEVEL_REGULAR
     //     uint16_t    entryPageOffset;
     //     uint16_t    entryCount;
 
     // typedef uint32_t compact_unwind_encoding_t;
-    // struct unwind_info_regular_second_level_entry {
+    // struct unwind_info_regular_second_level_entry
+    // {
     //     uint32_t                    functionOffset;
     //     compact_unwind_encoding_t    encoding;
 
@@ -574,10 +588,10 @@ bool CompactUnwindInfo::GetCompactUnwindInfoForFunction(
       if (sl) {
         uint32_t lsda_offset = GetLSDAForFunctionOffset(
             lsda_array_start, lsda_array_count, function_offset);
-        addr_t objfile_base_address =
-            m_objfile.GetBaseAddress().GetFileAddress();
+        addr_t objfile_header_file_address =
+            m_objfile.GetHeaderAddress().GetFileAddress();
         unwind_info.lsda_address.ResolveAddressUsingFileSections(
-            objfile_base_address + lsda_offset, sl);
+            objfile_header_file_address + lsda_offset, sl);
       }
     }
     if (unwind_info.encoding & UNWIND_PERSONALITY_MASK) {
@@ -592,17 +606,18 @@ bool CompactUnwindInfo::GetCompactUnwindInfoForFunction(
           SectionList *sl = m_objfile.GetSectionList();
           if (sl) {
             uint32_t personality_offset = m_unwindinfo_data.GetU32(&offset);
-            addr_t objfile_base_address =
-                m_objfile.GetBaseAddress().GetFileAddress();
+            addr_t objfile_header_file_address =
+                m_objfile.GetHeaderAddress().GetFileAddress();
             unwind_info.personality_ptr_address.ResolveAddressUsingFileSections(
-                objfile_base_address + personality_offset, sl);
+                objfile_header_file_address + personality_offset, sl);
           }
         }
       }
     }
     return true;
   } else if (kind == UNWIND_SECOND_LEVEL_COMPRESSED) {
-    // struct unwind_info_compressed_second_level_page_header {
+    // struct unwind_info_compressed_second_level_page_header
+    // {
     //     uint32_t    kind;    // UNWIND_SECOND_LEVEL_COMPRESSED
     //     uint16_t    entryPageOffset;         // offset from this 2nd lvl page
     //     idx to array of entries
@@ -658,10 +673,10 @@ bool CompactUnwindInfo::GetCompactUnwindInfoForFunction(
       if (sl) {
         uint32_t lsda_offset = GetLSDAForFunctionOffset(
             lsda_array_start, lsda_array_count, function_offset);
-        addr_t objfile_base_address =
-            m_objfile.GetBaseAddress().GetFileAddress();
+        addr_t objfile_header_file_address =
+            m_objfile.GetHeaderAddress().GetFileAddress();
         unwind_info.lsda_address.ResolveAddressUsingFileSections(
-            objfile_base_address + lsda_offset, sl);
+            objfile_header_file_address + lsda_offset, sl);
       }
     }
     if (unwind_info.encoding & UNWIND_PERSONALITY_MASK) {
@@ -676,10 +691,10 @@ bool CompactUnwindInfo::GetCompactUnwindInfoForFunction(
           SectionList *sl = m_objfile.GetSectionList();
           if (sl) {
             uint32_t personality_offset = m_unwindinfo_data.GetU32(&offset);
-            addr_t objfile_base_address =
-                m_objfile.GetBaseAddress().GetFileAddress();
+            addr_t objfile_header_file_address =
+                m_objfile.GetHeaderAddress().GetFileAddress();
             unwind_info.personality_ptr_address.ResolveAddressUsingFileSections(
-                objfile_base_address + personality_offset, sl);
+                objfile_header_file_address + personality_offset, sl);
           }
         }
       }
@@ -710,8 +725,8 @@ enum x86_64_eh_regnum {
            // enough
 };
 
-// Convert the compact_unwind_info.h register numbering scheme to
-// eRegisterKindEHFrame (eh_frame) register numbering scheme.
+// Convert the compact_unwind_info.h register numbering scheme
+// to eRegisterKindEHFrame (eh_frame) register numbering scheme.
 uint32_t translate_to_eh_frame_regnum_x86_64(uint32_t unwind_regno) {
   switch (unwind_regno) {
   case UNWIND_X86_64_REG_RBX:
@@ -738,7 +753,6 @@ bool CompactUnwindInfo::CreateUnwindPlan_x86_64(Target &target,
   unwind_plan.SetSourceName("compact unwind info");
   unwind_plan.SetSourcedFromCompiler(eLazyBoolYes);
   unwind_plan.SetUnwindPlanValidAtAllInstructions(eLazyBoolNo);
-  unwind_plan.SetUnwindPlanForSignalTrap(eLazyBoolNo);
   unwind_plan.SetRegisterKind(eRegisterKindEHFrame);
 
   unwind_plan.SetLSDAAddress(function_info.lsda_address);
@@ -792,8 +806,9 @@ bool CompactUnwindInfo::CreateUnwindPlan_x86_64(Target &target,
 
   case UNWIND_X86_64_MODE_STACK_IND: {
     // The clang in Xcode 6 is emitting incorrect compact unwind encodings for
-    // this style of unwind.  It was fixed in llvm r217020. The clang in Xcode
-    // 7 has this fixed.
+    // this
+    // style of unwind.  It was fixed in llvm r217020.
+    // The clang in Xcode 7 has this fixed.
     return false;
   } break;
 
@@ -821,7 +836,7 @@ bool CompactUnwindInfo::CreateUnwindPlan_x86_64(Target &target,
         if (process_sp) {
           Address subl_payload_addr(function_info.valid_range_offset_start, sl);
           subl_payload_addr.Slide(offset_to_subl_insn);
-          Status error;
+          Error error;
           uint64_t large_stack_size = process_sp->ReadUnsignedIntegerFromMemory(
               subl_payload_addr.GetLoadAddress(&target), 4, 0, error);
           if (large_stack_size != 0 && error.Success()) {
@@ -850,17 +865,17 @@ bool CompactUnwindInfo::CreateUnwindPlan_x86_64(Target &target,
 
     if (register_count > 0) {
 
-      // We need to include (up to) 6 registers in 10 bits. That would be 18
-      // bits if we just used 3 bits per reg to indicate the order they're
-      // saved on the stack.
+      // We need to include (up to) 6 registers in 10 bits.
+      // That would be 18 bits if we just used 3 bits per reg to indicate
+      // the order they're saved on the stack.
       //
       // This is done with Lehmer code permutation, e.g. see
-      // http://stackoverflow.com/questions/1506078/fast-permutation-number-
-      // permutation-mapping-algorithms
+      // http://stackoverflow.com/questions/1506078/fast-permutation-number-permutation-mapping-algorithms
       int permunreg[6] = {0, 0, 0, 0, 0, 0};
 
-      // This decodes the variable-base number in the 10 bits and gives us the
-      // Lehmer code sequence which can then be decoded.
+      // This decodes the variable-base number in the 10 bits
+      // and gives us the Lehmer code sequence which can then
+      // be decoded.
 
       switch (register_count) {
       case 6:
@@ -912,8 +927,8 @@ bool CompactUnwindInfo::CreateUnwindPlan_x86_64(Target &target,
         break;
       }
 
-      // Decode the Lehmer code for this permutation of the registers v.
-      // http://en.wikipedia.org/wiki/Lehmer_code
+      // Decode the Lehmer code for this permutation of
+      // the registers v. http://en.wikipedia.org/wiki/Lehmer_code
 
       int registers[6] = {UNWIND_X86_64_REG_NONE, UNWIND_X86_64_REG_NONE,
                           UNWIND_X86_64_REG_NONE, UNWIND_X86_64_REG_NONE,
@@ -922,7 +937,7 @@ bool CompactUnwindInfo::CreateUnwindPlan_x86_64(Target &target,
       for (uint32_t i = 0; i < register_count; i++) {
         int renum = 0;
         for (int j = 1; j < 7; j++) {
-          if (!used[j]) {
+          if (used[j] == false) {
             if (renum == permunreg[i]) {
               registers[i] = j;
               used[j] = true;
@@ -982,8 +997,8 @@ enum i386_eh_regnum {
           // enough
 };
 
-// Convert the compact_unwind_info.h register numbering scheme to
-// eRegisterKindEHFrame (eh_frame) register numbering scheme.
+// Convert the compact_unwind_info.h register numbering scheme
+// to eRegisterKindEHFrame (eh_frame) register numbering scheme.
 uint32_t translate_to_eh_frame_regnum_i386(uint32_t unwind_regno) {
   switch (unwind_regno) {
   case UNWIND_X86_REG_EBX:
@@ -1010,7 +1025,6 @@ bool CompactUnwindInfo::CreateUnwindPlan_i386(Target &target,
   unwind_plan.SetSourceName("compact unwind info");
   unwind_plan.SetSourcedFromCompiler(eLazyBoolYes);
   unwind_plan.SetUnwindPlanValidAtAllInstructions(eLazyBoolNo);
-  unwind_plan.SetUnwindPlanForSignalTrap(eLazyBoolNo);
   unwind_plan.SetRegisterKind(eRegisterKindEHFrame);
 
   unwind_plan.SetLSDAAddress(function_info.lsda_address);
@@ -1086,7 +1100,7 @@ bool CompactUnwindInfo::CreateUnwindPlan_i386(Target &target,
         if (process_sp) {
           Address subl_payload_addr(function_info.valid_range_offset_start, sl);
           subl_payload_addr.Slide(offset_to_subl_insn);
-          Status error;
+          Error error;
           uint64_t large_stack_size = process_sp->ReadUnsignedIntegerFromMemory(
               subl_payload_addr.GetLoadAddress(&target), 4, 0, error);
           if (large_stack_size != 0 && error.Success()) {
@@ -1113,17 +1127,17 @@ bool CompactUnwindInfo::CreateUnwindPlan_i386(Target &target,
 
     if (register_count > 0) {
 
-      // We need to include (up to) 6 registers in 10 bits. That would be 18
-      // bits if we just used 3 bits per reg to indicate the order they're
-      // saved on the stack.
+      // We need to include (up to) 6 registers in 10 bits.
+      // That would be 18 bits if we just used 3 bits per reg to indicate
+      // the order they're saved on the stack.
       //
       // This is done with Lehmer code permutation, e.g. see
-      // http://stackoverflow.com/questions/1506078/fast-permutation-number-
-      // permutation-mapping-algorithms
+      // http://stackoverflow.com/questions/1506078/fast-permutation-number-permutation-mapping-algorithms
       int permunreg[6] = {0, 0, 0, 0, 0, 0};
 
-      // This decodes the variable-base number in the 10 bits and gives us the
-      // Lehmer code sequence which can then be decoded.
+      // This decodes the variable-base number in the 10 bits
+      // and gives us the Lehmer code sequence which can then
+      // be decoded.
 
       switch (register_count) {
       case 6:
@@ -1175,8 +1189,8 @@ bool CompactUnwindInfo::CreateUnwindPlan_i386(Target &target,
         break;
       }
 
-      // Decode the Lehmer code for this permutation of the registers v.
-      // http://en.wikipedia.org/wiki/Lehmer_code
+      // Decode the Lehmer code for this permutation of
+      // the registers v. http://en.wikipedia.org/wiki/Lehmer_code
 
       int registers[6] = {UNWIND_X86_REG_NONE, UNWIND_X86_REG_NONE,
                           UNWIND_X86_REG_NONE, UNWIND_X86_REG_NONE,
@@ -1185,7 +1199,7 @@ bool CompactUnwindInfo::CreateUnwindPlan_i386(Target &target,
       for (uint32_t i = 0; i < register_count; i++) {
         int renum = 0;
         for (int j = 1; j < 7; j++) {
-          if (!used[j]) {
+          if (used[j] == false) {
             if (renum == permunreg[i]) {
               registers[i] = j;
               used[j] = true;
@@ -1250,10 +1264,14 @@ enum arm64_eh_regnum {
   pc = 32,
 
   // Compact unwind encodes d8-d15 but we don't have eh_frame / dwarf reg #'s
-  // for the 64-bit fp regs.  Normally in DWARF it's context sensitive - so it
-  // knows it is fetching a 32- or 64-bit quantity from reg v8 to indicate s0
-  // or d0 - but the unwinder is operating at a lower level and we'd try to
-  // fetch 128 bits if we were told that v8 were stored on the stack...
+  // for the 64-bit
+  // fp regs.  Normally in DWARF it's context sensitive - so it knows it is
+  // fetching a
+  // 32- or 64-bit quantity from reg v8 to indicate s0 or d0 - but the unwinder
+  // is operating
+  // at a lower level and we'd try to fetch 128 bits if we were told that v8
+  // were stored on
+  // the stack...
   v8 = 72,
   v9 = 73,
   v10 = 74,
@@ -1307,7 +1325,6 @@ bool CompactUnwindInfo::CreateUnwindPlan_arm64(Target &target,
   unwind_plan.SetSourceName("compact unwind info");
   unwind_plan.SetSourcedFromCompiler(eLazyBoolYes);
   unwind_plan.SetUnwindPlanValidAtAllInstructions(eLazyBoolNo);
-  unwind_plan.SetUnwindPlanForSignalTrap(eLazyBoolNo);
   unwind_plan.SetRegisterKind(eRegisterKindEHFrame);
 
   unwind_plan.SetLSDAAddress(function_info.lsda_address);
@@ -1441,7 +1458,6 @@ bool CompactUnwindInfo::CreateUnwindPlan_armv7(Target &target,
   unwind_plan.SetSourceName("compact unwind info");
   unwind_plan.SetSourcedFromCompiler(eLazyBoolYes);
   unwind_plan.SetUnwindPlanValidAtAllInstructions(eLazyBoolNo);
-  unwind_plan.SetUnwindPlanForSignalTrap(eLazyBoolNo);
   unwind_plan.SetRegisterKind(eRegisterKindEHFrame);
 
   unwind_plan.SetLSDAAddress(function_info.lsda_address);

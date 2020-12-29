@@ -1,19 +1,6 @@
 // REQUIRES: x86
-// RUN: llvm-mc -filetype=obj -triple=x86_64-pc-linux %s -o %t
-// RUN: not ld.lld --eh-frame-hdr %t -o /dev/null 2>&1 | FileCheck %s
+// RUN: not ld.lld --eh-frame-hdr %p/Inputs/cie-version2.elf -o %t >& %t.log
+// RUN: FileCheck %s < %t.log
 
-// CHECK: error: corrupted .eh_frame: FDE version 1 or 3 expected, but got 2
-
-.section .eh_frame
-  .byte 0x08
-  .byte 0x00
-  .byte 0x00
-  .byte 0x00
-  .byte 0x00
-  .byte 0x00
-  .byte 0x00
-  .byte 0x00
-  .byte 0x02
-  .byte 0x00
-  .byte 0x00
-  .byte 0x00
+// cie-version2.elf contains unsupported version of CIE = 2.
+// CHECK: FDE version 1 or 3 expected, but got 2

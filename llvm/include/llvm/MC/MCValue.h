@@ -1,8 +1,9 @@
 //===-- llvm/MC/MCValue.h - MCValue class -----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -22,7 +23,7 @@ namespace llvm {
 class MCAsmInfo;
 class raw_ostream;
 
-/// This represents an "assembler immediate".
+/// \brief This represents an "assembler immediate".
 ///
 ///  In its most general form, this can hold ":Kind:(SymbolA - SymbolB +
 ///  imm64)".  Not all targets supports relocations of this general form, but we
@@ -37,24 +38,23 @@ class raw_ostream;
 /// Note that this class must remain a simple POD value class, because we need
 /// it to live in unions etc.
 class MCValue {
-  const MCSymbolRefExpr *SymA = nullptr, *SymB = nullptr;
-  int64_t Cst = 0;
-  uint32_t RefKind = 0;
-
+  const MCSymbolRefExpr *SymA, *SymB;
+  int64_t Cst;
+  uint32_t RefKind;
 public:
-  MCValue() = default;
+
   int64_t getConstant() const { return Cst; }
   const MCSymbolRefExpr *getSymA() const { return SymA; }
   const MCSymbolRefExpr *getSymB() const { return SymB; }
   uint32_t getRefKind() const { return RefKind; }
 
-  /// Is this an absolute (as opposed to relocatable) value.
+  /// \brief Is this an absolute (as opposed to relocatable) value.
   bool isAbsolute() const { return !SymA && !SymB; }
 
-  /// Print the value to the stream \p OS.
+  /// \brief Print the value to the stream \p OS.
   void print(raw_ostream &OS) const;
 
-  /// Print the value to stderr.
+  /// \brief Print the value to stderr.
   void dump() const;
 
   MCSymbolRefExpr::VariantKind getAccessVariant() const;

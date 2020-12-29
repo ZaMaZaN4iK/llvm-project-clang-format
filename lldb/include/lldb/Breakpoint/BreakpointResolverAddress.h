@@ -1,23 +1,31 @@
 //===-- BreakpointResolverAddress.h -----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_BreakpointResolverAddress_h_
 #define liblldb_BreakpointResolverAddress_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Breakpoint/BreakpointResolver.h"
 #include "lldb/Core/ModuleSpec.h"
 
 namespace lldb_private {
 
-/// \class BreakpointResolverAddress BreakpointResolverAddress.h
-/// "lldb/Breakpoint/BreakpointResolverAddress.h" This class sets breakpoints
-/// on a given Address.  This breakpoint only takes once, and then it won't
-/// attempt to reset itself.
+//----------------------------------------------------------------------
+/// @class BreakpointResolverAddress BreakpointResolverAddress.h
+/// "lldb/Breakpoint/BreakpointResolverAddress.h"
+/// @brief This class sets breakpoints on a given Address.  This breakpoint only
+/// takes
+/// once, and then it won't attempt to reset itself.
+//----------------------------------------------------------------------
 
 class BreakpointResolverAddress : public BreakpointResolver {
 public:
@@ -31,7 +39,7 @@ public:
   static BreakpointResolver *
   CreateFromStructuredData(Breakpoint *bkpt,
                            const StructuredData::Dictionary &options_dict,
-                           Status &error);
+                           Error &error);
 
   StructuredData::ObjectSP SerializeToStructuredData() override;
 
@@ -41,10 +49,10 @@ public:
                                   ModuleList &modules) override;
 
   Searcher::CallbackReturn SearchCallback(SearchFilter &filter,
-                                          SymbolContext &context,
-                                          Address *addr) override;
+                                          SymbolContext &context, Address *addr,
+                                          bool containing) override;
 
-  lldb::SearchDepth GetDepth() override;
+  Searcher::Depth GetDepth() override;
 
   void GetDescription(Stream *s) override;
 
@@ -66,7 +74,8 @@ protected:
   FileSpec m_module_filespec;   // If this filespec is Valid, and m_addr is an
                                 // offset, then it will be converted
   // to a Section+Offset address in this module, whenever that module gets
-  // around to being loaded.
+  // around to
+  // being loaded.
 private:
   DISALLOW_COPY_AND_ASSIGN(BreakpointResolverAddress);
 };

@@ -15,8 +15,3 @@
 
 @interface Foo(LeftP4) <P4>
 @end
-
-// A hidden extension
-@interface Foo ()
-@property (assign) int hiddenPropertyFromExtension;
-@end

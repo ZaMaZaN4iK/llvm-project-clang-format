@@ -1,6 +1,4 @@
-// RUN: %clang_cc1 -verify -fopenmp -ferror-limit 100 -o - %s -Wuninitialized
-
-// RUN: %clang_cc1 -verify -fopenmp-simd -ferror-limit 100 -o - %s -Wuninitialized
+// RUN: %clang_cc1 -verify -fopenmp -ferror-limit 100 -o - %s
 
 void foo();
 
@@ -13,11 +11,11 @@ int main(int argc, char **argv) {
 #pragma omp task default(x)                       // expected-error {{expected 'none' or 'shared' in OpenMP clause 'default'}}
   foo();
 
-#pragma omp task default(none) // expected-note {{explicit data sharing attribute requested here}}
+#pragma omp task default(none)
   ++argc; // expected-error {{variable 'argc' must have explicitly specified data sharing attributes}}
 
-#pragma omp task default(none) // expected-note {{explicit data sharing attribute requested here}}
+#pragma omp task default(none)
 #pragma omp task default(shared)
-  ++argc; // expected-error {{variable 'argc' must have explicitly specified data sharing attributes}}
+  ++argc;
   return 0;
 }

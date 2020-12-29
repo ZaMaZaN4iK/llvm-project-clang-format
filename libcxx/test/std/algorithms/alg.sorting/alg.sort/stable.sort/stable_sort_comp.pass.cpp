@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,12 +18,10 @@
 #include <algorithm>
 #include <functional>
 #include <vector>
-#include <random>
 #include <cassert>
 #include <cstddef>
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
 #include <memory>
-
-#include "test_macros.h"
 
 struct indirect_less
 {
@@ -31,7 +30,7 @@ struct indirect_less
         {return *x < *y;}
 };
 
-std::mt19937 randomness;
+#endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
 
 struct first_only
 {
@@ -60,17 +59,17 @@ void test()
     }
     for (int i = 0; i < N - M; i += M)
     {
-        std::shuffle(v.begin() + i, v.begin() + i + M, randomness);
+        std::random_shuffle(v.begin() + i, v.begin() + i + M);
     }
     std::stable_sort(v.begin(), v.end(), first_only());
     assert(std::is_sorted(v.begin(), v.end()));
 }
 
-int main(int, char**)
+int main()
 {
     test();
 
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
     {
     std::vector<std::unique_ptr<int> > v(1000);
     for (int i = 0; static_cast<std::size_t>(i) < v.size(); ++i)
@@ -81,7 +80,5 @@ int main(int, char**)
     assert(*v[1] == 1);
     assert(*v[2] == 2);
     }
-#endif
-
-  return 0;
+#endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
 }

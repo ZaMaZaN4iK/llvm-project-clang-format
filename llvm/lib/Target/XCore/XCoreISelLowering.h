@@ -1,8 +1,9 @@
 //===-- XCoreISelLowering.h - XCore DAG Lowering Interface ------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,7 +17,7 @@
 
 #include "XCore.h"
 #include "llvm/CodeGen/SelectionDAG.h"
-#include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/Target/TargetLowering.h"
 
 namespace llvm {
 
@@ -122,8 +123,7 @@ namespace llvm {
                                 MachineBasicBlock *MBB) const override;
 
     bool isLegalAddressingMode(const DataLayout &DL, const AddrMode &AM,
-                               Type *Ty, unsigned AS,
-                               Instruction *I = nullptr) const override;
+                               Type *Ty, unsigned AS) const override;
 
     /// If a physical register, this returns the register that receives the
     /// exception address on entry to an EH pad.
@@ -188,8 +188,6 @@ namespace llvm {
     SDValue LowerATOMIC_LOAD(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerATOMIC_STORE(SDValue Op, SelectionDAG &DAG) const;
 
-    MachineMemOperand::Flags getMMOFlags(const Instruction &I) const override;
-
     // Inline asm support
     std::pair<unsigned, const TargetRegisterClass *>
     getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
@@ -202,8 +200,8 @@ namespace llvm {
     SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
 
     void computeKnownBitsForTargetNode(const SDValue Op,
-                                       KnownBits &Known,
-                                       const APInt &DemandedElts,
+                                       APInt &KnownZero,
+                                       APInt &KnownOne,
                                        const SelectionDAG &DAG,
                                        unsigned Depth = 0) const override;
 

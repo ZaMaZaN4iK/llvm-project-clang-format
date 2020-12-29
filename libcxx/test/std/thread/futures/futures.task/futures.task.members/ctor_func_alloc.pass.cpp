@@ -1,15 +1,14 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: libcpp-has-no-threads
 // UNSUPPORTED: c++98, c++03
-// REQUIRES: c++11 || c++14
-// packaged_task allocator support was removed in C++17 (LWG 2921)
 
 // <future>
 
@@ -21,7 +20,6 @@
 #include <future>
 #include <cassert>
 
-#include "test_macros.h"
 #include "test_allocator.h"
 #include "min_allocator.h"
 
@@ -45,7 +43,7 @@ int A::n_copies = 0;
 
 int func(int i) { return i; }
 
-int main(int, char**)
+int main()
 {
     {
         std::packaged_task<double(int, char)> p(std::allocator_arg,
@@ -71,7 +69,7 @@ int main(int, char**)
         p(3, 'a');
         assert(f.get() == 105.0);
         assert(A::n_copies > 0);
-        assert(A::n_moves >= 0);
+        assert(A::n_moves > 0);
     }
     assert(test_alloc_base::alloc_count == 0);
     A::n_copies = 0;
@@ -124,6 +122,4 @@ int main(int, char**)
     }
     A::n_copies = 0;
     A::n_moves  = 0;
-
-  return 0;
 }

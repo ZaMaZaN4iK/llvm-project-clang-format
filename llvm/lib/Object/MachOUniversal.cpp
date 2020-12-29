@@ -1,8 +1,9 @@
 //===- MachOUniversal.cpp - Mach-O universal binary -------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -155,16 +156,15 @@ MachOUniversalBinary::MachOUniversalBinary(MemoryBufferRef Source, Error &Err)
         ") extends past the end of the file");
       return;
     }
-
-    if (A.getAlign() > MaxSectionAlignment) {
-      Err = malformedError("align (2^" + Twine(A.getAlign()) +
-                           ") too large for cputype (" + Twine(A.getCPUType()) +
-                           ") cpusubtype (" +
-                           Twine(A.getCPUSubType() & ~MachO::CPU_SUBTYPE_MASK) +
-                           ") (maximum 2^" + Twine(MaxSectionAlignment) + ")");
+#define MAXSECTALIGN 15 /* 2**15 or 0x8000 */
+    if (A.getAlign() > MAXSECTALIGN) {
+      Err = malformedError("align (2^" + Twine(A.getAlign()) + ") too large "
+        "for cputype (" + Twine(A.getCPUType()) + ") cpusubtype (" +
+        Twine(A.getCPUSubType() & ~MachO::CPU_SUBTYPE_MASK) +
+        ") (maximum 2^" + Twine(MAXSECTALIGN) + ")");
       return;
     }
-    if(A.getOffset() % (1ull << A.getAlign()) != 0){
+    if(A.getOffset() % (1 << A.getAlign()) != 0){
       Err = malformedError("offset: " + Twine(A.getOffset()) +
         " for cputype (" + Twine(A.getCPUType()) + ") cpusubtype (" +
         Twine(A.getCPUSubType() & ~MachO::CPU_SUBTYPE_MASK) +
@@ -210,34 +210,19 @@ MachOUniversalBinary::MachOUniversalBinary(MemoryBufferRef Source, Error &Err)
   Err = Error::success();
 }
 
-Expected<MachOUniversalBinary::ObjectForArch>
+Expected<std::unique_ptr<MachOObjectFile>>
 MachOUniversalBinary::getObjectForArch(StringRef ArchName) const {
   if (Triple(ArchName).getArch() == Triple::ArchType::UnknownArch)
     return make_error<GenericBinaryError>("Unknown architecture "
                                           "named: " +
                                               ArchName,
                                           object_error::arch_not_found);
-  for (const auto &Obj : objects())
+
+  for (auto &Obj : objects())
     if (Obj.getArchFlagName() == ArchName)
-      return Obj;
+      return Obj.getAsObjectFile();
   return make_error<GenericBinaryError>("fat file does not "
                                         "contain " +
                                             ArchName,
                                         object_error::arch_not_found);
-}
-
-Expected<std::unique_ptr<MachOObjectFile>>
-MachOUniversalBinary::getMachOObjectForArch(StringRef ArchName) const {
-  Expected<ObjectForArch> O = getObjectForArch(ArchName);
-  if (!O)
-    return O.takeError();
-  return O->getAsObjectFile();
-}
-
-Expected<std::unique_ptr<Archive>>
-MachOUniversalBinary::getArchiveForArch(StringRef ArchName) const {
-  Expected<ObjectForArch> O = getObjectForArch(ArchName);
-  if (!O)
-    return O.takeError();
-  return O->getAsArchive();
 }

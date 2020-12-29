@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-# See https://llvm.org/LICENSE.txt for license information.
-# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+#                     The LLVM Compiler Infrastructure
+#
+# This file is distributed under the University of Illinois Open Source
+# License. See LICENSE.TXT for details.
 
 import multiprocessing
 multiprocessing.freeze_support()
@@ -12,5 +13,5 @@ import os.path
 this_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.dirname(this_dir))
 
-from libscanbuild.intercept import intercept_build
-sys.exit(intercept_build())
+from libscanbuild.intercept import intercept_build_main
+sys.exit(intercept_build_main(this_dir))

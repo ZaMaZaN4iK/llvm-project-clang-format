@@ -1,8 +1,9 @@
 //===-- aeabi_uldivmod.S - EABI uldivmod implementation -------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,23 +23,23 @@
         .syntax unified
         .p2align 2
 DEFINE_COMPILERRT_FUNCTION(__aeabi_uldivmod)
-        push	{r6, lr}
+        push	{r11, lr}
         sub	sp, sp, #16
-        add	r6, sp, #8
-        str	r6, [sp]
+        add	r12, sp, #8
+        str	r12, [sp]
 #if defined(__MINGW32__)
-        movs    r6, r0
-        movs    r0, r2
-        movs    r2, r6
-        movs    r6, r1
-        movs    r1, r3
-        movs    r3, r6
+        mov     r12, r0
+        mov     r0, r2
+        mov     r2, r12
+        mov     r12, r1
+        mov     r1, r3
+        mov     r3, r12
 #endif
         bl	SYMBOL_NAME(__udivmoddi4)
         ldr	r2, [sp, #8]
         ldr	r3, [sp, #12]
         add	sp, sp, #16
-        pop	{r6, pc}
+        pop	{r11, pc}
 END_COMPILERRT_FUNCTION(__aeabi_uldivmod)
 
 NO_EXEC_STACK_DIRECTIVE

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -30,7 +31,7 @@ void test_is_const()
 
 struct A; // incomplete
 
-int main(int, char**)
+int main()
 {
     test_is_const<void>();
     test_is_const<int>();
@@ -44,6 +45,4 @@ int main(int, char**)
 
     static_assert(!std::is_const<int&>::value, "");
     static_assert(!std::is_const<const int&>::value, "");
-
-  return 0;
 }

@@ -1,8 +1,9 @@
 //===-- LockFilePosix.h -----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,15 +20,15 @@ public:
   ~LockFilePosix() override;
 
 protected:
-  Status DoWriteLock(const uint64_t start, const uint64_t len) override;
+  Error DoWriteLock(const uint64_t start, const uint64_t len) override;
 
-  Status DoTryWriteLock(const uint64_t start, const uint64_t len) override;
+  Error DoTryWriteLock(const uint64_t start, const uint64_t len) override;
 
-  Status DoReadLock(const uint64_t start, const uint64_t len) override;
+  Error DoReadLock(const uint64_t start, const uint64_t len) override;
 
-  Status DoTryReadLock(const uint64_t start, const uint64_t len) override;
+  Error DoTryReadLock(const uint64_t start, const uint64_t len) override;
 
-  Status DoUnlock() override;
+  Error DoUnlock() override;
 };
 
 } // namespace lldb_private

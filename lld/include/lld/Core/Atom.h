@@ -1,15 +1,16 @@
 //===- Core/Atom.h - A node in linking graph --------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLD_CORE_ATOM_H
 #define LLD_CORE_ATOM_H
 
-#include "lld/Common/LLVM.h"
+#include "lld/Core/LLVM.h"
 #include "llvm/ADT/StringRef.h"
 
 namespace lld {
@@ -38,7 +39,7 @@ public:
     definitionSharedLibrary ///< Only in shared libraries to model export.
   };
 
-  /// The scope in which this atom is accessible to other atoms.
+  /// The scope in which this atom is acessible to other atoms.
   enum Scope {
     scopeTranslationUnit,  ///< Accessible only to atoms in the same translation
                            ///  unit (e.g. a C static).

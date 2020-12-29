@@ -1,15 +1,15 @@
 //===-- ExpressionVariable.cpp ----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Expression/ExpressionVariable.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Expression/IRExecutionUnit.h"
-#include "lldb/Target/Target.h"
-#include "lldb/Utility/Log.h"
 
 using namespace lldb_private;
 
@@ -25,12 +25,12 @@ uint8_t *ExpressionVariable::GetValueBytes() {
     return const_cast<uint8_t *>(
         m_frozen_sp->GetDataExtractor().GetDataStart());
   }
-  return nullptr;
+  return NULL;
 }
 
 PersistentExpressionState::~PersistentExpressionState() {}
 
-lldb::addr_t PersistentExpressionState::LookupSymbol(ConstString name) {
+lldb::addr_t PersistentExpressionState::LookupSymbol(const ConstString &name) {
   SymbolMap::iterator si = m_symbol_map.find(name.GetCString());
 
   if (si != m_symbol_map.end())
@@ -45,7 +45,8 @@ void PersistentExpressionState::RegisterExecutionUnit(
 
   m_execution_units.insert(execution_unit_sp);
 
-  LLDB_LOGF(log, "Registering JITted Functions:\n");
+  if (log)
+    log->Printf("Registering JITted Functions:\n");
 
   for (const IRExecutionUnit::JittedFunction &jitted_function :
        execution_unit_sp->GetJittedFunctions()) {
@@ -54,35 +55,28 @@ void PersistentExpressionState::RegisterExecutionUnit(
         jitted_function.m_remote_addr != LLDB_INVALID_ADDRESS) {
       m_symbol_map[jitted_function.m_name.GetCString()] =
           jitted_function.m_remote_addr;
-      LLDB_LOGF(log, "  Function: %s at 0x%" PRIx64 ".",
-                jitted_function.m_name.GetCString(),
-                jitted_function.m_remote_addr);
+      if (log)
+        log->Printf("  Function: %s at 0x%" PRIx64 ".",
+                    jitted_function.m_name.GetCString(),
+                    jitted_function.m_remote_addr);
     }
   }
 
-  LLDB_LOGF(log, "Registering JIIted Symbols:\n");
+  if (log)
+    log->Printf("Registering JIIted Symbols:\n");
 
   for (const IRExecutionUnit::JittedGlobalVariable &global_var :
        execution_unit_sp->GetJittedGlobalVariables()) {
     if (global_var.m_remote_addr != LLDB_INVALID_ADDRESS) {
       // Demangle the name before inserting it, so that lookups by the ConstStr
-      // of the demangled name will find the mangled one (needed for looking up
-      // metadata pointers.)
+      // of the demangled name
+      // will find the mangled one (needed for looking up metadata pointers.)
       Mangled mangler(global_var.m_name);
       mangler.GetDemangledName(lldb::eLanguageTypeUnknown);
       m_symbol_map[global_var.m_name.GetCString()] = global_var.m_remote_addr;
-      LLDB_LOGF(log, "  Symbol: %s at 0x%" PRIx64 ".",
-                global_var.m_name.GetCString(), global_var.m_remote_addr);
+      if (log)
+        log->Printf("  Symbol: %s at 0x%" PRIx64 ".",
+                    global_var.m_name.GetCString(), global_var.m_remote_addr);
     }
   }
-}
-
-ConstString PersistentExpressionState::GetNextPersistentVariableName(
-    Target &target, llvm::StringRef Prefix) {
-  llvm::SmallString<64> name;
-  {
-    llvm::raw_svector_ostream os(name);
-    os << Prefix << target.GetNextPersistentVariableIndex();
-  }
-  return ConstString(name);
 }

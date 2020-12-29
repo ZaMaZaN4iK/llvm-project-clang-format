@@ -1,20 +1,21 @@
 //===-- ClangExpressionVariable.cpp -----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "ClangExpressionVariable.h"
 
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/DataExtractor.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Core/Value.h"
 #include "lldb/Core/ValueObjectConstResult.h"
 #include "lldb/Target/ExecutionContext.h"
 #include "lldb/Target/Process.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/Stream.h"
 #include "clang/AST/ASTContext.h"
 
 using namespace lldb_private;
@@ -31,7 +32,7 @@ ClangExpressionVariable::ClangExpressionVariable(
 }
 
 ClangExpressionVariable::ClangExpressionVariable(
-    ExecutionContextScope *exe_scope, Value &value, ConstString name,
+    ExecutionContextScope *exe_scope, Value &value, const ConstString &name,
     uint16_t flags)
     : ExpressionVariable(LLVMCastKind::eKindClang), m_parser_vars(),
       m_jit_vars() {
@@ -48,7 +49,7 @@ ClangExpressionVariable::ClangExpressionVariable(
 }
 
 ClangExpressionVariable::ClangExpressionVariable(
-    ExecutionContextScope *exe_scope, ConstString name,
+    ExecutionContextScope *exe_scope, const ConstString &name,
     const TypeFromUser &user_type, lldb::ByteOrder byte_order,
     uint32_t addr_byte_size)
     : ExpressionVariable(LLVMCastKind::eKindClang), m_parser_vars(),

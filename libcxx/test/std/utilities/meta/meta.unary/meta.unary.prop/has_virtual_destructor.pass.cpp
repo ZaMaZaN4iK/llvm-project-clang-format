@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -70,7 +71,7 @@ struct A
     ~A();
 };
 
-int main(int, char**)
+int main()
 {
     test_has_not_virtual_destructor<void>();
     test_has_not_virtual_destructor<A>();
@@ -87,6 +88,4 @@ int main(int, char**)
 
     test_has_virtual_destructor<Abstract>();
     test_has_virtual_destructor<NotEmpty>();
-
-  return 0;
 }

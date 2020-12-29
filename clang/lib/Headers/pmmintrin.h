@@ -1,8 +1,22 @@
 /*===---- pmmintrin.h - SSE3 intrinsics ------------------------------------===
  *
- * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
- * See https://llvm.org/LICENSE.txt for license information.
- * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
  *===-----------------------------------------------------------------------===
  */
@@ -14,14 +28,12 @@
 
 /* Define the default attributes for the functions in this file. */
 #define __DEFAULT_FN_ATTRS \
-  __attribute__((__always_inline__, __nodebug__, __target__("sse3"), __min_vector_width__(128)))
+  __attribute__((__always_inline__, __nodebug__, __target__("sse3")))
 
-/// Loads data from an unaligned memory location to elements in a 128-bit
-///    vector.
-///
-///    If the address of the data is not 16-byte aligned, the instruction may
-///    read two adjacent aligned blocks of memory to retrieve the requested
-///    data.
+/// \brief Loads data from an unaligned memory location to elements in a 128-bit
+///    vector. If the address of the data is not 16-byte aligned, the
+///    instruction may read two adjacent aligned blocks of memory to retrieve
+///    the requested data.
 ///
 /// \headerfile <x86intrin.h>
 ///
@@ -36,7 +48,7 @@ _mm_lddqu_si128(__m128i const *__p)
   return (__m128i)__builtin_ia32_lddqu((char const *)__p);
 }
 
-/// Adds the even-indexed values and subtracts the odd-indexed values of
+/// \brief Adds the even-indexed values and subtracts the odd-indexed values of
 ///    two 128-bit vectors of [4 x float].
 ///
 /// \headerfile <x86intrin.h>
@@ -55,7 +67,7 @@ _mm_addsub_ps(__m128 __a, __m128 __b)
   return __builtin_ia32_addsubps((__v4sf)__a, (__v4sf)__b);
 }
 
-/// Horizontally adds the adjacent pairs of values contained in two
+/// \brief Horizontally adds the adjacent pairs of values contained in two
 ///    128-bit vectors of [4 x float].
 ///
 /// \headerfile <x86intrin.h>
@@ -78,7 +90,7 @@ _mm_hadd_ps(__m128 __a, __m128 __b)
   return __builtin_ia32_haddps((__v4sf)__a, (__v4sf)__b);
 }
 
-/// Horizontally subtracts the adjacent pairs of values contained in two
+/// \brief Horizontally subtracts the adjacent pairs of values contained in two
 ///    128-bit vectors of [4 x float].
 ///
 /// \headerfile <x86intrin.h>
@@ -101,9 +113,9 @@ _mm_hsub_ps(__m128 __a, __m128 __b)
   return __builtin_ia32_hsubps((__v4sf)__a, (__v4sf)__b);
 }
 
-/// Moves and duplicates odd-indexed values from a 128-bit vector
-///    of [4 x float] to float values stored in a 128-bit vector of
-///    [4 x float].
+/// \brief Moves and duplicates high-order (odd-indexed) values from a 128-bit
+///    vector of [4 x float] to float values stored in a 128-bit vector of
+///    [4 x float]. 
 ///
 /// \headerfile <x86intrin.h>
 ///
@@ -123,8 +135,8 @@ _mm_movehdup_ps(__m128 __a)
   return __builtin_shufflevector((__v4sf)__a, (__v4sf)__a, 1, 1, 3, 3);
 }
 
-/// Duplicates even-indexed values from a 128-bit vector of
-///    [4 x float] to float values stored in a 128-bit vector of [4 x float].
+/// \brief Duplicates low-order (even-indexed) values from a 128-bit vector of
+///    [4 x float] to float values stored in a 128-bit vector of [4 x float]. 
 ///
 /// \headerfile <x86intrin.h>
 ///
@@ -144,7 +156,7 @@ _mm_moveldup_ps(__m128 __a)
   return __builtin_shufflevector((__v4sf)__a, (__v4sf)__a, 0, 0, 2, 2);
 }
 
-/// Adds the even-indexed values and subtracts the odd-indexed values of
+/// \brief Adds the even-indexed values and subtracts the odd-indexed values of
 ///    two 128-bit vectors of [2 x double].
 ///
 /// \headerfile <x86intrin.h>
@@ -163,7 +175,7 @@ _mm_addsub_pd(__m128d __a, __m128d __b)
   return __builtin_ia32_addsubpd((__v2df)__a, (__v2df)__b);
 }
 
-/// Horizontally adds the pairs of values contained in two 128-bit
+/// \brief Horizontally adds the pairs of values contained in two 128-bit
 ///    vectors of [2 x double].
 ///
 /// \headerfile <x86intrin.h>
@@ -186,7 +198,7 @@ _mm_hadd_pd(__m128d __a, __m128d __b)
   return __builtin_ia32_haddpd((__v2df)__a, (__v2df)__b);
 }
 
-/// Horizontally subtracts the pairs of values contained in two 128-bit
+/// \brief Horizontally subtracts the pairs of values contained in two 128-bit
 ///    vectors of [2 x double].
 ///
 /// \headerfile <x86intrin.h>
@@ -209,13 +221,13 @@ _mm_hsub_pd(__m128d __a, __m128d __b)
   return __builtin_ia32_hsubpd((__v2df)__a, (__v2df)__b);
 }
 
-/// Moves and duplicates one double-precision value to double-precision
+/// \brief Moves and duplicates one double-precision value to double-precision
 ///    values stored in a 128-bit vector of [2 x double].
 ///
 /// \headerfile <x86intrin.h>
 ///
 /// \code
-/// __m128d _mm_loaddup_pd(double const *dp);
+/// __m128d _mm_loaddup_pd(double const * dp);
 /// \endcode
 ///
 /// This intrinsic corresponds to the <c> VMOVDDUP </c> instruction.
@@ -226,7 +238,7 @@ _mm_hsub_pd(__m128d __a, __m128d __b)
 ///    duplicated values.
 #define        _mm_loaddup_pd(dp)        _mm_load1_pd(dp)
 
-/// Moves and duplicates the double-precision value in the lower bits of
+/// \brief Moves and duplicates the double-precision value in the lower bits of
 ///    a 128-bit vector of [2 x double] to double-precision values stored in a
 ///    128-bit vector of [2 x double].
 ///
@@ -245,7 +257,15 @@ _mm_movedup_pd(__m128d __a)
   return __builtin_shufflevector((__v2df)__a, (__v2df)__a, 0, 0);
 }
 
-/// Establishes a linear address memory range to be monitored and puts
+#define _MM_DENORMALS_ZERO_ON   (0x0040)
+#define _MM_DENORMALS_ZERO_OFF  (0x0000)
+
+#define _MM_DENORMALS_ZERO_MASK (0x0040)
+
+#define _MM_GET_DENORMALS_ZERO_MODE() (_mm_getcsr() & _MM_DENORMALS_ZERO_MASK)
+#define _MM_SET_DENORMALS_ZERO_MODE(x) (_mm_setcsr((_mm_getcsr() & ~_MM_DENORMALS_ZERO_MASK) | (x)))
+
+/// \brief Establishes a linear address memory range to be monitored and puts
 ///    the processor in the monitor event pending state. Data stored in the
 ///    monitored address range causes the processor to exit the pending state.
 ///
@@ -263,10 +283,10 @@ _mm_movedup_pd(__m128d __a)
 static __inline__ void __DEFAULT_FN_ATTRS
 _mm_monitor(void const *__p, unsigned __extensions, unsigned __hints)
 {
-  __builtin_ia32_monitor(__p, __extensions, __hints);
+  __builtin_ia32_monitor((void *)__p, __extensions, __hints);
 }
 
-/// Used with the MONITOR instruction to wait while the processor is in
+/// \brief Used with the MONITOR instruction to wait while the processor is in
 ///    the monitor event pending state. Data stored in the monitored address
 ///    range causes the processor to exit the pending state.
 ///

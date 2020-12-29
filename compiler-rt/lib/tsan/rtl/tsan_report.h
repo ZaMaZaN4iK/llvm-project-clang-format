@@ -1,8 +1,9 @@
 //===-- tsan_report.h -------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,9 +14,8 @@
 #define TSAN_REPORT_H
 
 #include "sanitizer_common/sanitizer_symbolizer.h"
-#include "sanitizer_common/sanitizer_thread_registry.h"
-#include "sanitizer_common/sanitizer_vector.h"
 #include "tsan_defs.h"
+#include "tsan_vector.h"
 
 namespace __tsan {
 
@@ -24,7 +24,6 @@ enum ReportType {
   ReportTypeVptrRace,
   ReportTypeUseAfterFree,
   ReportTypeVptrUseAfterFree,
-  ReportTypeExternalRace,
   ReportTypeThreadLeak,
   ReportTypeMutexDestroyLocked,
   ReportTypeMutexDoubleLock,
@@ -57,7 +56,6 @@ struct ReportMop {
   int size;
   bool write;
   bool atomic;
-  uptr external_tag;
   Vector<ReportMopMutex> mset;
   ReportStack *stack;
 
@@ -77,7 +75,6 @@ struct ReportLocation {
   DataInfo global;
   uptr heap_chunk_start;
   uptr heap_chunk_size;
-  uptr external_tag;
   int tid;
   int fd;
   bool suppressable;
@@ -90,11 +87,10 @@ struct ReportLocation {
 
 struct ReportThread {
   int id;
-  tid_t os_id;
+  uptr os_id;
   bool running;
-  ThreadType thread_type;
   char *name;
-  u32 parent_tid;
+  int parent_tid;
   ReportStack *stack;
 };
 
@@ -108,7 +104,6 @@ struct ReportMutex {
 class ReportDesc {
  public:
   ReportType typ;
-  uptr tag;
   Vector<ReportStack*> stacks;
   Vector<ReportMop*> mops;
   Vector<ReportLocation*> locs;

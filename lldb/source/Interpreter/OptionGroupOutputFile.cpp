@@ -1,14 +1,19 @@
 //===-- OptionGroupOutputFile.cpp -------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Interpreter/OptionGroupOutputFile.h"
 
-#include "lldb/Host/OptionParser.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Utility/Utils.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -20,12 +25,12 @@ OptionGroupOutputFile::~OptionGroupOutputFile() {}
 
 static const uint32_t SHORT_OPTION_APND = 0x61706e64; // 'apnd'
 
-static constexpr OptionDefinition g_option_table[] = {
+static OptionDefinition g_option_table[] = {
     {LLDB_OPT_SET_1, false, "outfile", 'o', OptionParser::eRequiredArgument,
-     nullptr, {}, 0, eArgTypeFilename,
+     nullptr, nullptr, 0, eArgTypeFilename,
      "Specify a path for capturing command output."},
     {LLDB_OPT_SET_1, false, "append-outfile", SHORT_OPTION_APND,
-     OptionParser::eNoArgument, nullptr, {}, 0, eArgTypeNone,
+     OptionParser::eNoArgument, nullptr, nullptr, 0, eArgTypeNone,
      "Append to the file specified with '--outfile <path>'."},
 };
 
@@ -33,11 +38,10 @@ llvm::ArrayRef<OptionDefinition> OptionGroupOutputFile::GetDefinitions() {
   return llvm::makeArrayRef(g_option_table);
 }
 
-Status
-OptionGroupOutputFile::SetOptionValue(uint32_t option_idx,
-                                      llvm::StringRef option_arg,
-                                      ExecutionContext *execution_context) {
-  Status error;
+Error OptionGroupOutputFile::SetOptionValue(
+    uint32_t option_idx, llvm::StringRef option_arg,
+    ExecutionContext *execution_context) {
+  Error error;
   const int short_option = g_option_table[option_idx].short_option;
 
   switch (short_option) {
@@ -50,7 +54,8 @@ OptionGroupOutputFile::SetOptionValue(uint32_t option_idx,
     break;
 
   default:
-    llvm_unreachable("Unimplemented option");
+    error.SetErrorStringWithFormat("unrecognized option '%c'", short_option);
+    break;
   }
 
   return error;

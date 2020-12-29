@@ -1,7 +1,10 @@
 """Look up type information for typedefs of same name at different lexical scope and check for correct display."""
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -23,7 +26,7 @@ class TypedefTestCase(TestBase):
 
     def image_lookup_for_multiple_typedefs(self):
         """Test 'image lookup -t a' at different scopes and check for correct display."""
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
         typearray = (
             "float",

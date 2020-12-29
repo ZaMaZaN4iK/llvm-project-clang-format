@@ -1,8 +1,9 @@
-//===- ProfileSummary.h - Profile summary data structure. -------*- C++ -*-===//
+//===-- ProfileSummary.h - Profile summary data structure. ------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,17 +11,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_IR_PROFILESUMMARY_H
-#define LLVM_IR_PROFILESUMMARY_H
+#ifndef LLVM_SUPPORT_PROFILE_SUMMARY_H
+#define LLVM_SUPPORT_PROFILE_SUMMARY_H
 
-#include <algorithm>
 #include <cstdint>
+#include <utility>
 #include <vector>
+
+#include "llvm/Support/Casting.h"
 
 namespace llvm {
 
 class LLVMContext;
 class Metadata;
+class MDTuple;
+class MDNode;
 
 // The profile summary is one or more (Cutoff, MinCount, NumCounts) triplets.
 // The semantics of counts depend on the type of profile. For instrumentation
@@ -32,29 +37,28 @@ struct ProfileSummaryEntry {
   uint32_t Cutoff;    ///< The required percentile of counts.
   uint64_t MinCount;  ///< The minimum count for this percentile.
   uint64_t NumCounts; ///< Number of counts >= the minimum count.
-
   ProfileSummaryEntry(uint32_t TheCutoff, uint64_t TheMinCount,
                       uint64_t TheNumCounts)
       : Cutoff(TheCutoff), MinCount(TheMinCount), NumCounts(TheNumCounts) {}
 };
 
-using SummaryEntryVector = std::vector<ProfileSummaryEntry>;
+typedef std::vector<ProfileSummaryEntry> SummaryEntryVector;
 
 class ProfileSummary {
 public:
-  enum Kind { PSK_Instr, PSK_CSInstr, PSK_Sample };
+  enum Kind { PSK_Instr, PSK_Sample };
 
 private:
   const Kind PSK;
+  static const char *KindStr[2];
   SummaryEntryVector DetailedSummary;
   uint64_t TotalCount, MaxCount, MaxInternalCount, MaxFunctionCount;
   uint32_t NumCounts, NumFunctions;
-  /// Return detailed summary as metadata.
+  /// \brief Return detailed summary as metadata.
   Metadata *getDetailedSummaryMD(LLVMContext &Context);
 
 public:
   static const int Scale = 1000000;
-
   ProfileSummary(Kind K, SummaryEntryVector DetailedSummary,
                  uint64_t TotalCount, uint64_t MaxCount,
                  uint64_t MaxInternalCount, uint64_t MaxFunctionCount,
@@ -63,11 +67,10 @@ public:
         TotalCount(TotalCount), MaxCount(MaxCount),
         MaxInternalCount(MaxInternalCount), MaxFunctionCount(MaxFunctionCount),
         NumCounts(NumCounts), NumFunctions(NumFunctions) {}
-
   Kind getKind() const { return PSK; }
-  /// Return summary information as metadata.
+  /// \brief Return summary information as metadata.
   Metadata *getMD(LLVMContext &Context);
-  /// Construct profile summary from metdata.
+  /// \brief Construct profile summary from metdata.
   static ProfileSummary *getFromMD(Metadata *MD);
   SummaryEntryVector &getDetailedSummary() { return DetailedSummary; }
   uint32_t getNumFunctions() { return NumFunctions; }
@@ -79,5 +82,4 @@ public:
 };
 
 } // end namespace llvm
-
-#endif // LLVM_IR_PROFILESUMMARY_H
+#endif

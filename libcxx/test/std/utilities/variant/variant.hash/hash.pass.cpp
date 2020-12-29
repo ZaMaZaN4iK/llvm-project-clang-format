@@ -1,9 +1,10 @@
 // -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,8 +20,7 @@
 #include <variant>
 
 #include "test_macros.h"
-#include "variant_test_helpers.h"
-#include "poisoned_hash_helper.h"
+#include "variant_test_helpers.hpp"
 
 #ifndef TEST_HAS_NO_EXCEPTIONS
 namespace std {
@@ -101,11 +101,7 @@ void test_hash_monostate() {
   assert(h(m1) == h(m2));
   {
     ASSERT_SAME_TYPE(decltype(h(m1)), std::size_t);
-    ASSERT_NOEXCEPT(h(m1));
     static_assert(std::is_copy_constructible<H>::value, "");
-  }
-  {
-    test_hash_enabled_for_type<std::monostate>();
   }
 }
 
@@ -121,40 +117,8 @@ void test_hash_variant_duplicate_elements() {
     LIBCPP_ASSERT(h(v1) != h(v2));
 }
 
-struct A {};
-struct B {};
-
-namespace std {
-
-template <>
-struct hash<B> {
-  size_t operator()(B const&) const {
-    return 0;
-  }
-};
-
-}
-
-void test_hash_variant_enabled() {
-  {
-    test_hash_enabled_for_type<std::variant<int> >();
-    test_hash_enabled_for_type<std::variant<int*, long, double, const int> >();
-  }
-  {
-    test_hash_disabled_for_type<std::variant<int, A>>();
-    test_hash_disabled_for_type<std::variant<const A, void*>>();
-  }
-  {
-    test_hash_enabled_for_type<std::variant<int, B>>();
-    test_hash_enabled_for_type<std::variant<const B, int>>();
-  }
-}
-
-int main(int, char**) {
+int main() {
   test_hash_variant();
   test_hash_variant_duplicate_elements();
   test_hash_monostate();
-  test_hash_variant_enabled();
-
-  return 0;
 }

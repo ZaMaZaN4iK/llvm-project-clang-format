@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,41 +25,5 @@ public:
     Rep& operator*=(Rep x) {data_ *= x.data_; return *this;}
     Rep& operator/=(Rep x) {data_ /= x.data_; return *this;}
 };
-
-// This is PR#41130
-
-struct NotARep {};
-
-// std::chrono:::duration has only '*', '/' and '%' taking a "Rep" parameter
-
-// Multiplication is commutative, division is not.
-template <class Rep, class Period>
-std::chrono::duration<Rep, Period>
-operator*(std::chrono::duration<Rep, Period> d, NotARep) { return d; }
-
-template <class Rep, class Period>
-std::chrono::duration<Rep, Period>
-operator*(NotARep, std::chrono::duration<Rep, Period> d) { return d; }
-
-template <class Rep, class Period>
-std::chrono::duration<Rep, Period>
-operator/(std::chrono::duration<Rep, Period> d, NotARep) { return d; }
-
-template <class Rep, class Period>
-std::chrono::duration<Rep, Period>
-operator%(std::chrono::duration<Rep, Period> d, NotARep) { return d; }
-
-// op= is not commutative.
-template <class Rep, class Period>
-std::chrono::duration<Rep, Period>&
-operator*=(std::chrono::duration<Rep, Period>& d, NotARep) { return d; }
-
-template <class Rep, class Period>
-std::chrono::duration<Rep, Period>&
-operator/=(std::chrono::duration<Rep, Period>& d, NotARep) { return d; }
-
-template <class Rep, class Period>
-std::chrono::duration<Rep, Period>&
-operator%=(std::chrono::duration<Rep, Period>& d, NotARep) { return d; }
 
 #endif  // REP_H

@@ -1,6 +1,8 @@
+LEVEL = ../../../make
+
 OBJC_SOURCES := main.m
 
 CFLAGS ?= -arch $(ARCH) -g -O2
-LD_EXTRAS := -lobjc -framework Foundation
+LDFLAGS = $(CFLAGS) -lobjc -framework Foundation
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

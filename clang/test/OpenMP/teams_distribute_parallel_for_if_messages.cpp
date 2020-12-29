@@ -1,6 +1,4 @@
-// RUN: %clang_cc1 -verify -fopenmp -fopenmp-version=45 -ferror-limit 100 %s -Wuninitialized
-
-// RUN: %clang_cc1 -verify -fopenmp-simd -fopenmp-version=45 -ferror-limit 100 %s -Wuninitialized
+// RUN: %clang_cc1 -verify -fopenmp -fopenmp-version=45 -ferror-limit 100 %s
 
 void foo() {
 }
@@ -9,19 +7,11 @@ bool foobool(int argc) {
   return argc;
 }
 
-void xxx(int argc) {
-  int cond; // expected-note {{initialize the variable 'cond' to silence this warning}}
-#pragma omp target
-#pragma omp teams distribute parallel for if(cond) // expected-warning {{variable 'cond' is uninitialized when used here}}
-  for (int i = 0; i < 10; ++i)
-    ;
-}
-
 struct S1; // expected-note {{declared here}}
 
 template <class T, class S> // expected-note {{declared here}}
 int tmain(T argc, S **argv) {
-  T i, z;
+  T i;
 #pragma omp target
 #pragma omp teams distribute parallel for if // expected-error {{expected '(' after 'if'}}
   for (i = 0; i < argc; ++i) foo();
@@ -53,7 +43,7 @@ int tmain(T argc, S **argv) {
 #pragma omp teams distribute parallel for if (argc argc) // expected-error {{expected ')'}} expected-note {{to match this '('}}
   for (i = 0; i < argc; ++i) foo();
 #pragma omp target
-#pragma omp teams distribute parallel for if(argc+z)
+#pragma omp teams distribute parallel for if(argc)
   for (i = 0; i < argc; ++i) foo();
 #pragma omp target
 #pragma omp teams distribute parallel for if(parallel // expected-error {{use of undeclared identifier 'parallel'}} expected-error {{expected ')'}} expected-note {{to match this '('}}
@@ -84,7 +74,7 @@ int tmain(T argc, S **argv) {
 }
 
 int main(int argc, char **argv) {
-  int i, z;
+  int i;
 #pragma omp target
 #pragma omp teams distribute parallel for if // expected-error {{expected '(' after 'if'}}
   for (i = 0; i < argc; ++i) foo();
@@ -131,7 +121,7 @@ int main(int argc, char **argv) {
 #pragma omp teams distribute parallel for if(parallel : argc // expected-error {{expected ')'}} expected-note {{to match this '('}}
   for (i = 0; i < argc; ++i) foo();
 #pragma omp target
-#pragma omp teams distribute parallel for if(parallel : argc + z)
+#pragma omp teams distribute parallel for if(parallel : argc)
   for (i = 0; i < argc; ++i) foo();
 #pragma omp target
 #pragma omp teams distribute parallel for if(parallel : argc) if (for:argc) // expected-error {{directive name modifier 'for' is not allowed for '#pragma omp teams distribute parallel for'}}

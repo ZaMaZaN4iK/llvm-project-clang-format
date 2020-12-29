@@ -1,8 +1,9 @@
 //===-- GDBRemoteClientBase.cpp ---------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,6 +11,7 @@
 
 #include "llvm/ADT/StringExtras.h"
 
+#include "lldb/Target/Process.h"
 #include "lldb/Target/UnixSignals.h"
 #include "lldb/Utility/LLDBAssert.h"
 
@@ -58,21 +60,22 @@ StateType GDBRemoteClientBase::SendContinuePacketAndWaitForResponse(
         continue;
       if (steady_clock::now() >= m_interrupt_time + kInterruptTimeout)
         return eStateInvalid;
-      break;
     }
     case PacketResult::Success:
       break;
     default:
-      LLDB_LOGF(log, "GDBRemoteClientBase::%s () ReadPacket(...) => false",
-                __FUNCTION__);
+      if (log)
+        log->Printf("GDBRemoteClientBase::%s () ReadPacket(...) => false",
+                    __FUNCTION__);
       return eStateInvalid;
     }
     if (response.Empty())
       return eStateInvalid;
 
     const char stop_type = response.GetChar();
-    LLDB_LOGF(log, "GDBRemoteClientBase::%s () got packet: %s", __FUNCTION__,
-              response.GetStringRef().data());
+    if (log)
+      log->Printf("GDBRemoteClientBase::%s () got packet: %s", __FUNCTION__,
+                  response.GetStringRef().c_str());
 
     switch (stop_type) {
     case 'W':
@@ -82,8 +85,9 @@ StateType GDBRemoteClientBase::SendContinuePacketAndWaitForResponse(
       // ERROR
       return eStateInvalid;
     default:
-      LLDB_LOGF(log, "GDBRemoteClientBase::%s () unrecognized async packet",
-                __FUNCTION__);
+      if (log)
+        log->Printf("GDBRemoteClientBase::%s () unrecognized async packet",
+                    __FUNCTION__);
       return eStateInvalid;
     case 'O': {
       std::string inferior_stdout;
@@ -104,14 +108,16 @@ StateType GDBRemoteClientBase::SendContinuePacketAndWaitForResponse(
       const bool should_stop = ShouldStop(signals, response);
       response.SetFilePos(0);
 
-      // The packet we should resume with. In the future we should check our
-      // thread list and "do the right thing" for new threads that show up
-      // while we stop and run async packets. Setting the packet to 'c' to
-      // continue all threads is the right thing to do 99.99% of the time
-      // because if a thread was single stepping, and we sent an interrupt, we
-      // will notice above that we didn't stop due to an interrupt but stopped
-      // due to stepping and we would _not_ continue. This packet may get
-      // modified by the async actions (e.g. to send a signal).
+      // The packet we should resume with. In the future
+      // we should check our thread list and "do the right thing"
+      // for new threads that show up while we stop and run async
+      // packets. Setting the packet to 'c' to continue all threads
+      // is the right thing to do 99.99% of the time because if a
+      // thread was single stepping, and we sent an interrupt, we
+      // will notice above that we didn't stop due to an interrupt
+      // but stopped due to stepping and we would _not_ continue.
+      // This packet may get modified by the async actions (e.g. to send a
+      // signal).
       m_continue_packet = 'c';
       cont_lock.unlock();
 
@@ -159,38 +165,14 @@ GDBRemoteClientBase::SendPacketAndWaitForResponse(
   if (!lock) {
     if (Log *log =
             ProcessGDBRemoteLog::GetLogIfAllCategoriesSet(GDBR_LOG_PROCESS))
-      LLDB_LOGF(log,
-                "GDBRemoteClientBase::%s failed to get mutex, not sending "
-                "packet '%.*s' (send_async=%d)",
-                __FUNCTION__, int(payload.size()), payload.data(), send_async);
+      log->Printf("GDBRemoteClientBase::%s failed to get mutex, not sending "
+                  "packet '%.*s' (send_async=%d)",
+                  __FUNCTION__, int(payload.size()), payload.data(),
+                  send_async);
     return PacketResult::ErrorSendFailed;
   }
 
   return SendPacketAndWaitForResponseNoLock(payload, response);
-}
-
-GDBRemoteCommunication::PacketResult
-GDBRemoteClientBase::SendPacketAndReceiveResponseWithOutputSupport(
-    llvm::StringRef payload, StringExtractorGDBRemote &response,
-    bool send_async,
-    llvm::function_ref<void(llvm::StringRef)> output_callback) {
-  Lock lock(*this, send_async);
-  if (!lock) {
-    if (Log *log =
-            ProcessGDBRemoteLog::GetLogIfAllCategoriesSet(GDBR_LOG_PROCESS))
-      LLDB_LOGF(log,
-                "GDBRemoteClientBase::%s failed to get mutex, not sending "
-                "packet '%.*s' (send_async=%d)",
-                __FUNCTION__, int(payload.size()), payload.data(), send_async);
-    return PacketResult::ErrorSendFailed;
-  }
-
-  PacketResult packet_result = SendPacketNoLock(payload);
-  if (packet_result != PacketResult::Success)
-    return packet_result;
-
-  return ReadPacketWithOutputSupport(response, GetPacketTimeout(), true,
-                                     output_callback);
 }
 
 GDBRemoteCommunication::PacketResult
@@ -211,13 +193,13 @@ GDBRemoteClientBase::SendPacketAndWaitForResponseNoLock(
       return packet_result;
     // Response says it wasn't valid
     Log *log = ProcessGDBRemoteLog::GetLogIfAllCategoriesSet(GDBR_LOG_PACKETS);
-    LLDB_LOGF(
-        log,
-        "error: packet with payload \"%.*s\" got invalid response \"%s\": %s",
-        int(payload.size()), payload.data(), response.GetStringRef().data(),
-        (i == (max_response_retries - 1))
-            ? "using invalid response and giving up"
-            : "ignoring response and waiting for another");
+    if (log)
+      log->Printf(
+          "error: packet with payload \"%.*s\" got invalid response \"%s\": %s",
+          int(payload.size()), payload.data(), response.GetStringRef().c_str(),
+          (i == (max_response_retries - 1))
+              ? "using invalid response and giving up"
+              : "ignoring response and waiting for another");
   }
   return packet_result;
 }
@@ -225,14 +207,16 @@ GDBRemoteClientBase::SendPacketAndWaitForResponseNoLock(
 bool GDBRemoteClientBase::SendvContPacket(llvm::StringRef payload,
                                           StringExtractorGDBRemote &response) {
   Log *log(ProcessGDBRemoteLog::GetLogIfAllCategoriesSet(GDBR_LOG_PROCESS));
-  LLDB_LOGF(log, "GDBRemoteCommunicationClient::%s ()", __FUNCTION__);
+  if (log)
+    log->Printf("GDBRemoteCommunicationClient::%s ()", __FUNCTION__);
 
   // we want to lock down packet sending while we continue
   Lock lock(*this, true);
 
-  LLDB_LOGF(log,
-            "GDBRemoteCommunicationClient::%s () sending vCont packet: %.*s",
-            __FUNCTION__, int(payload.size()), payload.data());
+  if (log)
+    log->Printf(
+        "GDBRemoteCommunicationClient::%s () sending vCont packet: %.*s",
+        __FUNCTION__, int(payload.size()), payload.data());
 
   if (SendPacketNoLock(payload) != PacketResult::Success)
     return false;
@@ -254,16 +238,19 @@ bool GDBRemoteClientBase::ShouldStop(const UnixSignals &signals,
   if (m_async_count == 0)
     return true; // We were not interrupted. The process stopped on its own.
 
-  // Older debugserver stubs (before April 2016) can return two stop-reply
-  // packets in response to a ^C packet. Additionally, all debugservers still
-  // return two stop replies if the inferior stops due to some other reason
-  // before the remote stub manages to interrupt it. We need to wait for this
-  // additional packet to make sure the packet sequence does not get skewed.
+  // Older debugserver stubs (before April 2016) can return two
+  // stop-reply packets in response to a ^C packet.
+  // Additionally, all debugservers still return two stop replies if
+  // the inferior stops due to some other reason before the remote
+  // stub manages to interrupt it. We need to wait for this
+  // additional packet to make sure the packet sequence does not get
+  // skewed.
   StringExtractorGDBRemote extra_stop_reply_packet;
   ReadPacket(extra_stop_reply_packet, milliseconds(100), false);
 
-  // Interrupting is typically done using SIGSTOP or SIGINT, so if the process
-  // stops with some other signal, we definitely want to stop.
+  // Interrupting is typically done using SIGSTOP or SIGINT, so if
+  // the process stops with some other signal, we definitely want to
+  // stop.
   const uint8_t signo = response.GetHexU8(UINT8_MAX);
   if (signo != signals.GetSignalNumberFromName("SIGSTOP") &&
       signo != signals.GetSignalNumberFromName("SIGINT"))
@@ -280,7 +267,7 @@ bool GDBRemoteClientBase::ShouldStop(const UnixSignals &signals,
 
 void GDBRemoteClientBase::OnRunPacketSent(bool first) {
   if (first)
-    BroadcastEvent(eBroadcastBitRunPacketSent, nullptr);
+    BroadcastEvent(eBroadcastBitRunPacketSent, NULL);
 }
 
 ///////////////////////////////////////
@@ -310,16 +297,18 @@ void GDBRemoteClientBase::ContinueLock::unlock() {
 GDBRemoteClientBase::ContinueLock::LockResult
 GDBRemoteClientBase::ContinueLock::lock() {
   Log *log = ProcessGDBRemoteLog::GetLogIfAllCategoriesSet(GDBR_LOG_PROCESS);
-  LLDB_LOGF(log, "GDBRemoteClientBase::ContinueLock::%s() resuming with %s",
-            __FUNCTION__, m_comm.m_continue_packet.c_str());
+  if (log)
+    log->Printf("GDBRemoteClientBase::ContinueLock::%s() resuming with %s",
+                __FUNCTION__, m_comm.m_continue_packet.c_str());
 
   lldbassert(!m_acquired);
   std::unique_lock<std::mutex> lock(m_comm.m_mutex);
   m_comm.m_cv.wait(lock, [this] { return m_comm.m_async_count == 0; });
   if (m_comm.m_should_stop) {
     m_comm.m_should_stop = false;
-    LLDB_LOGF(log, "GDBRemoteClientBase::ContinueLock::%s() cancelled",
-              __FUNCTION__);
+    if (log)
+      log->Printf("GDBRemoteClientBase::ContinueLock::%s() cancelled",
+                  __FUNCTION__);
     return LockResult::Cancelled;
   }
   if (m_comm.SendPacketNoLock(m_comm.m_continue_packet) !=
@@ -358,18 +347,19 @@ void GDBRemoteClientBase::Lock::SyncWithContinueThread(bool interrupt) {
       // packet. Let's interrupt it.
       const char ctrl_c = '\x03';
       ConnectionStatus status = eConnectionStatusSuccess;
-      size_t bytes_written = m_comm.Write(&ctrl_c, 1, status, nullptr);
+      size_t bytes_written = m_comm.Write(&ctrl_c, 1, status, NULL);
       if (bytes_written == 0) {
         --m_comm.m_async_count;
-        LLDB_LOGF(log, "GDBRemoteClientBase::Lock::Lock failed to send "
-                       "interrupt packet");
+        if (log)
+          log->Printf("GDBRemoteClientBase::Lock::Lock failed to send "
+                      "interrupt packet");
         return;
       }
       if (log)
         log->PutCString("GDBRemoteClientBase::Lock::Lock sent packet: \\x03");
       m_comm.m_interrupt_time = steady_clock::now();
     }
-    m_comm.m_cv.wait(lock, [this] { return !m_comm.m_is_running; });
+    m_comm.m_cv.wait(lock, [this] { return m_comm.m_is_running == false; });
     m_did_interrupt = true;
   }
   m_acquired = true;

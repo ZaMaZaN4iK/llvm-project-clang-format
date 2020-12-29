@@ -1,8 +1,9 @@
-//===- MCAsmInfo.cpp - Asm Info -------------------------------------------===//
+//===-- MCAsmInfo.cpp - Asm Info -------------------------------------------==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,26 +13,32 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCAsmInfo.h"
-#include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCStreamer.h"
-#include "llvm/Support/CommandLine.h"
-
+#include "llvm/Support/DataTypes.h"
+#include "llvm/Support/Dwarf.h"
+#include <cctype>
+#include <cstring>
 using namespace llvm;
 
-enum DefaultOnOff { Default, Enable, Disable };
-static cl::opt<DefaultOnOff> DwarfExtendedLoc(
-    "dwarf-extended-loc", cl::Hidden,
-    cl::desc("Disable emission of the extended flags in .loc directives."),
-    cl::values(clEnumVal(Default, "Default for platform"),
-               clEnumVal(Enable, "Enabled"), clEnumVal(Disable, "Disabled")),
-    cl::init(Default));
-
 MCAsmInfo::MCAsmInfo() {
+  PointerSize = 4;
+  CalleeSaveStackSlotSize = 4;
+
+  IsLittleEndian = true;
+  StackGrowsUp = false;
+  HasSubsectionsViaSymbols = false;
+  HasMachoZeroFillDirective = false;
+  HasMachoTBSSDirective = false;
+  MaxInstLength = 4;
+  MinInstAlignment = 1;
+  DollarIsPC = false;
   SeparatorString = ";";
   CommentString = "#";
   LabelSuffix = ":";
+  UseAssignmentForEHBegin = false;
+  NeedsLocalForSize = false;
   PrivateGlobalPrefix = "L";
   PrivateLabelPrefix = PrivateGlobalPrefix;
   LinkerPrivateGlobalPrefix = "";
@@ -40,6 +47,10 @@ MCAsmInfo::MCAsmInfo() {
   Code16Directive = ".code16";
   Code32Directive = ".code32";
   Code64Directive = ".code64";
+  AssemblerDialect = 0;
+  AllowAtInName = false;
+  SupportsQuotedNames = true;
+  UseDataRegionDirectives = false;
   ZeroDirective = "\t.zero\t";
   AsciiDirective = "\t.ascii\t";
   AscizDirective = "\t.asciz\t";
@@ -47,10 +58,40 @@ MCAsmInfo::MCAsmInfo() {
   Data16bitsDirective = "\t.short\t";
   Data32bitsDirective = "\t.long\t";
   Data64bitsDirective = "\t.quad\t";
+  SunStyleELFSectionSwitchSyntax = false;
+  UsesELFSectionDirectiveForBSS = false;
+  AlignmentIsInBytes = true;
+  TextAlignFillValue = 0;
+  GPRel64Directive = nullptr;
+  GPRel32Directive = nullptr;
   GlobalDirective = "\t.globl\t";
+  SetDirectiveSuppressesReloc = false;
+  HasAggressiveSymbolFolding = true;
+  COMMDirectiveAlignmentIsInBytes = true;
+  LCOMMDirectiveAlignmentType = LCOMM::NoAlignment;
+  HasFunctionAlignment = true;
+  HasDotTypeDotSizeDirective = true;
+  HasSingleParameterDotFile = true;
+  HasIdentDirective = false;
+  HasNoDeadStrip = false;
+  HasAltEntry = false;
   WeakDirective = "\t.weak\t";
-  if (DwarfExtendedLoc != Default)
-    SupportsExtendedDwarfLocDirective = DwarfExtendedLoc == Enable;
+  WeakRefDirective = nullptr;
+  HasWeakDefDirective = false;
+  HasWeakDefCanBeHiddenDirective = false;
+  HasLinkOnceDirective = false;
+  HiddenVisibilityAttr = MCSA_Hidden;
+  HiddenDeclarationVisibilityAttr = MCSA_Hidden;
+  ProtectedVisibilityAttr = MCSA_Protected;
+  SupportsDebugInformation = false;
+  ExceptionsType = ExceptionHandling::None;
+  WinEHEncodingType = WinEH::EncodingType::Invalid;
+  DwarfUsesRelocationsAcrossSections = true;
+  DwarfFDESymbolsUseAbsDiff = false;
+  DwarfRegNumForCFI = false;
+  NeedsDwarfSectionOffsetDirective = false;
+  UseParensForSymbolVariant = false;
+  UseLogicalShr = true;
 
   // FIXME: Clang's logic should be synced with the logic used to initialize
   //        this member and the two implementations should be merged.
@@ -66,12 +107,11 @@ MCAsmInfo::MCAsmInfo() {
   //   - The target subclasses for AArch64, ARM, and X86 handle these cases
   UseIntegratedAssembler = false;
   PreserveAsmComments = true;
+
+  CompressDebugSections = DebugCompressionType::DCT_None;
 }
 
-MCAsmInfo::~MCAsmInfo() = default;
-
-void MCAsmInfo::addInitialFrameState(const MCCFIInstruction &Inst) {
-  InitialFrameState.push_back(Inst);
+MCAsmInfo::~MCAsmInfo() {
 }
 
 bool MCAsmInfo::isSectionAtomizableBySymbols(const MCSection &Section) const {
@@ -100,7 +140,7 @@ MCAsmInfo::getExprForFDESymbol(const MCSymbol *Sym,
   return MCBinaryExpr::createSub(Res, PC, Context);
 }
 
-bool MCAsmInfo::isAcceptableChar(char C) const {
+static bool isAcceptableChar(char C) {
   return (C >= 'a' && C <= 'z') || (C >= 'A' && C <= 'Z') ||
          (C >= '0' && C <= '9') || C == '_' || C == '$' || C == '.' || C == '@';
 }

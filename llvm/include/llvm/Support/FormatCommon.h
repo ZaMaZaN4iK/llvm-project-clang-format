@@ -1,8 +1,9 @@
-//===- FormatCommon.h - Formatters for common LLVM types --------*- C++ -*-===//
+//===- FormatAdapters.h - Formatters for common LLVM types -----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,11 +21,9 @@ struct FmtAlign {
   detail::format_adapter &Adapter;
   AlignStyle Where;
   size_t Amount;
-  char Fill;
 
-  FmtAlign(detail::format_adapter &Adapter, AlignStyle Where, size_t Amount,
-           char Fill = ' ')
-      : Adapter(Adapter), Where(Where), Amount(Amount), Fill(Fill) {}
+  FmtAlign(detail::format_adapter &Adapter, AlignStyle Where, size_t Amount)
+      : Adapter(Adapter), Where(Where), Amount(Amount) {}
 
   void format(raw_ostream &S, StringRef Options) {
     // If we don't need to align, we can format straight into the underlying
@@ -49,26 +48,20 @@ struct FmtAlign {
     switch (Where) {
     case AlignStyle::Left:
       S << Item;
-      fill(S, PadAmount);
+      S.indent(PadAmount);
       break;
     case AlignStyle::Center: {
       size_t X = PadAmount / 2;
-      fill(S, X);
+      S.indent(X);
       S << Item;
-      fill(S, PadAmount - X);
+      S.indent(PadAmount - X);
       break;
     }
     default:
-      fill(S, PadAmount);
+      S.indent(PadAmount);
       S << Item;
       break;
     }
-  }
-
-private:
-  void fill(llvm::raw_ostream &S, uint32_t Count) {
-    for (uint32_t I = 0; I < Count; ++I)
-      S << Fill;
   }
 };
 }

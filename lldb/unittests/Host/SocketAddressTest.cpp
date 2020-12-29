@@ -1,26 +1,21 @@
 //===-- SocketAddressTest.cpp -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "lldb/Host/SocketAddress.h"
-#include "TestingSupport/SubsystemRAII.h"
-#include "lldb/Host/Socket.h"
-#include "llvm/Testing/Support/Error.h"
-
 #include "gtest/gtest.h"
 
-using namespace lldb_private;
+#include "lldb/Host/SocketAddress.h"
 
 namespace {
-class SocketAddressTest : public testing::Test {
-public:
-  SubsystemRAII<Socket> subsystems;
-};
-} // namespace
+class SocketAddressTest : public ::testing::Test {};
+}
+
+using namespace lldb_private;
 
 TEST_F(SocketAddressTest, Set) {
   SocketAddress sa;
@@ -37,14 +32,6 @@ TEST_F(SocketAddressTest, Set) {
               sa.GetIPAddress() == "0:0:0:0:0:0:0:1")
       << "Address was: " << sa.GetIPAddress();
   ASSERT_EQ(1139, sa.GetPort());
-}
-
-TEST_F(SocketAddressTest, GetAddressInfo) {
-  auto addr = SocketAddress::GetAddressInfo("127.0.0.1", nullptr, AF_UNSPEC,
-                                            SOCK_STREAM, IPPROTO_TCP);
-  ASSERT_EQ(1u, addr.size());
-  EXPECT_EQ(AF_INET, addr[0].GetFamily());
-  EXPECT_EQ("127.0.0.1", addr[0].GetIPAddress());
 }
 
 #ifdef _WIN32

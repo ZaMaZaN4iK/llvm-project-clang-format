@@ -1,8 +1,9 @@
 //===-- asan_internal.h -----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -35,7 +36,7 @@
 // If set, values like allocator chunk size, as well as defaults for some flags
 // will be changed towards less memory overhead.
 #ifndef ASAN_LOW_MEMORY
-# if SANITIZER_IOS || SANITIZER_ANDROID || SANITIZER_RTEMS
+# if SANITIZER_IOS || SANITIZER_ANDROID
 #  define ASAN_LOW_MEMORY 1
 # else
 #  define ASAN_LOW_MEMORY 0
@@ -61,30 +62,22 @@ using __sanitizer::StackTrace;
 
 void AsanInitFromRtl();
 
-// asan_win.cpp
+// asan_win.cc
 void InitializePlatformExceptionHandlers();
-// Returns whether an address is a valid allocated system heap block.
-// 'addr' must point to the beginning of the block.
-bool IsSystemHeapAddress(uptr addr);
 
-// asan_rtl.cpp
-void PrintAddressSpaceLayout();
+// asan_win.cc / asan_posix.cc
+const char *DescribeSignalOrException(int signo);
+
+// asan_rtl.cc
 void NORETURN ShowStatsAndAbort();
 
-// asan_shadow_setup.cpp
-void InitializeShadowMemory();
-
-// asan_malloc_linux.cpp / asan_malloc_mac.cpp
+// asan_malloc_linux.cc / asan_malloc_mac.cc
 void ReplaceSystemMalloc();
 
-// asan_linux.cpp / asan_mac.cpp / asan_rtems.cpp / asan_win.cpp
-uptr FindDynamicShadowStart();
+// asan_linux.cc / asan_mac.cc / asan_win.cc
 void *AsanDoesNotSupportStaticLinkage();
 void AsanCheckDynamicRTPrereqs();
 void AsanCheckIncompatibleRT();
-
-// asan_thread.cpp
-AsanThread *CreateMainThread();
 
 // Support function for __asan_(un)register_image_globals. Searches for the
 // loaded image containing `needle' and then enumerates all global metadata
@@ -109,11 +102,6 @@ void AppendToErrorMessageBuffer(const char *buffer);
 void *AsanDlSymNext(const char *sym);
 
 void ReserveShadowMemoryRange(uptr beg, uptr end, const char *name);
-
-// Returns `true` iff most of ASan init process should be skipped due to the
-// ASan library being loaded via `dlopen()`. Platforms may perform any
-// `dlopen()` specific initialization inside this function.
-bool HandleDlopenInit();
 
 // Add convenient macro for interface functions that may be represented as
 // weak hooks.
@@ -151,9 +139,6 @@ const int kAsanArrayCookieMagic = 0xac;
 const int kAsanIntraObjectRedzone = 0xbb;
 const int kAsanAllocaLeftMagic = 0xca;
 const int kAsanAllocaRightMagic = 0xcb;
-// Used to populate the shadow gap for systems without memory
-// protection there (i.e. Myriad).
-const int kAsanShadowGap = 0xcc;
 
 static const uptr kCurrentStackFrameMagic = 0x41B58AB3;
 static const uptr kRetiredStackFrameMagic = 0x45E0360E;

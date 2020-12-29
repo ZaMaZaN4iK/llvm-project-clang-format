@@ -1,8 +1,9 @@
 //===- RegionPass.h - RegionPass class --------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -27,7 +28,7 @@ class RGPassManager;
 class Function;
 
 //===----------------------------------------------------------------------===//
-/// A pass that runs on each Region in a function.
+/// @brief A pass that runs on each Region in a function.
 ///
 /// RegionPass is managed by RGPassManager.
 class RegionPass : public Pass {
@@ -38,7 +39,7 @@ public:
   /// @name To be implemented by every RegionPass
   ///
   //@{
-  /// Run the pass on a specific Region
+  /// @brief Run the pass on a specific Region
   ///
   /// Accessing regions not contained in the current region is not allowed.
   ///
@@ -48,7 +49,7 @@ public:
   /// @return True if the pass modifies this Region.
   virtual bool runOnRegion(Region *R, RGPassManager &RGM) = 0;
 
-  /// Get a pass to print the LLVM IR in the region.
+  /// @brief Get a pass to print the LLVM IR in the region.
   ///
   /// @param O      The output stream to print the Region.
   /// @param Banner The banner to separate different printed passes.
@@ -77,14 +78,9 @@ public:
     return PMT_RegionPassManager;
   }
   //@}
-
-protected:
-  /// Optional passes call this function to check whether the pass should be
-  /// skipped. This is the case when optimization bisect is over the limit.
-  bool skipRegion(Region &R) const;
 };
 
-/// The pass manager to schedule RegionPasses.
+/// @brief The pass manager to schedule RegionPasses.
 class RGPassManager : public FunctionPass, public PMDataManager {
   std::deque<Region*> RQ;
   bool skipThisRegion;
@@ -96,7 +92,7 @@ public:
   static char ID;
   explicit RGPassManager();
 
-  /// Execute all of the passes scheduled for execution.
+  /// @brief Execute all of the passes scheduled for execution.
   ///
   /// @return True if any of the passes modifies the function.
   bool runOnFunction(Function &F) override;
@@ -110,10 +106,10 @@ public:
   PMDataManager *getAsPMDataManager() override { return this; }
   Pass *getAsPass() override { return this; }
 
-  /// Print passes managed by this manager.
+  /// @brief Print passes managed by this manager.
   void dumpPassStructure(unsigned Offset) override;
 
-  /// Get passes contained by this manager.
+  /// @brief Get passes contained by this manager.
   Pass *getContainedPass(unsigned N) {
     assert(N < PassVector.size() && "Pass number out of range!");
     Pass *FP = static_cast<Pass *>(PassVector[N]);

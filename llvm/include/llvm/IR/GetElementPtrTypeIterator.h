@@ -1,8 +1,9 @@
 //===- GetElementPtrTypeIterator.h ------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,9 +21,7 @@
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/User.h"
 #include "llvm/Support/Casting.h"
-#include <cassert>
 #include <cstddef>
-#include <cstdint>
 #include <iterator>
 
 namespace llvm {
@@ -30,13 +29,13 @@ namespace llvm {
   template<typename ItTy = User::const_op_iterator>
   class generic_gep_type_iterator
     : public std::iterator<std::forward_iterator_tag, Type *, ptrdiff_t> {
-    using super = std::iterator<std::forward_iterator_tag, Type *, ptrdiff_t>;
+    typedef std::iterator<std::forward_iterator_tag,
+                          Type *, ptrdiff_t> super;
 
     ItTy OpIt;
     PointerUnion<StructType *, Type *> CurTy;
     enum : uint64_t { Unbounded = -1ull };
     uint64_t NumElements = Unbounded;
-
     generic_gep_type_iterator() = default;
 
   public:
@@ -122,7 +121,7 @@ namespace llvm {
     }
   };
 
-  using gep_type_iterator = generic_gep_type_iterator<>;
+  typedef generic_gep_type_iterator<> gep_type_iterator;
 
   inline gep_type_iterator gep_type_begin(const User *GEP) {
     auto *GEPOp = cast<GEPOperator>(GEP);

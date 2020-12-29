@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -32,7 +33,6 @@
 #include <iterator>
 #include <type_traits>
 
-#include "test_macros.h"
 #include "test_allocator.h"
 #include "../../Copyable.h"
 #include "min_allocator.h"
@@ -79,7 +79,7 @@ test()
         std::reverse_iterator<typename C::const_iterator> >::value), "");
 }
 
-int main(int, char**)
+int main()
 {
     test<int, test_allocator<int> >();
     test<int*, std::allocator<int*> >();
@@ -105,6 +105,4 @@ int main(int, char**)
 //         typename std::iterator_traits<typename C::const_iterator>::difference_type>::value), "");
     }
 #endif
-
-  return 0;
 }

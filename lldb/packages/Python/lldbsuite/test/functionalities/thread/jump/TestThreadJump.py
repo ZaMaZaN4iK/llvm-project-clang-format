@@ -2,8 +2,11 @@
 Test jumping to different places.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -17,7 +20,7 @@ class ThreadJumpTestCase(TestBase):
     def test(self):
         """Test thread jump handling."""
         self.build(dictionary=self.getBuildFlags())
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Find the line numbers for our breakpoints.
@@ -47,10 +50,8 @@ class ThreadJumpTestCase(TestBase):
         self.do_min_test(self.mark3, self.mark2, "i", "5")
         # Try the double path, force it to return 'a'
         self.do_min_test(self.mark4, self.mark1, "j", "7")
-        # Expected to fail on powerpc64le architecture
-        if not self.isPPC64le():
-            # Try the double path, force it to return 'b'
-            self.do_min_test(self.mark4, self.mark2, "j", "8")
+        # Try the double path, force it to return 'b'
+        self.do_min_test(self.mark4, self.mark2, "j", "8")
 
         # Try jumping to another function in a different file.
         self.runCmd(

@@ -28,13 +28,14 @@ define void @test100() {
 }
 
 ; Largest stack for which three tADDspi/tSUBspis are enough
-define void @test100_nofpelim() "frame-pointer"="all" {
+define void @test100_nofpelim() "no-frame-pointer-elim"="true" {
 ; CHECK-LABEL: test100_nofpelim:
 ; CHECK: sub sp, #508
 ; CHECK: sub sp, #508
 ; CHECK: sub sp, #508
-; CHECK: subs r4, r7, #7
-; CHECK: subs r4, #1
+; ALIGN4: subs r4, r7, #4
+; ALIGN8: subs r4, r7, #7
+; ALIGN8: subs r4, #1
 ; CHECK: mov sp, r4
     %tmp = alloca [ 1524 x i8 ] , align 4
     ret void
@@ -52,12 +53,13 @@ define void @test2() {
 }
 
 ; Smallest stack for which we use a constant pool
-define void @test2_nofpelim() "frame-pointer"="all" {
+define void @test2_nofpelim() "no-frame-pointer-elim"="true" {
 ; CHECK-LABEL: test2_nofpelim:
 ; CHECK: ldr [[TEMP:r[0-7]]],
 ; CHECK: add sp, [[TEMP]]
-; CHECK: subs r4, r7, #7
-; CHECK: subs r4, #1
+; ALIGN4: subs r4, r7, #4
+; ALIGN8: subs r4, r7, #7
+; ALIGN8: subs r4, #1
 ; CHECK: mov sp, r4
     %tmp = alloca [ 1528 x i8 ] , align 4
     ret void
@@ -67,29 +69,29 @@ define i32 @test3() {
 ; CHECK-LABEL: test3:
 ; CHECK: ldr [[TEMP:r[0-7]]],
 ; CHECK: add sp, [[TEMP]]
-; CHECK: ldr [[TEMP2:r[0-7]]],
-; CHECK: add [[TEMP2]], sp
-; CHECK: ldr [[TEMP3:r[0-7]]],
-; CHECK: add sp, [[TEMP3]]
+; CHECK: ldr [[TEMP]],
+; CHECK: add [[TEMP]], sp
+; CHECK: ldr [[TEMP:r[0-7]]],
+; CHECK: add sp, [[TEMP]]
     %retval = alloca i32, align 4
     %tmp = alloca i32, align 4
-    %a = alloca [805306369 x i8], align 4
+    %a = alloca [805306369 x i8], align 16
     store i32 0, i32* %tmp
     %tmp1 = load i32, i32* %tmp
     ret i32 %tmp1
 }
 
-define i32 @test3_nofpelim() "frame-pointer"="all" {
+define i32 @test3_nofpelim() "no-frame-pointer-elim"="true" {
 ; CHECK-LABEL: test3_nofpelim:
 ; CHECK: ldr [[TEMP:r[0-7]]],
 ; CHECK: add sp, [[TEMP]]
-; CHECK: ldr [[TEMP2:r[0-7]]],
-; CHECK: add [[TEMP2]], sp
+; CHECK: ldr [[TEMP]],
+; CHECK: add [[TEMP]], sp
 ; CHECK: subs r4, r7,
 ; CHECK: mov sp, r4
     %retval = alloca i32, align 4
     %tmp = alloca i32, align 4
-    %a = alloca [805306369 x i8], align 8
+    %a = alloca [805306369 x i8], align 16
     store i32 0, i32* %tmp
     %tmp1 = load i32, i32* %tmp
     ret i32 %tmp1

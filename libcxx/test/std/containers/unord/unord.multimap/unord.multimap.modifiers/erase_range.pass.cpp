@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,15 +17,12 @@
 
 #include <unordered_map>
 #include <string>
-#include <set>
 #include <cassert>
 #include <cstddef>
 
-#include "test_macros.h"
-#include "../../../check_consecutive.h"
 #include "min_allocator.h"
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::unordered_multimap<int, std::string> C;
@@ -47,15 +45,20 @@ int main(int, char**)
         typedef std::pair<C::iterator, C::iterator> Eq;
         Eq eq = c.equal_range(1);
         assert(std::distance(eq.first, eq.second) == 2);
-        std::multiset<std::string> s;
-        s.insert("one");
-        s.insert("four");
-        CheckConsecutiveKeys<C::const_iterator>(c.find(1), c.end(), 1, s);
+        k = eq.first;
+        assert(k->first == 1);
+        assert(k->second == "one");
+        ++k;
+        assert(k->first == 1);
+        assert(k->second == "four");
         eq = c.equal_range(2);
         assert(std::distance(eq.first, eq.second) == 2);
-        s.insert("two");
-        s.insert("four");
-        CheckConsecutiveKeys<C::const_iterator>(c.find(2), c.end(), 2, s);
+        k = eq.first;
+        assert(k->first == 2);
+        assert(k->second == "two");
+        ++k;
+        assert(k->first == 2);
+        assert(k->second == "four");
         eq = c.equal_range(3);
         assert(std::distance(eq.first, eq.second) == 1);
         k = eq.first;
@@ -73,9 +76,12 @@ int main(int, char**)
         assert(c.size() == 4);
         eq = c.equal_range(1);
         assert(std::distance(eq.first, eq.second) == 2);
-        s.insert("one");
-        s.insert("four");
-        CheckConsecutiveKeys<C::const_iterator>(c.find(1), c.end(), 1, s);
+        k = eq.first;
+        assert(k->first == 1);
+        assert(k->second == "one");
+        ++k;
+        assert(k->first == 1);
+        assert(k->second == "four");
         eq = c.equal_range(3);
         assert(std::distance(eq.first, eq.second) == 1);
         k = eq.first;
@@ -116,15 +122,20 @@ int main(int, char**)
         typedef std::pair<C::iterator, C::iterator> Eq;
         Eq eq = c.equal_range(1);
         assert(std::distance(eq.first, eq.second) == 2);
-        std::multiset<std::string> s;
-        s.insert("one");
-        s.insert("four");
-        CheckConsecutiveKeys<C::const_iterator>(c.find(1), c.end(), 1, s);
+        k = eq.first;
+        assert(k->first == 1);
+        assert(k->second == "one");
+        ++k;
+        assert(k->first == 1);
+        assert(k->second == "four");
         eq = c.equal_range(2);
         assert(std::distance(eq.first, eq.second) == 2);
-        s.insert("two");
-        s.insert("four");
-        CheckConsecutiveKeys<C::const_iterator>(c.find(2), c.end(), 2, s);
+        k = eq.first;
+        assert(k->first == 2);
+        assert(k->second == "two");
+        ++k;
+        assert(k->first == 2);
+        assert(k->second == "four");
         eq = c.equal_range(3);
         assert(std::distance(eq.first, eq.second) == 1);
         k = eq.first;
@@ -142,9 +153,12 @@ int main(int, char**)
         assert(c.size() == 4);
         eq = c.equal_range(1);
         assert(std::distance(eq.first, eq.second) == 2);
-        s.insert("one");
-        s.insert("four");
-        CheckConsecutiveKeys<C::const_iterator>(c.find(1), c.end(), 1, s);
+        k = eq.first;
+        assert(k->first == 1);
+        assert(k->second == "one");
+        ++k;
+        assert(k->first == 1);
+        assert(k->second == "four");
         eq = c.equal_range(3);
         assert(std::distance(eq.first, eq.second) == 1);
         k = eq.first;
@@ -163,6 +177,4 @@ int main(int, char**)
         assert(k == c.end());
     }
 #endif
-
-  return 0;
 }

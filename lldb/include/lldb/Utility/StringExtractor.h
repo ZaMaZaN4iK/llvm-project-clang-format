@@ -1,37 +1,49 @@
 //===-- StringExtractor.h ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef utility_StringExtractor_h_
 #define utility_StringExtractor_h_
 
-#include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/StringRef.h"
-
-#include <stddef.h>
+// C Includes
+// C++ Includes
 #include <stdint.h>
 #include <string>
+
+// Other libraries and framework includes
+// Project includes
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/StringRef.h"
 
 class StringExtractor {
 public:
   enum { BigEndian = 0, LittleEndian = 1 };
+  //------------------------------------------------------------------
   // Constructors and Destructors
+  //------------------------------------------------------------------
   StringExtractor();
   StringExtractor(llvm::StringRef packet_str);
   StringExtractor(const char *packet_cstr);
+  StringExtractor(const StringExtractor &rhs);
   virtual ~StringExtractor();
+
+  //------------------------------------------------------------------
+  // Operators
+  //------------------------------------------------------------------
+  const StringExtractor &operator=(const StringExtractor &rhs);
 
   void Reset(llvm::StringRef str) {
     m_packet = str;
     m_index = 0;
   }
 
-  // Returns true if the file position is still valid for the data contained in
-  // this string extractor object.
+  // Returns true if the file position is still valid for the data
+  // contained in this string extractor object.
   bool IsGood() const { return m_index != UINT64_MAX; }
 
   uint64_t GetFilePos() const { return m_index; }
@@ -45,7 +57,9 @@ public:
 
   void SkipSpaces();
 
-  llvm::StringRef GetStringRef() const { return m_packet; }
+  std::string &GetStringRef() { return m_packet; }
+
+  const std::string &GetStringRef() const { return m_packet; }
 
   bool Empty() { return m_packet.empty(); }
 
@@ -89,13 +103,14 @@ public:
 
   size_t GetHexBytesAvail(llvm::MutableArrayRef<uint8_t> dest);
 
+  uint64_t GetHexWithFixedSize(uint32_t byte_size, bool little_endian,
+                               uint64_t fail_value);
+
   size_t GetHexByteString(std::string &str);
 
   size_t GetHexByteStringFixedLength(std::string &str, uint32_t nibble_length);
 
   size_t GetHexByteStringTerminatedBy(std::string &str, char terminator);
-
-  bool ConsumeFront(const llvm::StringRef &str);
 
   const char *Peek() {
     if (m_index < m_packet.size())
@@ -108,14 +123,14 @@ protected:
     m_index = UINT64_MAX;
     return false;
   }
-
-  /// The string in which to extract data.
-  std::string m_packet;
-
-  /// When extracting data from a packet, this index will march along as things
-  /// get extracted. If set to UINT64_MAX the end of the packet data was
-  /// reached when decoding information.
-  uint64_t m_index;
+  //------------------------------------------------------------------
+  // For StringExtractor only
+  //------------------------------------------------------------------
+  std::string m_packet; // The string in which to extract data.
+  uint64_t m_index;     // When extracting data from a packet, this index
+                        // will march along as things get extracted. If set
+                        // to UINT64_MAX the end of the packet data was
+                        // reached when decoding information
 };
 
 #endif // utility_StringExtractor_h_

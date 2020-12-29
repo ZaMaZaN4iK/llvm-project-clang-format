@@ -1,7 +1,10 @@
 """Test stepping and setting breakpoints in indirect and re-exported symbols."""
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -19,20 +22,14 @@ class TestIndirectFunctions(TestBase):
         self.main_source = "main.c"
 
     @skipUnlessDarwin
-    @expectedFailureAll(oslist=no_match(["macosx"]), bugnumber="rdar://55952764")
     @add_test_categories(['pyapi'])
     def test_with_python_api(self):
         """Test stepping and setting breakpoints in indirect and re-exported symbols."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
-
-        if self.platformIsDarwin():
-            lib1 = self.getBuildArtifact('libindirect.dylib')
-            lib2 = self.getBuildArtifact('libreexport.dylib')
-            self.registerSharedLibrariesWithTarget(target, [lib1, lib2])
 
         self.main_source_spec = lldb.SBFileSpec(self.main_source)
 
@@ -61,7 +58,8 @@ class TestIndirectFunctions(TestBase):
         # indirect function.
         thread.StepInto()
         curr_function = thread.GetFrameAtIndex(0).GetFunctionName()
-        self.assertEqual(curr_function, "call_through_indirect_hidden",
+        self.assertTrue(
+            curr_function == "call_through_indirect_hidden",
             "Stepped into indirect symbols.")
 
         # Now set a breakpoint using the indirect symbol name, and make sure we

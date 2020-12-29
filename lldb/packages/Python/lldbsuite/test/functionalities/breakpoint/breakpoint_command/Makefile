@@ -1,3 +1,5 @@
+LEVEL = ../../../make
+
 C_SOURCES := main.c a.c b.c
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

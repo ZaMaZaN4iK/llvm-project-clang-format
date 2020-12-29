@@ -1,18 +1,28 @@
 //===-- ABISysV_s390x.cpp ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "ABISysV_s390x.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Triple.h"
 
+// Project includes
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/DataExtractor.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/PluginManager.h"
+#include "lldb/Core/RegisterValue.h"
 #include "lldb/Core/Value.h"
 #include "lldb/Core/ValueObjectConstResult.h"
 #include "lldb/Core/ValueObjectMemory.h"
@@ -23,11 +33,6 @@
 #include "lldb/Target/StackFrame.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/RegisterValue.h"
-#include "lldb/Utility/Status.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -195,12 +200,17 @@ ABISysV_s390x::GetRegisterInfoArray(uint32_t &count) {
 
 size_t ABISysV_s390x::GetRedZoneSize() const { return 0; }
 
+//------------------------------------------------------------------
 // Static Functions
+//------------------------------------------------------------------
 
 ABISP
-ABISysV_s390x::CreateInstance(lldb::ProcessSP process_sp, const ArchSpec &arch) {
+ABISysV_s390x::CreateInstance(const ArchSpec &arch) {
+  static ABISP g_abi_sp;
   if (arch.GetTriple().getArch() == llvm::Triple::systemz) {
-    return ABISP(new ABISysV_s390x(std::move(process_sp), MakeMCRegisterInfo(arch)));
+    if (!g_abi_sp)
+      g_abi_sp.reset(new ABISysV_s390x);
+    return g_abi_sp;
   }
   return ABISP();
 }
@@ -252,14 +262,16 @@ bool ABISysV_s390x::PrepareTrivialCall(Thread &thread, addr_t sp,
     if (i < 5) {
       const RegisterInfo *reg_info = reg_ctx->GetRegisterInfo(
           eRegisterKindGeneric, LLDB_REGNUM_GENERIC_ARG1 + i);
-      LLDB_LOGF(log, "About to write arg%" PRIu64 " (0x%" PRIx64 ") into %s",
-                static_cast<uint64_t>(i + 1), args[i], reg_info->name);
+      if (log)
+        log->Printf("About to write arg%" PRIu64 " (0x%" PRIx64 ") into %s",
+                    static_cast<uint64_t>(i + 1), args[i], reg_info->name);
       if (!reg_ctx->WriteRegisterFromUnsigned(reg_info, args[i]))
         return false;
     } else {
-      Status error;
-      LLDB_LOGF(log, "About to write arg%" PRIu64 " (0x%" PRIx64 ") onto stack",
-                static_cast<uint64_t>(i + 1), args[i]);
+      Error error;
+      if (log)
+        log->Printf("About to write arg%" PRIu64 " (0x%" PRIx64 ") onto stack",
+                    static_cast<uint64_t>(i + 1), args[i]);
       if (!process_sp->WritePointerToMemory(arg_pos, args[i], error))
         return false;
       arg_pos += 8;
@@ -268,21 +280,24 @@ bool ABISysV_s390x::PrepareTrivialCall(Thread &thread, addr_t sp,
 
   // %r14 is set to the return address
 
-  LLDB_LOGF(log, "Writing RA: 0x%" PRIx64, (uint64_t)return_addr);
+  if (log)
+    log->Printf("Writing RA: 0x%" PRIx64, (uint64_t)return_addr);
 
   if (!reg_ctx->WriteRegisterFromUnsigned(ra_reg_info, return_addr))
     return false;
 
   // %r15 is set to the actual stack value.
 
-  LLDB_LOGF(log, "Writing SP: 0x%" PRIx64, (uint64_t)sp);
+  if (log)
+    log->Printf("Writing SP: 0x%" PRIx64, (uint64_t)sp);
 
   if (!reg_ctx->WriteRegisterFromUnsigned(sp_reg_info, sp))
     return false;
 
   // %pc is set to the address of the called function.
 
-  LLDB_LOGF(log, "Writing PC: 0x%" PRIx64, (uint64_t)func_addr);
+  if (log)
+    log->Printf("Writing PC: 0x%" PRIx64, (uint64_t)func_addr);
 
   if (!reg_ctx->WriteRegisterFromUnsigned(pc_reg_info, func_addr))
     return false;
@@ -306,7 +321,7 @@ static bool ReadIntegerArgument(Scalar &scalar, unsigned int bit_width,
       scalar.SignExtend(bit_width);
   } else {
     uint32_t byte_size = (bit_width + (8 - 1)) / 8;
-    Status error;
+    Error error;
     if (thread.GetProcess()->ReadScalarIntegerFromMemory(
             current_stack_argument + 8 - byte_size, byte_size, is_signed,
             scalar, error)) {
@@ -365,31 +380,30 @@ bool ABISysV_s390x::GetArgumentValues(Thread &thread, ValueList &values) const {
     if (!value)
       return false;
 
-    // We currently only support extracting values with Clang QualTypes. Do we
-    // care about others?
+    // We currently only support extracting values with Clang QualTypes.
+    // Do we care about others?
     CompilerType compiler_type = value->GetCompilerType();
-    llvm::Optional<uint64_t> bit_size = compiler_type.GetBitSize(&thread);
-    if (!bit_size)
+    if (!compiler_type)
       return false;
     bool is_signed;
 
     if (compiler_type.IsIntegerOrEnumerationType(is_signed)) {
-      ReadIntegerArgument(value->GetScalar(), *bit_size, is_signed, thread,
-                          argument_register_ids, current_argument_register,
-                          current_stack_argument);
+      ReadIntegerArgument(value->GetScalar(), compiler_type.GetBitSize(&thread),
+                          is_signed, thread, argument_register_ids,
+                          current_argument_register, current_stack_argument);
     } else if (compiler_type.IsPointerType()) {
-      ReadIntegerArgument(value->GetScalar(), *bit_size, false, thread,
-                          argument_register_ids, current_argument_register,
-                          current_stack_argument);
+      ReadIntegerArgument(value->GetScalar(), compiler_type.GetBitSize(&thread),
+                          false, thread, argument_register_ids,
+                          current_argument_register, current_stack_argument);
     }
   }
 
   return true;
 }
 
-Status ABISysV_s390x::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
-                                           lldb::ValueObjectSP &new_value_sp) {
-  Status error;
+Error ABISysV_s390x::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
+                                          lldb::ValueObjectSP &new_value_sp) {
+  Error error;
   if (!new_value_sp) {
     error.SetErrorString("Empty value object for return value.");
     return error;
@@ -415,7 +429,7 @@ Status ABISysV_s390x::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
     const RegisterInfo *reg_info = reg_ctx->GetRegisterInfoByName("r2", 0);
 
     DataExtractor data;
-    Status data_error;
+    Error data_error;
     size_t num_bytes = new_value_sp->GetData(data, data_error);
     if (data_error.Fail()) {
       error.SetErrorStringWithFormat(
@@ -438,17 +452,12 @@ Status ABISysV_s390x::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
       error.SetErrorString(
           "We don't support returning complex values at present");
     else {
-      llvm::Optional<uint64_t> bit_width =
-          compiler_type.GetBitSize(frame_sp.get());
-      if (!bit_width) {
-        error.SetErrorString("can't get type size");
-        return error;
-      }
-      if (*bit_width <= 64) {
+      size_t bit_width = compiler_type.GetBitSize(frame_sp.get());
+      if (bit_width <= 64) {
         const RegisterInfo *f0_info = reg_ctx->GetRegisterInfoByName("f0", 0);
         RegisterValue f0_value;
         DataExtractor data;
-        Status data_error;
+        Error data_error;
         size_t num_bytes = new_value_sp->GetData(data, data_error);
         if (data_error.Fail()) {
           error.SetErrorStringWithFormat(
@@ -474,8 +483,8 @@ Status ABISysV_s390x::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
 
   if (!set_it_simple) {
     // Okay we've got a structure or something that doesn't fit in a simple
-    // register. We should figure out where it really goes, but we don't
-    // support this yet.
+    // register.
+    // We should figure out where it really goes, but we don't support this yet.
     error.SetErrorString("We only support setting simple integer and float "
                          "return types at present.");
   }
@@ -504,15 +513,13 @@ ValueObjectSP ABISysV_s390x::GetReturnValueObjectSimple(
 
     bool success = false;
     if (type_flags & eTypeIsInteger) {
-      // Extract the register context so we can read arguments from registers.
-      llvm::Optional<uint64_t> byte_size =
-          return_compiler_type.GetByteSize(nullptr);
-      if (!byte_size)
-        return return_valobj_sp;
+      // Extract the register context so we can read arguments from registers
+
+      const size_t byte_size = return_compiler_type.GetByteSize(nullptr);
       uint64_t raw_value = thread.GetRegisterContext()->ReadRegisterAsUnsigned(
           reg_ctx->GetRegisterInfoByName("r2", 0), 0);
       const bool is_signed = (type_flags & eTypeIsSigned) != 0;
-      switch (*byte_size) {
+      switch (byte_size) {
       default:
         break;
 
@@ -552,22 +559,21 @@ ValueObjectSP ABISysV_s390x::GetReturnValueObjectSimple(
       if (type_flags & eTypeIsComplex) {
         // Don't handle complex yet.
       } else {
-        llvm::Optional<uint64_t> byte_size =
-            return_compiler_type.GetByteSize(nullptr);
-        if (byte_size && *byte_size <= sizeof(long double)) {
+        const size_t byte_size = return_compiler_type.GetByteSize(nullptr);
+        if (byte_size <= sizeof(long double)) {
           const RegisterInfo *f0_info = reg_ctx->GetRegisterInfoByName("f0", 0);
           RegisterValue f0_value;
           if (reg_ctx->ReadRegister(f0_info, f0_value)) {
             DataExtractor data;
             if (f0_value.GetData(data)) {
               lldb::offset_t offset = 0;
-              if (*byte_size == sizeof(float)) {
+              if (byte_size == sizeof(float)) {
                 value.GetScalar() = (float)data.GetFloat(&offset);
                 success = true;
-              } else if (*byte_size == sizeof(double)) {
+              } else if (byte_size == sizeof(double)) {
                 value.GetScalar() = (double)data.GetDouble(&offset);
                 success = true;
-              } else if (*byte_size == sizeof(long double)) {
+              } else if (byte_size == sizeof(long double)) {
                 // Don't handle long double yet.
               }
             }
@@ -612,8 +618,9 @@ ValueObjectSP ABISysV_s390x::GetReturnValueObjectImpl(
     // FIXME: This is just taking a guess, r2 may very well no longer hold the
     // return storage location.
     // If we are going to do this right, when we make a new frame we should
-    // check to see if it uses a memory return, and if we are at the first
-    // instruction and if so stash away the return location.  Then we would
+    // check to see if it uses a memory
+    // return, and if we are at the first instruction and if so stash away the
+    // return location.  Then we would
     // only return the memory return value if we know it is valid.
 
     unsigned r2_id =
@@ -647,8 +654,8 @@ bool ABISysV_s390x::CreateFunctionEntryUnwindPlan(UnwindPlan &unwind_plan) {
 }
 
 bool ABISysV_s390x::CreateDefaultUnwindPlan(UnwindPlan &unwind_plan) {
-  // There's really no default way to unwind on s390x. Trust the .eh_frame CFI,
-  // which should always be good.
+  // There's really no default way to unwind on s390x.
+  // Trust the .eh_frame CFI, which should always be good.
   return false;
 }
 
@@ -656,8 +663,8 @@ bool ABISysV_s390x::GetFallbackRegisterLocation(
     const RegisterInfo *reg_info,
     UnwindPlan::Row::RegisterLocation &unwind_regloc) {
   // If a volatile register is being requested, we don't want to forward the
-  // next frame's register contents up the stack -- the register is not
-  // retrievable at this frame.
+  // next frame's register contents
+  // up the stack -- the register is not retrievable at this frame.
   if (RegisterIsVolatile(reg_info)) {
     unwind_regloc.SetUndefined();
     return true;
@@ -735,7 +742,9 @@ lldb_private::ConstString ABISysV_s390x::GetPluginNameStatic() {
   return g_name;
 }
 
+//------------------------------------------------------------------
 // PluginInterface protocol
+//------------------------------------------------------------------
 
 lldb_private::ConstString ABISysV_s390x::GetPluginName() {
   return GetPluginNameStatic();

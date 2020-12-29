@@ -1,8 +1,9 @@
 //===- InlineSimple.cpp - Code to perform simple function inlining --------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Analysis/AssumptionCache.h"
+#include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/InlineCost.h"
 #include "llvm/Analysis/ProfileSummaryInfo.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
@@ -19,9 +21,9 @@
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/Inliner.h"
 
@@ -31,7 +33,7 @@ using namespace llvm;
 
 namespace {
 
-/// Actual inliner pass implementation.
+/// \brief Actual inliner pass implementation.
 ///
 /// The common implementation of the inlining logic is shared between this
 /// inliner pass and the always inliner pass. The two passes use different cost
@@ -46,7 +48,7 @@ public:
   }
 
   explicit SimpleInliner(InlineParams Params)
-      : LegacyInlinerBase(ID), Params(std::move(Params)) {
+      : LegacyInlinerBase(ID), Params(Params) {
     initializeSimpleInlinerPass(*PassRegistry::getPassRegistry());
   }
 
@@ -55,23 +57,11 @@ public:
   InlineCost getInlineCost(CallSite CS) override {
     Function *Callee = CS.getCalledFunction();
     TargetTransformInfo &TTI = TTIWP->getTTI(*Callee);
-
-    bool RemarksEnabled = false;
-    const auto &BBs = CS.getCaller()->getBasicBlockList();
-    if (!BBs.empty()) {
-      auto DI = OptimizationRemark(DEBUG_TYPE, "", DebugLoc(), &BBs.front());
-      if (DI.isEnabled())
-        RemarksEnabled = true;
-    }
-    OptimizationRemarkEmitter ORE(CS.getCaller());
-
     std::function<AssumptionCache &(Function &)> GetAssumptionCache =
         [&](Function &F) -> AssumptionCache & {
       return ACT->getAssumptionCache(F);
     };
-    return llvm::getInlineCost(
-        cast<CallBase>(*CS.getInstruction()), Params, TTI, GetAssumptionCache,
-        /*GetBFI=*/None, PSI, RemarksEnabled ? &ORE : nullptr);
+    return llvm::getInlineCost(CS, Params, TTI, GetAssumptionCache, PSI);
   }
 
   bool runOnSCC(CallGraphSCC &SCC) override;
@@ -102,12 +92,8 @@ Pass *llvm::createFunctionInliningPass(int Threshold) {
 }
 
 Pass *llvm::createFunctionInliningPass(unsigned OptLevel,
-                                       unsigned SizeOptLevel,
-                                       bool DisableInlineHotCallSite) {
-  auto Param = llvm::getInlineParams(OptLevel, SizeOptLevel);
-  if (DisableInlineHotCallSite)
-    Param.HotCallSiteThreshold = 0;
-  return new SimpleInliner(Param);
+                                       unsigned SizeOptLevel) {
+  return new SimpleInliner(llvm::getInlineParams(OptLevel, SizeOptLevel));
 }
 
 Pass *llvm::createFunctionInliningPass(InlineParams &Params) {

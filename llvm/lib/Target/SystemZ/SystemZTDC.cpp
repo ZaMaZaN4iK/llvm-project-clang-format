@@ -1,8 +1,9 @@
 //===-- SystemZTDC.cpp - Utilize Test Data Class instruction --------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -46,11 +47,10 @@
 #include "SystemZ.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/IntrinsicInst.h"
-#include "llvm/IR/IntrinsicsS390.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include <deque>
@@ -356,8 +356,8 @@ bool SystemZTDCPass::runOnFunction(Function &F) {
       if (!Worthy)
         continue;
       // Call the intrinsic, compare result with 0.
-      Function *TDCFunc =
-          Intrinsic::getDeclaration(&M, Intrinsic::s390_tdc, V->getType());
+      Value *TDCFunc = Intrinsic::getDeclaration(&M, Intrinsic::s390_tdc,
+                                                 V->getType());
       IRBuilder<> IRB(I);
       Value *MaskVal = ConstantInt::get(Type::getInt64Ty(Ctx), Mask);
       Instruction *TDC = IRB.CreateCall(TDCFunc, {V, MaskVal});

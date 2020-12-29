@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,12 +27,10 @@ test(const String& p, unsigned mc)
     assert(r.mark_count() == mc);
 }
 
-int main(int, char**)
+int main()
 {
     test(std::string("\\(a\\)"), 0);
     test(std::string("\\(a[bc]\\)"), 0);
     test(std::string("\\(a\\([bc]\\)\\)"), 0);
     test(std::string("(a([bc]))"), 2);
-
-  return 0;
 }

@@ -1,13 +1,14 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: libcpp-has-no-threads
-// UNSUPPORTED: c++98, c++03, c++11, c++14
+// UNSUPPORTED: c++03, c++98, c++11, c++14
 
 // FLAKY_TEST.
 
@@ -53,13 +54,11 @@ void f()
     assert(d < Tolerance);  // within tolerance
 }
 
-int main(int, char**)
+int main()
 {
     m.lock();
     std::thread t(f);
     std::this_thread::sleep_for(WaitTime);
     m.unlock();
     t.join();
-
-  return 0;
 }

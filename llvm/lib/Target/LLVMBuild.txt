@@ -1,8 +1,9 @@
 ;===- ./lib/Target/LLVMBuild.txt -------------------------------*- Conf -*--===;
 ;
-; Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-; See https://llvm.org/LICENSE.txt for license information.
-; SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+;                     The LLVM Compiler Infrastructure
+;
+; This file is distributed under the University of Illinois Open Source
+; License. See LICENSE.TXT for details.
 ;
 ;===------------------------------------------------------------------------===;
 ;
@@ -19,7 +20,6 @@
 [common]
 subdirectories =
  AMDGPU
- ARC
  ARM
  AArch64
  AVR
@@ -36,7 +36,6 @@ subdirectories =
  WebAssembly
  X86
  XCore
- VE
 
 ; This is a special group whose required libraries are extended (by llvm-build)
 ; with the best execution engine (the native JIT, if available, or the

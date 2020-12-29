@@ -1,8 +1,9 @@
 //===-- NativeThreadDarwin.h ---------------------------------- -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -45,7 +46,9 @@ public:
                      lldb::tid_t unique_thread_id = 0,
                      ::thread_t mach_thread_port = 0);
 
+  // -----------------------------------------------------------------
   // NativeThreadProtocol Interface
+  // -----------------------------------------------------------------
   std::string GetName() override;
 
   lldb::StateType GetState() override;
@@ -55,24 +58,28 @@ public:
 
   NativeRegisterContextSP GetRegisterContext() override;
 
-  Status SetWatchpoint(lldb::addr_t addr, size_t size, uint32_t watch_flags,
-                       bool hardware) override;
+  Error SetWatchpoint(lldb::addr_t addr, size_t size, uint32_t watch_flags,
+                      bool hardware) override;
 
-  Status RemoveWatchpoint(lldb::addr_t addr) override;
+  Error RemoveWatchpoint(lldb::addr_t addr) override;
 
+  // -----------------------------------------------------------------
   // New methods that are fine for others to call.
+  // -----------------------------------------------------------------
   void Dump(Stream &stream) const;
 
 private:
+  // -----------------------------------------------------------------
   // Interface for friend classes
+  // -----------------------------------------------------------------
 
-  /// Resumes the thread.  If \p signo is anything but
+  /// Resumes the thread.  If @p signo is anything but
   /// LLDB_INVALID_SIGNAL_NUMBER, deliver that signal to the thread.
-  Status Resume(uint32_t signo);
+  Error Resume(uint32_t signo);
 
-  /// Single steps the thread.  If \p signo is anything but
+  /// Single steps the thread.  If @p signo is anything but
   /// LLDB_INVALID_SIGNAL_NUMBER, deliver that signal to the thread.
-  Status SingleStep(uint32_t signo);
+  Error SingleStep(uint32_t signo);
 
   bool NotifyException(MachException::Data &exc);
 
@@ -110,18 +117,22 @@ private:
 
   void SetExited();
 
-  Status RequestStop();
+  Error RequestStop();
 
+  // -------------------------------------------------------------------------
   /// Return the mach thread port number for this thread.
   ///
-  /// \return
+  /// @return
   ///     The mach port number for this thread.  Returns NULL_THREAD
   ///     when the thread is invalid.
+  // -------------------------------------------------------------------------
   thread_t GetMachPortNumber() const { return m_mach_thread_port; }
 
   static bool MachPortNumberIsValid(::thread_t thread);
 
+  // ---------------------------------------------------------------------
   // Private interface
+  // ---------------------------------------------------------------------
   bool GetIdentifierInfo();
 
   void MaybeLogStateChange(lldb::StateType new_state);
@@ -134,7 +145,9 @@ private:
 
   inline void MaybeCleanupSingleStepWorkaround();
 
+  // -----------------------------------------------------------------
   // Member Variables
+  // -----------------------------------------------------------------
 
   // The mach thread port for the thread.
   ::thread_t m_mach_thread_port;

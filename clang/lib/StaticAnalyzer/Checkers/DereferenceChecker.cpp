@@ -1,8 +1,9 @@
-//===-- DereferenceChecker.cpp - Null dereference checker -----------------===//
+//== NullDerefChecker.cpp - Null dereference checker ------------*- C++ -*--==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/AST/ExprObjC.h"
 #include "clang/AST/ExprOpenMP.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
@@ -107,13 +108,7 @@ static const Expr *getDereferenceExpr(const Stmt *S, bool IsBind=false){
 
 static bool suppressReport(const Expr *E) {
   // Do not report dereferences on memory in non-default address spaces.
-  return E->getType().hasAddressSpace();
-}
-
-static bool isDeclRefExprToReference(const Expr *E) {
-  if (const auto *DRE = dyn_cast<DeclRefExpr>(E))
-    return DRE->getDecl()->getType()->isReferenceType();
-  return false;
+  return E->getType().getQualifiers().hasAddressSpace();
 }
 
 void DereferenceChecker::reportBug(ProgramStateRef State, const Stmt *S,
@@ -159,7 +154,7 @@ void DereferenceChecker::reportBug(ProgramStateRef State, const Stmt *S,
   }
   case Stmt::MemberExprClass: {
     const MemberExpr *M = cast<MemberExpr>(S);
-    if (M->isArrow() || isDeclRefExprToReference(M->getBase())) {
+    if (M->isArrow() || bugreporter::isDeclRefExprToReference(M->getBase())) {
       os << "Access to field '" << M->getMemberNameInfo()
          << "' results in a dereference of a null pointer";
       AddDerefSource(os, Ranges, M->getBase()->IgnoreParenCasts(),
@@ -179,10 +174,10 @@ void DereferenceChecker::reportBug(ProgramStateRef State, const Stmt *S,
     break;
   }
 
-  auto report = std::make_unique<PathSensitiveBugReport>(
+  auto report = llvm::make_unique<BugReport>(
       *BT_null, buf.empty() ? BT_null->getDescription() : StringRef(buf), N);
 
-  bugreporter::trackExpressionValue(N, bugreporter::getDerefExpr(S), *report);
+  bugreporter::trackNullOrUndefValue(N, bugreporter::getDerefExpr(S), *report);
 
   for (SmallVectorImpl<SourceRange>::iterator
        I = Ranges.begin(), E = Ranges.end(); I!=E; ++I)
@@ -200,9 +195,10 @@ void DereferenceChecker::checkLocation(SVal l, bool isLoad, const Stmt* S,
         BT_undef.reset(
             new BuiltinBug(this, "Dereference of undefined pointer value"));
 
-      auto report = std::make_unique<PathSensitiveBugReport>(
-          *BT_undef, BT_undef->getDescription(), N);
-      bugreporter::trackExpressionValue(N, bugreporter::getDerefExpr(S), *report);
+      auto report =
+          llvm::make_unique<BugReport>(*BT_undef, BT_undef->getDescription(), N);
+      bugreporter::trackNullOrUndefValue(N, bugreporter::getDerefExpr(S),
+                                         *report);
       C.emitReport(std::move(report));
     }
     return;
@@ -302,8 +298,4 @@ void DereferenceChecker::checkBind(SVal L, SVal V, const Stmt *S,
 
 void ento::registerDereferenceChecker(CheckerManager &mgr) {
   mgr.registerChecker<DereferenceChecker>();
-}
-
-bool ento::shouldRegisterDereferenceChecker(const LangOptions &LO) {
-  return true;
 }

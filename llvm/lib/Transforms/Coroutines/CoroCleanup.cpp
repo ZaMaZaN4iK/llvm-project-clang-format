@@ -1,8 +1,9 @@
 //===- CoroCleanup.cpp - Coroutine Cleanup Pass ---------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 // This pass lowers all remaining coroutine intrinsics.
@@ -49,7 +50,7 @@ static void lowerSubFn(IRBuilder<> &Builder, CoroSubFnInst *SubFn) {
   Builder.SetInsertPoint(SubFn);
   auto *FramePtr = Builder.CreateBitCast(FrameRaw, FramePtrTy);
   auto *Gep = Builder.CreateConstInBoundsGEP2_32(FrameTy, FramePtr, 0, Index);
-  auto *Load = Builder.CreateLoad(FrameTy->getElementType(Index), Gep);
+  auto *Load = Builder.CreateLoad(Gep);
 
   SubFn->replaceAllUsesWith(Load);
 }
@@ -73,8 +74,6 @@ bool Lowerer::lowerRemainingCoroIntrinsics(Function &F) {
         II->replaceAllUsesWith(ConstantInt::getTrue(Context));
         break;
       case Intrinsic::coro_id:
-      case Intrinsic::coro_id_retcon:
-      case Intrinsic::coro_id_retcon_once:
         II->replaceAllUsesWith(ConstantTokenNone::get(Context));
         break;
       case Intrinsic::coro_subfn_addr:
@@ -99,12 +98,10 @@ bool Lowerer::lowerRemainingCoroIntrinsics(Function &F) {
 
 namespace {
 
-struct CoroCleanupLegacy : FunctionPass {
+struct CoroCleanup : FunctionPass {
   static char ID; // Pass identification, replacement for typeid
 
-  CoroCleanupLegacy() : FunctionPass(ID) {
-    initializeCoroCleanupLegacyPass(*PassRegistry::getPassRegistry());
-  }
+  CoroCleanup() : FunctionPass(ID) {}
 
   std::unique_ptr<Lowerer> L;
 
@@ -113,9 +110,8 @@ struct CoroCleanupLegacy : FunctionPass {
   bool doInitialization(Module &M) override {
     if (coro::declaresIntrinsics(M, {"llvm.coro.alloc", "llvm.coro.begin",
                                      "llvm.coro.subfn.addr", "llvm.coro.free",
-                                     "llvm.coro.id", "llvm.coro.id.retcon",
-                                     "llvm.coro.id.retcon.once"}))
-      L = std::make_unique<Lowerer>(M);
+                                     "llvm.coro.id"}))
+      L = llvm::make_unique<Lowerer>(M);
     return false;
   }
 
@@ -128,12 +124,11 @@ struct CoroCleanupLegacy : FunctionPass {
     if (!L)
       AU.setPreservesAll();
   }
-  StringRef getPassName() const override { return "Coroutine Cleanup"; }
 };
 }
 
-char CoroCleanupLegacy::ID = 0;
-INITIALIZE_PASS(CoroCleanupLegacy, "coro-cleanup",
+char CoroCleanup::ID = 0;
+INITIALIZE_PASS(CoroCleanup, "coro-cleanup",
                 "Lower all coroutine related intrinsics", false, false)
 
-Pass *llvm::createCoroCleanupLegacyPass() { return new CoroCleanupLegacy(); }
+Pass *llvm::createCoroCleanupPass() { return new CoroCleanup(); }

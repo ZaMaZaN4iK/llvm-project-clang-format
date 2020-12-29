@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -25,41 +26,24 @@ struct wat
 
 struct F {};
 struct FD : public F {};
-
-#if TEST_STD_VER > 14
-template <typename T, typename U>
-struct test_invoke_result;
-
-template <typename Fn, typename ...Args, typename Ret>
-struct test_invoke_result<Fn(Args...), Ret>
-{
-    static void call()
-    {
-        static_assert(std::is_invocable<Fn, Args...>::value, "");
-        static_assert(std::is_invocable_r<Ret, Fn, Args...>::value, "");
-        ASSERT_SAME_TYPE(Ret, typename std::invoke_result<Fn, Args...>::type);
-        ASSERT_SAME_TYPE(Ret,        std::invoke_result_t<Fn, Args...>);
-    }
-};
-#endif
+struct NotDerived {};
 
 template <class T, class U>
 void test_result_of_imp()
 {
-    ASSERT_SAME_TYPE(U, typename std::result_of<T>::type);
+    static_assert((std::is_same<typename std::result_of<T>::type, U>::value), "");
 #if TEST_STD_VER > 11
-    ASSERT_SAME_TYPE(U,        std::result_of_t<T>);
+    static_assert((std::is_same<std::result_of_t<T>, U>::value), "");
 #endif
 #if TEST_STD_VER > 14
-    test_invoke_result<T, U>::call();
+    static_assert(std::is_callable<T>::value, "");
+    static_assert(std::is_callable<T, U>::value, "");
 #endif
 }
 
-// Do not warn on deprecated uses of 'volatile' below.
-_LIBCPP_SUPPRESS_DEPRECATED_PUSH
-
-int main(int, char**)
+int main()
 {
+    typedef NotDerived ND;
     {
     typedef char F::*PMD;
     test_result_of_imp<PMD(F                &), char                &>();
@@ -171,8 +155,4 @@ int main(int, char**)
     test_result_of_imp<int (F::* (std::unique_ptr<const F> ))       () const, int>();
     }
     test_result_of_imp<decltype(&wat::foo)(wat), void>();
-
-  return 0;
 }
-
-_LIBCPP_SUPPRESS_DEPRECATED_POP

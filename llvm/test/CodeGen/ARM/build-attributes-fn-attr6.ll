@@ -5,7 +5,6 @@
 ; functions have inconsistent values, and that a default is returned. 
 
 ; RUN: llc < %s -mtriple=armv7-linux-gnueabi -mcpu=cortex-a15  | FileCheck %s
-; RUN: llc < %s -mtriple=armv7-linux-gnueabi -mcpu=cortex-a15 -enable-ipra | FileCheck %s
 
 ; CHECK: .eabi_attribute 20, 1
 

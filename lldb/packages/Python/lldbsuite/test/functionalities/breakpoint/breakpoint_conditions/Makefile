@@ -1,4 +1,6 @@
-C_SOURCES := main.c
-CFLAGS_EXTRAS := -std=c99
+LEVEL = ../../../make
 
-include Makefile.rules
+C_SOURCES := main.c
+CFLAGS_EXTRAS += -std=c99
+
+include $(LEVEL)/Makefile.rules

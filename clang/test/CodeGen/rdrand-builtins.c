@@ -1,7 +1,7 @@
 // RUN: %clang_cc1 -ffreestanding -triple x86_64-unknown-unknown -target-feature +rdrnd -target-feature +rdseed -emit-llvm -o - %s | FileCheck %s
 
 
-#include <immintrin.h>
+#include <x86intrin.h>
 
 int rdrand16(unsigned short *p) {
   return _rdrand16_step(p);
@@ -17,14 +17,12 @@ int rdrand32(unsigned *p) {
 // CHECK: store i32
 }
 
-#if __x86_64__
 int rdrand64(unsigned long long *p) {
   return _rdrand64_step(p);
 // CHECK: @rdrand64
 // CHECK: call { i64, i32 } @llvm.x86.rdrand.64
 // CHECK: store i64
 }
-#endif
 
 int rdseed16(unsigned short *p) {
   return _rdseed16_step(p);
@@ -40,11 +38,9 @@ int rdseed32(unsigned *p) {
 // CHECK: store i32
 }
 
-#if __x86_64__
 int rdseed64(unsigned long long *p) {
   return _rdseed64_step(p);
 // CHECK: @rdseed64
 // CHECK: call { i64, i32 } @llvm.x86.rdseed.64
 // CHECK: store i64
 }
-#endif

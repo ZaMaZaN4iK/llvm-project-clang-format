@@ -1,8 +1,9 @@
 //===-- gtdf2vfp.S - Implement gtdf2vfp -----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,7 +13,7 @@
 // extern double __gtdf2vfp(double a, double b);
 //
 // Returns one iff a > b and neither is NaN.
-// Uses Darwin calling convention where double precision arguments are passsed
+// Uses Darwin calling convention where double precision arguments are passsed 
 // like in GPR pairs.
 //
 	.syntax unified
@@ -26,7 +27,6 @@ DEFINE_COMPILERRT_FUNCTION(__gtdf2vfp)
 	vcmp.f64 d6, d7
 #endif
 	vmrs	apsr_nzcv, fpscr
-	ITE(gt)
 	movgt	r0, #1		// set result register to 1 if equal
 	movle	r0, #0
 	bx	lr

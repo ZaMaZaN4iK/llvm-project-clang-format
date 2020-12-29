@@ -3,8 +3,11 @@ Test that objective-c constant strings are generated correctly by the expression
 parser.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -29,7 +32,7 @@ class ConstStringTestCase(TestBase):
         self.build(dictionary=self.d)
         self.setTearDownCleanup(self.d)
 
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(

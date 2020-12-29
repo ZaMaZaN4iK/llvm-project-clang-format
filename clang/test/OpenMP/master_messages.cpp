@@ -1,12 +1,4 @@
-// RUN: %clang_cc1 -verify -fopenmp %s -Wuninitialized
-
-// RUN: %clang_cc1 -verify -fopenmp-simd %s -Wuninitialized
-
-void xxx(int argc) {
-  int x; // expected-note {{initialize the variable 'x' to silence this warning}}
-#pragma omp master
-  argc = x; // expected-warning {{variable 'x' is uninitialized when used here}}
-}
+// RUN: %clang_cc1 -verify -fopenmp %s
 
 int foo();
 
@@ -34,7 +26,7 @@ int main() {
   #pragma omp single
   for (int i = 0; i < 10; ++i) {
     foo();
-    #pragma omp master allocate(i) // expected-error {{region cannot be closely nested inside 'single' region}} expected-error {{unexpected OpenMP clause 'allocate' in directive '#pragma omp master'}}
+    #pragma omp master // expected-error {{region cannot be closely nested inside 'single' region}}
     foo();
   }
   #pragma omp master

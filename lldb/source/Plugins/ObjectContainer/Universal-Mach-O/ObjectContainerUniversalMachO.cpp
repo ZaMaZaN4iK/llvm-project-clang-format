@@ -1,20 +1,21 @@
 //===-- ObjectContainerUniversalMachO.cpp -----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "ObjectContainerUniversalMachO.h"
+#include "lldb/Core/ArchSpec.h"
+#include "lldb/Core/DataBuffer.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/ArchSpec.h"
-#include "lldb/Utility/DataBuffer.h"
-#include "lldb/Utility/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -43,21 +44,21 @@ ObjectContainer *ObjectContainerUniversalMachO::CreateInstance(
     const lldb::ModuleSP &module_sp, DataBufferSP &data_sp,
     lldb::offset_t data_offset, const FileSpec *file,
     lldb::offset_t file_offset, lldb::offset_t length) {
-  // We get data when we aren't trying to look for cached container
-  // information, so only try and look for an architecture slice if we get data
+  // We get data when we aren't trying to look for cached container information,
+  // so only try and look for an architecture slice if we get data
   if (data_sp) {
     DataExtractor data;
     data.SetData(data_sp, data_offset, length);
     if (ObjectContainerUniversalMachO::MagicBytesMatch(data)) {
-      std::unique_ptr<ObjectContainerUniversalMachO> container_up(
+      std::unique_ptr<ObjectContainerUniversalMachO> container_ap(
           new ObjectContainerUniversalMachO(module_sp, data_sp, data_offset,
                                             file, file_offset, length));
-      if (container_up->ParseHeader()) {
-        return container_up.release();
+      if (container_ap->ParseHeader()) {
+        return container_ap.release();
       }
     }
   }
-  return nullptr;
+  return NULL;
 }
 
 bool ObjectContainerUniversalMachO::MagicBytesMatch(const DataExtractor &data) {
@@ -80,8 +81,8 @@ ObjectContainerUniversalMachO::~ObjectContainerUniversalMachO() {}
 
 bool ObjectContainerUniversalMachO::ParseHeader() {
   bool success = ParseHeader(m_data, m_header, m_fat_archs);
-  // We no longer need any data, we parsed all we needed to parse and cached it
-  // in m_header and m_fat_archs
+  // We no longer need any data, we parsed all we needed to parse
+  // and cached it in m_header and m_fat_archs
   m_data.Clear();
   return success;
 }
@@ -91,7 +92,8 @@ bool ObjectContainerUniversalMachO::ParseHeader(
     std::vector<llvm::MachO::fat_arch> &fat_archs) {
   bool success = false;
   // Store the file offset for this universal file as we could have a universal
-  // .o file in a BSD archive, or be contained in another kind of object.
+  // .o file
+  // in a BSD archive, or be contained in another kind of object.
   // Universal mach-o files always have their headers in big endian.
   lldb::offset_t offset = 0;
   data.SetByteOrder(eByteOrderBig);
@@ -202,7 +204,9 @@ ObjectContainerUniversalMachO::GetObjectFile(const FileSpec *file) {
   return ObjectFileSP();
 }
 
+//------------------------------------------------------------------
 // PluginInterface protocol
+//------------------------------------------------------------------
 lldb_private::ConstString ObjectContainerUniversalMachO::GetPluginName() {
   return GetPluginNameStatic();
 }

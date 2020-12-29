@@ -1,8 +1,9 @@
 //===--- polly/DependenceInfo.h - Polyhedral dependency analysis *- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -24,11 +25,21 @@
 
 #include "polly/ScopPass.h"
 #include "isl/ctx.h"
-#include "isl/isl-noexceptions.h"
+
+struct isl_pw_aff;
+struct isl_union_map;
+struct isl_union_set;
+struct isl_map;
+struct isl_set;
+struct clast_for;
 
 using namespace llvm;
 
 namespace polly {
+
+class Scop;
+class ScopStmt;
+class MemoryAccess;
 
 /// The accumulated dependence information for a SCoP.
 ///
@@ -51,7 +62,7 @@ struct Dependences {
   using ReductionDependencesMapTy = DenseMap<MemoryAccess *, isl_map *>;
 
   /// Map type to associate statements with schedules.
-  using StatementToIslMapTy = DenseMap<ScopStmt *, isl::map>;
+  using StatementToIslMapTy = DenseMap<ScopStmt *, isl_map *>;
 
   /// The type of the dependences.
   ///
@@ -81,14 +92,12 @@ struct Dependences {
     TYPE_TC_RED = 1 << 4,
   };
 
-  const std::shared_ptr<isl_ctx> &getSharedIslCtx() const { return IslCtx; }
-
   /// Get the dependences of type @p Kinds.
   ///
   /// @param Kinds This integer defines the different kinds of dependences
   ///              that will be returned. To return more than one kind, the
   ///              different kinds are 'ored' together.
-  isl::union_map getDependences(int Kinds) const;
+  __isl_give isl_union_map *getDependences(int Kinds) const;
 
   /// Report if valid dependences are available.
   bool hasValidDependences() const;
@@ -122,9 +131,9 @@ struct Dependences {
   /// @param S             The current SCoP.
   /// @param NewSchedules  The new schedules
   ///
-  /// @return True if the new schedule is valid, false if it reverses
+  /// @return True if the new schedule is valid, false it it reverses
   ///         dependences.
-  bool isValidSchedule(Scop &S, const StatementToIslMapTy &NewSchedules) const;
+  bool isValidSchedule(Scop &S, StatementToIslMapTy *NewSchedules) const;
 
   /// Print the stored dependence information.
   void print(llvm::raw_ostream &OS) const;
@@ -139,8 +148,6 @@ struct Dependences {
   ///
   /// To restrict access to the internal state, only the DependenceInfo class
   /// is able to call or modify a Dependences struct.
-  friend struct DependenceAnalysis;
-  friend struct DependenceInfoPrinterPass;
   friend class DependenceInfo;
   friend class DependenceInfoWrapperPass;
 
@@ -187,37 +194,6 @@ private:
 
   /// Granularity of this dependence analysis.
   const AnalysisLevel Level;
-};
-
-struct DependenceAnalysis : public AnalysisInfoMixin<DependenceAnalysis> {
-  static AnalysisKey Key;
-  struct Result {
-    Scop &S;
-    std::unique_ptr<Dependences> D[Dependences::NumAnalysisLevels];
-
-    /// Return the dependence information for the current SCoP.
-    ///
-    /// @param Level The granularity of dependence analysis result.
-    ///
-    /// @return The dependence analysis result
-    ///
-    const Dependences &getDependences(Dependences::AnalysisLevel Level);
-
-    /// Recompute dependences from schedule and memory accesses.
-    const Dependences &recomputeDependences(Dependences::AnalysisLevel Level);
-  };
-  Result run(Scop &S, ScopAnalysisManager &SAM,
-             ScopStandardAnalysisResults &SAR);
-};
-
-struct DependenceInfoPrinterPass
-    : public PassInfoMixin<DependenceInfoPrinterPass> {
-  DependenceInfoPrinterPass(raw_ostream &OS) : OS(OS) {}
-
-  PreservedAnalyses run(Scop &S, ScopAnalysisManager &,
-                        ScopStandardAnalysisResults &, SPMUpdater &);
-
-  raw_ostream &OS;
 };
 
 class DependenceInfo : public ScopPass {
@@ -299,9 +275,11 @@ private:
   /// Scop to Dependence map for the current function.
   ScopToDepsMapTy ScopToDepsMap;
 };
+
 } // namespace polly
 
 namespace llvm {
+class PassRegistry;
 void initializeDependenceInfoPass(llvm::PassRegistry &);
 void initializeDependenceInfoWrapperPassPass(llvm::PassRegistry &);
 } // namespace llvm

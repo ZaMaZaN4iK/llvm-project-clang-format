@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,8 +19,6 @@
 #include <array>
 #include <utility>
 #include <cassert>
-
-#include "test_macros.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 template <class T, std::size_t Dummy = 0>
@@ -131,7 +130,7 @@ void test_one()
     }
 }
 
-int main(int, char**)
+int main()
 {
     // Instantiate with 1-5 arguments.
     test_all<1>();
@@ -142,6 +141,4 @@ int main(int, char**)
 
     // Stress test with 256
     test_one<256>();
-
-  return 0;
 }

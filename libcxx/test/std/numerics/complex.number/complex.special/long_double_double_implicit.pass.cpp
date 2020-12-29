@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,9 +18,7 @@
 #include <complex>
 #include <cassert>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     {
     const std::complex<double> cd(2.5, 3.5);
@@ -27,7 +26,7 @@ int main(int, char**)
     assert(cf.real() == cd.real());
     assert(cf.imag() == cd.imag());
     }
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_CONSTEXPR
     {
     constexpr std::complex<double> cd(2.5, 3.5);
     constexpr std::complex<long double> cf = cd;
@@ -35,6 +34,4 @@ int main(int, char**)
     static_assert(cf.imag() == cd.imag(), "");
     }
 #endif
-
-  return 0;
 }

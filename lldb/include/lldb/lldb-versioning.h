@@ -1,16 +1,19 @@
 //===-- lldb-versioning.h ----------------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLDB_lldb_versioning_h_
 #define LLDB_lldb_versioning_h_
 
+//----------------------------------------------------------------------
 // LLDB API version
+//----------------------------------------------------------------------
 #define LLDB_API_MAJOR_VERSION 1
 #define LLDB_API_MINOR_VERSION 0
 
@@ -97,8 +100,8 @@
 */
 
 // if you want the version checking to work on other OS/compiler, define
-// appropriate IMPL_DEPRECATED/IMPL_TOONEW and define
-// LLDB_API_CHECK_VERSIONING_WORKS when you are ready to go live
+// appropriate IMPL_DEPRECATED/IMPL_TOONEW
+// and define LLDB_API_CHECK_VERSIONING_WORKS when you are ready to go live
 #if defined(__APPLE__) && defined(__clang__)
 #define LLDB_API_IMPL_DEPRECATED __attribute__((deprecated))
 #define LLDB_API_IMPL_TOONEW __attribute__((unavailable))

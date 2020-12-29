@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,9 +11,7 @@
 
 // is_trivially_copyable
 
-// These compilers have not implemented Core 2094 which makes volatile
-// qualified types trivially copyable.
-// XFAIL: clang-3, clang-4, apple-clang-6, apple-clang-7, apple-clang-8, apple-clang-9.0, gcc
+// XFAIL: gcc-4.9
 
 #include <type_traits>
 #include <cassert>
@@ -23,13 +22,13 @@ void test_is_trivially_copyable()
 {
     static_assert( std::is_trivially_copyable<T>::value, "");
     static_assert( std::is_trivially_copyable<const T>::value, "");
-    static_assert( std::is_trivially_copyable<volatile T>::value, "");
-    static_assert( std::is_trivially_copyable<const volatile T>::value, "");
+    static_assert(!std::is_trivially_copyable<volatile T>::value, "");
+    static_assert(!std::is_trivially_copyable<const volatile T>::value, "");
 #if TEST_STD_VER > 14
     static_assert( std::is_trivially_copyable_v<T>, "");
     static_assert( std::is_trivially_copyable_v<const T>, "");
-    static_assert( std::is_trivially_copyable_v<volatile T>, "");
-    static_assert( std::is_trivially_copyable_v<const volatile T>, "");
+    static_assert(!std::is_trivially_copyable_v<volatile T>, "");
+    static_assert(!std::is_trivially_copyable_v<const volatile T>, "");
 #endif
 }
 
@@ -65,7 +64,7 @@ public:
     C();
 };
 
-int main(int, char**)
+int main()
 {
     test_is_trivially_copyable<int> ();
     test_is_trivially_copyable<const int> ();
@@ -76,6 +75,4 @@ int main(int, char**)
     test_is_not_trivially_copyable<int&> ();
     test_is_not_trivially_copyable<const A&> ();
     test_is_not_trivially_copyable<B> ();
-
-  return 0;
 }

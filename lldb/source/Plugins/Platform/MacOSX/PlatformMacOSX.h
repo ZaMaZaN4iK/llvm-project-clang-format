@@ -1,14 +1,19 @@
 //===-- PlatformMacOSX.h ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_PlatformMacOSX_h_
 #define liblldb_PlatformMacOSX_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "PlatformDarwin.h"
 
 class PlatformMacOSX : public PlatformDarwin {
@@ -17,7 +22,9 @@ public:
 
   ~PlatformMacOSX() override;
 
+  //------------------------------------------------------------
   // Class functions
+  //------------------------------------------------------------
   static lldb::PlatformSP CreateInstance(bool force,
                                          const lldb_private::ArchSpec *arch);
 
@@ -29,14 +36,16 @@ public:
 
   static const char *GetDescriptionStatic(bool is_host);
 
+  //------------------------------------------------------------
   // lldb_private::PluginInterface functions
+  //------------------------------------------------------------
   lldb_private::ConstString GetPluginName() override {
     return GetPluginNameStatic(IsHost());
   }
 
   uint32_t GetPluginVersion() override { return 1; }
 
-  lldb_private::Status
+  lldb_private::Error
   GetSharedModule(const lldb_private::ModuleSpec &module_spec,
                   lldb_private::Process *process, lldb::ModuleSP &module_sp,
                   const lldb_private::FileSpecList *module_search_paths_ptr,
@@ -47,18 +56,17 @@ public:
     return GetDescriptionStatic(IsHost());
   }
 
-  lldb_private::Status
-  GetSymbolFile(const lldb_private::FileSpec &platform_file,
-                const lldb_private::UUID *uuid_ptr,
-                lldb_private::FileSpec &local_file);
+  lldb_private::Error GetSymbolFile(const lldb_private::FileSpec &platform_file,
+                                    const lldb_private::UUID *uuid_ptr,
+                                    lldb_private::FileSpec &local_file);
 
-  lldb_private::Status
+  lldb_private::Error
   GetFile(const lldb_private::FileSpec &source,
           const lldb_private::FileSpec &destination) override {
     return PlatformDarwin::GetFile(source, destination);
   }
 
-  lldb_private::Status
+  lldb_private::Error
   GetFileWithUUID(const lldb_private::FileSpec &platform_file,
                   const lldb_private::UUID *uuid_ptr,
                   lldb_private::FileSpec &local_file) override;

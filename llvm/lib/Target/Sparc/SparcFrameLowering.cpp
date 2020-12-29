@@ -1,8 +1,9 @@
 //===-- SparcFrameLowering.cpp - Sparc Frame Information ------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -34,8 +35,7 @@ DisableLeafProc("disable-sparc-leaf-proc",
 
 SparcFrameLowering::SparcFrameLowering(const SparcSubtarget &ST)
     : TargetFrameLowering(TargetFrameLowering::StackGrowsDown,
-                          ST.is64Bit() ? Align(16) : Align(8), 0,
-                          ST.is64Bit() ? Align(16) : Align(8)) {}
+                          ST.is64Bit() ? 16 : 8, 0, ST.is64Bit() ? 16 : 8) {}
 
 void SparcFrameLowering::emitSPAdjustment(MachineFunction &MF,
                                           MachineBasicBlock &MBB,
@@ -88,11 +88,10 @@ void SparcFrameLowering::emitPrologue(MachineFunction &MF,
 
   assert(&MF.front() == &MBB && "Shrink-wrapping not yet supported");
   MachineFrameInfo &MFI = MF.getFrameInfo();
-  const SparcSubtarget &Subtarget = MF.getSubtarget<SparcSubtarget>();
   const SparcInstrInfo &TII =
-      *static_cast<const SparcInstrInfo *>(Subtarget.getInstrInfo());
+      *static_cast<const SparcInstrInfo *>(MF.getSubtarget().getInstrInfo());
   const SparcRegisterInfo &RegInfo =
-      *static_cast<const SparcRegisterInfo *>(Subtarget.getRegisterInfo());
+      *static_cast<const SparcRegisterInfo *>(MF.getSubtarget().getRegisterInfo());
   MachineBasicBlock::iterator MBBI = MBB.begin();
   // Debug location must be unknown since the first debug location is used
   // to determine the end of the prologue.
@@ -142,7 +141,7 @@ void SparcFrameLowering::emitPrologue(MachineFunction &MF,
 
   // Adds the SPARC subtarget-specific spill area to the stack
   // size. Also ensures target-required alignment.
-  NumBytes = Subtarget.getAdjustedFrameSize(NumBytes);
+  NumBytes = MF.getSubtarget<SparcSubtarget>().getAdjustedFrameSize(NumBytes);
 
   // Finally, ensure that the size is sufficiently aligned for the
   // data on the stack.
@@ -177,27 +176,9 @@ void SparcFrameLowering::emitPrologue(MachineFunction &MF,
       .addCFIIndex(CFIIndex);
 
   if (NeedsStackRealignment) {
-    int64_t Bias = Subtarget.getStackPointerBias();
-    unsigned regUnbiased;
-    if (Bias) {
-      // This clobbers G1 which we always know is available here.
-      regUnbiased = SP::G1;
-      // add %o6, BIAS, %g1
-      BuildMI(MBB, MBBI, dl, TII.get(SP::ADDri), regUnbiased)
-        .addReg(SP::O6).addImm(Bias);
-    } else
-      regUnbiased = SP::O6;
-
-    // andn %regUnbiased, MaxAlign-1, %regUnbiased
+    // andn %o6, MaxAlign-1, %o6
     int MaxAlign = MFI.getMaxAlignment();
-    BuildMI(MBB, MBBI, dl, TII.get(SP::ANDNri), regUnbiased)
-      .addReg(regUnbiased).addImm(MaxAlign - 1);
-
-    if (Bias) {
-      // add %g1, -BIAS, %o6
-      BuildMI(MBB, MBBI, dl, TII.get(SP::ADDri), SP::O6)
-        .addReg(regUnbiased).addImm(-Bias);
-    }
+    BuildMI(MBB, MBBI, dl, TII.get(SP::ANDNri), SP::O6).addReg(SP::O6).addImm(MaxAlign - 1);
   }
 }
 
@@ -307,11 +288,11 @@ static bool LLVM_ATTRIBUTE_UNUSED verifyLeafProcRegUse(MachineRegisterInfo *MRI)
 {
 
   for (unsigned reg = SP::I0; reg <= SP::I7; ++reg)
-    if (MRI->isPhysRegUsed(reg))
+    if (!MRI->reg_nodbg_empty(reg))
       return false;
 
   for (unsigned reg = SP::L0; reg <= SP::L7; ++reg)
-    if (MRI->isPhysRegUsed(reg))
+    if (!MRI->reg_nodbg_empty(reg))
       return false;
 
   return true;
@@ -324,19 +305,20 @@ bool SparcFrameLowering::isLeafProc(MachineFunction &MF) const
   MachineFrameInfo    &MFI = MF.getFrameInfo();
 
   return !(MFI.hasCalls()                  // has calls
-           || MRI.isPhysRegUsed(SP::L0)    // Too many registers needed
-           || MRI.isPhysRegUsed(SP::O6)    // %sp is used
-           || hasFP(MF));                  // need %fp
+           || !MRI.reg_nodbg_empty(SP::L0) // Too many registers needed
+           || !MRI.reg_nodbg_empty(SP::O6) // %SP is used
+           || hasFP(MF));                  // need %FP
 }
 
 void SparcFrameLowering::remapRegsForLeafProc(MachineFunction &MF) const {
   MachineRegisterInfo &MRI = MF.getRegInfo();
   // Remap %i[0-7] to %o[0-7].
   for (unsigned reg = SP::I0; reg <= SP::I7; ++reg) {
-    if (!MRI.isPhysRegUsed(reg))
+    if (MRI.reg_nodbg_empty(reg))
       continue;
 
     unsigned mapped_reg = reg - SP::I0 + SP::O0;
+    assert(MRI.reg_nodbg_empty(mapped_reg));
 
     // Replace I register with O register.
     MRI.replaceRegWith(reg, mapped_reg);

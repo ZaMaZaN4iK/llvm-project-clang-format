@@ -1,8 +1,9 @@
 //== BoolAssignmentChecker.cpp - Boolean assignment checker -----*- C++ -*--==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
@@ -34,9 +35,7 @@ void BoolAssignmentChecker::emitReport(ProgramStateRef state,
   if (ExplodedNode *N = C.generateNonFatalErrorNode(state)) {
     if (!BT)
       BT.reset(new BuiltinBug(this, "Assignment of a non-Boolean value"));
-
-    C.emitReport(
-        std::make_unique<PathSensitiveBugReport>(*BT, BT->getDescription(), N));
+    C.emitReport(llvm::make_unique<BugReport>(*BT, BT->getDescription(), N));
   }
 }
 
@@ -155,8 +154,4 @@ void BoolAssignmentChecker::checkBind(SVal loc, SVal val, const Stmt *S,
 
 void ento::registerBoolAssignmentChecker(CheckerManager &mgr) {
     mgr.registerChecker<BoolAssignmentChecker>();
-}
-
-bool ento::shouldRegisterBoolAssignmentChecker(const LangOptions &LO) {
-  return true;
 }

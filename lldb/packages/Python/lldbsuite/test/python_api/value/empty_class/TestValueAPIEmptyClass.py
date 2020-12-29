@@ -1,4 +1,8 @@
+from __future__ import print_function
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -11,7 +15,7 @@ class ValueAPIEmptyClassTestCase(TestBase):
     @add_test_categories(['pyapi'])
     def test(self):
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), 'a.out')
         line = line_number('main.cpp', '// Break at this line')
 
         # Create a target by the debugger.

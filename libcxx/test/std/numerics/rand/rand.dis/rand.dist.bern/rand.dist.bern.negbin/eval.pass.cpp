@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -19,8 +20,6 @@
 #include <numeric>
 #include <vector>
 #include <cassert>
-
-#include "test_macros.h"
 
 template <class T>
 inline
@@ -286,7 +285,7 @@ test6()
     assert(std::abs((kurtosis - x_kurtosis) / x_kurtosis) < 0.03);
 }
 
-int main(int, char**)
+int main()
 {
     test1();
     test2();
@@ -294,6 +293,4 @@ int main(int, char**)
     test4();
     test5();
     test6();
-
-  return 0;
 }

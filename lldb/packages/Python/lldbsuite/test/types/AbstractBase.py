@@ -5,6 +5,7 @@ Abstract base class of basic types provides a generic type tester method.
 from __future__ import print_function
 
 import os
+import time
 import re
 import lldb
 from lldbsuite.test.lldbtest import *
@@ -33,7 +34,7 @@ class GenericTester(TestBase):
         # module cacheing subsystem to be confused with executable name "a.out"
         # used for all the test cases.
         self.exe_name = self.testMethodName
-        self.golden_filename = self.getBuildArtifact("golden-output.txt")
+        self.golden_filename = os.path.join(os.getcwd(), "golden-output.txt")
 
     def tearDown(self):
         """Cleanup the test byproducts."""
@@ -94,10 +95,10 @@ class GenericTester(TestBase):
         if lldb.remote_platform:
             # process launch -o requires a path that is valid on the target
             self.assertIsNotNone(lldb.remote_platform.GetWorkingDirectory())
-            remote_path = lldbutil.append_to_process_working_directory(self,
+            remote_path = lldbutil.append_to_process_working_directory(
                 "lldb-stdout-redirect.txt")
             self.runCmd(
-                'process launch -- {remote}'.format(remote=remote_path))
+                'process launch -o {remote}'.format(remote=remote_path))
             # copy remote_path to local host
             self.runCmd('platform get-file {remote} "{local}"'.format(
                 remote=remote_path, local=self.golden_filename))
@@ -112,8 +113,8 @@ class GenericTester(TestBase):
             quotedDisplay=False,
             blockCaptured=False):
         """Test that variables with basic types are displayed correctly."""
-        self.runCmd("file %s" % self.getBuildArtifact(exe_name),
-                    CURRENT_EXECUTABLE_SET)
+
+        self.runCmd("file %s" % exe_name, CURRENT_EXECUTABLE_SET)
 
         # First, capture the golden output emitted by the oracle, i.e., the
         # series of printf statements.
@@ -199,6 +200,7 @@ class GenericTester(TestBase):
             nv = ("%s = '%s'" if quotedDisplay else "%s = %s") % (var, val)
             self.expect(output, Msg(var, val, True), exe=False,
                         substrs=[nv])
+        pass
 
     def generic_type_expr_tester(
             self,
@@ -208,8 +210,7 @@ class GenericTester(TestBase):
             blockCaptured=False):
         """Test that variable expressions with basic types are evaluated correctly."""
 
-        self.runCmd("file %s" % self.getBuildArtifact(exe_name),
-                    CURRENT_EXECUTABLE_SET)
+        self.runCmd("file %s" % exe_name, CURRENT_EXECUTABLE_SET)
 
         # First, capture the golden output emitted by the oracle, i.e., the
         # series of printf statements.
@@ -295,3 +296,4 @@ class GenericTester(TestBase):
             valPart = ("'%s'" if quotedDisplay else "%s") % val
             self.expect(output, Msg(var, val, False), exe=False,
                         substrs=[valPart])
+        pass

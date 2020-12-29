@@ -1,8 +1,9 @@
 //===- BarrierNoopPass.cpp - A barrier pass for the pass manager ----------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,13 +18,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Transforms/IPO.h"
 using namespace llvm;
 
 namespace {
-/// A nonce module pass used to place a barrier in a pass manager.
+/// \brief A nonce module pass used to place a barrier in a pass manager.
 ///
 /// There is no mechanism for ending a CGSCC pass manager once one is started.
 /// This prevents extension points from having clear deterministic ordering

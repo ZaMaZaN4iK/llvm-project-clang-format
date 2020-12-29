@@ -1,8 +1,9 @@
-//===- ARMConstantPoolValue.h - ARM constantpool value ----------*- C++ -*-===//
+//===-- ARMConstantPoolValue.h - ARM constantpool value ---------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,13 +14,10 @@
 #ifndef LLVM_LIB_TARGET_ARM_ARMCONSTANTPOOLVALUE_H
 #define LLVM_LIB_TARGET_ARM_ARMCONSTANTPOOLVALUE_H
 
-#include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/iterator_range.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
 #include "llvm/Support/Casting.h"
-#include <string>
-#include <vector>
+#include "llvm/Support/ErrorHandling.h"
+#include <cstddef>
 
 namespace llvm {
 
@@ -29,11 +27,8 @@ class GlobalValue;
 class GlobalVariable;
 class LLVMContext;
 class MachineBasicBlock;
-class raw_ostream;
-class Type;
 
 namespace ARMCP {
-
   enum ARMCPKind {
     CPValue,
     CPExtSymbol,
@@ -52,8 +47,7 @@ namespace ARMCP {
     SECREL,      /// Section Relative (Windows TLS)
     SBREL,       /// Static Base Relative (RWPI)
   };
-
-} // end namespace ARMCP
+}
 
 /// ARMConstantPoolValue - ARM specific constantpool value. This is used to
 /// represent PC-relative displacement between the address of the load
@@ -83,8 +77,8 @@ protected:
     for (unsigned i = 0, e = Constants.size(); i != e; ++i) {
       if (Constants[i].isMachineConstantPoolEntry() &&
           (Constants[i].getAlignment() & AlignMask) == 0) {
-        auto *CPV =
-          static_cast<ARMConstantPoolValue*>(Constants[i].Val.MachineCPVal);
+        ARMConstantPoolValue *CPV =
+            (ARMConstantPoolValue *)Constants[i].Val.MachineCPVal;
         if (Derived *APC = dyn_cast<Derived>(CPV))
           if (cast<Derived>(this)->equals(APC))
             return i;
@@ -112,7 +106,7 @@ public:
   bool isLSDA() const { return Kind == ARMCP::CPLSDA; }
   bool isMachineBasicBlock() const{ return Kind == ARMCP::CPMachineBasicBlock; }
   bool isPromotedGlobal() const{ return Kind == ARMCP::CPPromotedGlobal; }
-
+  
   int getExistingMachineCPValue(MachineConstantPool *CP,
                                 unsigned Alignment) override;
 
@@ -142,7 +136,7 @@ inline raw_ostream &operator<<(raw_ostream &O, const ARMConstantPoolValue &V) {
 /// Functions, and BlockAddresses.
 class ARMConstantPoolConstant : public ARMConstantPoolValue {
   const Constant *CVal;         // Constant being loaded.
-  SmallPtrSet<const GlobalVariable*, 1> GVars;
+  const GlobalVariable *GVar = nullptr;
 
   ARMConstantPoolConstant(const Constant *C,
                           unsigned ID,
@@ -175,13 +169,9 @@ public:
 
   const GlobalValue *getGV() const;
   const BlockAddress *getBlockAddress() const;
-
-  using promoted_iterator = SmallPtrSet<const GlobalVariable *, 1>::iterator;
-
-  iterator_range<promoted_iterator> promotedGlobals() {
-    return iterator_range<promoted_iterator>(GVars.begin(), GVars.end());
+  const GlobalVariable *getPromotedGlobal() const {
+    return dyn_cast_or_null<GlobalVariable>(GVar);
   }
-
   const Constant *getPromotedGlobalInit() const {
     return CVal;
   }
@@ -196,7 +186,6 @@ public:
   void addSelectionDAGCSEId(FoldingSetNodeID &ID) override;
 
   void print(raw_ostream &O) const override;
-
   static bool classof(const ARMConstantPoolValue *APV) {
     return APV->isGlobalValue() || APV->isBlockAddress() || APV->isLSDA() ||
            APV->isPromotedGlobal();
@@ -278,6 +267,6 @@ public:
   }
 };
 
-} // end namespace llvm
+} // End llvm namespace
 
-#endif // LLVM_LIB_TARGET_ARM_ARMCONSTANTPOOLVALUE_H
+#endif

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,16 +16,15 @@
 // mapped_type&       at(const key_type& k);
 // const mapped_type& at(const key_type& k) const;
 
-#include <cassert>
-#include <stdexcept>
-#include <string>
 #include <unordered_map>
+#include <string>
+#include <cassert>
 
 #include "MoveOnly.h"
 #include "min_allocator.h"
 #include "test_macros.h"
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::unordered_map<int, std::string> C;
@@ -72,7 +72,7 @@ int main(int, char**)
 #ifndef TEST_HAS_NO_EXCEPTIONS
         try
         {
-            TEST_IGNORE_NODISCARD c.at(11);
+            c.at(11);
             assert(false);
         }
         catch (std::out_of_range&)
@@ -130,7 +130,7 @@ int main(int, char**)
 #ifndef TEST_HAS_NO_EXCEPTIONS
         try
         {
-            TEST_IGNORE_NODISCARD c.at(11);
+            c.at(11);
             assert(false);
         }
         catch (std::out_of_range&)
@@ -140,6 +140,4 @@ int main(int, char**)
 #endif
     }
 #endif
-
-  return 0;
 }

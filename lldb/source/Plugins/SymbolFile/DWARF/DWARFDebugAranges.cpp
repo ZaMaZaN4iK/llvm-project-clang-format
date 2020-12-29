@@ -1,24 +1,39 @@
 //===-- DWARFDebugAranges.cpp -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "DWARFDebugAranges.h"
-#include "DWARFDebugArangeSet.h"
-#include "DWARFUnit.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Timer.h"
+
+#include <assert.h>
+#include <stdio.h>
+
+#include <algorithm>
+
+#include "lldb/Core/Log.h"
+#include "lldb/Core/Stream.h"
+#include "lldb/Core/Timer.h"
+
+#include "DWARFCompileUnit.h"
+#include "DWARFDebugInfo.h"
+#include "LogChannelDWARF.h"
+#include "SymbolFileDWARF.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
+//----------------------------------------------------------------------
 // Constructor
+//----------------------------------------------------------------------
 DWARFDebugAranges::DWARFDebugAranges() : m_aranges() {}
 
+//----------------------------------------------------------------------
 // CountArangeDescriptors
+//----------------------------------------------------------------------
 class CountArangeDescriptors {
 public:
   CountArangeDescriptors(uint32_t &count_ref) : count(count_ref) {
@@ -30,44 +45,61 @@ public:
   uint32_t &count;
 };
 
+//----------------------------------------------------------------------
 // Extract
-llvm::Error
-DWARFDebugAranges::extract(const DWARFDataExtractor &debug_aranges_data) {
-  lldb::offset_t offset = 0;
+//----------------------------------------------------------------------
+bool DWARFDebugAranges::Extract(const DWARFDataExtractor &debug_aranges_data) {
+  if (debug_aranges_data.ValidOffset(0)) {
+    lldb::offset_t offset = 0;
 
-  DWARFDebugArangeSet set;
-  Range range;
-  while (debug_aranges_data.ValidOffset(offset)) {
-    llvm::Error error = set.extract(debug_aranges_data, &offset);
-    if (!error)
-      return error;
+    DWARFDebugArangeSet set;
+    Range range;
+    while (set.Extract(debug_aranges_data, &offset)) {
+      const uint32_t num_descriptors = set.NumDescriptors();
+      if (num_descriptors > 0) {
+        const dw_offset_t cu_offset = set.GetCompileUnitDIEOffset();
 
-    const uint32_t num_descriptors = set.NumDescriptors();
-    if (num_descriptors > 0) {
-      const dw_offset_t cu_offset = set.GetHeader().cu_offset;
-
-      for (uint32_t i = 0; i < num_descriptors; ++i) {
-        const DWARFDebugArangeSet::Descriptor &descriptor =
-            set.GetDescriptorRef(i);
-        m_aranges.Append(RangeToDIE::Entry(descriptor.address,
-                                           descriptor.length, cu_offset));
+        for (uint32_t i = 0; i < num_descriptors; ++i) {
+          const DWARFDebugArangeSet::Descriptor &descriptor =
+              set.GetDescriptorRef(i);
+          m_aranges.Append(RangeToDIE::Entry(descriptor.address,
+                                             descriptor.length, cu_offset));
+        }
       }
+      set.Clear();
     }
-    set.Clear();
   }
-  return llvm::ErrorSuccess();
+  return false;
+}
+
+//----------------------------------------------------------------------
+// Generate
+//----------------------------------------------------------------------
+bool DWARFDebugAranges::Generate(SymbolFileDWARF *dwarf2Data) {
+  Clear();
+  DWARFDebugInfo *debug_info = dwarf2Data->DebugInfo();
+  if (debug_info) {
+    uint32_t cu_idx = 0;
+    const uint32_t num_compile_units = dwarf2Data->GetNumCompileUnits();
+    for (cu_idx = 0; cu_idx < num_compile_units; ++cu_idx) {
+      DWARFCompileUnit *cu = debug_info->GetCompileUnitAtIndex(cu_idx);
+      if (cu)
+        cu->BuildAddressRangeTable(dwarf2Data, this);
+    }
+  }
+  return !IsEmpty();
 }
 
 void DWARFDebugAranges::Dump(Log *log) const {
-  if (log == nullptr)
+  if (log == NULL)
     return;
 
   const size_t num_entries = m_aranges.GetSize();
   for (size_t i = 0; i < num_entries; ++i) {
     const RangeToDIE::Entry *entry = m_aranges.GetEntryAtIndex(i);
     if (entry)
-      LLDB_LOGF(log, "0x%8.8x: [0x%" PRIx64 " - 0x%" PRIx64 ")", entry->data,
-                entry->GetRangeBase(), entry->GetRangeEnd());
+      log->Printf("0x%8.8x: [0x%" PRIx64 " - 0x%" PRIx64 ")", entry->data,
+                  entry->GetRangeBase(), entry->GetRangeEnd());
   }
 }
 
@@ -78,15 +110,38 @@ void DWARFDebugAranges::AppendRange(dw_offset_t offset, dw_addr_t low_pc,
 }
 
 void DWARFDebugAranges::Sort(bool minimize) {
-  static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
-  Timer scoped_timer(func_cat, "%s this = %p", LLVM_PRETTY_FUNCTION,
+  Timer scoped_timer(LLVM_PRETTY_FUNCTION, "%s this = %p", LLVM_PRETTY_FUNCTION,
                      static_cast<void *>(this));
+
+  Log *log(LogChannelDWARF::GetLogIfAll(DWARF_LOG_DEBUG_ARANGES));
+  size_t orig_arange_size = 0;
+  if (log) {
+    orig_arange_size = m_aranges.GetSize();
+    log->Printf("DWARFDebugAranges::Sort(minimize = %u) with %" PRIu64
+                " entries",
+                minimize, (uint64_t)orig_arange_size);
+  }
 
   m_aranges.Sort();
   m_aranges.CombineConsecutiveEntriesWithEqualData();
+
+  if (log) {
+    if (minimize) {
+      const size_t new_arange_size = m_aranges.GetSize();
+      const size_t delta = orig_arange_size - new_arange_size;
+      log->Printf("DWARFDebugAranges::Sort() %" PRIu64
+                  " entries after minimizing (%" PRIu64
+                  " entries combined for %" PRIu64 " bytes saved)",
+                  (uint64_t)new_arange_size, (uint64_t)delta,
+                  (uint64_t)delta * sizeof(Range));
+    }
+    Dump(log);
+  }
 }
 
+//----------------------------------------------------------------------
 // FindAddress
+//----------------------------------------------------------------------
 dw_offset_t DWARFDebugAranges::FindAddress(dw_addr_t address) const {
   const RangeToDIE::Entry *entry = m_aranges.FindEntryThatContains(address);
   if (entry)

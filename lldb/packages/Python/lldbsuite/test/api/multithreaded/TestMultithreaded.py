@@ -6,14 +6,14 @@ from __future__ import print_function
 
 
 import os
+import re
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
+import subprocess
 
 
 class SBBreakpointCallbackCase(TestBase):
-
-    NO_DEBUG_INFO_TESTCASE = True
 
     def setUp(self):
         TestBase.setUp(self)
@@ -45,6 +45,7 @@ class SBBreakpointCallbackCase(TestBase):
         self.build_and_test(
             'driver.cpp listener_test.cpp test_listener_event_description.cpp',
             'test_listener_event_description')
+        pass
 
     @skipIfRemote
     @skipIfNoSBHeaders
@@ -58,18 +59,20 @@ class SBBreakpointCallbackCase(TestBase):
         self.build_and_test(
             'driver.cpp listener_test.cpp test_listener_event_process_state.cpp',
             'test_listener_event_process_state')
+        pass
 
     @skipIfRemote
     @skipIfNoSBHeaders
     # clang-cl does not support throw or catch (llvm.org/pr24538)
     @skipIfWindows
     @expectedFlakeyFreeBSD
-    @skipIf(oslist=["linux"]) # flakey
+    @expectedFailureAll(oslist=["linux"])
     def test_sb_api_listener_resume(self):
         """ Test that a process can be resumed from a non-main thread. """
         self.build_and_test(
             'driver.cpp listener_test.cpp test_listener_resume.cpp',
             'test_listener_resume')
+        pass
 
     def build_and_test(self, sources, test_name, args=None):
         """ Build LLDB test from sources, and run expecting 0 exit code """
@@ -84,20 +87,16 @@ class SBBreakpointCallbackCase(TestBase):
 
         self.inferior = 'inferior_program'
         self.buildProgram('inferior.cpp', self.inferior)
-        self.addTearDownHook(lambda:
-                             os.remove(self.getBuildArtifact(self.inferior)))
+        self.addTearDownHook(lambda: os.remove(self.inferior))
 
         self.buildDriver(sources, test_name)
-        self.addTearDownHook(lambda:
-                             os.remove(self.getBuildArtifact(test_name)))
+        self.addTearDownHook(lambda: os.remove(test_name))
 
-        test_exe = self.getBuildArtifact(test_name)
+        test_exe = os.path.join(os.getcwd(), test_name)
         self.signBinary(test_exe)
-        exe = [test_exe, self.getBuildArtifact(self.inferior)]
+        exe = [test_exe, self.inferior]
 
         env = {self.dylibPath: self.getLLDBLibraryEnvVal()}
-        if 'LLDB_DEBUGSERVER_PATH' in os.environ:
-            env['LLDB_DEBUGSERVER_PATH'] = os.environ['LLDB_DEBUGSERVER_PATH']
         if self.TraceOn():
             print("Running test %s" % " ".join(exe))
             check_call(exe, env=env)

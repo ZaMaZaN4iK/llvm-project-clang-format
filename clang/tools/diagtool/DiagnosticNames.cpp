@@ -1,8 +1,9 @@
 //===- DiagnosticNames.cpp - Defines a table of all builtin diagnostics ----==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,7 +32,6 @@ static const DiagnosticRecord BuiltinDiagnosticsByID[] = {
              SFINAE,NOWERROR,SHOWINSYSHEADER,CATEGORY)            \
   { #ENUM, diag::ENUM, STR_SIZE(#ENUM, uint8_t) },
 #include "clang/Basic/DiagnosticCommonKinds.inc"
-#include "clang/Basic/DiagnosticCrossTUKinds.inc"
 #include "clang/Basic/DiagnosticDriverKinds.inc"
 #include "clang/Basic/DiagnosticFrontendKinds.inc"
 #include "clang/Basic/DiagnosticSerializationKinds.inc"
@@ -41,7 +41,6 @@ static const DiagnosticRecord BuiltinDiagnosticsByID[] = {
 #include "clang/Basic/DiagnosticCommentKinds.inc"
 #include "clang/Basic/DiagnosticSemaKinds.inc"
 #include "clang/Basic/DiagnosticAnalysisKinds.inc"
-#include "clang/Basic/DiagnosticRefactoringKinds.inc"
 #undef DIAG
 };
 
@@ -54,7 +53,9 @@ const DiagnosticRecord &diagtool::getDiagnosticForID(short DiagID) {
   DiagnosticRecord Key = {nullptr, DiagID, 0};
 
   const DiagnosticRecord *Result =
-      llvm::lower_bound(BuiltinDiagnosticsByID, Key, orderByID);
+    std::lower_bound(std::begin(BuiltinDiagnosticsByID),
+                     std::end(BuiltinDiagnosticsByID),
+                     Key, orderByID);
   assert(Result && "diagnostic not found; table may be out of date");
   return *Result;
 }
@@ -83,22 +84,12 @@ GroupRecord::subgroup_iterator GroupRecord::subgroup_end() const {
   return nullptr;
 }
 
-llvm::iterator_range<diagtool::GroupRecord::subgroup_iterator>
-GroupRecord::subgroups() const {
-  return llvm::make_range(subgroup_begin(), subgroup_end());
-}
-
 GroupRecord::diagnostics_iterator GroupRecord::diagnostics_begin() const {
   return DiagArrays + Members;
 }
 
 GroupRecord::diagnostics_iterator GroupRecord::diagnostics_end() const {
   return nullptr;
-}
-
-llvm::iterator_range<diagtool::GroupRecord::diagnostics_iterator>
-GroupRecord::diagnostics() const {
-  return llvm::make_range(diagnostics_begin(), diagnostics_end());
 }
 
 llvm::ArrayRef<GroupRecord> diagtool::getDiagnosticGroups() {

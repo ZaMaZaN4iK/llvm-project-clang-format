@@ -1,19 +1,26 @@
 //===-- ThreadPlanCallUserExpression.cpp -------------------------*- C++-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Target/ThreadPlanCallUserExpression.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
 
+// Project includes
 #include "lldb/Breakpoint/Breakpoint.h"
 #include "lldb/Breakpoint/BreakpointLocation.h"
 #include "lldb/Core/Address.h"
+#include "lldb/Core/Log.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Expression/DiagnosticManager.h"
-#include "lldb/Expression/DynamicCheckerFunctions.h"
+#include "lldb/Expression/IRDynamicChecks.h"
 #include "lldb/Expression/UserExpression.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Target/LanguageRuntime.h"
@@ -23,13 +30,13 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadPlanRunToAddress.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
+//----------------------------------------------------------------------
 // ThreadPlanCallUserExpression: Plan to call a single function
+//----------------------------------------------------------------------
 
 ThreadPlanCallUserExpression::ThreadPlanCallUserExpression(
     Thread &thread, Address &function, llvm::ArrayRef<lldb::addr_t> args,
@@ -37,8 +44,8 @@ ThreadPlanCallUserExpression::ThreadPlanCallUserExpression(
     lldb::UserExpressionSP &user_expression_sp)
     : ThreadPlanCallFunction(thread, function, CompilerType(), args, options),
       m_user_expression_sp(user_expression_sp) {
-  // User expressions are generally "User generated" so we should set them up
-  // to stop when done.
+  // User expressions are generally "User generated" so we should set them up to
+  // stop when done.
   SetIsMasterPlan(true);
   SetOkayToDiscard(false);
 }
@@ -53,12 +60,6 @@ void ThreadPlanCallUserExpression::GetDescription(
     ThreadPlanCallFunction::GetDescription(s, level);
 }
 
-void ThreadPlanCallUserExpression::DidPush() {
-  ThreadPlanCallFunction::DidPush();
-  if (m_user_expression_sp)
-    m_user_expression_sp->WillStartExecuting();
-}
-
 void ThreadPlanCallUserExpression::WillPop() {
   ThreadPlanCallFunction::WillPop();
   if (m_user_expression_sp)
@@ -69,8 +70,9 @@ bool ThreadPlanCallUserExpression::MischiefManaged() {
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
 
   if (IsPlanComplete()) {
-    LLDB_LOGF(log, "ThreadPlanCallFunction(%p): Completed call function plan.",
-              static_cast<void *>(this));
+    if (log)
+      log->Printf("ThreadPlanCallFunction(%p): Completed call function plan.",
+                  static_cast<void *>(this));
 
     if (m_manage_materialization && PlanSucceeded() && m_user_expression_sp) {
       lldb::addr_t function_stack_top;
@@ -110,9 +112,4 @@ StopInfoSP ThreadPlanCallUserExpression::GetRealStopInfo() {
   }
 
   return stop_info_sp;
-}
-
-void ThreadPlanCallUserExpression::DoTakedown(bool success) {
-  ThreadPlanCallFunction::DoTakedown(success);
-  m_user_expression_sp->DidFinishExecuting();
 }

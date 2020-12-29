@@ -1,8 +1,9 @@
 //===--- InitHeaderSearch.cpp - Initialize header search paths ------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,7 +14,6 @@
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Config/config.h" // C_INCLUDE_DIRS
-#include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Frontend/Utils.h"
 #include "clang/Lex/HeaderMap.h"
 #include "clang/Lex/HeaderSearch.h"
@@ -55,13 +55,11 @@ public:
 
   /// AddPath - Add the specified path to the specified group list, prefixing
   /// the sysroot if used.
-  /// Returns true if the path exists, false if it was ignored.
-  bool AddPath(const Twine &Path, IncludeDirGroup Group, bool isFramework);
+  void AddPath(const Twine &Path, IncludeDirGroup Group, bool isFramework);
 
   /// AddUnmappedPath - Add the specified path to the specified group list,
   /// without performing any sysroot remapping.
-  /// Returns true if the path exists, false if it was ignored.
-  bool AddUnmappedPath(const Twine &Path, IncludeDirGroup Group,
+  void AddUnmappedPath(const Twine &Path, IncludeDirGroup Group,
                        bool isFramework);
 
   /// AddSystemHeaderPrefix - Add the specified prefix to the system header
@@ -72,9 +70,10 @@ public:
 
   /// AddGnuCPlusPlusIncludePaths - Add the necessary paths to support a gnu
   ///  libstdc++.
-  /// Returns true if the \p Base path was found, false if it does not exist.
-  bool AddGnuCPlusPlusIncludePaths(StringRef Base, StringRef ArchDir,
-                                   StringRef Dir32, StringRef Dir64,
+  void AddGnuCPlusPlusIncludePaths(StringRef Base,
+                                   StringRef ArchDir,
+                                   StringRef Dir32,
+                                   StringRef Dir64,
                                    const llvm::Triple &triple);
 
   /// AddMinGWCPlusPlusIncludePaths - Add the necessary paths to support a MinGW
@@ -89,8 +88,7 @@ public:
 
   // AddDefaultCPlusPlusIncludePaths -  Add paths that should be searched when
   //  compiling c++.
-  void AddDefaultCPlusPlusIncludePaths(const LangOptions &LangOpts,
-                                       const llvm::Triple &triple,
+  void AddDefaultCPlusPlusIncludePaths(const llvm::Triple &triple,
                                        const HeaderSearchOptions &HSOpts);
 
   /// AddDefaultSystemIncludePaths - Adds the default system include paths so
@@ -107,14 +105,14 @@ public:
 }  // end anonymous namespace.
 
 static bool CanPrefixSysroot(StringRef Path) {
-#if defined(_WIN32)
+#if defined(LLVM_ON_WIN32)
   return !Path.empty() && llvm::sys::path::is_separator(Path[0]);
 #else
   return llvm::sys::path::is_absolute(Path);
 #endif
 }
 
-bool InitHeaderSearch::AddPath(const Twine &Path, IncludeDirGroup Group,
+void InitHeaderSearch::AddPath(const Twine &Path, IncludeDirGroup Group,
                                bool isFramework) {
   // Add the path with sysroot prepended, if desired and this is a system header
   // group.
@@ -122,27 +120,21 @@ bool InitHeaderSearch::AddPath(const Twine &Path, IncludeDirGroup Group,
     SmallString<256> MappedPathStorage;
     StringRef MappedPathStr = Path.toStringRef(MappedPathStorage);
     if (CanPrefixSysroot(MappedPathStr)) {
-      return AddUnmappedPath(IncludeSysroot + Path, Group, isFramework);
+      AddUnmappedPath(IncludeSysroot + Path, Group, isFramework);
+      return;
     }
   }
 
-  return AddUnmappedPath(Path, Group, isFramework);
+  AddUnmappedPath(Path, Group, isFramework);
 }
 
-bool InitHeaderSearch::AddUnmappedPath(const Twine &Path, IncludeDirGroup Group,
+void InitHeaderSearch::AddUnmappedPath(const Twine &Path, IncludeDirGroup Group,
                                        bool isFramework) {
   assert(!Path.isTriviallyEmpty() && "can't handle empty path here");
 
   FileManager &FM = Headers.getFileMgr();
   SmallString<256> MappedPathStorage;
   StringRef MappedPathStr = Path.toStringRef(MappedPathStorage);
-
-  // If use system headers while cross-compiling, emit the warning.
-  if (HasSysroot && (MappedPathStr.startswith("/usr/include") ||
-                     MappedPathStr.startswith("/usr/local/include"))) {
-    Headers.getDiags().Report(diag::warn_poison_system_directories)
-        << MappedPathStr;
-  }
 
   // Compute the DirectoryLookup type.
   SrcMgr::CharacteristicKind Type;
@@ -155,22 +147,22 @@ bool InitHeaderSearch::AddUnmappedPath(const Twine &Path, IncludeDirGroup Group,
   }
 
   // If the directory exists, add it.
-  if (auto DE = FM.getOptionalDirectoryRef(MappedPathStr)) {
+  if (const DirectoryEntry *DE = FM.getDirectory(MappedPathStr)) {
     IncludePath.push_back(
-      std::make_pair(Group, DirectoryLookup(*DE, Type, isFramework)));
-    return true;
+      std::make_pair(Group, DirectoryLookup(DE, Type, isFramework)));
+    return;
   }
 
   // Check to see if this is an apple-style headermap (which are not allowed to
   // be frameworks).
   if (!isFramework) {
-    if (auto FE = FM.getFile(MappedPathStr)) {
-      if (const HeaderMap *HM = Headers.CreateHeaderMap(*FE)) {
+    if (const FileEntry *FE = FM.getFile(MappedPathStr)) {
+      if (const HeaderMap *HM = Headers.CreateHeaderMap(FE)) {
         // It is a headermap, add it to the search path.
         IncludePath.push_back(
           std::make_pair(Group,
                          DirectoryLookup(HM, Type, Group == IndexHeaderMap)));
-        return true;
+        return;
       }
     }
   }
@@ -178,16 +170,15 @@ bool InitHeaderSearch::AddUnmappedPath(const Twine &Path, IncludeDirGroup Group,
   if (Verbose)
     llvm::errs() << "ignoring nonexistent directory \""
                  << MappedPathStr << "\"\n";
-  return false;
 }
 
-bool InitHeaderSearch::AddGnuCPlusPlusIncludePaths(StringRef Base,
+void InitHeaderSearch::AddGnuCPlusPlusIncludePaths(StringRef Base,
                                                    StringRef ArchDir,
                                                    StringRef Dir32,
                                                    StringRef Dir64,
                                                    const llvm::Triple &triple) {
   // Add the base dir
-  bool IsBaseFound = AddPath(Base, CXXSystem, false);
+  AddPath(Base, CXXSystem, false);
 
   // Add the multilib dirs
   llvm::Triple::ArchType arch = triple.getArch();
@@ -199,7 +190,6 @@ bool InitHeaderSearch::AddGnuCPlusPlusIncludePaths(StringRef Base,
 
   // Add the backward dir
   AddPath(Base + "/backward", CXXSystem, false);
-  return IsBaseFound;
 }
 
 void InitHeaderSearch::AddMinGWCPlusPlusIncludePaths(StringRef Base,
@@ -217,25 +207,20 @@ void InitHeaderSearch::AddDefaultCIncludePaths(const llvm::Triple &triple,
                                             const HeaderSearchOptions &HSOpts) {
   llvm::Triple::OSType os = triple.getOS();
 
-  if (triple.isOSDarwin()) {
-    llvm_unreachable("Include management is handled in the driver.");
-  }
-
   if (HSOpts.UseStandardSystemIncludes) {
     switch (os) {
     case llvm::Triple::CloudABI:
     case llvm::Triple::FreeBSD:
     case llvm::Triple::NetBSD:
     case llvm::Triple::OpenBSD:
+    case llvm::Triple::Bitrig:
     case llvm::Triple::NaCl:
     case llvm::Triple::PS4:
     case llvm::Triple::ELFIAMCU:
-    case llvm::Triple::Fuchsia:
       break;
     case llvm::Triple::Win32:
       if (triple.getEnvironment() != llvm::Triple::Cygnus)
         break;
-      LLVM_FALLTHROUGH;
     default:
       // FIXME: temporary hack: hard-coded paths.
       AddPath("/usr/local/include", System, false);
@@ -270,8 +255,6 @@ void InitHeaderSearch::AddDefaultCIncludePaths(const llvm::Triple &triple,
 
   switch (os) {
   case llvm::Triple::Linux:
-  case llvm::Triple::Hurd:
-  case llvm::Triple::Solaris:
     llvm_unreachable("Include management is handled in the driver.");
 
   case llvm::Triple::CloudABI: {
@@ -338,7 +321,6 @@ void InitHeaderSearch::AddDefaultCIncludePaths(const llvm::Triple &triple,
   case llvm::Triple::RTEMS:
   case llvm::Triple::NaCl:
   case llvm::Triple::ELFIAMCU:
-  case llvm::Triple::Fuchsia:
     break;
   case llvm::Triple::PS4: {
     // <isysroot> gets prepended later in AddPath().
@@ -361,7 +343,6 @@ void InitHeaderSearch::AddDefaultCIncludePaths(const llvm::Triple &triple,
     AddPath(BaseSDKPath + "/target/include", System, false);
     if (triple.isPS4CPU())
       AddPath(BaseSDKPath + "/target/include_common", System, false);
-    LLVM_FALLTHROUGH;
   }
   default:
     AddPath("/usr/include", ExternCSystem, false);
@@ -369,20 +350,51 @@ void InitHeaderSearch::AddDefaultCIncludePaths(const llvm::Triple &triple,
   }
 }
 
-void InitHeaderSearch::AddDefaultCPlusPlusIncludePaths(
-    const LangOptions &LangOpts, const llvm::Triple &triple,
-    const HeaderSearchOptions &HSOpts) {
+void InitHeaderSearch::
+AddDefaultCPlusPlusIncludePaths(const llvm::Triple &triple, const HeaderSearchOptions &HSOpts) {
   llvm::Triple::OSType os = triple.getOS();
   // FIXME: temporary hack: hard-coded paths.
 
   if (triple.isOSDarwin()) {
-    llvm_unreachable("Include management is handled in the driver.");
+    switch (triple.getArch()) {
+    default: break;
+
+    case llvm::Triple::ppc:
+    case llvm::Triple::ppc64:
+      AddGnuCPlusPlusIncludePaths("/usr/include/c++/4.2.1",
+                                  "powerpc-apple-darwin10", "", "ppc64",
+                                  triple);
+      AddGnuCPlusPlusIncludePaths("/usr/include/c++/4.0.0",
+                                  "powerpc-apple-darwin10", "", "ppc64",
+                                  triple);
+      break;
+
+    case llvm::Triple::x86:
+    case llvm::Triple::x86_64:
+      AddGnuCPlusPlusIncludePaths("/usr/include/c++/4.2.1",
+                                  "i686-apple-darwin10", "", "x86_64", triple);
+      AddGnuCPlusPlusIncludePaths("/usr/include/c++/4.0.0",
+                                  "i686-apple-darwin8", "", "", triple);
+      break;
+
+    case llvm::Triple::arm:
+    case llvm::Triple::thumb:
+      AddGnuCPlusPlusIncludePaths("/usr/include/c++/4.2.1",
+                                  "arm-apple-darwin10", "v7", "", triple);
+      AddGnuCPlusPlusIncludePaths("/usr/include/c++/4.2.1",
+                                  "arm-apple-darwin10", "v6", "", triple);
+      break;
+
+    case llvm::Triple::aarch64:
+      AddGnuCPlusPlusIncludePaths("/usr/include/c++/4.2.1",
+                                  "arm64-apple-darwin10", "", "", triple);
+      break;
+    }
+    return;
   }
 
   switch (os) {
   case llvm::Triple::Linux:
-  case llvm::Triple::Hurd:
-  case llvm::Triple::Solaris:
     llvm_unreachable("Include management is handled in the driver.");
     break;
   case llvm::Triple::Win32:
@@ -401,6 +413,14 @@ void InitHeaderSearch::AddDefaultCPlusPlusIncludePaths(
   case llvm::Triple::DragonFly:
     AddPath("/usr/include/c++/5.0", CXXSystem, false);
     break;
+  case llvm::Triple::OpenBSD: {
+    std::string t = triple.getTriple();
+    if (t.substr(0, 6) == "x86_64")
+      t.replace(0, 6, "amd64");
+    AddGnuCPlusPlusIncludePaths("/usr/include/g++",
+                                t, "", "", triple);
+    break;
+  }
   case llvm::Triple::Minix:
     AddGnuCPlusPlusIncludePaths("/usr/gnu/include/c++/4.4.3",
                                 "", "", "", triple);
@@ -421,11 +441,7 @@ void InitHeaderSearch::AddDefaultIncludePaths(const LangOptions &Lang,
   default:
     break; // Everything else continues to use this routine's logic.
 
-  case llvm::Triple::Emscripten:
   case llvm::Triple::Linux:
-  case llvm::Triple::Hurd:
-  case llvm::Triple::Solaris:
-  case llvm::Triple::WASI:
     return;
 
   case llvm::Triple::Win32:
@@ -433,34 +449,42 @@ void InitHeaderSearch::AddDefaultIncludePaths(const LangOptions &Lang,
         triple.isOSBinFormatMachO())
       return;
     break;
-
-  case llvm::Triple::UnknownOS:
-    if (triple.getArch() == llvm::Triple::wasm32 ||
-        triple.getArch() == llvm::Triple::wasm64)
-      return;
-    break;
   }
 
-  // All header search logic is handled in the Driver for Darwin.
-  if (triple.isOSDarwin()) {
-    if (HSOpts.UseStandardSystemIncludes) {
-      // Add the default framework include paths on Darwin.
-      AddPath("/System/Library/Frameworks", System, true);
-      AddPath("/Library/Frameworks", System, true);
-    }
-    return;
-  }
-
-  if (Lang.CPlusPlus && !Lang.AsmPreprocessor &&
-      HSOpts.UseStandardCXXIncludes && HSOpts.UseStandardSystemIncludes) {
+  if (Lang.CPlusPlus && HSOpts.UseStandardCXXIncludes &&
+      HSOpts.UseStandardSystemIncludes) {
     if (HSOpts.UseLibcxx) {
+      if (triple.isOSDarwin()) {
+        // On Darwin, libc++ may be installed alongside the compiler in
+        // include/c++/v1.
+        if (!HSOpts.ResourceDir.empty()) {
+          // Remove version from foo/lib/clang/version
+          StringRef NoVer = llvm::sys::path::parent_path(HSOpts.ResourceDir);
+          // Remove clang from foo/lib/clang
+          StringRef Lib = llvm::sys::path::parent_path(NoVer);
+          // Remove lib from foo/lib
+          SmallString<128> P = llvm::sys::path::parent_path(Lib);
+
+          // Get foo/include/c++/v1
+          llvm::sys::path::append(P, "include", "c++", "v1");
+          AddUnmappedPath(P, CXXSystem, false);
+        }
+      }
       AddPath("/usr/include/c++/v1", CXXSystem, false);
     } else {
-      AddDefaultCPlusPlusIncludePaths(Lang, triple, HSOpts);
+      AddDefaultCPlusPlusIncludePaths(triple, HSOpts);
     }
   }
 
   AddDefaultCIncludePaths(triple, HSOpts);
+
+  // Add the default framework include paths on Darwin.
+  if (HSOpts.UseStandardSystemIncludes) {
+    if (triple.isOSDarwin()) {
+      AddPath("/System/Library/Frameworks", System, true);
+      AddPath("/Library/Frameworks", System, true);
+    }
+  }
 }
 
 /// RemoveDuplicates - If there are duplicate directory entries in the specified
@@ -573,11 +597,11 @@ void InitHeaderSearch::Realize(const LangOptions &Lang) {
 
   for (auto &Include : IncludePath)
     if (Include.first == System || Include.first == ExternCSystem ||
-        (!Lang.ObjC && !Lang.CPlusPlus && Include.first == CSystem) ||
-        (/*FIXME !Lang.ObjC && */ Lang.CPlusPlus &&
+        (!Lang.ObjC1 && !Lang.CPlusPlus && Include.first == CSystem) ||
+        (/*FIXME !Lang.ObjC1 && */ Lang.CPlusPlus &&
          Include.first == CXXSystem) ||
-        (Lang.ObjC && !Lang.CPlusPlus && Include.first == ObjCSystem) ||
-        (Lang.ObjC && Lang.CPlusPlus && Include.first == ObjCXXSystem))
+        (Lang.ObjC1 && !Lang.CPlusPlus && Include.first == ObjCSystem) ||
+        (Lang.ObjC1 && Lang.CPlusPlus && Include.first == ObjCXXSystem))
       SearchList.push_back(Include.second);
 
   for (auto &Include : IncludePath)
@@ -643,8 +667,8 @@ void clang::ApplyHeaderSearchOptions(HeaderSearch &HS,
     // Set up the builtin include directory in the module map.
     SmallString<128> P = StringRef(HSOpts.ResourceDir);
     llvm::sys::path::append(P, "include");
-    if (auto Dir = HS.getFileMgr().getDirectory(P))
-      HS.getModuleMap().setBuiltinIncludeDir(*Dir);
+    if (const DirectoryEntry *Dir = HS.getFileMgr().getDirectory(P))
+      HS.getModuleMap().setBuiltinIncludeDir(Dir);
   }
 
   Init.Realize(Lang);

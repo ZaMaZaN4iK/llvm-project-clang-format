@@ -1,9 +1,3 @@
-add_lldb_library(lldbPluginPlatformFreeBSD PLUGIN
+add_lldb_library(lldbPluginPlatformFreeBSD
   PlatformFreeBSD.cpp
-
-   LINK_LIBS
-    lldbBreakpoint
-    lldbCore
-    lldbHost
-    lldbTarget
   )

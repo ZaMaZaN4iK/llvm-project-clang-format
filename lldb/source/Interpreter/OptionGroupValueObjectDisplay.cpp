@@ -1,18 +1,23 @@
 //===-- OptionGroupValueObjectDisplay.cpp -----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Interpreter/OptionGroupValueObjectDisplay.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/DataFormatters/ValueObjectPrinter.h"
-#include "lldb/Host/OptionParser.h"
+#include "lldb/Host/StringConvert.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
-#include "lldb/Interpreter/OptionArgParser.h"
 #include "lldb/Target/Target.h"
+#include "lldb/Utility/Utils.h"
 
 #include "llvm/ADT/ArrayRef.h"
 
@@ -23,44 +28,46 @@ OptionGroupValueObjectDisplay::OptionGroupValueObjectDisplay() {}
 
 OptionGroupValueObjectDisplay::~OptionGroupValueObjectDisplay() {}
 
-static const OptionDefinition g_option_table[] = {
+static OptionDefinition g_option_table[] = {
     {LLDB_OPT_SET_1, false, "dynamic-type", 'd',
-     OptionParser::eRequiredArgument, nullptr, GetDynamicValueTypes(), 0,
+     OptionParser::eRequiredArgument, nullptr, g_dynamic_value_types, 0,
      eArgTypeNone, "Show the object as its full dynamic type, not its static "
                    "type, if available."},
     {LLDB_OPT_SET_1, false, "synthetic-type", 'S',
-     OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeBoolean,
+     OptionParser::eRequiredArgument, nullptr, nullptr, 0, eArgTypeBoolean,
      "Show the object obeying its synthetic provider, if available."},
     {LLDB_OPT_SET_1, false, "depth", 'D', OptionParser::eRequiredArgument,
-     nullptr, {}, 0, eArgTypeCount, "Set the max recurse depth when dumping "
-                                    "aggregate types (default is infinity)."},
+     nullptr, nullptr, 0, eArgTypeCount, "Set the max recurse depth when "
+                                         "dumping aggregate types (default is "
+                                         "infinity)."},
     {LLDB_OPT_SET_1, false, "flat", 'F', OptionParser::eNoArgument, nullptr,
-     {}, 0, eArgTypeNone, "Display results in a flat format that uses "
-                          "expression paths for each variable or member."},
+     nullptr, 0, eArgTypeNone, "Display results in a flat format that uses "
+                               "expression paths for each variable or member."},
     {LLDB_OPT_SET_1, false, "location", 'L', OptionParser::eNoArgument, nullptr,
-     {}, 0, eArgTypeNone, "Show variable location information."},
+     nullptr, 0, eArgTypeNone, "Show variable location information."},
     {LLDB_OPT_SET_1, false, "object-description", 'O',
-     OptionParser::eNoArgument, nullptr, {}, 0, eArgTypeNone,
-     "Display using a language-specific description API, if possible."},
+     OptionParser::eNoArgument, nullptr, nullptr, 0, eArgTypeNone,
+     "Print as an Objective-C object."},
     {LLDB_OPT_SET_1, false, "ptr-depth", 'P', OptionParser::eRequiredArgument,
-     nullptr, {}, 0, eArgTypeCount, "The number of pointers to be traversed "
-                                    "when dumping values (default is zero)."},
+     nullptr, nullptr, 0, eArgTypeCount, "The number of pointers to be "
+                                         "traversed when dumping values "
+                                         "(default is zero)."},
     {LLDB_OPT_SET_1, false, "show-types", 'T', OptionParser::eNoArgument,
-     nullptr, {}, 0, eArgTypeNone,
+     nullptr, nullptr, 0, eArgTypeNone,
      "Show variable types when dumping values."},
     {LLDB_OPT_SET_1, false, "no-summary-depth", 'Y',
-     OptionParser::eOptionalArgument, nullptr, {}, 0, eArgTypeCount,
+     OptionParser::eOptionalArgument, nullptr, nullptr, 0, eArgTypeCount,
      "Set the depth at which omitting summary information stops (default is "
      "1)."},
     {LLDB_OPT_SET_1, false, "raw-output", 'R', OptionParser::eNoArgument,
-     nullptr, {}, 0, eArgTypeNone, "Don't use formatting options."},
+     nullptr, nullptr, 0, eArgTypeNone, "Don't use formatting options."},
     {LLDB_OPT_SET_1, false, "show-all-children", 'A', OptionParser::eNoArgument,
-     nullptr, {}, 0, eArgTypeNone,
+     nullptr, nullptr, 0, eArgTypeNone,
      "Ignore the upper bound on the number of children to show."},
     {LLDB_OPT_SET_1, false, "validate", 'V', OptionParser::eRequiredArgument,
-     nullptr, {}, 0, eArgTypeBoolean, "Show results of type validators."},
+     nullptr, nullptr, 0, eArgTypeBoolean, "Show results of type validators."},
     {LLDB_OPT_SET_1, false, "element-count", 'Z',
-     OptionParser::eRequiredArgument, nullptr, {}, 0, eArgTypeCount,
+     OptionParser::eRequiredArgument, nullptr, nullptr, 0, eArgTypeCount,
      "Treat the result of the expression as if its type is an array of this "
      "many values."}};
 
@@ -69,18 +76,18 @@ OptionGroupValueObjectDisplay::GetDefinitions() {
   return llvm::makeArrayRef(g_option_table);
 }
 
-Status OptionGroupValueObjectDisplay::SetOptionValue(
+Error OptionGroupValueObjectDisplay::SetOptionValue(
     uint32_t option_idx, llvm::StringRef option_arg,
     ExecutionContext *execution_context) {
-  Status error;
+  Error error;
   const int short_option = g_option_table[option_idx].short_option;
   bool success = false;
 
   switch (short_option) {
   case 'd': {
     int32_t result;
-    result = OptionArgParser::ToOptionEnum(option_arg, GetDynamicValueTypes(),
-                                           2, error);
+    result =
+        Args::StringToOptionEnum(option_arg, g_dynamic_value_types, 2, error);
     if (error.Success())
       use_dynamic = (lldb::DynamicValueType)result;
   } break;
@@ -138,21 +145,22 @@ Status OptionGroupValueObjectDisplay::SetOptionValue(
     break;
 
   case 'S':
-    use_synth = OptionArgParser::ToBoolean(option_arg, true, &success);
+    use_synth = Args::StringToBoolean(option_arg, true, &success);
     if (!success)
       error.SetErrorStringWithFormat("invalid synthetic-type '%s'",
                                      option_arg.str().c_str());
     break;
 
   case 'V':
-    run_validator = OptionArgParser::ToBoolean(option_arg, true, &success);
+    run_validator = Args::StringToBoolean(option_arg, true, &success);
     if (!success)
       error.SetErrorStringWithFormat("invalid validate '%s'",
                                      option_arg.str().c_str());
     break;
 
   default:
-    llvm_unreachable("Unimplemented option");
+    error.SetErrorStringWithFormat("unrecognized option '%c'", short_option);
+    break;
   }
 
   return error;

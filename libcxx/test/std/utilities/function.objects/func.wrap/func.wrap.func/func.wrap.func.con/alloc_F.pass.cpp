@@ -1,13 +1,14 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // <functional>
-// REQUIRES: c++98 || c++03 || c++11 || c++14
+// REQUIRES-ANY: c++98, c++03, c++11, c++14
 
 // class function<R(ArgTypes...)>
 
@@ -19,7 +20,7 @@
 #include "test_macros.h"
 #include "min_allocator.h"
 #include "test_allocator.h"
-#include "count_new.h"
+#include "count_new.hpp"
 #include "../function_types.h"
 
 
@@ -64,9 +65,7 @@ void test_FreeFunction(AllocType& alloc)
     FuncType* target = &FreeFunction;
     assert(globalMemCounter.checkOutstandingNewEq(0));
     std::function<FuncType> f2(std::allocator_arg, alloc, target);
-    // The allocator may not fit in the small object buffer, if we allocated
-    // check it was done via the allocator.
-    assert(globalMemCounter.checkOutstandingNewEq(test_alloc_base::alloc_count));
+    assert(globalMemCounter.checkOutstandingNewEq(0));
     assert(f2.template target<FuncType*>());
     assert(*f2.template target<FuncType*>() == target);
     assert(f2.template target<FuncType>() == 0);
@@ -83,7 +82,7 @@ void test_MemFunClass(AllocType& alloc)
     TargetType target = &MemFunClass::foo;
     assert(globalMemCounter.checkOutstandingNewEq(0));
     std::function<FuncType> f2(std::allocator_arg, alloc, target);
-    assert(globalMemCounter.checkOutstandingNewEq(test_alloc_base::alloc_count));
+    assert(globalMemCounter.checkOutstandingNewEq(0));
     assert(f2.template target<TargetType>());
     assert(*f2.template target<TargetType>() == target);
     assert(f2.template target<FuncType*>() == 0);
@@ -108,7 +107,7 @@ void test_for_alloc(Alloc& alloc) {
     test_MemFunClass<int(MemFunClass::*)(int, int) const, int(MemFunClass&, int, int)>(alloc);
 }
 
-int main(int, char**)
+int main()
 {
     {
         bare_allocator<DummyClass> bare_alloc;
@@ -128,6 +127,4 @@ int main(int, char**)
     }
 #endif
 
-
-  return 0;
 }

@@ -1,8 +1,9 @@
 //===--- UseUsingCheck.cpp - clang-tidy------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,97 +17,76 @@ namespace clang {
 namespace tidy {
 namespace modernize {
 
-UseUsingCheck::UseUsingCheck(StringRef Name, ClangTidyContext *Context)
-    : ClangTidyCheck(Name, Context),
-      IgnoreMacros(Options.getLocalOrGlobal("IgnoreMacros", true)) {}
-
 void UseUsingCheck::registerMatchers(MatchFinder *Finder) {
   if (!getLangOpts().CPlusPlus11)
     return;
-  Finder->addMatcher(typedefDecl(unless(isInstantiated())).bind("typedef"),
-                     this);
-  // This matcher used to find structs defined in source code within typedefs.
-  // They appear in the AST just *prior* to the typedefs.
-  Finder->addMatcher(cxxRecordDecl(unless(isImplicit())).bind("struct"), this);
+  Finder->addMatcher(typedefDecl().bind("typedef"), this);
+}
+
+// Checks if 'typedef' keyword can be removed - we do it only if
+// it is the only declaration in a declaration chain.
+static bool CheckRemoval(SourceManager &SM, const SourceLocation &LocStart,
+                         const SourceLocation &LocEnd, ASTContext &Context,
+                         SourceRange &ResultRange) {
+  FileID FID = SM.getFileID(LocEnd);
+  llvm::MemoryBuffer *Buffer = SM.getBuffer(FID, LocEnd);
+  Lexer DeclLexer(SM.getLocForStartOfFile(FID), Context.getLangOpts(),
+                  Buffer->getBufferStart(), SM.getCharacterData(LocStart),
+                  Buffer->getBufferEnd());
+  Token DeclToken;
+  bool result = false;
+  int parenthesisLevel = 0;
+
+  while (!DeclLexer.LexFromRawLexer(DeclToken)) {
+    if (DeclToken.getKind() == tok::TokenKind::l_paren)
+      parenthesisLevel++;
+    if (DeclToken.getKind() == tok::TokenKind::r_paren)
+      parenthesisLevel--;
+    if (DeclToken.getKind() == tok::TokenKind::semi)
+      break;
+    // if there is comma and we are not between open parenthesis then it is
+    // two or more declatarions in this chain
+    if (parenthesisLevel == 0 && DeclToken.getKind() == tok::TokenKind::comma)
+      return false;
+
+    if (DeclToken.isOneOf(tok::TokenKind::identifier,
+                          tok::TokenKind::raw_identifier)) {
+      auto TokenStr = DeclToken.getRawIdentifier().str();
+
+      if (TokenStr == "typedef") {
+        ResultRange =
+            SourceRange(DeclToken.getLocation(), DeclToken.getEndLoc());
+        result = true;
+      }
+    }
+  }
+  // assert if there was keyword 'typedef' in declaration
+  assert(result && "No typedef found");
+
+  return result;
 }
 
 void UseUsingCheck::check(const MatchFinder::MatchResult &Result) {
-  // Match CXXRecordDecl only to store the range of the last non-implicit full
-  // declaration, to later check whether it's within the typdef itself.
-  const auto *MatchedCxxRecordDecl =
-      Result.Nodes.getNodeAs<CXXRecordDecl>("struct");
-  if (MatchedCxxRecordDecl) {
-    LastCxxDeclRange = MatchedCxxRecordDecl->getSourceRange();
-    return;
-  }
-
   const auto *MatchedDecl = Result.Nodes.getNodeAs<TypedefDecl>("typedef");
   if (MatchedDecl->getLocation().isInvalid())
     return;
 
-  SourceLocation StartLoc = MatchedDecl->getBeginLoc();
+  auto &Context = *Result.Context;
+  auto &SM = *Result.SourceManager;
 
-  if (StartLoc.isMacroID() && IgnoreMacros)
-    return;
-
-  static const char *UseUsingWarning = "use 'using' instead of 'typedef'";
-
-  // Warn at StartLoc but do not fix if there is macro or array.
-  if (MatchedDecl->getUnderlyingType()->isArrayType() || StartLoc.isMacroID()) {
-    diag(StartLoc, UseUsingWarning);
+  auto Diag =
+      diag(MatchedDecl->getLocStart(), "use 'using' instead of 'typedef'");
+  if (MatchedDecl->getLocStart().isMacroID()) {
     return;
   }
-
-  auto printPolicy = PrintingPolicy(getLangOpts());
-  printPolicy.SuppressScope = true;
-  printPolicy.ConstantArraySizeAsWritten = true;
-  printPolicy.UseVoidForZeroParams = false;
-
-  std::string Type = MatchedDecl->getUnderlyingType().getAsString(printPolicy);
-  std::string Name = MatchedDecl->getNameAsString();
-  SourceRange ReplaceRange = MatchedDecl->getSourceRange();
-
-  // typedefs with multiple comma-separated definitions produce multiple
-  // consecutive TypedefDecl nodes whose SourceRanges overlap. Each range starts
-  // at the "typedef" and then continues *across* previous definitions through
-  // the end of the current TypedefDecl definition.
-  std::string Using = "using ";
-  if (ReplaceRange.getBegin().isMacroID() ||
-      ReplaceRange.getBegin() >= LastReplacementEnd) {
-    // This is the first (and possibly the only) TypedefDecl in a typedef. Save
-    // Type and Name in case we find subsequent TypedefDecl's in this typedef.
-    FirstTypedefType = Type;
-    FirstTypedefName = Name;
-  } else {
-    // This is additional TypedefDecl in a comma-separated typedef declaration.
-    // Start replacement *after* prior replacement and separate with semicolon.
-    ReplaceRange.setBegin(LastReplacementEnd);
-    Using = ";\nusing ";
-
-    // If this additional TypedefDecl's Type starts with the first TypedefDecl's
-    // type, make this using statement refer back to the first type, e.g. make
-    // "typedef int Foo, *Foo_p;" -> "using Foo = int;\nusing Foo_p = Foo*;"
-    if (Type.size() > FirstTypedefType.size() &&
-        Type.substr(0, FirstTypedefType.size()) == FirstTypedefType)
-      Type = FirstTypedefName + Type.substr(FirstTypedefType.size() + 1);
+  SourceRange RemovalRange;
+  if (CheckRemoval(SM, MatchedDecl->getLocStart(), MatchedDecl->getLocEnd(),
+                   Context, RemovalRange)) {
+    Diag << FixItHint::CreateReplacement(
+        MatchedDecl->getSourceRange(),
+        "using " + MatchedDecl->getNameAsString() + " = " +
+            MatchedDecl->getUnderlyingType().getAsString(getLangOpts()));
   }
-  if (!ReplaceRange.getEnd().isMacroID())
-    LastReplacementEnd = ReplaceRange.getEnd().getLocWithOffset(Name.size());
-
-  auto Diag = diag(ReplaceRange.getBegin(), UseUsingWarning);
-
-  // If typedef contains a full struct/class declaration, extract its full text.
-  if (LastCxxDeclRange.isValid() && ReplaceRange.fullyContains(LastCxxDeclRange)) {
-    bool Invalid;
-    Type =
-        Lexer::getSourceText(CharSourceRange::getTokenRange(LastCxxDeclRange),
-                             *Result.SourceManager, getLangOpts(), &Invalid);
-    if (Invalid)
-      return;
-  }
-
-  std::string Replacement = Using + Name + " = " + Type;
-  Diag << FixItHint::CreateReplacement(ReplaceRange, Replacement);
 }
 
 } // namespace modernize

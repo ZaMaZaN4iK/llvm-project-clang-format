@@ -1,13 +1,13 @@
 //===-- SBSourceManager.cpp -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/API/SBSourceManager.h"
-#include "SBReproducerPrivate.h"
 #include "lldb/API/SBDebugger.h"
 #include "lldb/API/SBStream.h"
 #include "lldb/API/SBTarget.h"
@@ -15,8 +15,8 @@
 #include "lldb/API/SBFileSpec.h"
 #include "lldb/Core/Debugger.h"
 #include "lldb/Core/SourceManager.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Core/StreamFile.h"
-#include "lldb/Utility/Stream.h"
 
 #include "lldb/Target/Target.h"
 
@@ -72,36 +72,24 @@ using namespace lldb;
 using namespace lldb_private;
 
 SBSourceManager::SBSourceManager(const SBDebugger &debugger) {
-  LLDB_RECORD_CONSTRUCTOR(SBSourceManager, (const lldb::SBDebugger &),
-                          debugger);
-
-  m_opaque_up.reset(new SourceManagerImpl(debugger.get_sp()));
+  m_opaque_ap.reset(new SourceManagerImpl(debugger.get_sp()));
 }
 
 SBSourceManager::SBSourceManager(const SBTarget &target) {
-  LLDB_RECORD_CONSTRUCTOR(SBSourceManager, (const lldb::SBTarget &), target);
-
-  m_opaque_up.reset(new SourceManagerImpl(target.GetSP()));
+  m_opaque_ap.reset(new SourceManagerImpl(target.GetSP()));
 }
 
 SBSourceManager::SBSourceManager(const SBSourceManager &rhs) {
-  LLDB_RECORD_CONSTRUCTOR(SBSourceManager, (const lldb::SBSourceManager &),
-                          rhs);
-
   if (&rhs == this)
     return;
 
-  m_opaque_up.reset(new SourceManagerImpl(*(rhs.m_opaque_up.get())));
+  m_opaque_ap.reset(new SourceManagerImpl(*(rhs.m_opaque_ap.get())));
 }
 
 const lldb::SBSourceManager &SBSourceManager::
 operator=(const lldb::SBSourceManager &rhs) {
-  LLDB_RECORD_METHOD(const lldb::SBSourceManager &,
-                     SBSourceManager, operator=,(const lldb::SBSourceManager &),
-                     rhs);
-
-  m_opaque_up.reset(new SourceManagerImpl(*(rhs.m_opaque_up.get())));
-  return LLDB_RECORD_RESULT(*this);
+  m_opaque_ap.reset(new SourceManagerImpl(*(rhs.m_opaque_ap.get())));
+  return *this;
 }
 
 SBSourceManager::~SBSourceManager() {}
@@ -109,12 +97,6 @@ SBSourceManager::~SBSourceManager() {}
 size_t SBSourceManager::DisplaySourceLinesWithLineNumbers(
     const SBFileSpec &file, uint32_t line, uint32_t context_before,
     uint32_t context_after, const char *current_line_cstr, SBStream &s) {
-  LLDB_RECORD_METHOD(size_t, SBSourceManager, DisplaySourceLinesWithLineNumbers,
-                     (const lldb::SBFileSpec &, uint32_t, uint32_t, uint32_t,
-                      const char *, lldb::SBStream &),
-                     file, line, context_before, context_after,
-                     current_line_cstr, s);
-
   const uint32_t column = 0;
   return DisplaySourceLinesWithLineNumbersAndColumn(
       file.ref(), line, column, context_before, context_after,
@@ -125,40 +107,10 @@ size_t SBSourceManager::DisplaySourceLinesWithLineNumbersAndColumn(
     const SBFileSpec &file, uint32_t line, uint32_t column,
     uint32_t context_before, uint32_t context_after,
     const char *current_line_cstr, SBStream &s) {
-  LLDB_RECORD_METHOD(
-      size_t, SBSourceManager, DisplaySourceLinesWithLineNumbersAndColumn,
-      (const lldb::SBFileSpec &, uint32_t, uint32_t, uint32_t, uint32_t,
-       const char *, lldb::SBStream &),
-      file, line, column, context_before, context_after, current_line_cstr, s);
-
-  if (m_opaque_up == nullptr)
+  if (m_opaque_ap.get() == NULL)
     return 0;
 
-  return m_opaque_up->DisplaySourceLinesWithLineNumbers(
+  return m_opaque_ap->DisplaySourceLinesWithLineNumbers(
       file.ref(), line, column, context_before, context_after,
       current_line_cstr, s.get());
-}
-
-namespace lldb_private {
-namespace repro {
-
-template <>
-void RegisterMethods<SBSourceManager>(Registry &R) {
-  LLDB_REGISTER_CONSTRUCTOR(SBSourceManager, (const lldb::SBDebugger &));
-  LLDB_REGISTER_CONSTRUCTOR(SBSourceManager, (const lldb::SBTarget &));
-  LLDB_REGISTER_CONSTRUCTOR(SBSourceManager, (const lldb::SBSourceManager &));
-  LLDB_REGISTER_METHOD(
-      const lldb::SBSourceManager &,
-      SBSourceManager, operator=,(const lldb::SBSourceManager &));
-  LLDB_REGISTER_METHOD(size_t, SBSourceManager,
-                       DisplaySourceLinesWithLineNumbers,
-                       (const lldb::SBFileSpec &, uint32_t, uint32_t,
-                        uint32_t, const char *, lldb::SBStream &));
-  LLDB_REGISTER_METHOD(size_t, SBSourceManager,
-                       DisplaySourceLinesWithLineNumbersAndColumn,
-                       (const lldb::SBFileSpec &, uint32_t, uint32_t,
-                        uint32_t, uint32_t, const char *, lldb::SBStream &));
-}
-
-}
 }

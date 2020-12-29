@@ -4,5 +4,4 @@
 
 void testAsmImport() {
   asmFunc(12, 42);
-  asmFunc2(42);
 }

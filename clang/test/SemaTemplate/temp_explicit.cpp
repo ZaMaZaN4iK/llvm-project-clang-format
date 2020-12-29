@@ -1,6 +1,4 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -pedantic -Wc++11-compat %s
-// RUN: %clang_cc1 -fsyntax-only -verify -pedantic -Wc++11-compat -std=c++98 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -pedantic -std=c++11 %s
 //
 // Tests explicit instantiation of templates.
 template<typename T, typename U = T> class X0 { };
@@ -100,12 +98,7 @@ void f4(X5<float&>::Inner2);
 template struct X5<float&>::Inner2; // expected-note{{instantiation}}
 
 namespace N3 {
-  template struct N2::X5<int>::Inner2;
-#if __cplusplus <= 199711L
-// expected-warning@-2 {{explicit instantiation of 'Inner2' not in a namespace enclosing 'N2'}}
-#else
-// expected-error@-4 {{explicit instantiation of 'Inner2' not in a namespace enclosing 'N2'}}
-#endif
+  template struct N2::X5<int>::Inner2; // expected-warning {{explicit instantiation of 'Inner2' not in a namespace enclosing 'N2'}}
 }
 
 struct X6 {
@@ -152,17 +145,7 @@ template struct ::N1::Inner::X8<float>;
 namespace N2 {
   using namespace N1;
 
-  template struct X7<double>;
-#if __cplusplus <= 199711L
-// expected-warning@-2 {{explicit instantiation of 'N1::X7' must occur in namespace 'N1'}}
-#else
-// expected-error@-4 {{explicit instantiation of 'N1::X7' must occur in namespace 'N1'}}
-#endif
+  template struct X7<double>; // expected-warning{{must occur in namespace}}
 
-  template struct X9<float>;
-#if __cplusplus <= 199711L
-// expected-warning@-2 {{explicit instantiation of 'X9' must occur at global scope}}
-#else
-// expected-error@-4 {{explicit instantiation of 'X9' must occur at global scope}}
-#endif
+  template struct X9<float>; // expected-warning{{must occur at global scope}}
 }

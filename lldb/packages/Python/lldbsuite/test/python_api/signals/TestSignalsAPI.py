@@ -2,8 +2,11 @@
 Test SBProcess APIs, including ReadMemory(), WriteMemory(), and others.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -13,14 +16,13 @@ from lldbsuite.test.lldbutil import get_stopped_thread, state_type_to_str
 
 class SignalsAPITestCase(TestBase):
     mydir = TestBase.compute_mydir(__file__)
-    NO_DEBUG_INFO_TESTCASE = True
 
     @add_test_categories(['pyapi'])
     @skipIfWindows  # Windows doesn't have signals
     def test_ignore_signal(self):
         """Test Python SBUnixSignals.Suppress/Stop/Notify() API."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         target = self.dbg.CreateTarget(exe)

@@ -1,29 +1,16 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-// test libc++'s implementation of align_val_t, and the relevant new/delete
+// test libc++'s implementation of align_val_t, and the relevent new/delete
 // overloads in all dialects when -faligned-allocation is present.
 
-// Libc++ defers to the underlying MSVC library to provide the new/delete
-// definitions, which does not yet provide aligned allocation
-// XFAIL: LIBCXX-WINDOWS-FIXME
-
 // REQUIRES: -faligned-allocation
-
-// The dylibs shipped before macosx10.13 do not contain the aligned allocation
-// functions, so trying to force using those with -faligned-allocation results
-// in a link error.
-// XFAIL: with_system_cxx_lib=macosx10.12
-// XFAIL: with_system_cxx_lib=macosx10.11
-// XFAIL: with_system_cxx_lib=macosx10.10
-// XFAIL: with_system_cxx_lib=macosx10.9
-// XFAIL: with_system_cxx_lib=macosx10.8
-// XFAIL: with_system_cxx_lib=macosx10.7
 
 // RUN: %build -faligned-allocation
 // RUN: %run
@@ -35,7 +22,7 @@
 
 #include "test_macros.h"
 
-int main(int, char**) {
+int main() {
   {
     static_assert(std::is_enum<std::align_val_t>::value, "");
     typedef std::underlying_type<std::align_val_t>::type UT;
@@ -87,6 +74,4 @@ int main(int, char**) {
     assert(typeid(std::align_val_t).name() == std::string("St11align_val_t"));
   }
 #endif
-
-  return 0;
 }

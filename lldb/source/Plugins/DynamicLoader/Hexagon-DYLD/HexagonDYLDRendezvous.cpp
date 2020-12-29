@@ -1,18 +1,23 @@
 //===-- HexagonDYLDRendezvous.cpp -------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+#include "lldb/Core/ArchSpec.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Symbol/Symbol.h"
 #include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Status.h"
 
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Target/Process.h"
@@ -28,7 +33,7 @@ using namespace lldb_private;
 static addr_t ResolveRendezvousAddress(Process *process) {
   addr_t info_location;
   addr_t info_addr;
-  Status error;
+  Error error;
 
   info_location = process->GetImageInfoAddress();
 
@@ -114,8 +119,8 @@ bool HexagonDYLDRendezvous::UpdateSOEntries() {
   if (m_current.map_addr == 0)
     return false;
 
-  // When the previous and current states are consistent this is the first time
-  // we have been asked to update.  Just take a snapshot of the currently
+  // When the previous and current states are consistent this is the first
+  // time we have been asked to update.  Just take a snapshot of the currently
   // loaded modules.
   if (m_previous.state == eConsistent && m_current.state == eConsistent)
     return TakeSnapshot(m_soentries);
@@ -125,8 +130,8 @@ bool HexagonDYLDRendezvous::UpdateSOEntries() {
   if (m_current.state == eAdd || m_current.state == eDelete) {
     // this is a fudge so that we can clear the assert below.
     m_previous.state = eConsistent;
-    // We hit this assert on the 2nd run of this function after running the
-    // calc example
+    // We hit this assert on the 2nd run of this function after running the calc
+    // example
     assert(m_previous.state == eConsistent);
     m_soentries.clear();
     m_added_soentries.clear();
@@ -158,9 +163,9 @@ bool HexagonDYLDRendezvous::UpdateSOEntriesForAddition() {
     if (!ReadSOEntryFromMemory(cursor, entry))
       return false;
 
-    // Only add shared libraries and not the executable. On Linux this is
-    // indicated by an empty path in the entry. On FreeBSD it is the name of
-    // the executable.
+    // Only add shared libraries and not the executable.
+    // On Linux this is indicated by an empty path in the entry.
+    // On FreeBSD it is the name of the executable.
     if (entry.path.empty() || ::strcmp(entry.path.c_str(), m_exe_path) == 0)
       continue;
 
@@ -203,9 +208,9 @@ bool HexagonDYLDRendezvous::TakeSnapshot(SOEntryList &entry_list) {
     if (!ReadSOEntryFromMemory(cursor, entry))
       return false;
 
-    // Only add shared libraries and not the executable. On Linux this is
-    // indicated by an empty path in the entry. On FreeBSD it is the name of
-    // the executable.
+    // Only add shared libraries and not the executable.
+    // On Linux this is indicated by an empty path in the entry.
+    // On FreeBSD it is the name of the executable.
     if (entry.path.empty() || ::strcmp(entry.path.c_str(), m_exe_path) == 0)
       continue;
 
@@ -217,7 +222,7 @@ bool HexagonDYLDRendezvous::TakeSnapshot(SOEntryList &entry_list) {
 
 addr_t HexagonDYLDRendezvous::ReadWord(addr_t addr, uint64_t *dst,
                                        size_t size) {
-  Status error;
+  Error error;
 
   *dst = m_process->ReadUnsignedIntegerFromMemory(addr, size, 0, error);
   if (error.Fail())
@@ -227,7 +232,7 @@ addr_t HexagonDYLDRendezvous::ReadWord(addr_t addr, uint64_t *dst,
 }
 
 addr_t HexagonDYLDRendezvous::ReadPointer(addr_t addr, addr_t *dst) {
-  Status error;
+  Error error;
 
   *dst = m_process->ReadPointerFromMemory(addr, error);
   if (error.Fail())
@@ -238,7 +243,7 @@ addr_t HexagonDYLDRendezvous::ReadPointer(addr_t addr, addr_t *dst) {
 
 std::string HexagonDYLDRendezvous::ReadStringFromMemory(addr_t addr) {
   std::string str;
-  Status error;
+  Error error;
   size_t size;
   char c;
 
@@ -290,9 +295,8 @@ bool HexagonDYLDRendezvous::FindMetadata(const char *name, PThreadField field,
   Target &target = m_process->GetTarget();
 
   SymbolContextList list;
-  target.GetImages().FindSymbolsWithNameAndType(ConstString(name),
-                                                eSymbolTypeAny, list);
-  if (list.IsEmpty())
+  if (!target.GetImages().FindSymbolsWithNameAndType(ConstString(name),
+                                                     eSymbolTypeAny, list))
     return false;
 
   Address address = list[0].symbol->GetAddress();
@@ -300,7 +304,7 @@ bool HexagonDYLDRendezvous::FindMetadata(const char *name, PThreadField field,
   if (addr == LLDB_INVALID_ADDRESS)
     return false;
 
-  Status error;
+  Error error;
   value = (uint32_t)m_process->ReadUnsignedIntegerFromMemory(
       addr + field * sizeof(uint32_t), sizeof(uint32_t), 0, error);
   if (error.Fail())
@@ -340,16 +344,16 @@ void HexagonDYLDRendezvous::DumpToLog(Log *log) const {
     return;
 
   log->PutCString("HexagonDYLDRendezvous:");
-  LLDB_LOGF(log, "   Address: %" PRIx64, GetRendezvousAddress());
-  LLDB_LOGF(log, "   Version: %" PRIu64, GetVersion());
-  LLDB_LOGF(log, "   Link   : %" PRIx64, GetLinkMapAddress());
-  LLDB_LOGF(log, "   Break  : %" PRIx64, GetBreakAddress());
-  LLDB_LOGF(log, "   LDBase : %" PRIx64, GetLDBase());
-  LLDB_LOGF(log, "   State  : %s",
-            (state == eConsistent)
-                ? "consistent"
-                : (state == eAdd) ? "add"
-                                  : (state == eDelete) ? "delete" : "unknown");
+  log->Printf("   Address: %" PRIx64, GetRendezvousAddress());
+  log->Printf("   Version: %" PRIu64, GetVersion());
+  log->Printf("   Link   : %" PRIx64, GetLinkMapAddress());
+  log->Printf("   Break  : %" PRIx64, GetBreakAddress());
+  log->Printf("   LDBase : %" PRIx64, GetLDBase());
+  log->Printf("   State  : %s",
+              (state == eConsistent)
+                  ? "consistent"
+                  : (state == eAdd) ? "add" : (state == eDelete) ? "delete"
+                                                                 : "unknown");
 
   iterator I = begin();
   iterator E = end();
@@ -358,11 +362,11 @@ void HexagonDYLDRendezvous::DumpToLog(Log *log) const {
     log->PutCString("HexagonDYLDRendezvous SOEntries:");
 
   for (int i = 1; I != E; ++I, ++i) {
-    LLDB_LOGF(log, "\n   SOEntry [%d] %s", i, I->path.c_str());
-    LLDB_LOGF(log, "      Base : %" PRIx64, I->base_addr);
-    LLDB_LOGF(log, "      Path : %" PRIx64, I->path_addr);
-    LLDB_LOGF(log, "      Dyn  : %" PRIx64, I->dyn_addr);
-    LLDB_LOGF(log, "      Next : %" PRIx64, I->next);
-    LLDB_LOGF(log, "      Prev : %" PRIx64, I->prev);
+    log->Printf("\n   SOEntry [%d] %s", i, I->path.c_str());
+    log->Printf("      Base : %" PRIx64, I->base_addr);
+    log->Printf("      Path : %" PRIx64, I->path_addr);
+    log->Printf("      Dyn  : %" PRIx64, I->dyn_addr);
+    log->Printf("      Next : %" PRIx64, I->next);
+    log->Printf("      Prev : %" PRIx64, I->prev);
   }
 }

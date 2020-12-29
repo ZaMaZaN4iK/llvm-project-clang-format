@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,7 +13,7 @@
 
 // constexpr reverse_iterator& operator++();
 //
-// constexpr in C++17
+// constexpr in c++17
 
 #include <iterator>
 #include <cassert>
@@ -30,7 +31,7 @@ test(It i, It x)
     assert(&rr == &r);
 }
 
-int main(int, char**)
+int main()
 {
     const char* s = "123";
     test(bidirectional_iterator<const char*>(s+1), bidirectional_iterator<const char*>(s));
@@ -50,6 +51,4 @@ int main(int, char**)
         static_assert(*(++std::make_reverse_iterator(p+2)) == '1', "");
     }
 #endif
-
-  return 0;
 }

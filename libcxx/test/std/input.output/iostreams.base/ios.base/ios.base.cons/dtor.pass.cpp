@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,8 +17,6 @@
 #include <string>
 #include <locale>
 #include <cassert>
-
-#include "test_macros.h"
 
 class test
     : public std::ios
@@ -72,7 +71,7 @@ void f3(std::ios_base::event ev, std::ios_base& stream, int index)
     }
 }
 
-int main(int, char**)
+int main()
 {
     {
         test t;
@@ -84,6 +83,4 @@ int main(int, char**)
     assert(f1_called);
     assert(f2_called);
     assert(f3_called);
-
-  return 0;
 }

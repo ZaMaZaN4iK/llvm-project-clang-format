@@ -3,8 +3,10 @@ This tests that we do not lose control of the inferior, while doing an instructi
 over a thread creation instruction.
 """
 
+from __future__ import print_function
 
 
+import os
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -14,7 +16,10 @@ from lldbsuite.test import lldbutil
 class CreateDuringInstructionStepTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
-    NO_DEBUG_INFO_TESTCASE = True
+
+    def setUp(self):
+        # Call super's setUp().
+        TestBase.setUp(self)
 
     @skipUnlessPlatform(['linux'])
     @expectedFailureAndroid('llvm.org/pr24737', archs=['arm'])
@@ -24,7 +29,7 @@ class CreateDuringInstructionStepTestCase(TestBase):
         bugnumber="llvm.org/pr24737")
     def test_step_inst(self):
         self.build(dictionary=self.getBuildFlags())
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target and target.IsValid(), "Target is valid")
 

@@ -1,14 +1,15 @@
 //===-- asan_thread.h -------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // This file is a part of AddressSanitizer, an address sanity checker.
 //
-// ASan-private header for asan_thread.cpp.
+// ASan-private header for asan_thread.cc.
 //===----------------------------------------------------------------------===//
 
 #ifndef ASAN_THREAD_H
@@ -48,11 +49,6 @@ class AsanThreadContext : public ThreadContextBase {
 
   void OnCreated(void *arg) override;
   void OnFinished() override;
-
-  struct CreateThreadContextArgs {
-    AsanThread *thread;
-    StackTrace *stack;
-  };
 };
 
 // AsanThreadContext objects are never freed, so we need many of them.
@@ -66,10 +62,8 @@ class AsanThread {
   static void TSDDtor(void *tsd);
   void Destroy();
 
-  struct InitOptions;
-  void Init(const InitOptions *options = nullptr);
-
-  thread_return_t ThreadStart(tid_t os_id,
+  void Init();  // Should be called from the thread itself.
+  thread_return_t ThreadStart(uptr os_id,
                               atomic_uintptr_t *signal_thread_is_registered);
 
   uptr stack_top();
@@ -88,9 +82,6 @@ class AsanThread {
     const char *frame_descr;
   };
   bool GetStackFrameAccessByAddr(uptr addr, StackFrameAccess *access);
-
-  // Returns a pointer to the start of the stack variable's shadow memory.
-  uptr GetStackVariableShadowStart(uptr addr);
 
   bool AddrIsInStack(uptr addr);
 
@@ -127,17 +118,17 @@ class AsanThread {
   bool isUnwinding() const { return unwinding_; }
   void setUnwinding(bool b) { unwinding_ = b; }
 
+  // True if we are in a deadly signal handler.
+  bool isInDeadlySignal() const { return in_deadly_signal_; }
+  void setInDeadlySignal(bool b) { in_deadly_signal_ = b; }
+
   AsanThreadLocalMallocStorage &malloc_storage() { return malloc_storage_; }
   AsanStats &stats() { return stats_; }
-
-  void *extra_spill_area() { return &extra_spill_area_; }
 
  private:
   // NOTE: There is no AsanThread constructor. It is allocated
   // via mmap() and *must* be valid in zero-initialized state.
-
-  void SetThreadStackAndTls(const InitOptions *options);
-
+  void SetThreadStackAndTls();
   void ClearShadowForThreadStackAndTLS();
   FakeStack *AsyncSignalSafeLazyInitFakeStack();
 
@@ -167,7 +158,33 @@ class AsanThread {
   AsanThreadLocalMallocStorage malloc_storage_;
   AsanStats stats_;
   bool unwinding_;
-  uptr extra_spill_area_;
+  bool in_deadly_signal_;
+};
+
+// ScopedUnwinding is a scope for stacktracing member of a context
+class ScopedUnwinding {
+ public:
+  explicit ScopedUnwinding(AsanThread *t) : thread(t) {
+    t->setUnwinding(true);
+  }
+  ~ScopedUnwinding() { thread->setUnwinding(false); }
+
+ private:
+  AsanThread *thread;
+};
+
+// ScopedDeadlySignal is a scope for handling deadly signals.
+class ScopedDeadlySignal {
+ public:
+  explicit ScopedDeadlySignal(AsanThread *t) : thread(t) {
+    if (thread) thread->setInDeadlySignal(true);
+  }
+  ~ScopedDeadlySignal() {
+    if (thread) thread->setInDeadlySignal(false);
+  }
+
+ private:
+  AsanThread *thread;
 };
 
 // Returns a single instance of registry.

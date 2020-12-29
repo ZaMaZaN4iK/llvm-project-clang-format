@@ -1,5 +1,7 @@
+LEVEL = ../../../make
+
 OBJC_SOURCES := static.m
-LD_EXTRAS := -lobjc -framework Foundation
+LDFLAGS = $(CFLAGS) -lobjc -framework Foundation
 
 default:        a.out.stripped
 
@@ -11,4 +13,4 @@ clean::
 	rm -f a.out.stripped
 	rm -rf $(wildcard *.dSYM)
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

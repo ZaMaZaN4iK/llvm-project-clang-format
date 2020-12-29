@@ -1,17 +1,7 @@
-add_lldb_library(lldbPluginSystemRuntimeMacOSX PLUGIN
+add_lldb_library(lldbPluginSystemRuntimeMacOSX
   AppleGetItemInfoHandler.cpp
   AppleGetPendingItemsHandler.cpp
   AppleGetQueuesHandler.cpp
   AppleGetThreadItemInfoHandler.cpp
   SystemRuntimeMacOSX.cpp
-
-  LINK_LIBS
-    lldbBreakpoint
-    lldbCore
-    lldbExpression
-    lldbHost
-    lldbSymbol
-    lldbTarget
-    lldbUtility
-    lldbPluginProcessUtility
   )

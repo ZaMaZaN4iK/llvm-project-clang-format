@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -23,7 +24,7 @@
 
 #include "test_macros.h"
 
-int main(int, char**)
+int main()
 {
     typedef std::chrono::system_clock Clock;
     typedef std::chrono::milliseconds Duration1;
@@ -44,6 +45,4 @@ int main(int, char**)
     static_assert(t3.time_since_epoch() == Duration2(3006), "");
     }
 #endif
-
-  return 0;
 }

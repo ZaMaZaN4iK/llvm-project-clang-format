@@ -1,8 +1,9 @@
 //===- unittest/Tooling/ASTMatchersTest.h - Matcher tests helpers ------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -57,21 +58,10 @@ private:
   const std::unique_ptr<BoundNodesCallback> FindResultReviewer;
 };
 
-enum class LanguageMode {
-  Cxx11,
-  Cxx14,
-  Cxx17,
-  Cxx2a,
-  Cxx11OrLater,
-  Cxx14OrLater,
-  Cxx17OrLater,
-  Cxx2aOrLater
-};
-
 template <typename T>
 testing::AssertionResult matchesConditionally(
     const std::string &Code, const T &AMatcher, bool ExpectMatch,
-    llvm::ArrayRef<llvm::StringRef> CompileArgs,
+    llvm::StringRef CompileArg,
     const FileContentMappings &VirtualMappedFiles = FileContentMappings(),
     const std::string &Filename = "input.cc") {
   bool Found = false, DynamicFound = false;
@@ -91,9 +81,8 @@ testing::AssertionResult matchesConditionally(
   // FIXME: This is a hack to work around the fact that there's no way to do the
   // equivalent of runToolOnCodeWithArgs without instantiating a full Driver.
   // We should consider having a function, at least for tests, that invokes cc1.
-  std::vector<std::string> Args(CompileArgs.begin(), CompileArgs.end());
-  Args.insert(Args.end(), {"-frtti", "-fexceptions",
-                           "-target", "i386-unknown-unknown"});
+  std::vector<std::string> Args = {CompileArg, "-frtti", "-fexceptions",
+                                   "-target", "i386-unknown-unknown"};
   if (!runToolOnCodeWithArgs(
           Factory->create(), Code, Args, Filename, "clang-tool",
           std::make_shared<PCHContainerOperations>(), VirtualMappedFiles)) {
@@ -116,91 +105,22 @@ testing::AssertionResult matchesConditionally(
 }
 
 template <typename T>
-testing::AssertionResult matchesConditionally(
-    const std::string &Code, const T &AMatcher, bool ExpectMatch,
-    llvm::StringRef CompileArg,
-    const FileContentMappings &VirtualMappedFiles = FileContentMappings(),
-    const std::string &Filename = "input.cc") {
-  return matchesConditionally(Code, AMatcher, ExpectMatch,
-                              llvm::makeArrayRef(CompileArg),
-                              VirtualMappedFiles, Filename);
+testing::AssertionResult matches(const std::string &Code, const T &AMatcher) {
+  return matchesConditionally(Code, AMatcher, true, "-std=c++11");
 }
 
 template <typename T>
-testing::AssertionResult
-matchesConditionally(const std::string &Code, const T &AMatcher,
-                     bool ExpectMatch, const LanguageMode &Mode) {
-  std::vector<LanguageMode> LangModes;
-  switch (Mode) {
-  case LanguageMode::Cxx11:
-  case LanguageMode::Cxx14:
-  case LanguageMode::Cxx17:
-  case LanguageMode::Cxx2a:
-    LangModes = {Mode};
-    break;
-  case LanguageMode::Cxx11OrLater:
-    LangModes = {LanguageMode::Cxx11, LanguageMode::Cxx14, LanguageMode::Cxx17,
-                 LanguageMode::Cxx2a};
-    break;
-  case LanguageMode::Cxx14OrLater:
-    LangModes = {LanguageMode::Cxx14, LanguageMode::Cxx17, LanguageMode::Cxx2a};
-    break;
-  case LanguageMode::Cxx17OrLater:
-    LangModes = {LanguageMode::Cxx17, LanguageMode::Cxx2a};
-    break;
-  case LanguageMode::Cxx2aOrLater:
-    LangModes = {LanguageMode::Cxx2a};
-  }
-
-  for (auto Mode : LangModes) {
-    std::string LangModeArg;
-    switch (Mode) {
-    case LanguageMode::Cxx11:
-      LangModeArg = "-std=c++11";
-      break;
-    case LanguageMode::Cxx14:
-      LangModeArg = "-std=c++14";
-      break;
-    case LanguageMode::Cxx17:
-      LangModeArg = "-std=c++17";
-      break;
-    case LanguageMode::Cxx2a:
-      LangModeArg = "-std=c++2a";
-      break;
-    default:
-      llvm_unreachable("Invalid language mode");
-    }
-
-    auto Result =
-        matchesConditionally(Code, AMatcher, ExpectMatch, LangModeArg);
-    if (!Result)
-      return Result;
-  }
-
-  return testing::AssertionSuccess();
+testing::AssertionResult notMatches(const std::string &Code,
+                                    const T &AMatcher) {
+  return matchesConditionally(Code, AMatcher, false, "-std=c++11");
 }
 
 template <typename T>
-testing::AssertionResult
-matches(const std::string &Code, const T &AMatcher,
-        const LanguageMode &Mode = LanguageMode::Cxx11) {
-  return matchesConditionally(Code, AMatcher, true, Mode);
-}
-
-template <typename T>
-testing::AssertionResult
-notMatches(const std::string &Code, const T &AMatcher,
-           const LanguageMode &Mode = LanguageMode::Cxx11) {
-  return matchesConditionally(Code, AMatcher, false, Mode);
-}
-
-template <typename T>
-testing::AssertionResult matchesObjC(const std::string &Code, const T &AMatcher,
-                                     bool ExpectMatch = true) {
-  return matchesConditionally(Code, AMatcher, ExpectMatch,
-                              {"-fobjc-nonfragile-abi", "-Wno-objc-root-class",
-                               "-fblocks", "-Wno-incomplete-implementation"},
-                              FileContentMappings(), "input.m");
+testing::AssertionResult matchesObjC(const std::string &Code,
+                                     const T &AMatcher) {
+  return matchesConditionally(
+    Code, AMatcher, true,
+    "", FileContentMappings(), "input.m");
 }
 
 template <typename T>
@@ -225,8 +145,10 @@ testing::AssertionResult notMatchesC(const std::string &Code,
 
 template <typename T>
 testing::AssertionResult notMatchesObjC(const std::string &Code,
-                                        const T &AMatcher) {
-  return matchesObjC(Code, AMatcher, false);
+                                     const T &AMatcher) {
+  return matchesConditionally(
+    Code, AMatcher, false,
+    "", FileContentMappings(), "input.m");
 }
 
 
@@ -251,9 +173,7 @@ testing::AssertionResult matchesConditionallyWithCuda(
       "typedef struct cudaStream *cudaStream_t;"
       "int cudaConfigureCall(dim3 gridSize, dim3 blockSize,"
       "                      size_t sharedSize = 0,"
-      "                      cudaStream_t stream = 0);"
-      "extern \"C\" unsigned __cudaPushCallConfiguration("
-      "    dim3 gridDim, dim3 blockDim, size_t sharedMem = 0, void *stream = 0);";
+      "                      cudaStream_t stream = 0);";
 
   bool Found = false, DynamicFound = false;
   MatchFinder Finder;
@@ -300,18 +220,6 @@ template <typename T>
 testing::AssertionResult notMatchesWithCuda(const std::string &Code,
                                     const T &AMatcher) {
   return matchesConditionallyWithCuda(Code, AMatcher, false, "-std=c++11");
-}
-
-template <typename T>
-testing::AssertionResult matchesWithOpenMP(const std::string &Code,
-                                           const T &AMatcher) {
-  return matchesConditionally(Code, AMatcher, true, "-fopenmp=libomp");
-}
-
-template <typename T>
-testing::AssertionResult notMatchesWithOpenMP(const std::string &Code,
-                                              const T &AMatcher) {
-  return matchesConditionally(Code, AMatcher, false, "-fopenmp=libomp");
 }
 
 template <typename T>
@@ -401,12 +309,10 @@ public:
       ExpectedName(ExpectedName) {}
 
   void onEndOfTranslationUnit() override {
-    if (ExpectedCount != -1) {
+    if (ExpectedCount != -1)
       EXPECT_EQ(ExpectedCount, Count);
-    }
-    if (!ExpectedName.empty()) {
+    if (!ExpectedName.empty())
       EXPECT_EQ(ExpectedName, Name);
-    }
     Count = 0;
     Name.clear();
   }
@@ -429,9 +335,8 @@ public:
       }
       BoundNodes::IDToNodeMap::const_iterator I = M.find(Id);
       EXPECT_NE(M.end(), I);
-      if (I != M.end()) {
+      if (I != M.end())
         EXPECT_EQ(Nodes->getNodeAs<T>(Id), I->second.get<T>());
-      }
       return true;
     }
     EXPECT_TRUE(M.count(Id) == 0 ||

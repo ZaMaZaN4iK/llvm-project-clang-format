@@ -3,6 +3,8 @@
 from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -10,6 +12,9 @@ from lldbsuite.test import lldbutil
 
 
 class TestObjCStepping(TestBase):
+
+    def getCategories(self):
+        return ['basic_process']
 
     mydir = TestBase.compute_mydir(__file__)
 
@@ -30,11 +35,11 @@ class TestObjCStepping(TestBase):
             self.main_source, '// Step over nil should stop here.')
 
     @skipUnlessDarwin
-    @add_test_categories(['pyapi', 'basic_process'])
+    @add_test_categories(['pyapi'])
     def test_with_python_api(self):
         """Test stepping through ObjC method dispatch in various forms."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
@@ -157,7 +162,6 @@ class TestObjCStepping(TestBase):
         newClassName = mySource_isa.GetSummary()
 
         if self.TraceOn():
-            print("className is %s, newClassName is %s" % (className, newClassName))
             print(mySource_isa)
 
         self.assertTrue(

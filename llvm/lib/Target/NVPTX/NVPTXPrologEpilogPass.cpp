@@ -1,8 +1,9 @@
 //===-- NVPTXPrologEpilogPass.cpp - NVPTX prolog/epilog inserter ----------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,13 +17,12 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/TargetFrameLowering.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
-#include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetFrameLowering.h"
+#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 
 using namespace llvm;
 
@@ -60,24 +60,6 @@ bool NVPTXPrologEpilogPass::runOnMachineFunction(MachineFunction &MF) {
       for (unsigned i = 0, e = MI.getNumOperands(); i != e; ++i) {
         if (!MI.getOperand(i).isFI())
           continue;
-
-        // Frame indices in debug values are encoded in a target independent
-        // way with simply the frame index and offset rather than any
-        // target-specific addressing mode.
-        if (MI.isDebugValue()) {
-          assert(i == 0 && "Frame indices can only appear as the first "
-                           "operand of a DBG_VALUE machine instruction");
-          unsigned Reg;
-          int64_t Offset =
-              TFI.getFrameIndexReference(MF, MI.getOperand(0).getIndex(), Reg);
-          MI.getOperand(0).ChangeToRegister(Reg, /*isDef=*/false);
-          MI.getOperand(0).setIsDebug();
-          auto *DIExpr = DIExpression::prepend(
-              MI.getDebugExpression(), DIExpression::ApplyOffset, Offset);
-          MI.getOperand(3).setMetadata(DIExpr);
-          continue;
-        }
-
         TRI.eliminateFrameIndex(MI, 0, i, nullptr);
         Modified = true;
       }
@@ -115,12 +97,10 @@ AdjustStackOffset(MachineFrameInfo &MFI, int FrameIdx,
   Offset = (Offset + Align - 1) / Align * Align;
 
   if (StackGrowsDown) {
-    LLVM_DEBUG(dbgs() << "alloc FI(" << FrameIdx << ") at SP[" << -Offset
-                      << "]\n");
+    DEBUG(dbgs() << "alloc FI(" << FrameIdx << ") at SP[" << -Offset << "]\n");
     MFI.setObjectOffset(FrameIdx, -Offset); // Set the computed offset
   } else {
-    LLVM_DEBUG(dbgs() << "alloc FI(" << FrameIdx << ") at SP[" << Offset
-                      << "]\n");
+    DEBUG(dbgs() << "alloc FI(" << FrameIdx << ") at SP[" << Offset << "]\n");
     MFI.setObjectOffset(FrameIdx, Offset);
     Offset += MFI.getObjectSize(FrameIdx);
   }
@@ -178,19 +158,19 @@ NVPTXPrologEpilogPass::calculateFrameObjectOffsets(MachineFunction &Fn) {
   // frame index registers. Functions which don't want/need this optimization
   // will continue to use the existing code path.
   if (MFI.getUseLocalStackAllocationBlock()) {
-    unsigned Align = MFI.getLocalFrameMaxAlign().value();
+    unsigned Align = MFI.getLocalFrameMaxAlign();
 
     // Adjust to alignment boundary.
     Offset = (Offset + Align - 1) / Align * Align;
 
-    LLVM_DEBUG(dbgs() << "Local frame base offset: " << Offset << "\n");
+    DEBUG(dbgs() << "Local frame base offset: " << Offset << "\n");
 
     // Resolve offsets for objects in the local block.
     for (unsigned i = 0, e = MFI.getLocalFrameObjectCount(); i != e; ++i) {
       std::pair<int, int64_t> Entry = MFI.getLocalFrameObjectMap(i);
       int64_t FIOffset = (StackGrowsDown ? -Offset : Offset) + Entry.second;
-      LLVM_DEBUG(dbgs() << "alloc FI(" << Entry.first << ") at SP[" << FIOffset
-                        << "]\n");
+      DEBUG(dbgs() << "alloc FI(" << Entry.first << ") at SP[" <<
+            FIOffset << "]\n");
       MFI.setObjectOffset(Entry.first, FIOffset);
     }
     // Allocate the local block

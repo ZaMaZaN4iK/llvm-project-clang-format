@@ -1,8 +1,9 @@
-//===- llvm/ADT/EquivalenceClasses.h - Generic Equiv. Classes ---*- C++ -*-===//
+//===-- llvm/ADT/EquivalenceClasses.h - Generic Equiv. Classes --*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -68,7 +69,6 @@ class EquivalenceClasses {
   /// leader is determined by a bit stolen from one of the pointers.
   class ECValue {
     friend class EquivalenceClasses;
-
     mutable const ECValue *Leader, *Next;
     ElemTy Data;
 
@@ -141,14 +141,14 @@ public:
   //
 
   /// iterator* - Provides a way to iterate over all values in the set.
-  using iterator = typename std::set<ECValue>::const_iterator;
-
+  typedef typename std::set<ECValue>::const_iterator iterator;
   iterator begin() const { return TheMapping.begin(); }
   iterator end() const { return TheMapping.end(); }
 
   bool empty() const { return TheMapping.empty(); }
 
   /// member_* Iterate over the members of an equivalence class.
+  ///
   class member_iterator;
   member_iterator member_begin(iterator I) const {
     // Only leaders provide anything to iterate over.
@@ -204,6 +204,7 @@ public:
   /// equivalence class it is in.  This does the path-compression part that
   /// makes union-find "union findy".  This returns an end iterator if the value
   /// is not in the equivalence class.
+  ///
   member_iterator findLeader(iterator I) const {
     if (I == TheMapping.end()) return member_end();
     return member_iterator(I->getLeader());
@@ -238,29 +239,17 @@ public:
     return L1;
   }
 
-  // isEquivalent - Return true if V1 is equivalent to V2. This can happen if
-  // V1 is equal to V2 or if they belong to one equivalence class.
-  bool isEquivalent(const ElemTy &V1, const ElemTy &V2) const {
-    // Fast path: any element is equivalent to itself.
-    if (V1 == V2)
-      return true;
-    auto It = findLeader(V1);
-    return It != member_end() && It == findLeader(V2);
-  }
-
   class member_iterator : public std::iterator<std::forward_iterator_tag,
                                                const ElemTy, ptrdiff_t> {
+    typedef std::iterator<std::forward_iterator_tag,
+                          const ElemTy, ptrdiff_t> super;
+    const ECValue *Node;
     friend class EquivalenceClasses;
 
-    using super = std::iterator<std::forward_iterator_tag,
-                                const ElemTy, ptrdiff_t>;
-
-    const ECValue *Node;
-
   public:
-    using size_type = size_t;
-    using pointer = typename super::pointer;
-    using reference = typename super::reference;
+    typedef size_t size_type;
+    typedef typename super::pointer pointer;
+    typedef typename super::reference reference;
 
     explicit member_iterator() = default;
     explicit member_iterator(const ECValue *N) : Node(N) {}

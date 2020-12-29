@@ -1,15 +1,16 @@
 //===-- main.cpp ------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // This test is intended to create a situation in which two threads are stopped
 // at a breakpoint and the debugger issues a step-out command.
 
-#include "pseudo_barrier.h"
+#include <atomic>
 #include <thread>
 
 pseudo_barrier_t g_barrier;
@@ -30,7 +31,7 @@ thread_func ()
     step_out_of_here(); // Expect to stop here after step-out (clang)
 
     // Return
-    return NULL;  // Expect to stop here after step-out (icc and gcc; arm64)
+    return NULL;  // Expect to stop here after step-out (icc and gcc)
 }
 
 int main ()

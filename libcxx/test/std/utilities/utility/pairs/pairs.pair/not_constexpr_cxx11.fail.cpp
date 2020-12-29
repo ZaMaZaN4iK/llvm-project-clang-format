@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -27,7 +28,7 @@ struct ImplicitT {
   int value;
 };
 
-int main(int, char**)
+int main()
 {
     {
         using P = std::pair<int, int>;
@@ -53,6 +54,4 @@ int main(int, char**)
         constexpr P U_V = {42, 101}; // expected-error {{must be initialized by a constant expression}}
         constexpr P pair_U_V = other; // expected-error {{must be initialized by a constant expression}}
     }
-
-  return 0;
 }

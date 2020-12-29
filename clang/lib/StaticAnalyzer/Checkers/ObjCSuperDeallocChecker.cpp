@@ -1,8 +1,9 @@
 //===- ObjCSuperDeallocChecker.cpp - Check correct use of [super dealloc] -===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
@@ -61,17 +62,21 @@ private:
 REGISTER_SET_WITH_PROGRAMSTATE(CalledSuperDealloc, SymbolRef)
 
 namespace {
-class SuperDeallocBRVisitor final : public BugReporterVisitor {
+class SuperDeallocBRVisitor final
+    : public BugReporterVisitorImpl<SuperDeallocBRVisitor> {
+
   SymbolRef ReceiverSymbol;
   bool Satisfied;
 
 public:
   SuperDeallocBRVisitor(SymbolRef ReceiverSymbol)
-      : ReceiverSymbol(ReceiverSymbol), Satisfied(false) {}
+      : ReceiverSymbol(ReceiverSymbol),
+        Satisfied(false) {}
 
-  PathDiagnosticPieceRef VisitNode(const ExplodedNode *Succ,
-                                   BugReporterContext &BRC,
-                                   PathSensitiveBugReport &BR) override;
+  std::shared_ptr<PathDiagnosticPiece> VisitNode(const ExplodedNode *Succ,
+                                                 const ExplodedNode *Pred,
+                                                 BugReporterContext &BRC,
+                                                 BugReport &BR) override;
 
   void Profile(llvm::FoldingSetNodeID &ID) const override {
     ID.Add(ReceiverSymbol);
@@ -102,6 +107,8 @@ void ObjCSuperDeallocChecker::checkPreObjCMessage(const ObjCMethodCall &M,
   }
 
   reportUseAfterDealloc(ReceiverSymbol, Desc, M.getOriginExpr(), C);
+
+  return;
 }
 
 void ObjCSuperDeallocChecker::checkPreCall(const CallEvent &Call,
@@ -187,10 +194,10 @@ void ObjCSuperDeallocChecker::reportUseAfterDealloc(SymbolRef Sym,
     Desc = "Use of 'self' after it has been deallocated";
 
   // Generate the report.
-  auto BR = std::make_unique<PathSensitiveBugReport>(*DoubleSuperDeallocBugType,
-                                                     Desc, ErrNode);
+  std::unique_ptr<BugReport> BR(
+      new BugReport(*DoubleSuperDeallocBugType, Desc, ErrNode));
   BR->addRange(S->getSourceRange());
-  BR->addVisitor(std::make_unique<SuperDeallocBRVisitor>(Sym));
+  BR->addVisitor(llvm::make_unique<SuperDeallocBRVisitor>(Sym));
   C.emitReport(std::move(BR));
 }
 
@@ -242,10 +249,10 @@ ObjCSuperDeallocChecker::isSuperDeallocMessage(const ObjCMethodCall &M) const {
   return M.getSelector() == SELdealloc;
 }
 
-PathDiagnosticPieceRef
+std::shared_ptr<PathDiagnosticPiece>
 SuperDeallocBRVisitor::VisitNode(const ExplodedNode *Succ,
-                                 BugReporterContext &BRC,
-                                 PathSensitiveBugReport &) {
+                                 const ExplodedNode *Pred,
+                                 BugReporterContext &BRC, BugReport &BR) {
   if (Satisfied)
     return nullptr;
 
@@ -254,8 +261,7 @@ SuperDeallocBRVisitor::VisitNode(const ExplodedNode *Succ,
   bool CalledNow =
       Succ->getState()->contains<CalledSuperDealloc>(ReceiverSymbol);
   bool CalledBefore =
-      Succ->getFirstPred()->getState()->contains<CalledSuperDealloc>(
-          ReceiverSymbol);
+      Pred->getState()->contains<CalledSuperDealloc>(ReceiverSymbol);
 
   // Is Succ the node on which the analyzer noted that [super dealloc] was
   // called on ReceiverSymbol?
@@ -281,9 +287,8 @@ SuperDeallocBRVisitor::VisitNode(const ExplodedNode *Succ,
 //===----------------------------------------------------------------------===//
 
 void ento::registerObjCSuperDeallocChecker(CheckerManager &Mgr) {
+  const LangOptions &LangOpts = Mgr.getLangOpts();
+  if (LangOpts.getGC() == LangOptions::GCOnly || LangOpts.ObjCAutoRefCount)
+    return;
   Mgr.registerChecker<ObjCSuperDeallocChecker>();
-}
-
-bool ento::shouldRegisterObjCSuperDeallocChecker(const LangOptions &LO) {
-  return true;
 }

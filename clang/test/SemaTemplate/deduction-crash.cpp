@@ -1,10 +1,14 @@
-// RUN: %clang_cc1 -fsyntax-only %s -std=c++1z -verify
+// RUN: not %clang_cc1 -fsyntax-only %s -std=c++11 2>&1| FileCheck %s
+
+// Note that the error count below doesn't matter. We just want to
+// make sure that the parser doesn't crash.
+// CHECK: 16 errors
 
 // PR7511
-template<a> // expected-error +{{}}
+template<a>
 struct int_;
 
-template<a> // expected-error +{{}}
+template<a>
 template<int,typename T1,typename>
 struct ac
 {
@@ -13,7 +17,7 @@ struct ac
 
 template<class>struct aaa
 {
-  typedef ac<1,int,int>::ae ae // expected-error +{{}}
+  typedef ac<1,int,int>::ae ae
 };
 
 template<class>
@@ -32,19 +36,19 @@ struct state_machine
     struct In;
     
     template<int my>
-    struct In<a::int_<aaa::a>,my>; // expected-error +{{}}
+    struct In<a::int_<aaa::a>,my>;
         
     template<class Event>
     int process(Event)
     {
-      In<a::int_<0> > a; // expected-error +{{}}
+      In<a::int_<0> > a;
     }
-  } // expected-error +{{}}
+  }
   template<class Event>
   int ant(Event)
   {
     region_processing_helper<int>* helper;
-    helper->process(0) // expected-error +{{}}
+    helper->process(0)
   }
 };
 
@@ -77,21 +81,21 @@ void endl( ) ;
 
 extern basic_ostream<char> cout;
 
-int operator<<( basic_ostream<char> , pair ) ; // expected-note +{{}}
+int operator<<( basic_ostream<char> , pair ) ;
 
 void register_object_imp ( )
 {
-cout << endl<1>; // expected-error +{{}}
+cout << endl<1>;
 }
 
 // PR12933
-namespace PR12933 {
-  template<typename S> // expected-error +{{}}
+namespacae PR12933 {
+  template<typename S>
     template<typename T>
     void function(S a, T b) {}
 
   int main() {
-    function(0, 1); // expected-error +{{}}
+    function(0, 1);
     return 0;
   }
 }
@@ -137,27 +141,4 @@ namespace PR14281_part3 {
   };
   template <class T, int* i> struct B {};
   A<B<int, &some_decl>, &some_decl>::type x;
-}
-
-namespace var_template_partial_spec_incomplete {
-  template<typename T> int n;
-  template<typename T, typename U = void> int n<T *>; // expected-error +{{}} expected-note {{}}
-  int k = n<void *>;
-}
-
-namespace deduceFunctionSpecializationForInvalidOutOfLineFunction {
-
-template <typename InputT, typename OutputT>
-struct SourceSelectionRequirement {
-  template<typename T>
-  OutputT evaluateSelectionRequirement(InputT &&Value) {
-  }
-};
-
-template <typename InputT, typename OutputT>
-OutputT SourceSelectionRequirement<InputT, OutputT>::
-evaluateSelectionRequirement<void>(InputT &&Value) { // expected-error {{cannot specialize a member of an unspecialized template}}
-  return Value;
-}
-
 }

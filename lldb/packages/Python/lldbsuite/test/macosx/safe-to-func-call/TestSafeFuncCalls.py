@@ -1,7 +1,10 @@
 """Test function call thread safety."""
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -23,7 +26,7 @@ class TestSafeFuncCalls(TestBase):
     def test_with_python_api(self):
         """Test function call thread safety."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)

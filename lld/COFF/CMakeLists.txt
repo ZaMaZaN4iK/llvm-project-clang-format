@@ -8,41 +8,38 @@ endif()
 
 add_lld_library(lldCOFF
   Chunks.cpp
-  DebugTypes.cpp
   DLL.cpp
   Driver.cpp
   DriverUtils.cpp
+  Error.cpp
   ICF.cpp
   InputFiles.cpp
-  LTO.cpp
-  MapFile.cpp
+  Librarian.cpp
   MarkLive.cpp
-  MinGW.cpp
+  ModuleDef.cpp
   PDB.cpp
+  Strings.cpp
   SymbolTable.cpp
   Symbols.cpp
   Writer.cpp
 
   LINK_COMPONENTS
   ${LLVM_TARGETS_TO_BUILD}
-  BinaryFormat
   Core
   DebugInfoCodeView
-  DebugInfoDWARF
   DebugInfoMSF
   DebugInfoPDB
-  Demangle
-  LibDriver
   LTO
-  MC
+  LibDriver
   Object
+  MC
+  MCDisassembler
+  Target
   Option
-  Passes
   Support
-  WindowsManifest
 
   LINK_LIBS
-  lldCommon
+  lldCore
   ${LLVM_PTHREAD_LIB}
 
   DEPENDS

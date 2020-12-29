@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,13 +17,11 @@
 
 #include <unordered_map>
 #include <string>
-#include <set>
 #include <cassert>
 
-#include "test_macros.h"
 #include "min_allocator.h"
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::unordered_multimap<int, std::string> C;
@@ -49,17 +48,14 @@ int main(int, char**)
         r = c.equal_range(5);
         assert(std::distance(r.first, r.second) == 0);
         r = c.equal_range(50);
-        std::set<std::string> s;
-        s.insert("fifty");
-        s.insert("fiftyA");
-        s.insert("fiftyB");
-        for ( int i = 0; i < 3; ++i )
-        {
-            assert(r.first->first == 50);
-            assert(s.find(r.first->second) != s.end());
-            s.erase(s.find(r.first->second));
-            ++r.first;
-        }
+        assert(r.first->first == 50);
+        assert(r.first->second == "fifty");
+        ++r.first;
+        assert(r.first->first == 50);
+        assert(r.first->second == "fiftyA");
+        ++r.first;
+        assert(r.first->first == 50);
+        assert(r.first->second == "fiftyB");
     }
 #if TEST_STD_VER >= 11
     {
@@ -88,19 +84,14 @@ int main(int, char**)
         r = c.equal_range(5);
         assert(std::distance(r.first, r.second) == 0);
         r = c.equal_range(50);
-        std::set<std::string> s;
-        s.insert("fifty");
-        s.insert("fiftyA");
-        s.insert("fiftyB");
-        for ( int i = 0; i < 3; ++i )
-        {
-            assert(r.first->first == 50);
-            assert(s.find(r.first->second) != s.end());
-            s.erase(s.find(r.first->second));
-            ++r.first;
-        }
+        assert(r.first->first == 50);
+        assert(r.first->second == "fifty");
+        ++r.first;
+        assert(r.first->first == 50);
+        assert(r.first->second == "fiftyA");
+        ++r.first;
+        assert(r.first->first == 50);
+        assert(r.first->second == "fiftyB");
     }
 #endif
-
-  return 0;
 }

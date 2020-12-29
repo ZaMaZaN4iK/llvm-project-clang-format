@@ -1,10 +1,5 @@
-; RUN: llc < %s | FileCheck %s
-
-target triple = "i686-unknown-unknown"
+; RUN: llc < %s -march=x86 | grep -i ESP | not grep sub
 
 define i32 @test(i32 %X) {
-; CHECK-LABEL: test:
-entry:
-  ret i32 %X
-; CHECK-NOT: subl %esp
+        ret i32 %X
 }

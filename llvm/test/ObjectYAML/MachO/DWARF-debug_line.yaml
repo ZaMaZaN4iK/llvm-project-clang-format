@@ -394,8 +394,7 @@ DWARF:
         - Attribute:       DW_AT_type
           Form:            DW_FORM_ref4
   debug_aranges:   
-    - Length:          
-        TotalLength:     44
+    - Length:          44
       Version:         2
       CuOffset:        0
       AddrSize:        8
@@ -404,8 +403,7 @@ DWARF:
         - Address:         0x0000000100000F50
           Length:          52
   debug_pubnames:  
-    Length:          
-      TotalLength:     23
+    Length:          23
     Version:         2
     UnitOffset:      0
     UnitSize:        121
@@ -413,8 +411,7 @@ DWARF:
       - DieOffset:       0x0000002A
         Name:            main
   debug_pubtypes:  
-    Length:          
-      TotalLength:     31
+    Length:          31
     Version:         2
     UnitOffset:      0
     UnitSize:        121
@@ -424,8 +421,7 @@ DWARF:
       - DieOffset:       0x00000071
         Name:            char
   debug_info:      
-    - Length:          
-        TotalLength:     117
+    - Length:          117
       Version:         4
       AbbrOffset:      0
       AddrSize:        8
@@ -493,8 +489,7 @@ DWARF:
         - AbbrCode:        0x00000000
           Values:          
   debug_line:      
-    - Length:          
-        TotalLength:     65
+    - TotalLength:     65
       Version:         2
       PrologueLength:  36
       MinInstLength:   1
@@ -502,7 +497,19 @@ DWARF:
       LineBase:        251
       LineRange:       14
       OpcodeBase:      13
-      StandardOpcodeLengths: [ 0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1 ]
+      StandardOpcodeLengths: 
+        - 0
+        - 1
+        - 1
+        - 1
+        - 1
+        - 0
+        - 0
+        - 0
+        - 1
+        - 0
+        - 0
+        - 1
       IncludeDirs:     
       Files:           
         - Name:            hello_world.c
@@ -535,8 +542,7 @@ DWARF:
 ...
 
 #CHECK:   debug_line:      
-#CHECK:     - Length:          
-#CHECK:         TotalLength:     65
+#CHECK:     - TotalLength:     65
 #CHECK:       Version:         2
 #CHECK:       PrologueLength:  36
 #CHECK:       MinInstLength:   1
@@ -544,7 +550,19 @@ DWARF:
 #CHECK:       LineBase:        251
 #CHECK:       LineRange:       14
 #CHECK:       OpcodeBase:      13
-#CHECK:       StandardOpcodeLengths: [ 0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1 ]
+#CHECK:       StandardOpcodeLengths: 
+#CHECK:         - 0
+#CHECK:         - 1
+#CHECK:         - 1
+#CHECK:         - 1
+#CHECK:         - 1
+#CHECK:         - 0
+#CHECK:         - 0
+#CHECK:         - 0
+#CHECK:         - 1
+#CHECK:         - 0
+#CHECK:         - 0
+#CHECK:         - 1
 #CHECK:       IncludeDirs:     
 #CHECK:       Files:           
 #CHECK:         - Name:            hello_world.c
@@ -557,21 +575,21 @@ DWARF:
 #CHECK:           SubOpcode:       DW_LNE_set_address
 #CHECK:           Data:            4294971216
 #CHECK:         - Opcode:          0x14
-#CHECK:           Data:            0
+#CHECK:           Data:            4294971216
 #CHECK:         - Opcode:          DW_LNS_set_column
 #CHECK:           Data:            3
 #CHECK:         - Opcode:          DW_LNS_set_prologue_end
-#CHECK:           Data:            0
+#CHECK:           Data:            3
 #CHECK:         - Opcode:          DW_LNS_const_add_pc
-#CHECK:           Data:            0
+#CHECK:           Data:            3
 #CHECK:         - Opcode:          0xBB
-#CHECK:           Data:            0
+#CHECK:           Data:            3
 #CHECK:         - Opcode:          0xBB
-#CHECK:           Data:            0
+#CHECK:           Data:            3
 #CHECK:         - Opcode:          DW_LNS_advance_pc
 #CHECK:           Data:            11
 #CHECK:         - Opcode:          DW_LNS_extended_op
 #CHECK:           ExtLen:          1
 #CHECK:           SubOpcode:       DW_LNE_end_sequence
-#CHECK:           Data:            0
+#CHECK:           Data:            11
 #CHECK: ...

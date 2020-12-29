@@ -1,14 +1,4 @@
-add_lldb_library(lldbPluginObjectFileELF PLUGIN
+add_lldb_library(lldbPluginObjectFileELF
   ELFHeader.cpp
   ObjectFileELF.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbHost
-    lldbSymbol
-    lldbTarget
-  LINK_COMPONENTS
-    BinaryFormat
-    Object
-    Support
   )

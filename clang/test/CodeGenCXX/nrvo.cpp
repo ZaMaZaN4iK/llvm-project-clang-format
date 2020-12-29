@@ -1,6 +1,6 @@
-// RUN: %clang_cc1 -triple i386-unknown-unknown -emit-llvm -O1 -fno-experimental-new-pass-manager -o - %s | FileCheck %s
-// RUN: %clang_cc1 -triple i386-unknown-unknown -emit-llvm -O1 -fno-experimental-new-pass-manager -fcxx-exceptions -fexceptions -std=c++03 -o - %s | FileCheck --check-prefixes=CHECK-EH,CHECK-EH-03 %s
-// RUN: %clang_cc1 -triple i386-unknown-unknown -emit-llvm -O1 -fno-experimental-new-pass-manager -fcxx-exceptions -fexceptions -std=c++11 -o - %s | FileCheck --check-prefixes=CHECK-EH,CHECK-EH-11 %s
+// RUN: %clang_cc1 -triple i386-unknown-unknown -emit-llvm -O1 -o - %s | FileCheck %s
+// RUN: %clang_cc1 -triple i386-unknown-unknown -emit-llvm -O1 -fcxx-exceptions -fexceptions -std=c++03 -o - %s | FileCheck --check-prefixes=CHECK-EH,CHECK-EH-03 %s
+// RUN: %clang_cc1 -triple i386-unknown-unknown -emit-llvm -O1 -fcxx-exceptions -fexceptions -std=c++11 -o - %s | FileCheck --check-prefixes=CHECK-EH,CHECK-EH-11 %s
 
 // Test code generation for the named return value optimization.
 class X {
@@ -33,13 +33,13 @@ X test0() {
 // CHECK-LABEL: define void @_Z5test1b(
 // CHECK-EH-LABEL: define void @_Z5test1b(
 X test1(bool B) {
-  // CHECK:      call {{.*}} @_ZN1XC1Ev
+  // CHECK:      tail call {{.*}} @_ZN1XC1Ev
   // CHECK-NEXT: ret void
   X x;
   if (B)
     return (x);
   return x;
-  // CHECK-EH:      call {{.*}} @_ZN1XC1Ev
+  // CHECK-EH:      tail call {{.*}} @_ZN1XC1Ev
   // CHECK-EH-NEXT: ret void
 }
 
@@ -59,6 +59,7 @@ X test2(bool B) {
   // CHECK-NEXT: {{.*}} getelementptr inbounds %class.X, %class.X* %y, i32 0, i32 0
   // CHECK-NEXT: call void @llvm.lifetime.start
   // CHECK-NEXT: call {{.*}} @_ZN1XC1Ev
+  // CHECK: call {{.*}} @_ZN1XC1ERKS_
   // CHECK: call {{.*}} @_ZN1XC1ERKS_
   // CHECK: call {{.*}} @_ZN1XD1Ev
   // CHECK-NEXT: call void @llvm.lifetime.end
@@ -130,7 +131,7 @@ X test2(bool B) {
 
 // CHECK-LABEL: define void @_Z5test3b
 X test3(bool B) {
-  // CHECK: call {{.*}} @_ZN1XC1Ev
+  // CHECK: tail call {{.*}} @_ZN1XC1Ev
   // CHECK-NOT: call {{.*}} @_ZN1XC1ERKS_
   // CHECK: call {{.*}} @_ZN1XC1Ev
   // CHECK: call {{.*}} @_ZN1XC1ERKS_
@@ -148,14 +149,14 @@ extern "C" void exit(int) throw();
 // CHECK-LABEL: define void @_Z5test4b
 X test4(bool B) {
   {
-    // CHECK: call {{.*}} @_ZN1XC1Ev
+    // CHECK: tail call {{.*}} @_ZN1XC1Ev
     X x;
     // CHECK: br i1
     if (B)
       return x;
   }
-  // CHECK: call {{.*}} @_ZN1XD1Ev
-  // CHECK: call void @exit(i32 1)
+  // CHECK: tail call {{.*}} @_ZN1XD1Ev
+  // CHECK: tail call void @exit(i32 1)
   exit(1);
 }
 
@@ -181,17 +182,17 @@ X test6() {
   return a;
   // CHECK:      [[A:%.*]] = alloca [[X:%.*]], align 8
   // CHECK-NEXT: [[PTR:%.*]] = getelementptr inbounds %class.X, %class.X* [[A]], i32 0, i32 0
-  // CHECK-NEXT: call void @llvm.lifetime.start.p0i8(i64 1, i8* nonnull [[PTR]])
+  // CHECK-NEXT: call void @llvm.lifetime.start(i64 1, i8* nonnull [[PTR]])
   // CHECK-NEXT: call {{.*}} @_ZN1XC1Ev([[X]]* nonnull [[A]])
   // CHECK-NEXT: call {{.*}} @_ZN1XC1ERKS_([[X]]* {{%.*}}, [[X]]* nonnull dereferenceable({{[0-9]+}}) [[A]])
   // CHECK-NEXT: call {{.*}} @_ZN1XD1Ev([[X]]* nonnull [[A]])
-  // CHECK-NEXT: call void @llvm.lifetime.end.p0i8(i64 1, i8* nonnull [[PTR]])
+  // CHECK-NEXT: call void @llvm.lifetime.end(i64 1, i8* nonnull [[PTR]])
   // CHECK-NEXT: ret void
 }
 
 // CHECK-LABEL: define void @_Z5test7b
 X test7(bool b) {
-  // CHECK: call {{.*}} @_ZN1XC1Ev
+  // CHECK: tail call {{.*}} @_ZN1XC1Ev
   // CHECK-NEXT: ret
   if (b) {
     X x;
@@ -202,7 +203,7 @@ X test7(bool b) {
 
 // CHECK-LABEL: define void @_Z5test8b
 X test8(bool b) {
-  // CHECK: call {{.*}} @_ZN1XC1Ev
+  // CHECK: tail call {{.*}} @_ZN1XC1Ev
   // CHECK-NEXT: ret
   if (b) {
     X x;
@@ -218,6 +219,6 @@ Y<int> test9() {
 }
 
 // CHECK-LABEL: define linkonce_odr void @_ZN1YIiE1fEv
-// CHECK: call {{.*}} @_ZN1YIiEC1Ev
+// CHECK: tail call {{.*}} @_ZN1YIiEC1Ev
 
 // CHECK-EH-03: attributes [[NR_NUW]] = { noreturn nounwind }

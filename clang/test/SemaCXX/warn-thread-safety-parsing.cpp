@@ -1,6 +1,4 @@
 // RUN: %clang_cc1 -fsyntax-only -verify -Wthread-safety %s
-// RUN: %clang_cc1 -fsyntax-only -verify -Wthread-safety -std=c++98 %s
-// RUN: %clang_cc1 -fsyntax-only -verify -Wthread-safety -std=c++11 %s -D CPP11
 
 #define LOCKABLE            __attribute__ ((lockable))
 #define SCOPED_LOCKABLE     __attribute__ ((scoped_lockable))
@@ -154,18 +152,18 @@ class GVFoo {
 };
 
 class GUARDED_VAR GV { // \
-  // expected-warning {{'guarded_var' attribute only applies to non-static data members and global variables}}
+  // expected-warning {{'guarded_var' attribute only applies to fields and global variables}}
 };
 
 void gv_function() GUARDED_VAR; // \
-  // expected-warning {{'guarded_var' attribute only applies to}}
+  // expected-warning {{'guarded_var' attribute only applies to fields and global variables}}
 
 void gv_function_params(int gv_lvar GUARDED_VAR); // \
-  // expected-warning {{'guarded_var' attribute only applies to}}
+  // expected-warning {{'guarded_var' attribute only applies to fields and global variables}}
 
 int gv_testfn(int y){
   int x GUARDED_VAR = y; // \
-    // expected-warning {{'guarded_var' attribute only applies to}}
+    // expected-warning {{'guarded_var' attribute only applies to fields and global variables}}
   return x;
 }
 
@@ -194,7 +192,7 @@ class PGVFoo {
 };
 
 class PT_GUARDED_VAR PGV { // \
-  // expected-warning {{'pt_guarded_var' attribute only applies to non-static data members and global variables}}
+  // expected-warning {{'pt_guarded_var' attribute only applies to fields and global variables}}
 };
 
 int *pgv_var_args __attribute__((pt_guarded_var(1))); // \
@@ -202,14 +200,14 @@ int *pgv_var_args __attribute__((pt_guarded_var(1))); // \
 
 
 void pgv_function() PT_GUARDED_VAR; // \
-  // expected-warning {{'pt_guarded_var' attribute only applies to}}
+  // expected-warning {{'pt_guarded_var' attribute only applies to fields and global variables}}
 
 void pgv_function_params(int *gv_lvar PT_GUARDED_VAR); // \
-  // expected-warning {{'pt_guarded_var' attribute only applies to}}
+  // expected-warning {{'pt_guarded_var' attribute only applies to fields and global variables}}
 
 void pgv_testfn(int y){
   int *x PT_GUARDED_VAR = new int(0); // \
-    // expected-warning {{'pt_guarded_var' attribute only applies to}}
+    // expected-warning {{'pt_guarded_var' attribute only applies to fields and global variables}}
   delete x;
 }
 
@@ -231,28 +229,28 @@ class __attribute__((lockable (1))) LTestClass_args { // \
 };
 
 void l_test_function() LOCKABLE;  // \
-  // expected-warning {{'lockable' attribute only applies to structs, unions, and classes}}
+  // expected-warning {{'lockable' attribute only applies to struct, union or class}}
 
 int l_testfn(int y) {
   int x LOCKABLE = y; // \
-    // expected-warning {{'lockable' attribute only applies to}}
+    // expected-warning {{'lockable' attribute only applies to struct, union or class}}
   return x;
 }
 
 int l_test_var LOCKABLE; // \
-  // expected-warning {{'lockable' attribute only applies to}}
+  // expected-warning {{'lockable' attribute only applies to struct, union or class}}
 
 class LFoo {
  private:
   int test_field LOCKABLE; // \
-    // expected-warning {{'lockable' attribute only applies to}}
+    // expected-warning {{'lockable' attribute only applies to struct, union or class}}
   void test_method() LOCKABLE; // \
-    // expected-warning {{'lockable' attribute only applies to}}
+    // expected-warning {{'lockable' attribute only applies to struct, union or class}}
 };
 
 
 void l_function_params(int lvar LOCKABLE); // \
-  // expected-warning {{'lockable' attribute only applies to}}
+  // expected-warning {{'lockable' attribute only applies to struct, union or class}}
 
 
 //-----------------------------------------//
@@ -271,28 +269,28 @@ class __attribute__((scoped_lockable (1))) SLTestClass_args { // \
 };
 
 void sl_test_function() SCOPED_LOCKABLE;  // \
-  // expected-warning {{'scoped_lockable' attribute only applies to structs, unions, and classes}}
+  // expected-warning {{'scoped_lockable' attribute only applies to struct, union or class}}
 
 int sl_testfn(int y) {
   int x SCOPED_LOCKABLE = y; // \
-    // expected-warning {{'scoped_lockable' attribute only applies to}}
+    // expected-warning {{'scoped_lockable' attribute only applies to struct, union or class}}
   return x;
 }
 
 int sl_test_var SCOPED_LOCKABLE; // \
-  // expected-warning {{'scoped_lockable' attribute only applies to}}
+  // expected-warning {{'scoped_lockable' attribute only applies to struct, union or class}}
 
 class SLFoo {
  private:
   int test_field SCOPED_LOCKABLE; // \
-    // expected-warning {{'scoped_lockable' attribute only applies to}}
+    // expected-warning {{'scoped_lockable' attribute only applies to struct, union or class}}
   void test_method() SCOPED_LOCKABLE; // \
-    // expected-warning {{'scoped_lockable' attribute only applies to}}
+    // expected-warning {{'scoped_lockable' attribute only applies to struct, union or class}}
 };
 
 
 void sl_function_params(int lvar SCOPED_LOCKABLE); // \
-  // expected-warning {{'scoped_lockable' attribute only applies to}}
+  // expected-warning {{'scoped_lockable' attribute only applies to struct, union or class}}
 
 
 //-----------------------------------------//
@@ -325,18 +323,18 @@ class GBFoo {
 };
 
 class GUARDED_BY(mu1) GB { // \
-  // expected-warning {{'guarded_by' attribute only applies to non-static data members and global variables}}
+  // expected-warning {{'guarded_by' attribute only applies to fields and global variables}}
 };
 
 void gb_function() GUARDED_BY(mu1); // \
-  // expected-warning {{'guarded_by' attribute only applies to}}
+  // expected-warning {{'guarded_by' attribute only applies to fields and global variables}}
 
 void gb_function_params(int gv_lvar GUARDED_BY(mu1)); // \
-  // expected-warning {{'guarded_by' attribute only applies to}}
+  // expected-warning {{'guarded_by' attribute only applies to fields and global variables}}
 
 int gb_testfn(int y){
   int x GUARDED_BY(mu1) = y; // \
-    // expected-warning {{'guarded_by' attribute only applies to}}
+    // expected-warning {{'guarded_by' attribute only applies to fields and global variables}}
   return x;
 }
 
@@ -351,8 +349,7 @@ int gb_var_arg_5 GUARDED_BY(&mu1);
 int gb_var_arg_6 GUARDED_BY(muRef);
 int gb_var_arg_7 GUARDED_BY(muDoubleWrapper.getWrapper()->getMu());
 int gb_var_arg_8 GUARDED_BY(muPointer);
-int gb_var_arg_9 GUARDED_BY(!&mu1);
-int gb_var_arg_10 GUARDED_BY(!&*&mu1);
+
 
 // illegal attribute arguments
 int gb_var_arg_bad_1 GUARDED_BY(1); // \
@@ -397,18 +394,18 @@ class PGBFoo {
 };
 
 class PT_GUARDED_BY(mu1) PGB { // \
-  // expected-warning {{'pt_guarded_by' attribute only applies to non-static data members and global variables}}
+  // expected-warning {{'pt_guarded_by' attribute only applies to fields and global variables}}
 };
 
 void pgb_function() PT_GUARDED_BY(mu1); // \
-  // expected-warning {{'pt_guarded_by' attribute only applies to}}
+  // expected-warning {{'pt_guarded_by' attribute only applies to fields and global variables}}
 
 void pgb_function_params(int gv_lvar PT_GUARDED_BY(mu1)); // \
-  // expected-warning {{'pt_guarded_by' attribute only applies to}}
+  // expected-warning {{'pt_guarded_by' attribute only applies to fields and global variables}}
 
 void pgb_testfn(int y){
   int *x PT_GUARDED_BY(mu1) = new int(0); // \
-    // expected-warning {{'pt_guarded_by' attribute only applies to}}
+    // expected-warning {{'pt_guarded_by' attribute only applies to fields and global variables}}
   delete x;
 }
 
@@ -459,18 +456,18 @@ class AAFoo {
 };
 
 class ACQUIRED_AFTER(mu1) AA { // \
-  // expected-warning {{'acquired_after' attribute only applies to non-static data members and global variables}}
+  // expected-warning {{'acquired_after' attribute only applies to fields and global variables}}
 };
 
 void aa_function() ACQUIRED_AFTER(mu1); // \
-  // expected-warning {{'acquired_after' attribute only applies to}}
+  // expected-warning {{'acquired_after' attribute only applies to fields and global variables}}
 
 void aa_function_params(int gv_lvar ACQUIRED_AFTER(mu1)); // \
-  // expected-warning {{'acquired_after' attribute only applies to}}
+  // expected-warning {{'acquired_after' attribute only applies to fields and global variables}}
 
 void aa_testfn(int y){
   Mutex x ACQUIRED_AFTER(mu1) = Mutex(); // \
-    // expected-warning {{'acquired_after' attribute only applies to}}
+    // expected-warning {{'acquired_after' attribute only applies to fields and global variables}}
 }
 
 //Check argument parsing.
@@ -519,18 +516,18 @@ class ABFoo {
 };
 
 class ACQUIRED_BEFORE(mu1) AB { // \
-  // expected-warning {{'acquired_before' attribute only applies to non-static data members and global variables}}
+  // expected-warning {{'acquired_before' attribute only applies to fields and global variables}}
 };
 
 void ab_function() ACQUIRED_BEFORE(mu1); // \
-  // expected-warning {{'acquired_before' attribute only applies to}}
+  // expected-warning {{'acquired_before' attribute only applies to fields and global variables}}
 
 void ab_function_params(int gv_lvar ACQUIRED_BEFORE(mu1)); // \
-  // expected-warning {{'acquired_before' attribute only applies to}}
+  // expected-warning {{'acquired_before' attribute only applies to fields and global variables}}
 
 void ab_testfn(int y){
   Mutex x ACQUIRED_BEFORE(mu1) = Mutex(); // \
-    // expected-warning {{'acquired_before' attribute only applies to}}
+    // expected-warning {{'acquired_before' attribute only applies to fields and global variables}}
 }
 
 // Note: illegal int ab_int ACQUIRED_BEFORE(mu1) will
@@ -572,11 +569,11 @@ UnlockableMu ab_var_arg_bad_5 ACQUIRED_BEFORE(mu_ab); // \
 
 // takes zero or more arguments, all locks (vars/fields)
 
-void elf_function() EXCLUSIVE_LOCK_FUNCTION(); // expected-warning {{'exclusive_lock_function' attribute without capability arguments can only be applied to non-static methods of a class}}
+void elf_function() EXCLUSIVE_LOCK_FUNCTION();
 
 void elf_function_args() EXCLUSIVE_LOCK_FUNCTION(mu1, mu2);
 
-int elf_testfn(int y) EXCLUSIVE_LOCK_FUNCTION(); // expected-warning {{'exclusive_lock_function' attribute without capability arguments can only be applied to non-static methods of a class}}
+int elf_testfn(int y) EXCLUSIVE_LOCK_FUNCTION();
 
 int elf_testfn(int y) {
   int x EXCLUSIVE_LOCK_FUNCTION() = y; // \
@@ -591,8 +588,7 @@ class ElfFoo {
  private:
   int test_field EXCLUSIVE_LOCK_FUNCTION(); // \
     // expected-warning {{'exclusive_lock_function' attribute only applies to functions}}
-  void test_method() EXCLUSIVE_LOCK_FUNCTION(); // \
-    // expected-warning {{'exclusive_lock_function' attribute without capability arguments refers to 'this', but 'ElfFoo' isn't annotated with 'capability' or 'scoped_lockable' attribute}}
+  void test_method() EXCLUSIVE_LOCK_FUNCTION();
 };
 
 class EXCLUSIVE_LOCK_FUNCTION() ElfTestClass { // \
@@ -645,11 +641,11 @@ int elf_function_bad_7() EXCLUSIVE_LOCK_FUNCTION(0); // \
 
 // takes zero or more arguments, all locks (vars/fields)
 
-void slf_function() SHARED_LOCK_FUNCTION(); // expected-warning {{'shared_lock_function' attribute without capability arguments can only be applied to non-static methods of a class}}
+void slf_function() SHARED_LOCK_FUNCTION();
 
 void slf_function_args() SHARED_LOCK_FUNCTION(mu1, mu2);
 
-int slf_testfn(int y) SHARED_LOCK_FUNCTION(); // expected-warning {{'shared_lock_function' attribute without capability arguments can only be applied to non-static methods of a class}}
+int slf_testfn(int y) SHARED_LOCK_FUNCTION();
 
 int slf_testfn(int y) {
   int x SHARED_LOCK_FUNCTION() = y; // \
@@ -667,8 +663,7 @@ class SlfFoo {
  private:
   int test_field SHARED_LOCK_FUNCTION(); // \
     // expected-warning {{'shared_lock_function' attribute only applies to functions}}
-  void test_method() SHARED_LOCK_FUNCTION(); // \
-    // expected-warning {{'shared_lock_function' attribute without capability arguments refers to 'this', but 'SlfFoo' isn't annotated with 'capability' or 'scoped_lockable' attribute}}
+  void test_method() SHARED_LOCK_FUNCTION();
 };
 
 class SHARED_LOCK_FUNCTION() SlfTestClass { // \
@@ -719,16 +714,14 @@ int slf_function_bad_7() SHARED_LOCK_FUNCTION(0); // \
 // takes a mandatory boolean or integer argument specifying the retval
 // plus an optional list of locks (vars/fields)
 
-void etf_function() __attribute__((exclusive_trylock_function)); // \
+void etf_function() __attribute__((exclusive_trylock_function));  // \
   // expected-error {{'exclusive_trylock_function' attribute takes at least 1 argument}}
 
 void etf_function_args() EXCLUSIVE_TRYLOCK_FUNCTION(1, mu2);
 
-void etf_function_arg() EXCLUSIVE_TRYLOCK_FUNCTION(1); // \
-  // expected-warning {{'exclusive_trylock_function' attribute without capability arguments can only be applied to non-static methods of a class}}
+void etf_function_arg() EXCLUSIVE_TRYLOCK_FUNCTION(1);
 
-int etf_testfn(int y) EXCLUSIVE_TRYLOCK_FUNCTION(1); // \
-  // expected-warning {{'exclusive_trylock_function' attribute without capability arguments can only be applied to non-static methods of a class}}
+int etf_testfn(int y) EXCLUSIVE_TRYLOCK_FUNCTION(1);
 
 int etf_testfn(int y) {
   int x EXCLUSIVE_TRYLOCK_FUNCTION(1) = y; // \
@@ -743,8 +736,7 @@ class EtfFoo {
  private:
   int test_field EXCLUSIVE_TRYLOCK_FUNCTION(1); // \
     // expected-warning {{'exclusive_trylock_function' attribute only applies to functions}}
-  void test_method() EXCLUSIVE_TRYLOCK_FUNCTION(1); // \
-    // expected-warning {{'exclusive_trylock_function' attribute without capability arguments refers to 'this', but 'EtfFoo' isn't annotated with 'capability' or 'scoped_lockable' attribute}}
+  void test_method() EXCLUSIVE_TRYLOCK_FUNCTION(1);
 };
 
 class EXCLUSIVE_TRYLOCK_FUNCTION(1) EtfTestClass { // \
@@ -765,8 +757,7 @@ int etf_function_5() EXCLUSIVE_TRYLOCK_FUNCTION(1, &mu1);
 int etf_function_6() EXCLUSIVE_TRYLOCK_FUNCTION(1, muRef);
 int etf_function_7() EXCLUSIVE_TRYLOCK_FUNCTION(1, muDoubleWrapper.getWrapper()->getMu());
 int etf_functetfn_8() EXCLUSIVE_TRYLOCK_FUNCTION(1, muPointer);
-int etf_function_9() EXCLUSIVE_TRYLOCK_FUNCTION(true); // \
-  // expected-warning {{'exclusive_trylock_function' attribute without capability arguments can only be applied to non-static methods of a class}}
+int etf_function_9() EXCLUSIVE_TRYLOCK_FUNCTION(true);
 
 
 // illegal attribute arguments
@@ -801,11 +792,9 @@ void stf_function() __attribute__((shared_trylock_function));  // \
 
 void stf_function_args() SHARED_TRYLOCK_FUNCTION(1, mu2);
 
-void stf_function_arg() SHARED_TRYLOCK_FUNCTION(1); // \
-  // expected-warning {{'shared_trylock_function' attribute without capability arguments can only be applied to non-static methods of a class}}
+void stf_function_arg() SHARED_TRYLOCK_FUNCTION(1);
 
-int stf_testfn(int y) SHARED_TRYLOCK_FUNCTION(1); // \
-  // expected-warning {{'shared_trylock_function' attribute without capability arguments can only be applied to non-static methods of a class}}
+int stf_testfn(int y) SHARED_TRYLOCK_FUNCTION(1);
 
 int stf_testfn(int y) {
   int x SHARED_TRYLOCK_FUNCTION(1) = y; // \
@@ -824,8 +813,7 @@ class StfFoo {
  private:
   int test_field SHARED_TRYLOCK_FUNCTION(1); // \
     // expected-warning {{'shared_trylock_function' attribute only applies to functions}}
-  void test_method() SHARED_TRYLOCK_FUNCTION(1); // \
-    // expected-warning {{'shared_trylock_function' attribute without capability arguments refers to 'this', but 'StfFoo' isn't annotated with 'capability' or 'scoped_lockable' attribute}}
+  void test_method() SHARED_TRYLOCK_FUNCTION(1);
 };
 
 class SHARED_TRYLOCK_FUNCTION(1) StfTestClass { // \
@@ -843,8 +831,7 @@ int stf_function_5() SHARED_TRYLOCK_FUNCTION(1, &mu1);
 int stf_function_6() SHARED_TRYLOCK_FUNCTION(1, muRef);
 int stf_function_7() SHARED_TRYLOCK_FUNCTION(1, muDoubleWrapper.getWrapper()->getMu());
 int stf_function_8() SHARED_TRYLOCK_FUNCTION(1, muPointer);
-int stf_function_9() SHARED_TRYLOCK_FUNCTION(true); // \
-  // expected-warning {{'shared_trylock_function' attribute without capability arguments can only be applied to non-static methods of a class}}
+int stf_function_9() SHARED_TRYLOCK_FUNCTION(true);
 
 
 // illegal attribute arguments
@@ -873,14 +860,11 @@ int stf_function_bad_6() SHARED_TRYLOCK_FUNCTION(1, umu); // \
 
 // takes zero or more arguments, all locks (vars/fields)
 
-void uf_function() UNLOCK_FUNCTION(); // \
-  // expected-warning {{'unlock_function' attribute without capability arguments can only be applied to non-static methods of a class}}
-
+void uf_function() UNLOCK_FUNCTION();
 
 void uf_function_args() UNLOCK_FUNCTION(mu1, mu2);
 
-int uf_testfn(int y) UNLOCK_FUNCTION(); //\
-  // expected-warning {{'unlock_function' attribute without capability arguments can only be applied to non-static methods of a class}}
+int uf_testfn(int y) UNLOCK_FUNCTION();
 
 int uf_testfn(int y) {
   int x UNLOCK_FUNCTION() = y; // \
@@ -895,8 +879,7 @@ class UfFoo {
  private:
   int test_field UNLOCK_FUNCTION(); // \
     // expected-warning {{'unlock_function' attribute only applies to functions}}
-  void test_method() UNLOCK_FUNCTION(); // \
-    // expected-warning {{'unlock_function' attribute without capability arguments refers to 'this', but 'UfFoo' isn't annotated with 'capability' or 'scoped_lockable' attribute}}
+  void test_method() UNLOCK_FUNCTION();
 };
 
 class NO_THREAD_SAFETY_ANALYSIS UfTestClass { // \
@@ -1264,36 +1247,6 @@ struct Foomgoper {
   }
 };
 
-template <typename Mutex>
-struct SCOPED_LOCKABLE SLTemplateClass {
-  ~SLTemplateClass() UNLOCK_FUNCTION();
-};
-
-template <typename Mutex>
-struct NonSLTemplateClass {
-  ~NonSLTemplateClass() UNLOCK_FUNCTION(); // \
-    // expected-warning{{'unlock_function' attribute without capability arguments refers to 'this', but 'NonSLTemplateClass' isn't annotated with 'capability' or 'scoped_lockable' attribute}}
-};
-
-template <>
-struct SLTemplateClass<int> {};
-
-template <typename Mutex>
-struct SLTemplateDerived : public SLTemplateClass<Mutex> {
-  ~SLTemplateDerived() UNLOCK_FUNCTION();
-};
-
-// FIXME: warn on template instantiation.
-template struct SLTemplateDerived<int>;
-
-struct SLDerived1 : public SLTemplateClass<double> {
-  ~SLDerived1() UNLOCK_FUNCTION();
-};
-
-struct SLDerived2 : public SLTemplateClass<int> {
-  ~SLDerived2() UNLOCK_FUNCTION(); // \
-    // expected-warning{{'unlock_function' attribute without capability arguments refers to 'this', but 'SLDerived2' isn't annotated with 'capability' or 'scoped_lockable' attribute}}
-};
 
 //-----------------------------------------------------
 // Parsing of member variables and function parameters
@@ -1313,11 +1266,8 @@ public:
   void foo3(FooLate *f) EXCLUSIVE_LOCKS_REQUIRED(f->mu) { }
   void foo4(FooLate *f) EXCLUSIVE_LOCKS_REQUIRED(f->mu);
 
-  static void foo5()    EXCLUSIVE_LOCKS_REQUIRED(mu);
-//FIXME: Bug 32066 - Error should be emitted irrespective of C++ dialect
-#if __cplusplus <= 199711L
-  // expected-error@-3 {{invalid use of member 'mu' in static member function}}
-#endif
+  static void foo5()    EXCLUSIVE_LOCKS_REQUIRED(mu); // \
+    // expected-error {{invalid use of member 'mu' in static member function}}
 
   template <class T>
   void foo6() EXCLUSIVE_LOCKS_REQUIRED(T::statmu) { }
@@ -1511,24 +1461,15 @@ class Foo {
   mutable Mutex mu;
   int a GUARDED_BY(mu);
 
-  static int si GUARDED_BY(mu);
-//FIXME: Bug 32066 - Error should be emitted irrespective of C++ dialect
-#if __cplusplus <= 199711L
-  // expected-error@-3 {{invalid use of non-static data member 'mu'}}
-#endif
+  static int si GUARDED_BY(mu); // \
+    // expected-error {{invalid use of non-static data member 'mu'}}
 
-  static void foo() EXCLUSIVE_LOCKS_REQUIRED(mu);
-//FIXME: Bug 32066 - Error should be emitted irrespective of C++ dialect
-#if __cplusplus <= 199711L
-  // expected-error@-3 {{invalid use of member 'mu' in static member function}}
-#endif
+  static void foo() EXCLUSIVE_LOCKS_REQUIRED(mu); // \
+    // expected-error {{invalid use of member 'mu' in static member function}}
 
   friend FooStream& operator<<(FooStream& s, const Foo& f)
-    EXCLUSIVE_LOCKS_REQUIRED(mu);
-//FIXME: Bug 32066 - Error should be emitted irrespective of C++ dialect
-#if __cplusplus <= 199711L
-    // expected-error@-3 {{invalid use of non-static data member 'mu'}}
-#endif
+    EXCLUSIVE_LOCKS_REQUIRED(mu); // \
+    // expected-error {{invalid use of non-static data member 'mu'}}
 };
 
 
@@ -1558,15 +1499,3 @@ public:
 
 }  // end namespace FunctionAttributesInsideClass_ICE_Test
 
-
-#ifdef CPP11
-namespace CRASH_POST_R301735 {
-  class SomeClass {
-   public:
-     void foo() {
-       auto l = [this] { auto l = [] () EXCLUSIVE_LOCKS_REQUIRED(mu_) {}; };
-     }
-     Mutex mu_;
-   };
-}
-#endif

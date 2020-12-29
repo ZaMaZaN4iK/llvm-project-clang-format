@@ -1,12 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// UNSUPPORTED: c++98, c++03
 
 // <fstream>
 
@@ -17,11 +16,11 @@
 
 #include <fstream>
 #include <cassert>
-#include "test_macros.h"
 #include "platform_support.h"
 
-int main(int, char**)
+int main()
 {
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
     std::string temp = get_temp_file_name();
     {
         std::filebuf f;
@@ -53,6 +52,5 @@ int main(int, char**)
         assert(f2.sgetc() == L'2');
     }
     std::remove(temp.c_str());
-
-  return 0;
+#endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
 }

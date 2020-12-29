@@ -1,9 +1,10 @@
 //===-- VectorIterator.h ----------------------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,9 +13,8 @@
 
 #include "lldb/lldb-forward.h"
 
-#include "lldb/DataFormatters/TypeSynthetic.h"
+#include "lldb/Core/ConstString.h"
 #include "lldb/Target/ExecutionContext.h"
-#include "lldb/Utility/ConstString.h"
 
 namespace lldb_private {
 namespace formatters {
@@ -31,7 +31,7 @@ public:
 
   bool MightHaveChildren() override;
 
-  size_t GetIndexOfChildWithName(ConstString name) override;
+  size_t GetIndexOfChildWithName(const ConstString &name) override;
 
 private:
   ExecutionContextRef m_exe_ctx_ref;

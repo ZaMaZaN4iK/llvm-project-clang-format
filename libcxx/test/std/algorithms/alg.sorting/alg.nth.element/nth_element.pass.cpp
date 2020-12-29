@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,12 +16,7 @@
 //   nth_element(Iter first, Iter nth, Iter last);
 
 #include <algorithm>
-#include <random>
 #include <cassert>
-
-#include "test_macros.h"
-
-std::mt19937 randomness;
 
 void
 test_one(int N, int M)
@@ -30,7 +26,7 @@ test_one(int N, int M)
     int* array = new int[N];
     for (int i = 0; i < N; ++i)
         array[i] = i;
-    std::shuffle(array, array+N, randomness);
+    std::random_shuffle(array, array+N);
     std::nth_element(array, array+M, array+N);
     assert(array[M] == M);
     std::nth_element(array, array+N, array+N); // begin, end, end
@@ -52,7 +48,7 @@ test(int N)
     test_one(N, N-1);
 }
 
-int main(int, char**)
+int main()
 {
     int d = 0;
     std::nth_element(&d, &d, &d);
@@ -64,6 +60,4 @@ int main(int, char**)
     test(997);
     test(1000);
     test(1009);
-
-  return 0;
 }

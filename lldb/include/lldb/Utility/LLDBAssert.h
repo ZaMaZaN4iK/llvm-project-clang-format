@@ -1,20 +1,23 @@
-//===----------------- LLDBAssert.h ------------------------------*- C++-*-===//
+//===----------------- LLDBAssert.h --------------------------------*- C++
+//-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef utility_LLDBAssert_h_
 #define utility_LLDBAssert_h_
 
+#include <assert.h>
+
 #ifdef LLDB_CONFIGURATION_DEBUG
 #define lldbassert(x) assert(x)
 #else
 #define lldbassert(x)                                                          \
-  lldb_private::lldb_assert(static_cast<bool>(x), #x, __FUNCTION__, __FILE__,  \
-                            __LINE__)
+  lldb_private::lldb_assert(x, #x, __FUNCTION__, __FILE__, __LINE__)
 #endif
 
 namespace lldb_private {

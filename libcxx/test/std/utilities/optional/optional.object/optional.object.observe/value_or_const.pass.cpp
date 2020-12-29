@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,8 +15,6 @@
 #include <optional>
 #include <type_traits>
 #include <cassert>
-
-#include "test_macros.h"
 
 using std::optional;
 
@@ -37,7 +36,7 @@ struct X
         {return x.i_ == y.i_;}
 };
 
-int main(int, char**)
+int main()
 {
     {
         constexpr optional<X> opt(2);
@@ -75,6 +74,4 @@ int main(int, char**)
         const optional<X> opt;
         assert(opt.value_or(Y(3)) == 4);
     }
-
-  return 0;
 }

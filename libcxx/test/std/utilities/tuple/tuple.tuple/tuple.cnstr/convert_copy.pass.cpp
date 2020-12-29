@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -29,15 +30,6 @@ struct Explicit {
 struct Implicit {
   int value;
   Implicit(int x) : value(x) {}
-};
-
-struct ExplicitTwo {
-    ExplicitTwo() {}
-    ExplicitTwo(ExplicitTwo const&) {}
-    ExplicitTwo(ExplicitTwo &&) {}
-
-    template <class T, class = typename std::enable_if<!std::is_same<T, ExplicitTwo>::value>::type>
-    explicit ExplicitTwo(T) {}
 };
 
 struct B
@@ -73,7 +65,7 @@ struct C
 
 #endif
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::tuple<long> T0;
@@ -145,13 +137,4 @@ int main(int, char**)
         std::tuple<Implicit> t2 = t1;
         assert(std::get<0>(t2).value == 42);
     }
-    {
-        static_assert(std::is_convertible<ExplicitTwo&&, ExplicitTwo>::value, "");
-        static_assert(std::is_convertible<std::tuple<ExplicitTwo&&>&&, const std::tuple<ExplicitTwo>&>::value, "");
-
-        ExplicitTwo e;
-        std::tuple<ExplicitTwo> t = std::tuple<ExplicitTwo&&>(std::move(e));
-        ((void)t);
-    }
-  return 0;
 }

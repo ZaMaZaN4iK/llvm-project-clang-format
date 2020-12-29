@@ -1,4 +1,3 @@
-#include <sys/time.h>  // work around module map issue with iOS sdk, <rdar://problem/35159346> 
 #include <sys/select.h>
 #include <stdio.h>
 #include <pthread.h>

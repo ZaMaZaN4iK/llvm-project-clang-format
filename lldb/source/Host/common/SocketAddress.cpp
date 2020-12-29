@@ -1,14 +1,9 @@
 //===-- SocketAddress.cpp ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
 //
-//===----------------------------------------------------------------------===//
-//
-// Note: This file is used on Darwin by debugserver, so it needs to remain as
-//       self contained as possible, and devoid of references to LLVM unless 
-//       there is compelling reason.
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,6 +15,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
+// C Includes
 #if !defined(_WIN32)
 #include <arpa/inet.h>
 #endif
@@ -27,6 +23,9 @@
 #include <assert.h>
 #include <string.h>
 
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Host/PosixApi.h"
 
 // WindowsXP needs an inet_ntop implementation
@@ -71,7 +70,9 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size) {
 
 using namespace lldb_private;
 
+//----------------------------------------------------------------------
 // SocketAddress constructor
+//----------------------------------------------------------------------
 SocketAddress::SocketAddress() { Clear(); }
 
 SocketAddress::SocketAddress(const struct sockaddr &s) { m_socket_addr.sa = s; }
@@ -88,11 +89,15 @@ SocketAddress::SocketAddress(const struct sockaddr_storage &s) {
   m_socket_addr.sa_storage = s;
 }
 
-SocketAddress::SocketAddress(const struct addrinfo *addr_info) {
-  *this = addr_info;
-}
+//----------------------------------------------------------------------
+// SocketAddress copy constructor
+//----------------------------------------------------------------------
+SocketAddress::SocketAddress(const SocketAddress &rhs)
+    : m_socket_addr(rhs.m_socket_addr) {}
 
+//----------------------------------------------------------------------
 // Destructor
+//----------------------------------------------------------------------
 SocketAddress::~SocketAddress() {}
 
 void SocketAddress::Clear() {
@@ -173,12 +178,20 @@ bool SocketAddress::SetPort(uint16_t port) {
   return false;
 }
 
+//----------------------------------------------------------------------
 // SocketAddress assignment operator
+//----------------------------------------------------------------------
+const SocketAddress &SocketAddress::operator=(const SocketAddress &rhs) {
+  if (this != &rhs)
+    m_socket_addr = rhs.m_socket_addr;
+  return *this;
+}
+
 const SocketAddress &SocketAddress::
 operator=(const struct addrinfo *addr_info) {
   Clear();
   if (addr_info && addr_info->ai_addr && addr_info->ai_addrlen > 0 &&
-      size_t(addr_info->ai_addrlen) <= sizeof m_socket_addr) {
+      addr_info->ai_addrlen <= sizeof m_socket_addr) {
     ::memcpy(&m_socket_addr, addr_info->ai_addr, addr_info->ai_addrlen);
   }
   return *this;
@@ -210,19 +223,6 @@ bool SocketAddress::getaddrinfo(const char *host, const char *service,
                                 int ai_flags) {
   Clear();
 
-  auto addresses = GetAddressInfo(host, service, ai_family, ai_socktype,
-                                  ai_protocol, ai_flags);
-  if (!addresses.empty())
-    *this = addresses[0];
-  return IsValid();
-}
-
-std::vector<SocketAddress>
-SocketAddress::GetAddressInfo(const char *hostname, const char *servname,
-                              int ai_family, int ai_socktype, int ai_protocol,
-                              int ai_flags) {
-  std::vector<SocketAddress> addr_list;
-
   struct addrinfo hints;
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = ai_family;
@@ -230,18 +230,18 @@ SocketAddress::GetAddressInfo(const char *hostname, const char *servname,
   hints.ai_protocol = ai_protocol;
   hints.ai_flags = ai_flags;
 
-  struct addrinfo *service_info_list = nullptr;
-  int err = ::getaddrinfo(hostname, servname, &hints, &service_info_list);
+  bool result = false;
+  struct addrinfo *service_info_list = NULL;
+  int err = ::getaddrinfo(host, service, &hints, &service_info_list);
   if (err == 0 && service_info_list) {
-    for (struct addrinfo *service_ptr = service_info_list;
-         service_ptr != nullptr; service_ptr = service_ptr->ai_next) {
-      addr_list.emplace_back(SocketAddress(service_ptr));
-    }
+    *this = service_info_list;
+    result = IsValid();
   }
 
   if (service_info_list)
     ::freeaddrinfo(service_info_list);
-  return addr_list;
+
+  return result;
 }
 
 bool SocketAddress::SetToLocalhost(sa_family_t family, uint16_t port) {
@@ -286,37 +286,4 @@ bool SocketAddress::SetToAnyAddress(sa_family_t family, uint16_t port) {
   }
   Clear();
   return false;
-}
-
-bool SocketAddress::IsAnyAddr() const {
-  return (GetFamily() == AF_INET)
-             ? m_socket_addr.sa_ipv4.sin_addr.s_addr == htonl(INADDR_ANY)
-             : 0 == memcmp(&m_socket_addr.sa_ipv6.sin6_addr, &in6addr_any, 16);
-}
-
-bool SocketAddress::IsLocalhost() const {
-  return (GetFamily() == AF_INET)
-             ? m_socket_addr.sa_ipv4.sin_addr.s_addr == htonl(INADDR_LOOPBACK)
-             : 0 == memcmp(&m_socket_addr.sa_ipv6.sin6_addr, &in6addr_loopback,
-                           16);
-}
-
-bool SocketAddress::operator==(const SocketAddress &rhs) const {
-  if (GetFamily() != rhs.GetFamily())
-    return false;
-  if (GetLength() != rhs.GetLength())
-    return false;
-  switch (GetFamily()) {
-  case AF_INET:
-    return m_socket_addr.sa_ipv4.sin_addr.s_addr ==
-           rhs.m_socket_addr.sa_ipv4.sin_addr.s_addr;
-  case AF_INET6:
-    return 0 == memcmp(&m_socket_addr.sa_ipv6.sin6_addr,
-                       &rhs.m_socket_addr.sa_ipv6.sin6_addr, 16);
-  }
-  return false;
-}
-
-bool SocketAddress::operator!=(const SocketAddress &rhs) const {
-  return !(*this == rhs);
 }

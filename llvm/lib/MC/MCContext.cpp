@@ -1,53 +1,36 @@
 //===- lib/MC/MCContext.cpp - Machine Code Context ------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/MC/MCContext.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringMap.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/BinaryFormat/COFF.h"
-#include "llvm/BinaryFormat/ELF.h"
-#include "llvm/BinaryFormat/XCOFF.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCCodeView.h"
 #include "llvm/MC/MCDwarf.h"
-#include "llvm/MC/MCExpr.h"
-#include "llvm/MC/MCFragment.h"
 #include "llvm/MC/MCLabel.h"
 #include "llvm/MC/MCObjectFileInfo.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSectionCOFF.h"
 #include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCSectionMachO.h"
-#include "llvm/MC/MCSectionWasm.h"
-#include "llvm/MC/MCSectionXCOFF.h"
 #include "llvm/MC/MCStreamer.h"
-#include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCSymbolCOFF.h"
 #include "llvm/MC/MCSymbolELF.h"
 #include "llvm/MC/MCSymbolMachO.h"
-#include "llvm/MC/MCSymbolWasm.h"
-#include "llvm/MC/MCSymbolXCOFF.h"
-#include "llvm/MC/SectionKind.h"
-#include "llvm/Support/Casting.h"
+#include "llvm/Support/COFF.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/ELF.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MemoryBuffer.h"
-#include "llvm/Support/Path.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/SourceMgr.h"
-#include "llvm/Support/raw_ostream.h"
-#include <cassert>
-#include <cstdlib>
-#include <tuple>
-#include <utility>
 
 using namespace llvm;
 
@@ -57,15 +40,19 @@ AsSecureLogFileName("as-secure-log-file-name",
                  "AS_SECURE_LOG_FILE env variable)"),
         cl::init(getenv("AS_SECURE_LOG_FILE")), cl::Hidden);
 
+
 MCContext::MCContext(const MCAsmInfo *mai, const MCRegisterInfo *mri,
                      const MCObjectFileInfo *mofi, const SourceMgr *mgr,
-                     MCTargetOptions const *TargetOpts, bool DoAutoReset)
-    : SrcMgr(mgr), InlineSrcMgr(nullptr), MAI(mai), MRI(mri), MOFI(mofi),
+                     bool DoAutoReset)
+    : SrcMgr(mgr), MAI(mai), MRI(mri), MOFI(mofi), Allocator(),
       Symbols(Allocator), UsedNames(Allocator),
-      InlineAsmUsedLabelNames(Allocator),
-      CurrentDwarfLoc(0, 0, 0, DWARF2_FLAG_IS_STMT, 0, 0),
-      AutoReset(DoAutoReset), TargetOptions(TargetOpts) {
+      CurrentDwarfLoc(0, 0, 0, DWARF2_FLAG_IS_STMT, 0, 0), DwarfLocSeen(false),
+      GenDwarfForAssembly(false), GenDwarfFileNumber(0), DwarfVersion(4),
+      AllowTemporaryLabels(true), DwarfCompileUnitID(0),
+      AutoReset(DoAutoReset), HadError(false) {
   SecureLogFile = AsSecureLogFileName;
+  SecureLog = nullptr;
+  SecureLogUsed = false;
 
   if (SrcMgr && SrcMgr->getNumBuffers())
     MainFileName =
@@ -89,12 +76,11 @@ void MCContext::reset() {
   COFFAllocator.DestroyAll();
   ELFAllocator.DestroyAll();
   MachOAllocator.DestroyAll();
-  XCOFFAllocator.DestroyAll();
 
   MCSubtargetAllocator.DestroyAll();
-  InlineAsmUsedLabelNames.clear();
   UsedNames.clear();
   Symbols.clear();
+  SectionSymbols.clear();
   Allocator.Reset();
   Instances.clear();
   CompilationDir.clear();
@@ -111,8 +97,6 @@ void MCContext::reset() {
   MachOUniquingMap.clear();
   ELFUniquingMap.clear();
   COFFUniquingMap.clear();
-  WasmUniquingMap.clear();
-  XCOFFUniquingMap.clear();
 
   NextID.clear();
   AllowTemporaryLabels = true;
@@ -138,6 +122,18 @@ MCSymbol *MCContext::getOrCreateSymbol(const Twine &Name) {
     Sym = createSymbol(NameRef, false, false);
 
   return Sym;
+}
+
+MCSymbolELF *MCContext::getOrCreateSectionSymbol(const MCSectionELF &Section) {
+  MCSymbol *&Sym = SectionSymbols[&Section];
+  if (Sym)
+    return cast<MCSymbolELF>(Sym);
+
+  StringRef Name = Section.getSectionName();
+  auto NameIter = UsedNames.insert(std::make_pair(Name, false)).first;
+  Sym = new (&*NameIter, *this) MCSymbolELF(&*NameIter, /*isTemporary*/ false);
+
+  return cast<MCSymbolELF>(Sym);
 }
 
 MCSymbol *MCContext::getOrCreateFrameAllocSymbol(StringRef FuncName,
@@ -166,10 +162,6 @@ MCSymbol *MCContext::createSymbolImpl(const StringMapEntry<bool> *Name,
       return new (Name, *this) MCSymbolELF(Name, IsTemporary);
     case MCObjectFileInfo::IsMachO:
       return new (Name, *this) MCSymbolMachO(Name, IsTemporary);
-    case MCObjectFileInfo::IsWasm:
-      return new (Name, *this) MCSymbolWasm(Name, IsTemporary);
-    case MCObjectFileInfo::IsXCOFF:
-      return new (Name, *this) MCSymbolXCOFF(Name, IsTemporary);
     }
   }
   return new (Name, *this) MCSymbol(MCSymbol::SymbolKindUnset, Name,
@@ -190,7 +182,7 @@ MCSymbol *MCContext::createSymbol(StringRef Name, bool AlwaysAddSuffix,
   SmallString<128> NewName = Name;
   bool AddSuffix = AlwaysAddSuffix;
   unsigned &NextUniqueID = NextID[Name];
-  while (true) {
+  for (;;) {
     if (AddSuffix) {
       NewName.resize(Name.size());
       raw_svector_ostream(NewName) << NextUniqueID++;
@@ -275,10 +267,6 @@ void MCContext::setSymbolValue(MCStreamer &Streamer,
   Streamer.EmitAssignment(Symbol, MCConstantExpr::create(Val, *this));
 }
 
-void MCContext::registerInlineAsmLabel(MCSymbol *Sym) {
-  InlineAsmUsedLabelNames[Sym->getName()] = Sym;
-}
-
 //===----------------------------------------------------------------------===//
 // Section Management
 //===----------------------------------------------------------------------===//
@@ -287,6 +275,7 @@ MCSectionMachO *MCContext::getMachOSection(StringRef Segment, StringRef Section,
                                            unsigned TypeAndAttributes,
                                            unsigned Reserved2, SectionKind Kind,
                                            const char *BeginSymName) {
+
   // We unique sections by their segment/section pair.  The returned section
   // may not have the same flags as the requested section, if so this should be
   // diagnosed by the client as an error.
@@ -327,53 +316,18 @@ void MCContext::renameELFSection(MCSectionELF *Section, StringRef Name) {
   const_cast<MCSectionELF *>(Section)->setSectionName(CachedName);
 }
 
-MCSectionELF *MCContext::createELFSectionImpl(StringRef Section, unsigned Type,
-                                              unsigned Flags, SectionKind K,
-                                              unsigned EntrySize,
-                                              const MCSymbolELF *Group,
-                                              unsigned UniqueID,
-                                              const MCSymbolELF *Associated) {
-  MCSymbolELF *R;
-  MCSymbol *&Sym = Symbols[Section];
-  // A section symbol can not redefine regular symbols. There may be multiple
-  // sections with the same name, in which case the first such section wins.
-  if (Sym && Sym->isDefined() &&
-      (!Sym->isInSection() || Sym->getSection().getBeginSymbol() != Sym))
-    reportError(SMLoc(), "invalid symbol redefinition");
-  if (Sym && Sym->isUndefined()) {
-    R = cast<MCSymbolELF>(Sym);
-  } else {
-    auto NameIter = UsedNames.insert(std::make_pair(Section, false)).first;
-    R = new (&*NameIter, *this) MCSymbolELF(&*NameIter, /*isTemporary*/ false);
-    if (!Sym)
-      Sym = R;
-  }
-  R->setBinding(ELF::STB_LOCAL);
-  R->setType(ELF::STT_SECTION);
-
-  auto *Ret = new (ELFAllocator.Allocate()) MCSectionELF(
-      Section, Type, Flags, K, EntrySize, Group, UniqueID, R, Associated);
-
-  auto *F = new MCDataFragment();
-  Ret->getFragmentList().insert(Ret->begin(), F);
-  F->setParent(Ret);
-  R->setFragment(F);
-
-  return Ret;
-}
-
 MCSectionELF *MCContext::createELFRelSection(const Twine &Name, unsigned Type,
                                              unsigned Flags, unsigned EntrySize,
                                              const MCSymbolELF *Group,
-                                             const MCSectionELF *RelInfoSection) {
+                                             const MCSectionELF *Associated) {
   StringMap<bool>::iterator I;
   bool Inserted;
   std::tie(I, Inserted) =
-      RelSecNames.insert(std::make_pair(Name.str(), true));
+      ELFRelSecNames.insert(std::make_pair(Name.str(), true));
 
-  return createELFSectionImpl(
-      I->getKey(), Type, Flags, SectionKind::getReadOnly(), EntrySize, Group,
-      true, cast<MCSymbolELF>(RelInfoSection->getBeginSymbol()));
+  return new (ELFAllocator.Allocate())
+      MCSectionELF(I->getKey(), Type, Flags, SectionKind::getReadOnly(),
+                   EntrySize, Group, true, nullptr, Associated);
 }
 
 MCSectionELF *MCContext::getELFNamedSection(const Twine &Prefix,
@@ -386,20 +340,21 @@ MCSectionELF *MCContext::getELFNamedSection(const Twine &Prefix,
 MCSectionELF *MCContext::getELFSection(const Twine &Section, unsigned Type,
                                        unsigned Flags, unsigned EntrySize,
                                        const Twine &Group, unsigned UniqueID,
-                                       const MCSymbolELF *Associated) {
+                                       const char *BeginSymName) {
   MCSymbolELF *GroupSym = nullptr;
   if (!Group.isTriviallyEmpty() && !Group.str().empty())
     GroupSym = cast<MCSymbolELF>(getOrCreateSymbol(Group));
 
   return getELFSection(Section, Type, Flags, EntrySize, GroupSym, UniqueID,
-                       Associated);
+                       BeginSymName, nullptr);
 }
 
 MCSectionELF *MCContext::getELFSection(const Twine &Section, unsigned Type,
                                        unsigned Flags, unsigned EntrySize,
                                        const MCSymbolELF *GroupSym,
                                        unsigned UniqueID,
-                                       const MCSymbolELF *Associated) {
+                                       const char *BeginSymName,
+                                       const MCSectionELF *Associated) {
   StringRef Group = "";
   if (GroupSym)
     Group = GroupSym->getName();
@@ -420,16 +375,22 @@ MCSectionELF *MCContext::getELFSection(const Twine &Section, unsigned Type,
   else
     Kind = SectionKind::getReadOnly();
 
-  MCSectionELF *Result = createELFSectionImpl(
-      CachedName, Type, Flags, Kind, EntrySize, GroupSym, UniqueID, Associated);
+  MCSymbol *Begin = nullptr;
+  if (BeginSymName)
+    Begin = createTempSymbol(BeginSymName, false);
+
+  MCSectionELF *Result = new (ELFAllocator.Allocate())
+      MCSectionELF(CachedName, Type, Flags, Kind, EntrySize, GroupSym, UniqueID,
+                   Begin, Associated);
   Entry.second = Result;
   return Result;
 }
 
 MCSectionELF *MCContext::createELFGroupSection(const MCSymbolELF *Group) {
-  return createELFSectionImpl(".group", ELF::SHT_GROUP, 0,
-                              SectionKind::getReadOnly(), 4, Group, ~0,
-                              nullptr);
+  MCSectionELF *Result = new (ELFAllocator.Allocate())
+      MCSectionELF(".group", ELF::SHT_GROUP, 0, SectionKind::getReadOnly(), 4,
+                   Group, ~0, nullptr, nullptr);
+  return Result;
 }
 
 MCSectionCOFF *MCContext::getCOFFSection(StringRef Section,
@@ -472,6 +433,14 @@ MCSectionCOFF *MCContext::getCOFFSection(StringRef Section,
                         BeginSymName);
 }
 
+MCSectionCOFF *MCContext::getCOFFSection(StringRef Section) {
+  COFFSectionKey T{Section, "", 0, GenericSectionID};
+  auto Iter = COFFUniquingMap.find(T);
+  if (Iter == COFFUniquingMap.end())
+    return nullptr;
+  return Iter->second;
+}
+
 MCSectionCOFF *MCContext::getAssociativeCOFFSection(MCSectionCOFF *Sec,
                                                     const MCSymbol *KeySym,
                                                     unsigned UniqueID) {
@@ -493,184 +462,35 @@ MCSectionCOFF *MCContext::getAssociativeCOFFSection(MCSectionCOFF *Sec,
                         "", 0, UniqueID);
 }
 
-MCSectionWasm *MCContext::getWasmSection(const Twine &Section, SectionKind K,
-                                         const Twine &Group, unsigned UniqueID,
-                                         const char *BeginSymName) {
-  MCSymbolWasm *GroupSym = nullptr;
-  if (!Group.isTriviallyEmpty() && !Group.str().empty()) {
-    GroupSym = cast<MCSymbolWasm>(getOrCreateSymbol(Group));
-    GroupSym->setComdat(true);
-  }
-
-  return getWasmSection(Section, K, GroupSym, UniqueID, BeginSymName);
-}
-
-MCSectionWasm *MCContext::getWasmSection(const Twine &Section, SectionKind Kind,
-                                         const MCSymbolWasm *GroupSym,
-                                         unsigned UniqueID,
-                                         const char *BeginSymName) {
-  StringRef Group = "";
-  if (GroupSym)
-    Group = GroupSym->getName();
-  // Do the lookup, if we have a hit, return it.
-  auto IterBool = WasmUniquingMap.insert(
-      std::make_pair(WasmSectionKey{Section.str(), Group, UniqueID}, nullptr));
-  auto &Entry = *IterBool.first;
-  if (!IterBool.second)
-    return Entry.second;
-
-  StringRef CachedName = Entry.first.SectionName;
-
-  MCSymbol *Begin = createSymbol(CachedName, false, false);
-  cast<MCSymbolWasm>(Begin)->setType(wasm::WASM_SYMBOL_TYPE_SECTION);
-
-  MCSectionWasm *Result = new (WasmAllocator.Allocate())
-      MCSectionWasm(CachedName, Kind, GroupSym, UniqueID, Begin);
-  Entry.second = Result;
-
-  auto *F = new MCDataFragment();
-  Result->getFragmentList().insert(Result->begin(), F);
-  F->setParent(Result);
-  Begin->setFragment(F);
-
-  return Result;
-}
-
-MCSectionXCOFF *MCContext::getXCOFFSection(StringRef Section,
-                                           XCOFF::StorageMappingClass SMC,
-                                           XCOFF::SymbolType Type,
-                                           XCOFF::StorageClass SC,
-                                           SectionKind Kind,
-                                           const char *BeginSymName) {
-  // Do the lookup. If we have a hit, return it.
-  auto IterBool = XCOFFUniquingMap.insert(
-      std::make_pair(XCOFFSectionKey{Section.str(), SMC}, nullptr));
-  auto &Entry = *IterBool.first;
-  if (!IterBool.second)
-    return Entry.second;
-
-  // Otherwise, return a new section.
-  StringRef CachedName = Entry.first.SectionName;
-  MCSymbol *QualName = getOrCreateSymbol(
-      CachedName + "[" + XCOFF::getMappingClassString(SMC) + "]");
-
-  MCSymbol *Begin = nullptr;
-  if (BeginSymName)
-    Begin = createTempSymbol(BeginSymName, false);
-
-  MCSectionXCOFF *Result = new (XCOFFAllocator.Allocate()) MCSectionXCOFF(
-      CachedName, SMC, Type, SC, Kind, cast<MCSymbolXCOFF>(QualName), Begin);
-  Entry.second = Result;
-
-  auto *F = new MCDataFragment();
-  Result->getFragmentList().insert(Result->begin(), F);
-  F->setParent(Result);
-
-  if (Begin)
-    Begin->setFragment(F);
-
-  return Result;
-}
-
 MCSubtargetInfo &MCContext::getSubtargetCopy(const MCSubtargetInfo &STI) {
   return *new (MCSubtargetAllocator.Allocate()) MCSubtargetInfo(STI);
-}
-
-void MCContext::addDebugPrefixMapEntry(const std::string &From,
-                                       const std::string &To) {
-  DebugPrefixMap.insert(std::make_pair(From, To));
-}
-
-void MCContext::RemapDebugPaths() {
-  const auto &DebugPrefixMap = this->DebugPrefixMap;
-  const auto RemapDebugPath = [&DebugPrefixMap](std::string &Path) {
-    for (const auto &Entry : DebugPrefixMap)
-      if (StringRef(Path).startswith(Entry.first)) {
-        std::string RemappedPath =
-            (Twine(Entry.second) + Path.substr(Entry.first.size())).str();
-        Path.swap(RemappedPath);
-      }
-  };
-
-  // Remap compilation directory.
-  std::string CompDir = CompilationDir.str();
-  RemapDebugPath(CompDir);
-  CompilationDir = CompDir;
-
-  // Remap MCDwarfDirs in all compilation units.
-  for (auto &CUIDTablePair : MCDwarfLineTablesCUMap)
-    for (auto &Dir : CUIDTablePair.second.getMCDwarfDirs())
-      RemapDebugPath(Dir);
 }
 
 //===----------------------------------------------------------------------===//
 // Dwarf Management
 //===----------------------------------------------------------------------===//
 
-void MCContext::setGenDwarfRootFile(StringRef InputFileName, StringRef Buffer) {
-  // MCDwarf needs the root file as well as the compilation directory.
-  // If we find a '.file 0' directive that will supersede these values.
-  Optional<MD5::MD5Result> Cksum;
-  if (getDwarfVersion() >= 5) {
-    MD5 Hash;
-    MD5::MD5Result Sum;
-    Hash.update(Buffer);
-    Hash.final(Sum);
-    Cksum = Sum;
-  }
-  // Canonicalize the root filename. It cannot be empty, and should not
-  // repeat the compilation dir.
-  // The MCContext ctor initializes MainFileName to the name associated with
-  // the SrcMgr's main file ID, which might be the same as InputFileName (and
-  // possibly include directory components).
-  // Or, MainFileName might have been overridden by a -main-file-name option,
-  // which is supposed to be just a base filename with no directory component.
-  // So, if the InputFileName and MainFileName are not equal, assume
-  // MainFileName is a substitute basename and replace the last component.
-  SmallString<1024> FileNameBuf = InputFileName;
-  if (FileNameBuf.empty() || FileNameBuf == "-")
-    FileNameBuf = "<stdin>";
-  if (!getMainFileName().empty() && FileNameBuf != getMainFileName()) {
-    llvm::sys::path::remove_filename(FileNameBuf);
-    llvm::sys::path::append(FileNameBuf, getMainFileName());
-  }
-  StringRef FileName = FileNameBuf;
-  if (FileName.consume_front(getCompilationDir()))
-    if (llvm::sys::path::is_separator(FileName.front()))
-      FileName = FileName.drop_front();
-  assert(!FileName.empty());
-  setMCLineTableRootFile(
-      /*CUID=*/0, getCompilationDir(), FileName, Cksum, None);
-}
-
-/// getDwarfFile - takes a file name and number to place in the dwarf file and
+/// getDwarfFile - takes a file name an number to place in the dwarf file and
 /// directory tables.  If the file number has already been allocated it is an
 /// error and zero is returned and the client reports the error, else the
 /// allocated file number is returned.  The file numbers may be in any order.
-Expected<unsigned> MCContext::getDwarfFile(StringRef Directory,
-                                           StringRef FileName,
-                                           unsigned FileNumber,
-                                           Optional<MD5::MD5Result> Checksum,
-                                           Optional<StringRef> Source,
-                                           unsigned CUID) {
+unsigned MCContext::getDwarfFile(StringRef Directory, StringRef FileName,
+                                 unsigned FileNumber, unsigned CUID) {
   MCDwarfLineTable &Table = MCDwarfLineTablesCUMap[CUID];
-  return Table.tryGetFile(Directory, FileName, Checksum, Source, DwarfVersion,
-                          FileNumber);
+  return Table.getFile(Directory, FileName, FileNumber);
 }
 
 /// isValidDwarfFileNumber - takes a dwarf file number and returns true if it
 /// currently is assigned and false otherwise.
 bool MCContext::isValidDwarfFileNumber(unsigned FileNumber, unsigned CUID) {
-  const MCDwarfLineTable &LineTable = getMCDwarfLineTable(CUID);
-  if (FileNumber == 0)
-    return getDwarfVersion() >= 5;
-  if (FileNumber >= LineTable.getMCDwarfFiles().size())
+  const SmallVectorImpl<MCDwarfFile> &MCDwarfFiles = getMCDwarfFiles(CUID);
+  if (FileNumber == 0 || FileNumber >= MCDwarfFiles.size())
     return false;
 
-  return !LineTable.getMCDwarfFiles()[FileNumber].Name.empty();
+  return !MCDwarfFiles[FileNumber].Name.empty();
 }
 
-/// Remove empty sections from SectionsForRanges, to avoid generating
+/// Remove empty sections from SectionStartEndSyms, to avoid generating
 /// useless debug info for them.
 void MCContext::finalizeDwarfSections(MCStreamer &MCOS) {
   SectionsForRanges.remove_if(
@@ -690,30 +510,13 @@ CodeViewContext &MCContext::getCVContext() {
 void MCContext::reportError(SMLoc Loc, const Twine &Msg) {
   HadError = true;
 
-  // If we have a source manager use it. Otherwise, try using the inline source
-  // manager.
-  // If that fails, use the generic report_fatal_error().
-  if (SrcMgr)
-    SrcMgr->PrintMessage(Loc, SourceMgr::DK_Error, Msg);
-  else if (InlineSrcMgr)
-    InlineSrcMgr->PrintMessage(Loc, SourceMgr::DK_Error, Msg);
-  else
+  // If we have a source manager use it. Otherwise just use the generic
+  // report_fatal_error().
+  if (!SrcMgr)
     report_fatal_error(Msg, false);
-}
 
-void MCContext::reportWarning(SMLoc Loc, const Twine &Msg) {
-  if (TargetOptions && TargetOptions->MCNoWarn)
-    return;
-  if (TargetOptions && TargetOptions->MCFatalWarnings)
-    reportError(Loc, Msg);
-  else {
-    // If we have a source manager use it. Otherwise, try using the inline
-    // source manager.
-    if (SrcMgr)
-      SrcMgr->PrintMessage(Loc, SourceMgr::DK_Warning, Msg);
-    else if (InlineSrcMgr)
-      InlineSrcMgr->PrintMessage(Loc, SourceMgr::DK_Warning, Msg);
-  }
+  // Use the source manager to print the message.
+  SrcMgr->PrintMessage(Loc, SourceMgr::DK_Error, Msg);
 }
 
 void MCContext::reportFatalError(SMLoc Loc, const Twine &Msg) {

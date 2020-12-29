@@ -1,27 +1,22 @@
 //===- PassPrinters.cpp - Utilities to print analysis info for passes -----===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Utilities to print analysis info for various kinds of passes.
+/// \brief Utilities to print analysis info for various kinds of passes.
 ///
 //===----------------------------------------------------------------------===//
-
 #include "PassPrinters.h"
-#include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/CallGraphSCCPass.h"
-#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopPass.h"
-#include "llvm/Analysis/RegionInfo.h"
 #include "llvm/Analysis/RegionPass.h"
-#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Pass.h"
-#include "llvm/Support/raw_ostream.h"
 #include <string>
 
 using namespace llvm;
@@ -198,7 +193,40 @@ struct RegionPassPrinter : public RegionPass {
 
 char RegionPassPrinter::ID = 0;
 
-} // end anonymous namespace
+struct BasicBlockPassPrinter : public BasicBlockPass {
+  const PassInfo *PassToPrint;
+  raw_ostream &Out;
+  static char ID;
+  std::string PassName;
+  bool QuietPass;
+
+  BasicBlockPassPrinter(const PassInfo *PI, raw_ostream &out, bool Quiet)
+      : BasicBlockPass(ID), PassToPrint(PI), Out(out), QuietPass(Quiet) {
+    std::string PassToPrintName = PassToPrint->getPassName();
+    PassName = "BasicBlockPass Printer: " + PassToPrintName;
+  }
+
+  bool runOnBasicBlock(BasicBlock &BB) override {
+    if (!QuietPass)
+      Out << "Printing Analysis info for BasicBlock '" << BB.getName()
+          << "': Pass " << PassToPrint->getPassName() << ":\n";
+
+    // Get and print pass...
+    getAnalysisID<Pass>(PassToPrint->getTypeInfo())
+        .print(Out, BB.getParent()->getParent());
+    return false;
+  }
+
+  StringRef getPassName() const override { return PassName; }
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.addRequiredID(PassToPrint->getTypeInfo());
+    AU.setPreservesAll();
+  }
+};
+
+char BasicBlockPassPrinter::ID = 0;
+}
 
 FunctionPass *llvm::createFunctionPassPrinter(const PassInfo *PI,
                                               raw_ostream &OS, bool Quiet) {
@@ -226,3 +254,7 @@ RegionPass *llvm::createRegionPassPrinter(const PassInfo *PI, raw_ostream &OS,
   return new RegionPassPrinter(PI, OS, Quiet);
 }
 
+BasicBlockPass *llvm::createBasicBlockPassPrinter(const PassInfo *PI,
+                                                  raw_ostream &OS, bool Quiet) {
+  return new BasicBlockPassPrinter(PI, OS, Quiet);
+}

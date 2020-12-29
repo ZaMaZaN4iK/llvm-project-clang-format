@@ -1,8 +1,9 @@
-//===- BaseSubobject.h - BaseSubobject class --------------------*- C++ -*-===//
+//===--- BaseSubobject.h - BaseSubobject class ----------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,30 +16,26 @@
 
 #include "clang/AST/CharUnits.h"
 #include "clang/AST/DeclCXX.h"
-#include "llvm/ADT/DenseMapInfo.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/Support/DataTypes.h"
 #include "llvm/Support/type_traits.h"
-#include <cstdint>
-#include <utility>
 
 namespace clang {
-
-class CXXRecordDecl;
-
-// BaseSubobject - Uniquely identifies a direct or indirect base class.
+// BaseSubobject - Uniquely identifies a direct or indirect base class. 
 // Stores both the base class decl and the offset from the most derived class to
 // the base class. Used for vtable and VTT generation.
 class BaseSubobject {
   /// Base - The base class declaration.
   const CXXRecordDecl *Base;
-
+  
   /// BaseOffset - The offset from the most derived class to the base class.
   CharUnits BaseOffset;
-
+  
 public:
-  BaseSubobject() = default;
+  BaseSubobject() { }
   BaseSubobject(const CXXRecordDecl *Base, CharUnits BaseOffset)
-      : Base(Base), BaseOffset(BaseOffset) {}
-
+    : Base(Base), BaseOffset(BaseOffset) { }
+  
   /// getBase - Returns the base class declaration.
   const CXXRecordDecl *getBase() const { return Base; }
 
@@ -50,7 +47,7 @@ public:
  }
 };
 
-} // namespace clang
+} // end namespace clang
 
 namespace llvm {
 
@@ -68,18 +65,22 @@ template<> struct DenseMapInfo<clang::BaseSubobject> {
   }
 
   static unsigned getHashValue(const clang::BaseSubobject &Base) {
-    using PairTy = std::pair<const clang::CXXRecordDecl *, clang::CharUnits>;
-
+    typedef std::pair<const clang::CXXRecordDecl *, clang::CharUnits> PairTy;
     return DenseMapInfo<PairTy>::getHashValue(PairTy(Base.getBase(),
                                                      Base.getBaseOffset()));
   }
 
-  static bool isEqual(const clang::BaseSubobject &LHS,
+  static bool isEqual(const clang::BaseSubobject &LHS, 
                       const clang::BaseSubobject &RHS) {
     return LHS == RHS;
   }
 };
 
-} // namespace llvm
+// It's OK to treat BaseSubobject as a POD type.
+template <> struct isPodLike<clang::BaseSubobject> {
+  static const bool value = true;
+};
 
-#endif // LLVM_CLANG_AST_BASESUBOBJECT_H
+}
+
+#endif

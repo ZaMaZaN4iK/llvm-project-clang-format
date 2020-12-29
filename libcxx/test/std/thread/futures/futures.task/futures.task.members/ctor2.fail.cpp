@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -26,10 +27,8 @@ struct A {};
 typedef std::packaged_task<A(int, char)> PT;
 typedef volatile std::packaged_task<A(int, char)> VPT;
 
-int main(int, char**)
+int main()
 {
     PT p { std::allocator_arg_t{}, test_allocator<A>{}, VPT {}}; // expected-error {{no matching constructor for initialization of 'PT' (aka 'packaged_task<A (int, char)>')}}
-    // expected-note-re@future:* 1 {{candidate template ignored: {{(disabled by 'enable_if')|(requirement '.*' was not satisfied)}}}}
-
-  return 0;
+    // expected-note@future:* 1 {{candidate template ignored: disabled by 'enable_if'}}
 }

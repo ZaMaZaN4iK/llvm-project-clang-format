@@ -1,8 +1,9 @@
-//===- ValueEnumerator.cpp - Number values and types for bitcode writer ---===//
+//===-- ValueEnumerator.cpp - Number values and types for bitcode writer --===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,78 +12,47 @@
 //===----------------------------------------------------------------------===//
 
 #include "ValueEnumerator.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/Config/llvm-config.h"
-#include "llvm/IR/Argument.h"
-#include "llvm/IR/Attributes.h"
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/Constant.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/GlobalAlias.h"
-#include "llvm/IR/GlobalIFunc.h"
-#include "llvm/IR/GlobalObject.h"
-#include "llvm/IR/GlobalValue.h"
-#include "llvm/IR/GlobalVariable.h"
-#include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/Type.h"
-#include "llvm/IR/Use.h"
 #include "llvm/IR/UseListOrder.h"
-#include "llvm/IR/User.h"
-#include "llvm/IR/Value.h"
 #include "llvm/IR/ValueSymbolTable.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
-#include <cassert>
-#include <cstddef>
-#include <iterator>
-#include <tuple>
-#include <utility>
-#include <vector>
-
 using namespace llvm;
 
 namespace {
-
 struct OrderMap {
   DenseMap<const Value *, std::pair<unsigned, bool>> IDs;
-  unsigned LastGlobalConstantID = 0;
-  unsigned LastGlobalValueID = 0;
+  unsigned LastGlobalConstantID;
+  unsigned LastGlobalValueID;
 
-  OrderMap() = default;
+  OrderMap() : LastGlobalConstantID(0), LastGlobalValueID(0) {}
 
   bool isGlobalConstant(unsigned ID) const {
     return ID <= LastGlobalConstantID;
   }
-
   bool isGlobalValue(unsigned ID) const {
     return ID <= LastGlobalValueID && !isGlobalConstant(ID);
   }
 
   unsigned size() const { return IDs.size(); }
   std::pair<unsigned, bool> &operator[](const Value *V) { return IDs[V]; }
-
   std::pair<unsigned, bool> lookup(const Value *V) const {
     return IDs.lookup(V);
   }
-
   void index(const Value *V) {
     // Explicitly sequence get-size and insert-value operations to avoid UB.
     unsigned ID = IDs.size() + 1;
     IDs[V].first = ID;
   }
 };
-
-} // end anonymous namespace
+}
 
 static void orderValue(const Value *V, OrderMap &OM) {
   if (OM.lookup(V).first)
@@ -171,7 +141,7 @@ static void predictValueUseListOrderImpl(const Value *V, const Function *F,
                                          unsigned ID, const OrderMap &OM,
                                          UseListOrderStack &Stack) {
   // Predict use-list order for this one.
-  using Entry = std::pair<const Use *, unsigned>;
+  typedef std::pair<const Use *, unsigned> Entry;
   SmallVector<Entry, 64> List;
   for (const Use &U : V->uses())
     // Check if this user will be serialized.
@@ -183,7 +153,7 @@ static void predictValueUseListOrderImpl(const Value *V, const Function *F,
     return;
 
   bool IsGlobalValue = OM.isGlobalValue(ID);
-  llvm::sort(List, [&](const Entry &L, const Entry &R) {
+  std::sort(List.begin(), List.end(), [&](const Entry &L, const Entry &R) {
     const Use *LU = L.first;
     const Use *RU = R.first;
     if (LU == RU)
@@ -344,13 +314,10 @@ ValueEnumerator::ValueEnumerator(const Module &M,
   // Remember what is the cutoff between globalvalue's and other constants.
   unsigned FirstConstant = Values.size();
 
-  // Enumerate the global variable initializers and attributes.
-  for (const GlobalVariable &GV : M.globals()) {
+  // Enumerate the global variable initializers.
+  for (const GlobalVariable &GV : M.globals())
     if (GV.hasInitializer())
       EnumerateValue(GV.getInitializer());
-    if (GV.hasAttributes())
-      EnumerateAttributes(GV.getAttributesAsList(AttributeList::FunctionIndex));
-  }
 
   // Enumerate the aliasees.
   for (const GlobalAlias &GA : M.aliases())
@@ -414,8 +381,10 @@ ValueEnumerator::ValueEnumerator(const Module &M,
           EnumerateMetadata(&F, MD->getMetadata());
         }
         EnumerateType(I.getType());
-        if (const auto *Call = dyn_cast<CallBase>(&I))
-          EnumerateAttributes(Call->getAttributes());
+        if (const CallInst *CI = dyn_cast<CallInst>(&I))
+          EnumerateAttributes(CI->getAttributes());
+        else if (const InvokeInst *II = dyn_cast<InvokeInst>(&I))
+          EnumerateAttributes(II->getAttributes());
 
         // Enumerate metadata attached with this instruction.
         MDs.clear();
@@ -463,30 +432,29 @@ unsigned ValueEnumerator::getValueID(const Value *V) const {
   return I->second-1;
 }
 
-#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
 LLVM_DUMP_METHOD void ValueEnumerator::dump() const {
   print(dbgs(), ValueMap, "Default");
   dbgs() << '\n';
   print(dbgs(), MetadataMap, "MetaData");
   dbgs() << '\n';
 }
-#endif
 
 void ValueEnumerator::print(raw_ostream &OS, const ValueMapType &Map,
                             const char *Name) const {
+
   OS << "Map Name: " << Name << "\n";
   OS << "Size: " << Map.size() << "\n";
   for (ValueMapType::const_iterator I = Map.begin(),
          E = Map.end(); I != E; ++I) {
+
     const Value *V = I->first;
     if (V->hasName())
       OS << "Value: " << V->getName();
     else
       OS << "Value: [null]\n";
-    V->print(errs());
-    errs() << '\n';
+    V->dump();
 
-    OS << " Uses(" << V->getNumUses() << "):";
+    OS << " Uses(" << std::distance(V->use_begin(),V->use_end()) << "):";
     for (const Use &U : V->uses()) {
       if (&U != &*V->use_begin())
         OS << ",";
@@ -502,6 +470,7 @@ void ValueEnumerator::print(raw_ostream &OS, const ValueMapType &Map,
 
 void ValueEnumerator::print(raw_ostream &OS, const MetadataMapType &Map,
                             const char *Name) const {
+
   OS << "Map Name: " << Name << "\n";
   OS << "Size: " << Map.size() << "\n";
   for (auto I = Map.begin(), E = Map.end(); I != E; ++I) {
@@ -543,6 +512,7 @@ void ValueEnumerator::OptimizeConstants(unsigned CstStart, unsigned CstEnd) {
     ValueMap[Values[CstStart].first] = CstStart+1;
 }
 
+
 /// EnumerateValueSymbolTable - Insert all of the values in the specified symbol
 /// table into the values table.
 void ValueEnumerator::EnumerateValueSymbolTable(const ValueSymbolTable &VST) {
@@ -579,7 +549,7 @@ void ValueEnumerator::EnumerateFunctionLocalMetadata(
 void ValueEnumerator::dropFunctionFromMetadata(
     MetadataMapType::value_type &FirstMD) {
   SmallVector<const MDNode *, 64> Worklist;
-  auto push = [&Worklist](MetadataMapType::value_type &MD) {
+  auto push = [this, &Worklist](MetadataMapType::value_type &MD) {
     auto &Entry = MD.second;
 
     // Nothing to do if this metadata isn't tagged.
@@ -742,15 +712,14 @@ void ValueEnumerator::organizeMetadata() {
   // and then sort by the original/current ID.  Since the IDs are guaranteed to
   // be unique, the result of std::sort will be deterministic.  There's no need
   // for std::stable_sort.
-  llvm::sort(Order, [this](MDIndex LHS, MDIndex RHS) {
+  std::sort(Order.begin(), Order.end(), [this](MDIndex LHS, MDIndex RHS) {
     return std::make_tuple(LHS.F, getMetadataTypeOrder(LHS.get(MDs)), LHS.ID) <
            std::make_tuple(RHS.F, getMetadataTypeOrder(RHS.get(MDs)), RHS.ID);
   });
 
   // Rebuild MDs, index the metadata ranges for each function in FunctionMDs,
   // and fix up MetadataMap.
-  std::vector<const Metadata *> OldMDs;
-  MDs.swap(OldMDs);
+  std::vector<const Metadata *> OldMDs = std::move(MDs);
   MDs.reserve(OldMDs.size());
   for (unsigned I = 0, E = Order.size(); I != E && !Order[I].F; ++I) {
     auto *MD = Order[I].get(OldMDs);
@@ -915,26 +884,23 @@ void ValueEnumerator::EnumerateOperandType(const Value *V) {
   }
 }
 
-void ValueEnumerator::EnumerateAttributes(AttributeList PAL) {
+void ValueEnumerator::EnumerateAttributes(AttributeSet PAL) {
   if (PAL.isEmpty()) return;  // null is always 0.
 
   // Do a lookup.
-  unsigned &Entry = AttributeListMap[PAL];
+  unsigned &Entry = AttributeMap[PAL];
   if (Entry == 0) {
     // Never saw this before, add it.
-    AttributeLists.push_back(PAL);
-    Entry = AttributeLists.size();
+    Attribute.push_back(PAL);
+    Entry = Attribute.size();
   }
 
   // Do lookups for all attribute groups.
-  for (unsigned i = PAL.index_begin(), e = PAL.index_end(); i != e; ++i) {
-    AttributeSet AS = PAL.getAttributes(i);
-    if (!AS.hasAttributes())
-      continue;
-    IndexAndAttrSet Pair = {i, AS};
-    unsigned &Entry = AttributeGroupMap[Pair];
+  for (unsigned i = 0, e = PAL.getNumSlots(); i != e; ++i) {
+    AttributeSet AS = PAL.getSlotAttributes(i);
+    unsigned &Entry = AttributeGroupMap[AS];
     if (Entry == 0) {
-      AttributeGroups.push_back(Pair);
+      AttributeGroups.push_back(AS);
       Entry = AttributeGroups.size();
     }
   }
@@ -949,11 +915,9 @@ void ValueEnumerator::incorporateFunction(const Function &F) {
   incorporateFunctionMetadata(F);
 
   // Adding function arguments to the value table.
-  for (const auto &I : F.args()) {
+  for (const auto &I : F.args())
     EnumerateValue(&I);
-    if (I.hasAttribute(Attribute::ByVal))
-      EnumerateType(I.getParamByValType());
-  }
+
   FirstFuncConstantID = Values.size();
 
   // Add all function-level constants to the value table.

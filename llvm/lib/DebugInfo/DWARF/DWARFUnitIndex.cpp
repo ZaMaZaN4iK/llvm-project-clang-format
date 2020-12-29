@@ -1,24 +1,21 @@
-//===- DWARFUnitIndex.cpp -------------------------------------------------===//
+//===-- DWARFUnitIndex.cpp ------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/DebugInfo/DWARF/DWARFUnitIndex.h"
-#include "llvm/ADT/STLExtras.h"
+
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/Format.h"
-#include "llvm/Support/raw_ostream.h"
-#include <cinttypes>
-#include <cstdint>
 
-using namespace llvm;
+namespace llvm {
 
 bool DWARFUnitIndex::Header::parse(DataExtractor IndexData,
-                                   uint64_t *OffsetPtr) {
+                                   uint32_t *OffsetPtr) {
   if (!IndexData.isValidOffsetForDataOfSize(*OffsetPtr, 16))
     return false;
   Version = IndexData.getU32(OffsetPtr);
@@ -45,7 +42,7 @@ bool DWARFUnitIndex::parse(DataExtractor IndexData) {
 }
 
 bool DWARFUnitIndex::parseImpl(DataExtractor IndexData) {
-  uint64_t Offset = 0;
+  uint32_t Offset = 0;
   if (!Header.parse(IndexData, &Offset))
     return false;
 
@@ -54,10 +51,10 @@ bool DWARFUnitIndex::parseImpl(DataExtractor IndexData) {
                       (2 * Header.NumUnits + 1) * 4 * Header.NumColumns))
     return false;
 
-  Rows = std::make_unique<Entry[]>(Header.NumBuckets);
+  Rows = llvm::make_unique<Entry[]>(Header.NumBuckets);
   auto Contribs =
-      std::make_unique<Entry::SectionContribution *[]>(Header.NumUnits);
-  ColumnKinds = std::make_unique<DWARFSectionKind[]>(Header.NumColumns);
+      llvm::make_unique<Entry::SectionContribution *[]>(Header.NumUnits);
+  ColumnKinds = llvm::make_unique<DWARFSectionKind[]>(Header.NumColumns);
 
   // Read Hash Table of Signatures
   for (unsigned i = 0; i != Header.NumBuckets; ++i)
@@ -70,7 +67,7 @@ bool DWARFUnitIndex::parseImpl(DataExtractor IndexData) {
       continue;
     Rows[i].Index = this;
     Rows[i].Contributions =
-        std::make_unique<Entry::SectionContribution[]>(Header.NumColumns);
+        llvm::make_unique<Entry::SectionContribution[]>(Header.NumColumns);
     Contribs[Index - 1] = Rows[i].Contributions.get();
   }
 
@@ -122,7 +119,7 @@ StringRef DWARFUnitIndex::getColumnHeader(DWARFSectionKind DS) {
 }
 
 void DWARFUnitIndex::dump(raw_ostream &OS) const {
-  if (!*this)
+  if (!Header.NumBuckets)
     return;
 
   Header.dump(OS);
@@ -155,7 +152,6 @@ DWARFUnitIndex::Entry::getOffset(DWARFSectionKind Sec) const {
       return &Contributions[i];
   return nullptr;
 }
-
 const DWARFUnitIndex::Entry::SectionContribution *
 DWARFUnitIndex::Entry::getOffset() const {
   return &Contributions[Index->InfoColumn];
@@ -163,38 +159,10 @@ DWARFUnitIndex::Entry::getOffset() const {
 
 const DWARFUnitIndex::Entry *
 DWARFUnitIndex::getFromOffset(uint32_t Offset) const {
-  if (OffsetLookup.empty()) {
-    for (uint32_t i = 0; i != Header.NumBuckets; ++i)
-      if (Rows[i].Contributions)
-        OffsetLookup.push_back(&Rows[i]);
-    llvm::sort(OffsetLookup, [&](Entry *E1, Entry *E2) {
-      return E1->Contributions[InfoColumn].Offset <
-             E2->Contributions[InfoColumn].Offset;
-    });
-  }
-  auto I = partition_point(OffsetLookup, [&](Entry *E2) {
-    return E2->Contributions[InfoColumn].Offset <= Offset;
-  });
-  if (I == OffsetLookup.begin())
-    return nullptr;
-  --I;
-  const auto *E = *I;
-  const auto &InfoContrib = E->Contributions[InfoColumn];
-  if ((InfoContrib.Offset + InfoContrib.Length) <= Offset)
-    return nullptr;
-  return E;
+  for (uint32_t i = 0; i != Header.NumBuckets; ++i)
+    if (const auto &Contribs = Rows[i].Contributions)
+      if (Contribs[InfoColumn].Offset == Offset)
+        return &Rows[i];
+  return nullptr;
 }
-
-const DWARFUnitIndex::Entry *DWARFUnitIndex::getFromHash(uint64_t S) const {
-  uint64_t Mask = Header.NumBuckets - 1;
-
-  auto H = S & Mask;
-  auto HP = ((S >> 32) & Mask) | 1;
-  while (Rows[H].getSignature() != S && Rows[H].getSignature() != 0)
-    H = (H + HP) & Mask;
-
-  if (Rows[H].getSignature() != S)
-    return nullptr;
-
-  return &Rows[H];
 }

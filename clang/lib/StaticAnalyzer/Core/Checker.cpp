@@ -1,8 +1,9 @@
 //== Checker.cpp - Registration mechanism for checkers -----------*- C++ -*--=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,13 +17,11 @@
 using namespace clang;
 using namespace ento;
 
-int ImplicitNullDerefEvent::Tag;
-
 StringRef CheckerBase::getTagDescription() const {
-  return getCheckerName().getName();
+  return getCheckName().getName();
 }
 
-CheckerNameRef CheckerBase::getCheckerName() const { return Name; }
+CheckName CheckerBase::getCheckName() const { return Name; }
 
 CheckerProgramPointTag::CheckerProgramPointTag(StringRef CheckerName,
                                                StringRef Msg)
@@ -30,10 +29,10 @@ CheckerProgramPointTag::CheckerProgramPointTag(StringRef CheckerName,
 
 CheckerProgramPointTag::CheckerProgramPointTag(const CheckerBase *Checker,
                                                StringRef Msg)
-    : SimpleProgramPointTag(Checker->getCheckerName().getName(), Msg) {}
+  : SimpleProgramPointTag(Checker->getCheckName().getName(), Msg) {}
 
 raw_ostream& clang::ento::operator<<(raw_ostream &Out,
                                      const CheckerBase &Checker) {
-  Out << Checker.getCheckerName().getName();
+  Out << Checker.getCheckName().getName();
   return Out;
 }

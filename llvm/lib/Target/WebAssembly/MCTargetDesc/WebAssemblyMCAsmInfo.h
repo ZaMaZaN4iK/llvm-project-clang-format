@@ -1,29 +1,29 @@
 //===-- WebAssemblyMCAsmInfo.h - WebAssembly asm properties -----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file contains the declaration of the WebAssemblyMCAsmInfo class.
+/// \brief This file contains the declaration of the WebAssemblyMCAsmInfo class.
 ///
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_WEBASSEMBLY_MCTARGETDESC_WEBASSEMBLYMCASMINFO_H
 #define LLVM_LIB_TARGET_WEBASSEMBLY_MCTARGETDESC_WEBASSEMBLYMCASMINFO_H
 
-#include "llvm/MC/MCAsmInfoWasm.h"
+#include "llvm/MC/MCAsmInfoELF.h"
 
 namespace llvm {
 
 class Triple;
 
-class WebAssemblyMCAsmInfo final : public MCAsmInfoWasm {
+class WebAssemblyMCAsmInfo final : public MCAsmInfoELF {
 public:
-  explicit WebAssemblyMCAsmInfo(const Triple &T,
-                                const MCTargetOptions &Options);
+  explicit WebAssemblyMCAsmInfo(const Triple &T);
   ~WebAssemblyMCAsmInfo() override;
 };
 

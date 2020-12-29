@@ -1,7 +1,7 @@
-; RUN: opt %loadPolly -polly-import-jscop \
+; RUN: opt %loadPolly -polly-import-jscop -polly-import-jscop-dir=%S \
 ; RUN:                -analyze < %s | FileCheck %s
 
-; RUN: opt %loadPolly -polly-import-jscop \
+; RUN: opt %loadPolly -polly-import-jscop -polly-import-jscop-dir=%S \
 ; RUN:                -polly-codegen -S < %s \
 ; RUN:                -polly-parallel \
 ; RUN:                | FileCheck %s -check-prefix=IR

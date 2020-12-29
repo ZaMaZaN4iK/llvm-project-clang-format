@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -27,7 +28,7 @@ constexpr bool test_constexpr()
 #endif
 
 
-int main(int, char**)
+int main()
 {
     assert(std::char_traits<char>::length("") == 0);
     assert(std::char_traits<char>::length("a") == 1);
@@ -38,6 +39,4 @@ int main(int, char**)
 #if TEST_STD_VER > 14
     static_assert(test_constexpr(), "" );
 #endif
-
-  return 0;
 }

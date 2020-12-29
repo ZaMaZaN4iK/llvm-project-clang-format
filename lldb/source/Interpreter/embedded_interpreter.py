@@ -72,7 +72,6 @@ def get_terminal_size(fd):
 
 def readfunc_stdio(prompt):
     sys.stdout.write(prompt)
-    sys.stdout.flush()
     return sys.stdin.readline().rstrip()
 
 

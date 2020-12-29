@@ -1,8 +1,9 @@
 //===- unittests/LockFileManagerTest.cpp - LockFileManager tests ----------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -59,7 +60,7 @@ TEST(LockFileManagerTest, LinkLockExists) {
   sys::path::append(TmpFileLock, "file.lock-000");
 
   int FD;
-  EC = sys::fs::openFileForWrite(StringRef(TmpFileLock), FD);
+  EC = sys::fs::openFileForWrite(StringRef(TmpFileLock), FD, sys::fs::F_None);
   ASSERT_FALSE(EC);
 
   int Ret = close(FD);

@@ -1,43 +1,44 @@
 //===-- CPlusPlusLanguage.cpp -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "CPlusPlusLanguage.h"
 
+// C Includes
 #include <cctype>
 #include <cstring>
 
+// C++ Includes
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <set>
 
+// Other libraries and framework includes
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Demangle/ItaniumDemangle.h"
 
-#include "lldb/Core/Mangled.h"
+// Project includes
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/FastDemangle.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Core/PluginManager.h"
+#include "lldb/Core/RegularExpression.h"
 #include "lldb/Core/UniqueCStringMap.h"
 #include "lldb/DataFormatters/CXXFunctionPointer.h"
 #include "lldb/DataFormatters/DataVisualization.h"
 #include "lldb/DataFormatters/FormattersHelpers.h"
 #include "lldb/DataFormatters/VectorType.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/RegularExpression.h"
 
 #include "BlockPointer.h"
-#include "CPlusPlusNameParser.h"
 #include "CxxStringTypes.h"
 #include "LibCxx.h"
 #include "LibCxxAtomic.h"
-#include "LibCxxVariant.h"
 #include "LibStdcpp.h"
-#include "MSVCUndecoratedNameParser.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -57,7 +58,9 @@ lldb_private::ConstString CPlusPlusLanguage::GetPluginNameStatic() {
   return g_name;
 }
 
+//------------------------------------------------------------------
 // PluginInterface protocol
+//------------------------------------------------------------------
 
 lldb_private::ConstString CPlusPlusLanguage::GetPluginName() {
   return GetPluginNameStatic();
@@ -65,7 +68,9 @@ lldb_private::ConstString CPlusPlusLanguage::GetPluginName() {
 
 uint32_t CPlusPlusLanguage::GetPluginVersion() { return 1; }
 
+//------------------------------------------------------------------
 // Static Functions
+//------------------------------------------------------------------
 
 Language *CPlusPlusLanguage::CreateInstance(lldb::LanguageType language) {
   if (Language::LanguageIsCPlusPlus(language))
@@ -79,14 +84,15 @@ void CPlusPlusLanguage::MethodName::Clear() {
   m_context = llvm::StringRef();
   m_arguments = llvm::StringRef();
   m_qualifiers = llvm::StringRef();
+  m_type = eTypeInvalid;
   m_parsed = false;
   m_parse_error = false;
 }
 
-static bool ReverseFindMatchingChars(const llvm::StringRef &s,
-                                     const llvm::StringRef &left_right_chars,
-                                     size_t &left_pos, size_t &right_pos,
-                                     size_t pos = llvm::StringRef::npos) {
+bool ReverseFindMatchingChars(const llvm::StringRef &s,
+                              const llvm::StringRef &left_right_chars,
+                              size_t &left_pos, size_t &right_pos,
+                              size_t pos = llvm::StringRef::npos) {
   assert(left_right_chars.size() == 2);
   left_pos = llvm::StringRef::npos;
   const char left_char = left_right_chars[0];
@@ -112,11 +118,13 @@ static bool ReverseFindMatchingChars(const llvm::StringRef &s,
   return false;
 }
 
-static bool IsTrivialBasename(const llvm::StringRef &basename) {
-  // Check that the basename matches with the following regular expression
-  // "^~?([A-Za-z_][A-Za-z_0-9]*)$" We are using a hand written implementation
-  // because it is significantly more efficient then using the general purpose
-  // regular expression library.
+static bool IsValidBasename(const llvm::StringRef &basename) {
+  // Check that the basename matches with the following regular expression or is
+  // an operator name:
+  // "^~?([A-Za-z_][A-Za-z_0-9]*)(<.*>)?$"
+  // We are using a hand written implementation because it is significantly more
+  // efficient then
+  // using the general purpose regular expression library.
   size_t idx = 0;
   if (basename.size() > 0 && basename[0] == '~')
     idx = 1;
@@ -137,68 +145,103 @@ static bool IsTrivialBasename(const llvm::StringRef &basename) {
   }
 
   // We processed all characters. It is a vaild basename.
-  return idx == basename.size();
-}
+  if (idx == basename.size())
+    return true;
 
-bool CPlusPlusLanguage::MethodName::TrySimplifiedParse() {
-  // This method tries to parse simple method definitions which are presumably
-  // most comman in user programs. Definitions that can be parsed by this
-  // function don't have return types and templates in the name.
-  // A::B::C::fun(std::vector<T> &) const
-  size_t arg_start, arg_end;
-  llvm::StringRef full(m_full.GetCString());
-  llvm::StringRef parens("()", 2);
-  if (ReverseFindMatchingChars(full, parens, arg_start, arg_end)) {
-    m_arguments = full.substr(arg_start, arg_end - arg_start + 1);
-    if (arg_end + 1 < full.size())
-      m_qualifiers = full.substr(arg_end + 1).ltrim();
+  // Check for basename with template arguments
+  // TODO: Improve the quality of the validation with validating the template
+  // arguments
+  if (basename[idx] == '<' && basename.back() == '>')
+    return true;
 
-    if (arg_start == 0)
-      return false;
-    size_t basename_end = arg_start;
-    size_t context_start = 0;
-    size_t context_end = full.rfind(':', basename_end);
-    if (context_end == llvm::StringRef::npos)
-      m_basename = full.substr(0, basename_end);
-    else {
-      if (context_start < context_end)
-        m_context = full.substr(context_start, context_end - 1 - context_start);
-      const size_t basename_begin = context_end + 1;
-      m_basename = full.substr(basename_begin, basename_end - basename_begin);
-    }
+  // Check if the basename is a vaild C++ operator name
+  if (!basename.startswith("operator"))
+    return false;
 
-    if (IsTrivialBasename(m_basename)) {
-      return true;
-    } else {
-      // The C++ basename doesn't match our regular expressions so this can't
-      // be a valid C++ method, clear everything out and indicate an error
-      m_context = llvm::StringRef();
-      m_basename = llvm::StringRef();
-      m_arguments = llvm::StringRef();
-      m_qualifiers = llvm::StringRef();
-      return false;
-    }
-  }
-  return false;
+  static RegularExpression g_operator_regex(
+      llvm::StringRef("^(operator)( "
+                      "?)([A-Za-z_][A-Za-z_0-9]*|\\(\\)|"
+                      "\\[\\]|[\\^<>=!\\/"
+                      "*+-]+)(<.*>)?(\\[\\])?$"));
+  std::string basename_str(basename.str());
+  return g_operator_regex.Execute(basename_str, nullptr);
 }
 
 void CPlusPlusLanguage::MethodName::Parse() {
   if (!m_parsed && m_full) {
-    if (TrySimplifiedParse()) {
-      m_parse_error = false;
-    } else {
-      CPlusPlusNameParser parser(m_full.GetStringRef());
-      if (auto function = parser.ParseAsFunctionDefinition()) {
-        m_basename = function.getValue().name.basename;
-        m_context = function.getValue().name.context;
-        m_arguments = function.getValue().arguments;
-        m_qualifiers = function.getValue().qualifiers;
-        m_parse_error = false;
+    //        ConstString mangled;
+    //        m_full.GetMangledCounterpart(mangled);
+    //        printf ("\n   parsing = '%s'\n", m_full.GetCString());
+    //        if (mangled)
+    //            printf ("   mangled = '%s'\n", mangled.GetCString());
+    m_parse_error = false;
+    m_parsed = true;
+    llvm::StringRef full(m_full.GetCString());
+
+    size_t arg_start, arg_end;
+    llvm::StringRef parens("()", 2);
+    if (ReverseFindMatchingChars(full, parens, arg_start, arg_end)) {
+      m_arguments = full.substr(arg_start, arg_end - arg_start + 1);
+      if (arg_end + 1 < full.size())
+        m_qualifiers = full.substr(arg_end + 1);
+      if (arg_start > 0) {
+        size_t basename_end = arg_start;
+        size_t context_start = 0;
+        size_t context_end = llvm::StringRef::npos;
+        if (basename_end > 0 && full[basename_end - 1] == '>') {
+          // TODO: handle template junk...
+          // Templated function
+          size_t template_start, template_end;
+          llvm::StringRef lt_gt("<>", 2);
+          if (ReverseFindMatchingChars(full, lt_gt, template_start,
+                                       template_end, basename_end)) {
+            // Check for templated functions that include return type like:
+            // 'void foo<Int>()'
+            context_start = full.rfind(' ', template_start);
+            if (context_start == llvm::StringRef::npos)
+              context_start = 0;
+            else
+              ++context_start;
+
+            context_end = full.rfind(':', template_start);
+            if (context_end == llvm::StringRef::npos ||
+                context_end < context_start)
+              context_end = context_start;
+          } else {
+            context_end = full.rfind(':', basename_end);
+          }
+        } else if (context_end == llvm::StringRef::npos) {
+          context_end = full.rfind(':', basename_end);
+        }
+
+        if (context_end == llvm::StringRef::npos)
+          m_basename = full.substr(0, basename_end);
+        else {
+          if (context_start < context_end)
+            m_context =
+                full.substr(context_start, context_end - 1 - context_start);
+          const size_t basename_begin = context_end + 1;
+          m_basename =
+              full.substr(basename_begin, basename_end - basename_begin);
+        }
+        m_type = eTypeUnknownMethod;
       } else {
         m_parse_error = true;
+        return;
       }
+
+      if (!IsValidBasename(m_basename)) {
+        // The C++ basename doesn't match our regular expressions so this can't
+        // be a valid C++ method, clear everything out and indicate an error
+        m_context = llvm::StringRef();
+        m_basename = llvm::StringRef();
+        m_arguments = llvm::StringRef();
+        m_qualifiers = llvm::StringRef();
+        m_parse_error = true;
+      }
+    } else {
+      m_parse_error = true;
     }
-    m_parsed = true;
   }
 }
 
@@ -229,164 +272,225 @@ llvm::StringRef CPlusPlusLanguage::MethodName::GetQualifiers() {
 std::string CPlusPlusLanguage::MethodName::GetScopeQualifiedName() {
   if (!m_parsed)
     Parse();
-  if (m_context.empty())
-    return m_basename;
+  if (m_basename.empty() || m_context.empty())
+    return std::string();
 
   std::string res;
   res += m_context;
   res += "::";
   res += m_basename;
+
   return res;
 }
 
-bool CPlusPlusLanguage::IsCPPMangledName(llvm::StringRef name) {
-  // FIXME!! we should really run through all the known C++ Language plugins
-  // and ask each one if this is a C++ mangled name
+bool CPlusPlusLanguage::IsCPPMangledName(const char *name) {
+  // FIXME, we should really run through all the known C++ Language plugins and
+  // ask each one if
+  // this is a C++ mangled name, but we can put that off till there is actually
+  // more than one
+  // we care about.
 
-  Mangled::ManglingScheme scheme = Mangled::GetManglingScheme(name);
-
-  if (scheme == Mangled::eManglingSchemeNone)
-    return false;
-
-  return true;
+  return (name != nullptr && name[0] == '_' && name[1] == 'Z');
 }
 
 bool CPlusPlusLanguage::ExtractContextAndIdentifier(
     const char *name, llvm::StringRef &context, llvm::StringRef &identifier) {
-  if (MSVCUndecoratedNameParser::IsMSVCUndecoratedName(name))
-    return MSVCUndecoratedNameParser::ExtractContextAndIdentifier(name, context,
-                                                                  identifier);
-
-  CPlusPlusNameParser parser(name);
-  if (auto full_name = parser.ParseAsFullName()) {
-    identifier = full_name.getValue().basename;
-    context = full_name.getValue().context;
+  static RegularExpression g_basename_regex(llvm::StringRef(
+      "^(([A-Za-z_][A-Za-z_0-9]*::)*)(~?[A-Za-z_~][A-Za-z_0-9]*)$"));
+  RegularExpression::Match match(4);
+  if (g_basename_regex.Execute(llvm::StringRef::withNullAsEmpty(name),
+                               &match)) {
+    match.GetMatchAtIndex(name, 1, context);
+    match.GetMatchAtIndex(name, 3, identifier);
     return true;
   }
   return false;
 }
 
-namespace {
-class NodeAllocator {
-  llvm::BumpPtrAllocator Alloc;
-
+class CPPRuntimeEquivalents {
 public:
-  void reset() { Alloc.Reset(); }
+  CPPRuntimeEquivalents() {
+    m_impl.Append(ConstString("std::basic_string<char, std::char_traits<char>, "
+                              "std::allocator<char> >")
+                      .GetStringRef(),
+                  ConstString("basic_string<char>"));
 
-  template <typename T, typename... Args> T *makeNode(Args &&... args) {
-    return new (Alloc.Allocate(sizeof(T), alignof(T)))
-        T(std::forward<Args>(args)...);
+    // these two (with a prefixed std::) occur when c++stdlib string class
+    // occurs as a template argument in some STL container
+    m_impl.Append(ConstString("std::basic_string<char, std::char_traits<char>, "
+                              "std::allocator<char> >")
+                      .GetStringRef(),
+                  ConstString("std::basic_string<char>"));
+
+    m_impl.Sort();
   }
 
-  void *allocateNodeArray(size_t sz) {
-    return Alloc.Allocate(sizeof(llvm::itanium_demangle::Node *) * sz,
-                          alignof(llvm::itanium_demangle::Node *));
-  }
-};
-
-template <typename Derived>
-class ManglingSubstitutor
-    : public llvm::itanium_demangle::AbstractManglingParser<Derived,
-                                                            NodeAllocator> {
-  using Base =
-      llvm::itanium_demangle::AbstractManglingParser<Derived, NodeAllocator>;
-
-public:
-  ManglingSubstitutor() : Base(nullptr, nullptr) {}
-
-  template<typename... Ts>
-  ConstString substitute(llvm::StringRef Mangled, Ts &&... Vals) {
-    this->getDerived().reset(Mangled, std::forward<Ts>(Vals)...);
-    return substituteImpl(Mangled);
+  void Add(ConstString &type_name, ConstString &type_equivalent) {
+    m_impl.Insert(type_name.GetStringRef(), type_equivalent);
   }
 
+  uint32_t FindExactMatches(ConstString &type_name,
+                            std::vector<ConstString> &equivalents) {
+    uint32_t count = 0;
 
-protected:
-  void reset(llvm::StringRef Mangled) {
-    Base::reset(Mangled.begin(), Mangled.end());
-    Written = Mangled.begin();
-    Result.clear();
-    Substituted = false;
-  }
-
-  ConstString substituteImpl(llvm::StringRef Mangled) {
-    Log *log = GetLogIfAllCategoriesSet(LIBLLDB_LOG_LANGUAGE);
-    if (this->parse() == nullptr) {
-      LLDB_LOG(log, "Failed to substitute mangling in {0}", Mangled);
-      return ConstString();
+    for (ImplData match =
+             m_impl.FindFirstValueForName(type_name.GetStringRef());
+         match != nullptr; match = m_impl.FindNextValueForName(match)) {
+      equivalents.push_back(match->value);
+      count++;
     }
-    if (!Substituted)
-      return ConstString();
 
-    // Append any trailing unmodified input.
-    appendUnchangedInput();
-    LLDB_LOG(log, "Substituted mangling {0} -> {1}", Mangled, Result);
-    return ConstString(Result);
+    return count;
   }
 
-  void trySubstitute(llvm::StringRef From, llvm::StringRef To) {
-    if (!llvm::StringRef(currentParserPos(), this->numLeft()).startswith(From))
-      return;
+  // partial matches can occur when a name with equivalents is a template
+  // argument.
+  // e.g. we may have "class Foo" be a match for "struct Bar". if we have a
+  // typename
+  // such as "class Templatized<class Foo, Anything>" we want this to be
+  // replaced with
+  // "class Templatized<struct Bar, Anything>". Since partial matching is time
+  // consuming
+  // once we get a partial match, we add it to the exact matches list for faster
+  // retrieval
+  uint32_t FindPartialMatches(ConstString &type_name,
+                              std::vector<ConstString> &equivalents) {
+    uint32_t count = 0;
 
-    // We found a match. Append unmodified input up to this point.
-    appendUnchangedInput();
+    llvm::StringRef type_name_cstr = type_name.GetStringRef();
 
-    // And then perform the replacement.
-    Result += To;
-    Written += From.size();
-    Substituted = true;
+    size_t items_count = m_impl.GetSize();
+
+    for (size_t item = 0; item < items_count; item++) {
+      llvm::StringRef key_cstr = m_impl.GetCStringAtIndex(item);
+      if (type_name_cstr.contains(key_cstr)) {
+        count += AppendReplacements(type_name_cstr, key_cstr, equivalents);
+      }
+    }
+
+    return count;
   }
 
 private:
-  /// Input character until which we have constructed the respective output
-  /// already.
-  const char *Written;
+  std::string &replace(std::string &target, std::string &pattern,
+                       std::string &with) {
+    size_t pos;
+    size_t pattern_len = pattern.size();
 
-  llvm::SmallString<128> Result;
+    while ((pos = target.find(pattern)) != std::string::npos)
+      target.replace(pos, pattern_len, with);
 
-  /// Whether we have performed any substitutions.
-  bool Substituted;
-
-  const char *currentParserPos() const { return this->First; }
-
-  void appendUnchangedInput() {
-    Result +=
-        llvm::StringRef(Written, std::distance(Written, currentParserPos()));
-    Written = currentParserPos();
+    return target;
   }
 
+  uint32_t AppendReplacements(llvm::StringRef original,
+                              llvm::StringRef matching_key,
+                              std::vector<ConstString> &equivalents) {
+    std::string matching_key_str(matching_key);
+    ConstString original_const(original);
+
+    uint32_t count = 0;
+
+    for (ImplData match = m_impl.FindFirstValueForName(matching_key);
+         match != nullptr; match = m_impl.FindNextValueForName(match)) {
+      std::string target(original);
+      std::string equiv_class(match->value.AsCString());
+
+      replace(target, matching_key_str, equiv_class);
+
+      ConstString target_const(target.c_str());
+
+// you will most probably want to leave this off since it might make this map
+// grow indefinitely
+#ifdef ENABLE_CPP_EQUIVALENTS_MAP_TO_GROW
+      Add(original_const, target_const);
+#endif
+      equivalents.push_back(target_const);
+
+      count++;
+    }
+
+    return count;
+  }
+
+  typedef UniqueCStringMap<ConstString> Impl;
+  typedef const Impl::Entry *ImplData;
+  Impl m_impl;
 };
 
-/// Given a mangled function `Mangled`, replace all the primitive function type
-/// arguments of `Search` with type `Replace`.
-class TypeSubstitutor : public ManglingSubstitutor<TypeSubstitutor> {
-  llvm::StringRef Search;
-  llvm::StringRef Replace;
+static CPPRuntimeEquivalents &GetEquivalentsMap() {
+  static CPPRuntimeEquivalents g_equivalents_map;
+  return g_equivalents_map;
+}
 
-public:
-  void reset(llvm::StringRef Mangled, llvm::StringRef Search,
-             llvm::StringRef Replace) {
-    ManglingSubstitutor::reset(Mangled);
-    this->Search = Search;
-    this->Replace = Replace;
-  }
+uint32_t
+CPlusPlusLanguage::FindEquivalentNames(ConstString type_name,
+                                       std::vector<ConstString> &equivalents) {
+  uint32_t count = GetEquivalentsMap().FindExactMatches(type_name, equivalents);
 
-  llvm::itanium_demangle::Node *parseType() {
-    trySubstitute(Search, Replace);
-    return ManglingSubstitutor::parseType();
-  }
-};
+  bool might_have_partials =
+      (count == 0) // if we have a full name match just use it
+      && (strchr(type_name.AsCString(), '<') !=
+              nullptr // we should only have partial matches when templates are
+                      // involved, check that we have
+          && strchr(type_name.AsCString(), '>') != nullptr); // angle brackets
+                                                             // in the type_name
+                                                             // before trying to
+                                                             // scan for partial
+                                                             // matches
 
-class CtorDtorSubstitutor : public ManglingSubstitutor<CtorDtorSubstitutor> {
-public:
-  llvm::itanium_demangle::Node *
-  parseCtorDtorName(llvm::itanium_demangle::Node *&SoFar, NameState *State) {
-    trySubstitute("C1", "C2");
-    trySubstitute("D1", "D2");
-    return ManglingSubstitutor::parseCtorDtorName(SoFar, State);
-  }
-};
-} // namespace
+  if (might_have_partials)
+    count = GetEquivalentsMap().FindPartialMatches(type_name, equivalents);
+
+  return count;
+}
+
+/// Given a mangled function `mangled`, replace all the primitive function type
+/// arguments of `search` with type `replace`.
+static ConstString SubsPrimitiveParmItanium(llvm::StringRef mangled,
+                                            llvm::StringRef search,
+                                            llvm::StringRef replace) {
+  Log *log = GetLogIfAllCategoriesSet(LIBLLDB_LOG_LANGUAGE);
+
+  const size_t max_len =
+      mangled.size() + mangled.count(search) * replace.size() + 1;
+
+  // Make a temporary buffer to fix up the mangled parameter types and copy the
+  // original there
+  std::string output_buf;
+  output_buf.reserve(max_len);
+  output_buf.insert(0, mangled.str());
+  ptrdiff_t replaced_offset = 0;
+
+  auto swap_parms_hook = [&](const char *parsee) {
+    if (!parsee || !*parsee)
+      return;
+
+    // Check whether we've found a substitutee
+    llvm::StringRef s(parsee);
+    if (s.startswith(search)) {
+      // account for the case where a replacement is of a different length to
+      // the original
+      replaced_offset += replace.size() - search.size();
+
+      ptrdiff_t replace_idx = (mangled.size() - s.size()) + replaced_offset;
+      output_buf.erase(replace_idx, search.size());
+      output_buf.insert(replace_idx, replace.str());
+    }
+  };
+
+  // FastDemangle will call our hook for each instance of a primitive type,
+  // allowing us to perform substitution
+  const char *const demangled =
+      FastDemangle(mangled.str().c_str(), mangled.size(), swap_parms_hook);
+
+  if (log)
+    log->Printf("substituted mangling for %s:{%s} %s:{%s}\n",
+                mangled.str().c_str(), demangled, output_buf.c_str(),
+                FastDemangle(output_buf.c_str()));
+
+  return output_buf == mangled ? ConstString() : ConstString(output_buf);
+}
 
 uint32_t CPlusPlusLanguage::FindAlternateFunctionManglings(
     const ConstString mangled_name, std::set<ConstString> &alternates) {
@@ -414,29 +518,24 @@ uint32_t CPlusPlusLanguage::FindAlternateFunctionManglings(
     alternates.insert(ConstString(fixed_scratch));
   }
 
-  TypeSubstitutor TS;
   // `char` is implementation defined as either `signed` or `unsigned`.  As a
   // result a char parameter has 3 possible manglings: 'c'-char, 'a'-signed
   // char, 'h'-unsigned char.  If we're looking for symbols with a signed char
   // parameter, try finding matches which have the general case 'c'.
   if (ConstString char_fixup =
-          TS.substitute(mangled_name.GetStringRef(), "a", "c"))
+          SubsPrimitiveParmItanium(mangled_name.GetStringRef(), "a", "c"))
     alternates.insert(char_fixup);
 
   // long long parameter mangling 'x', may actually just be a long 'l' argument
   if (ConstString long_fixup =
-          TS.substitute(mangled_name.GetStringRef(), "x", "l"))
+          SubsPrimitiveParmItanium(mangled_name.GetStringRef(), "x", "l"))
     alternates.insert(long_fixup);
 
   // unsigned long long parameter mangling 'y', may actually just be unsigned
   // long 'm' argument
   if (ConstString ulong_fixup =
-          TS.substitute(mangled_name.GetStringRef(), "y", "m"))
+          SubsPrimitiveParmItanium(mangled_name.GetStringRef(), "y", "m"))
     alternates.insert(ulong_fixup);
-
-  if (ConstString ctor_fixup =
-          CtorDtorSubstitutor().substitute(mangled_name.GetStringRef()))
-    alternates.insert(ctor_fixup);
 
   return alternates.size() - start_size;
 }
@@ -454,119 +553,107 @@ static void LoadLibCxxFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
       .SetShowMembersOneLiner(false)
       .SetHideItemNames(false);
 
-  AddCXXSummary(cpp_category_sp,
-                lldb_private::formatters::LibcxxStringSummaryProviderASCII,
-                "std::string summary provider",
-                ConstString("^std::__[[:alnum:]]+::string$"), stl_summary_flags,
-                true);
-  AddCXXSummary(cpp_category_sp,
-                lldb_private::formatters::LibcxxStringSummaryProviderASCII,
-                "std::string summary provider",
-                ConstString("^std::__[[:alnum:]]+::basic_string<char, "
-                            "std::__[[:alnum:]]+::char_traits<char>, "
-                            "std::__[[:alnum:]]+::allocator<char> >$"),
-                stl_summary_flags, true);
-  AddCXXSummary(cpp_category_sp,
-                lldb_private::formatters::LibcxxStringSummaryProviderASCII,
-                "std::string summary provider",
-                ConstString("^std::__[[:alnum:]]+::basic_string<unsigned char, "
-                            "std::__[[:alnum:]]+::char_traits<unsigned char>, "
-                            "std::__[[:alnum:]]+::allocator<unsigned char> >$"),
-                stl_summary_flags, true);
+#ifndef LLDB_DISABLE_PYTHON
+  lldb::TypeSummaryImplSP std_string_summary_sp(new CXXFunctionSummaryFormat(
+      stl_summary_flags, lldb_private::formatters::LibcxxStringSummaryProvider,
+      "std::string summary provider"));
+  lldb::TypeSummaryImplSP std_wstring_summary_sp(new CXXFunctionSummaryFormat(
+      stl_summary_flags, lldb_private::formatters::LibcxxWStringSummaryProvider,
+      "std::wstring summary provider"));
 
-  AddCXXSummary(cpp_category_sp,
-                lldb_private::formatters::LibcxxStringSummaryProviderUTF16,
-                "std::u16string summary provider",
-                ConstString(
-                    "^std::__[[:alnum:]]+::basic_string<char16_t, "
-                    "std::__[[:alnum:]]+::char_traits<char16_t>, "
-                    "std::__[[:alnum:]]+::allocator<char16_t> >$"),
-                stl_summary_flags, true);
+  cpp_category_sp->GetTypeSummariesContainer()->Add(
+      ConstString("std::__1::string"), std_string_summary_sp);
+  cpp_category_sp->GetTypeSummariesContainer()->Add(
+      ConstString("std::__ndk1::string"), std_string_summary_sp);
+  cpp_category_sp->GetTypeSummariesContainer()->Add(
+      ConstString("std::__1::basic_string<char, std::__1::char_traits<char>, "
+                  "std::__1::allocator<char> >"),
+      std_string_summary_sp);
+  cpp_category_sp->GetTypeSummariesContainer()->Add(
+      ConstString("std::__ndk1::basic_string<char, "
+                  "std::__ndk1::char_traits<char>, "
+                  "std::__ndk1::allocator<char> >"),
+      std_string_summary_sp);
 
-  AddCXXSummary(cpp_category_sp,
-                lldb_private::formatters::LibcxxStringSummaryProviderUTF32,
-                "std::u32string summary provider",
-                ConstString(
-                    "^std::__[[:alnum:]]+::basic_string<char32_t, "
-                    "std::__[[:alnum:]]+::char_traits<char32_t>, "
-                    "std::__[[:alnum:]]+::allocator<char32_t> >$"),
-                stl_summary_flags, true);
-
-  AddCXXSummary(cpp_category_sp,
-                lldb_private::formatters::LibcxxWStringSummaryProvider,
-                "std::wstring summary provider",
-                ConstString("^std::__[[:alnum:]]+::wstring$"),
-                stl_summary_flags, true);
-  AddCXXSummary(cpp_category_sp,
-                lldb_private::formatters::LibcxxWStringSummaryProvider,
-                "std::wstring summary provider",
-                ConstString("^std::__[[:alnum:]]+::basic_string<wchar_t, "
-                            "std::__[[:alnum:]]+::char_traits<wchar_t>, "
-                            "std::__[[:alnum:]]+::allocator<wchar_t> >$"),
-                stl_summary_flags, true);
+  cpp_category_sp->GetTypeSummariesContainer()->Add(
+      ConstString("std::__1::wstring"), std_wstring_summary_sp);
+  cpp_category_sp->GetTypeSummariesContainer()->Add(
+      ConstString("std::__ndk1::wstring"), std_wstring_summary_sp);
+  cpp_category_sp->GetTypeSummariesContainer()->Add(
+      ConstString("std::__1::basic_string<wchar_t, "
+                  "std::__1::char_traits<wchar_t>, "
+                  "std::__1::allocator<wchar_t> >"),
+      std_wstring_summary_sp);
+  cpp_category_sp->GetTypeSummariesContainer()->Add(
+      ConstString("std::__ndk1::basic_string<wchar_t, "
+                  "std::__ndk1::char_traits<wchar_t>, "
+                  "std::__ndk1::allocator<wchar_t> >"),
+      std_wstring_summary_sp);
 
   SyntheticChildren::Flags stl_synth_flags;
   stl_synth_flags.SetCascades(true).SetSkipPointers(false).SetSkipReferences(
       false);
-  SyntheticChildren::Flags stl_deref_flags = stl_synth_flags;
-  stl_deref_flags.SetFrontEndWantsDereference();
 
   AddCXXSynthetic(
       cpp_category_sp,
-      lldb_private::formatters::LibcxxBitsetSyntheticFrontEndCreator,
-      "libc++ std::bitset synthetic children",
-      ConstString("^std::__[[:alnum:]]+::bitset<.+>(( )?&)?$"), stl_deref_flags,
-      true);
+      lldb_private::formatters::LibcxxVectorBoolSyntheticFrontEndCreator,
+      "libc++ std::vector<bool> synthetic children",
+      ConstString(
+          "^std::__(ndk)?1::vector<bool, std::__(ndk)?1::allocator<bool> >$"),
+      stl_synth_flags, true);
   AddCXXSynthetic(
       cpp_category_sp,
       lldb_private::formatters::LibcxxStdVectorSyntheticFrontEndCreator,
       "libc++ std::vector synthetic children",
-      ConstString("^std::__[[:alnum:]]+::vector<.+>(( )?&)?$"), stl_deref_flags,
+      ConstString("^std::__(ndk)?1::vector<.+>(( )?&)?$"), stl_synth_flags,
       true);
-  AddCXXSynthetic(
-      cpp_category_sp,
-      lldb_private::formatters::LibcxxStdForwardListSyntheticFrontEndCreator,
-      "libc++ std::forward_list synthetic children",
-      ConstString("^std::__[[:alnum:]]+::forward_list<.+>(( )?&)?$"),
-      stl_synth_flags, true);
   AddCXXSynthetic(
       cpp_category_sp,
       lldb_private::formatters::LibcxxStdListSyntheticFrontEndCreator,
       "libc++ std::list synthetic children",
-      // A POSIX variant of: "^std::__(?!cxx11:)[[:alnum:]]+::list<.+>(( )?&)?$"
-      // so that it does not clash with: "^std::(__cxx11::)?list<.+>(( )?&)?$"
-      ConstString("^std::__([A-Zabd-z0-9]|cx?[A-Za-wyz0-9]|cxx1?[A-Za-z02-9]|"
-                  "cxx11[[:alnum:]])[[:alnum:]]*::list<.+>(( )?&)?$"),
-      stl_deref_flags, true);
+      ConstString("^std::__(ndk)?1::list<.+>(( )?&)?$"), stl_synth_flags, true);
   AddCXXSynthetic(
       cpp_category_sp,
       lldb_private::formatters::LibcxxStdMapSyntheticFrontEndCreator,
       "libc++ std::map synthetic children",
-      ConstString("^std::__[[:alnum:]]+::map<.+> >(( )?&)?$"), stl_synth_flags,
+      ConstString("^std::__(ndk)?1::map<.+> >(( )?&)?$"), stl_synth_flags,
       true);
+  AddCXXSynthetic(
+      cpp_category_sp,
+      lldb_private::formatters::LibcxxVectorBoolSyntheticFrontEndCreator,
+      "libc++ std::vector<bool> synthetic children",
+      ConstString("std::__(ndk)?1::vector<std::__(ndk)?1::allocator<bool> >"),
+      stl_synth_flags);
+  AddCXXSynthetic(
+      cpp_category_sp,
+      lldb_private::formatters::LibcxxVectorBoolSyntheticFrontEndCreator,
+      "libc++ std::vector<bool> synthetic children",
+      ConstString(
+          "std::__(ndk)?1::vector<bool, std::__(ndk)?1::allocator<bool> >"),
+      stl_synth_flags);
   AddCXXSynthetic(
       cpp_category_sp,
       lldb_private::formatters::LibcxxStdMapSyntheticFrontEndCreator,
       "libc++ std::set synthetic children",
-      ConstString("^std::__[[:alnum:]]+::set<.+> >(( )?&)?$"), stl_deref_flags,
+      ConstString("^std::__(ndk)?1::set<.+> >(( )?&)?$"), stl_synth_flags,
       true);
   AddCXXSynthetic(
       cpp_category_sp,
       lldb_private::formatters::LibcxxStdMapSyntheticFrontEndCreator,
       "libc++ std::multiset synthetic children",
-      ConstString("^std::__[[:alnum:]]+::multiset<.+> >(( )?&)?$"),
-      stl_deref_flags, true);
+      ConstString("^std::__(ndk)?1::multiset<.+> >(( )?&)?$"), stl_synth_flags,
+      true);
   AddCXXSynthetic(
       cpp_category_sp,
       lldb_private::formatters::LibcxxStdMapSyntheticFrontEndCreator,
       "libc++ std::multimap synthetic children",
-      ConstString("^std::__[[:alnum:]]+::multimap<.+> >(( )?&)?$"),
-      stl_synth_flags, true);
+      ConstString("^std::__(ndk)?1::multimap<.+> >(( )?&)?$"), stl_synth_flags,
+      true);
   AddCXXSynthetic(
       cpp_category_sp,
       lldb_private::formatters::LibcxxStdUnorderedMapSyntheticFrontEndCreator,
       "libc++ std::unordered containers synthetic children",
-      ConstString("^(std::__[[:alnum:]]+::)unordered_(multi)?(map|set)<.+> >$"),
+      ConstString("^(std::__(ndk)?1::)unordered_(multi)?(map|set)<.+> >$"),
       stl_synth_flags, true);
   AddCXXSynthetic(
       cpp_category_sp,
@@ -574,31 +661,15 @@ static void LoadLibCxxFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
       "libc++ std::initializer_list synthetic children",
       ConstString("^std::initializer_list<.+>(( )?&)?$"), stl_synth_flags,
       true);
-  AddCXXSynthetic(cpp_category_sp, LibcxxQueueFrontEndCreator,
-                  "libc++ std::queue synthetic children",
-                  ConstString("^std::__[[:alnum:]]+::queue<.+>(( )?&)?$"),
-                  stl_synth_flags, true);
-  AddCXXSynthetic(cpp_category_sp, LibcxxTupleFrontEndCreator,
-                  "libc++ std::tuple synthetic children",
-                  ConstString("^std::__[[:alnum:]]+::tuple<.*>(( )?&)?$"),
-                  stl_synth_flags, true);
-  AddCXXSynthetic(cpp_category_sp, LibcxxOptionalFrontEndCreator,
-                  "libc++ std::optional synthetic children",
-                  ConstString("^std::__[[:alnum:]]+::optional<.+>(( )?&)?$"),
-                  stl_synth_flags, true);
-  AddCXXSynthetic(cpp_category_sp, LibcxxVariantFrontEndCreator,
-                  "libc++ std::variant synthetic children",
-                  ConstString("^std::__[[:alnum:]]+::variant<.+>(( )?&)?$"),
-                  stl_synth_flags, true);
   AddCXXSynthetic(
       cpp_category_sp,
       lldb_private::formatters::LibcxxAtomicSyntheticFrontEndCreator,
       "libc++ std::atomic synthetic children",
-      ConstString("^std::__[[:alnum:]]+::atomic<.+>$"), stl_synth_flags, true);
+      ConstString("^std::__(ndk)?1::atomic<.+>$"), stl_synth_flags, true);
 
   cpp_category_sp->GetRegexTypeSyntheticsContainer()->Add(
-      RegularExpression(
-          llvm::StringRef("^(std::__[[:alnum:]]+::)deque<.+>(( )?&)?$")),
+      RegularExpressionSP(new RegularExpression(
+          llvm::StringRef("^(std::__(ndk)?1::)deque<.+>(( )?&)?$"))),
       SyntheticChildrenSP(new ScriptedSyntheticChildren(
           stl_synth_flags,
           "lldb.formatters.cpp.libcxx.stddeque_SynthProvider")));
@@ -607,126 +678,105 @@ static void LoadLibCxxFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
       cpp_category_sp,
       lldb_private::formatters::LibcxxSharedPtrSyntheticFrontEndCreator,
       "shared_ptr synthetic children",
-      ConstString("^(std::__[[:alnum:]]+::)shared_ptr<.+>(( )?&)?$"),
+      ConstString("^(std::__(ndk)?1::)shared_ptr<.+>(( )?&)?$"),
       stl_synth_flags, true);
   AddCXXSynthetic(
       cpp_category_sp,
       lldb_private::formatters::LibcxxSharedPtrSyntheticFrontEndCreator,
       "weak_ptr synthetic children",
-      ConstString("^(std::__[[:alnum:]]+::)weak_ptr<.+>(( )?&)?$"),
-      stl_synth_flags, true);
-  AddCXXSummary(cpp_category_sp,
-                lldb_private::formatters::LibcxxFunctionSummaryProvider,
-                "libc++ std::function summary provider",
-                ConstString("^std::__[[:alnum:]]+::function<.+>$"),
-                stl_summary_flags, true);
+      ConstString("^(std::__(ndk)?1::)weak_ptr<.+>(( )?&)?$"), stl_synth_flags,
+      true);
 
   stl_summary_flags.SetDontShowChildren(false);
   stl_summary_flags.SetSkipPointers(false);
-  AddCXXSummary(cpp_category_sp,
-                lldb_private::formatters::LibcxxContainerSummaryProvider,
-                "libc++ std::bitset summary provider",
-                ConstString("^std::__[[:alnum:]]+::bitset<.+>(( )?&)?$"),
-                stl_summary_flags, true);
+  AddCXXSummary(
+      cpp_category_sp, lldb_private::formatters::LibcxxContainerSummaryProvider,
+      "libc++ std::vector<bool> summary provider",
+      ConstString(
+          "std::__(ndk)?1::vector<bool, std::__(ndk)?1::allocator<bool> >"),
+      stl_summary_flags, true);
   AddCXXSummary(cpp_category_sp,
                 lldb_private::formatters::LibcxxContainerSummaryProvider,
                 "libc++ std::vector summary provider",
-                ConstString("^std::__[[:alnum:]]+::vector<.+>(( )?&)?$"),
+                ConstString("^std::__(ndk)?1::vector<.+>(( )?&)?$"),
                 stl_summary_flags, true);
   AddCXXSummary(cpp_category_sp,
                 lldb_private::formatters::LibcxxContainerSummaryProvider,
                 "libc++ std::list summary provider",
-                ConstString("^std::__[[:alnum:]]+::forward_list<.+>(( )?&)?$"),
+                ConstString("^std::__(ndk)?1::list<.+>(( )?&)?$"),
                 stl_summary_flags, true);
-  AddCXXSummary(
-      cpp_category_sp, lldb_private::formatters::LibcxxContainerSummaryProvider,
-      "libc++ std::list summary provider",
-      // A POSIX variant of: "^std::__(?!cxx11:)[[:alnum:]]+::list<.+>(( )?&)?$"
-      // so that it does not clash with: "^std::(__cxx11::)?list<.+>(( )?&)?$"
-      ConstString("^std::__([A-Zabd-z0-9]|cx?[A-Za-wyz0-9]|cxx1?[A-Za-z02-9]|"
-                  "cxx11[[:alnum:]])[[:alnum:]]*::list<.+>(( )?&)?$"),
-      stl_summary_flags, true);
   AddCXXSummary(cpp_category_sp,
                 lldb_private::formatters::LibcxxContainerSummaryProvider,
                 "libc++ std::map summary provider",
-                ConstString("^std::__[[:alnum:]]+::map<.+>(( )?&)?$"),
+                ConstString("^std::__(ndk)?1::map<.+>(( )?&)?$"),
                 stl_summary_flags, true);
   AddCXXSummary(cpp_category_sp,
                 lldb_private::formatters::LibcxxContainerSummaryProvider,
                 "libc++ std::deque summary provider",
-                ConstString("^std::__[[:alnum:]]+::deque<.+>(( )?&)?$"),
-                stl_summary_flags, true);
-  AddCXXSummary(cpp_category_sp,
-                lldb_private::formatters::LibcxxContainerSummaryProvider,
-                "libc++ std::queue summary provider",
-                ConstString("^std::__[[:alnum:]]+::queue<.+>(( )?&)?$"),
+                ConstString("^std::__(ndk)?1::deque<.+>(( )?&)?$"),
                 stl_summary_flags, true);
   AddCXXSummary(cpp_category_sp,
                 lldb_private::formatters::LibcxxContainerSummaryProvider,
                 "libc++ std::set summary provider",
-                ConstString("^std::__[[:alnum:]]+::set<.+>(( )?&)?$"),
+                ConstString("^std::__(ndk)?1::set<.+>(( )?&)?$"),
                 stl_summary_flags, true);
   AddCXXSummary(cpp_category_sp,
                 lldb_private::formatters::LibcxxContainerSummaryProvider,
                 "libc++ std::multiset summary provider",
-                ConstString("^std::__[[:alnum:]]+::multiset<.+>(( )?&)?$"),
+                ConstString("^std::__(ndk)?1::multiset<.+>(( )?&)?$"),
                 stl_summary_flags, true);
   AddCXXSummary(cpp_category_sp,
                 lldb_private::formatters::LibcxxContainerSummaryProvider,
                 "libc++ std::multimap summary provider",
-                ConstString("^std::__[[:alnum:]]+::multimap<.+>(( )?&)?$"),
+                ConstString("^std::__(ndk)?1::multimap<.+>(( )?&)?$"),
                 stl_summary_flags, true);
   AddCXXSummary(
       cpp_category_sp, lldb_private::formatters::LibcxxContainerSummaryProvider,
       "libc++ std::unordered containers summary provider",
-      ConstString("^(std::__[[:alnum:]]+::)unordered_(multi)?(map|set)<.+> >$"),
+      ConstString("^(std::__(ndk)?1::)unordered_(multi)?(map|set)<.+> >$"),
       stl_summary_flags, true);
-  AddCXXSummary(cpp_category_sp, LibcxxContainerSummaryProvider,
-                "libc++ std::tuple summary provider",
-                ConstString("^std::__[[:alnum:]]+::tuple<.*>(( )?&)?$"),
-                stl_summary_flags, true);
   AddCXXSummary(
       cpp_category_sp, lldb_private::formatters::LibCxxAtomicSummaryProvider,
       "libc++ std::atomic summary provider",
-      ConstString("^std::__[[:alnum:]]+::atomic<.+>$"), stl_summary_flags,
-      true);
-  AddCXXSummary(cpp_category_sp,
-                lldb_private::formatters::LibcxxOptionalSummaryProvider,
-                "libc++ std::optional summary provider",
-                ConstString("^std::__[[:alnum:]]+::optional<.+>(( )?&)?$"),
-                stl_summary_flags, true);
-  AddCXXSummary(cpp_category_sp,
-                lldb_private::formatters::LibcxxVariantSummaryProvider,
-                "libc++ std::variant summary provider",
-                ConstString("^std::__[[:alnum:]]+::variant<.+>(( )?&)?$"),
-                stl_summary_flags, true);
+      ConstString("^std::__(ndk)?1::atomic<.+>$"), stl_summary_flags, true);
 
   stl_summary_flags.SetSkipPointers(true);
 
   AddCXXSummary(cpp_category_sp,
                 lldb_private::formatters::LibcxxSmartPointerSummaryProvider,
                 "libc++ std::shared_ptr summary provider",
-                ConstString("^std::__[[:alnum:]]+::shared_ptr<.+>(( )?&)?$"),
+                ConstString("^std::__(ndk)?1::shared_ptr<.+>(( )?&)?$"),
                 stl_summary_flags, true);
   AddCXXSummary(cpp_category_sp,
                 lldb_private::formatters::LibcxxSmartPointerSummaryProvider,
                 "libc++ std::weak_ptr summary provider",
-                ConstString("^std::__[[:alnum:]]+::weak_ptr<.+>(( )?&)?$"),
+                ConstString("^std::__(ndk)?1::weak_ptr<.+>(( )?&)?$"),
                 stl_summary_flags, true);
 
   AddCXXSynthetic(
       cpp_category_sp,
       lldb_private::formatters::LibCxxVectorIteratorSyntheticFrontEndCreator,
       "std::vector iterator synthetic children",
-      ConstString("^std::__[[:alnum:]]+::__wrap_iter<.+>$"), stl_synth_flags,
-      true);
+      ConstString("^std::__(ndk)?1::__wrap_iter<.+>$"), stl_synth_flags, true);
 
+  AddCXXSummary(
+      cpp_category_sp, lldb_private::formatters::LibcxxContainerSummaryProvider,
+      "libc++ std::vector<bool> summary provider",
+      ConstString(
+          "std::__(ndk)?1::vector<bool, std::__(ndk)?1::allocator<bool> >"),
+      stl_summary_flags);
   AddCXXSynthetic(
       cpp_category_sp,
       lldb_private::formatters::LibCxxMapIteratorSyntheticFrontEndCreator,
       "std::map iterator synthetic children",
-      ConstString("^std::__[[:alnum:]]+::__map_iterator<.+>$"), stl_synth_flags,
+      ConstString("^std::__(ndk)?1::__map_iterator<.+>$"), stl_synth_flags,
       true);
+
+  AddCXXSynthetic(
+      cpp_category_sp, lldb_private::formatters::LibcxxFunctionFrontEndCreator,
+      "std::function synthetic value provider",
+      ConstString("^std::__1::function<.+>$"), stl_synth_flags, true);
+#endif
 }
 
 static void LoadLibStdcppFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
@@ -771,10 +821,6 @@ static void LoadLibStdcppFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
       ConstString("std::__cxx11::basic_string<char, std::char_traits<char>, "
                   "std::allocator<char> >"),
       cxx11_string_summary_sp);
-  cpp_category_sp->GetTypeSummariesContainer()->Add(
-      ConstString("std::__cxx11::basic_string<unsigned char, std::char_traits<unsigned char>, "
-                  "std::allocator<unsigned char> >"),
-      cxx11_string_summary_sp);
 
   // making sure we force-pick the summary for printing wstring (_M_p is a
   // wchar_t*)
@@ -801,37 +847,45 @@ static void LoadLibStdcppFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
                   "std::char_traits<wchar_t>, std::allocator<wchar_t> >"),
       cxx11_wstring_summary_sp);
 
+#ifndef LLDB_DISABLE_PYTHON
+
   SyntheticChildren::Flags stl_synth_flags;
   stl_synth_flags.SetCascades(true).SetSkipPointers(false).SetSkipReferences(
       false);
 
   cpp_category_sp->GetRegexTypeSyntheticsContainer()->Add(
-      RegularExpression(llvm::StringRef("^std::vector<.+>(( )?&)?$")),
+      RegularExpressionSP(
+          new RegularExpression(llvm::StringRef("^std::vector<.+>(( )?&)?$"))),
       SyntheticChildrenSP(new ScriptedSyntheticChildren(
           stl_synth_flags,
           "lldb.formatters.cpp.gnu_libstdcpp.StdVectorSynthProvider")));
   cpp_category_sp->GetRegexTypeSyntheticsContainer()->Add(
-      RegularExpression(llvm::StringRef("^std::map<.+> >(( )?&)?$")),
+      RegularExpressionSP(
+          new RegularExpression(llvm::StringRef("^std::map<.+> >(( )?&)?$"))),
       SyntheticChildrenSP(new ScriptedSyntheticChildren(
           stl_synth_flags,
           "lldb.formatters.cpp.gnu_libstdcpp.StdMapSynthProvider")));
   cpp_category_sp->GetRegexTypeSyntheticsContainer()->Add(
-      RegularExpression(llvm::StringRef("^std::(__cxx11::)?list<.+>(( )?&)?$")),
+      RegularExpressionSP(new RegularExpression(
+          llvm::StringRef("^std::(__cxx11::)?list<.+>(( )?&)?$"))),
       SyntheticChildrenSP(new ScriptedSyntheticChildren(
           stl_synth_flags,
           "lldb.formatters.cpp.gnu_libstdcpp.StdListSynthProvider")));
   stl_summary_flags.SetDontShowChildren(false);
   stl_summary_flags.SetSkipPointers(true);
   cpp_category_sp->GetRegexTypeSummariesContainer()->Add(
-      RegularExpression(llvm::StringRef("^std::vector<.+>(( )?&)?$")),
+      RegularExpressionSP(
+          new RegularExpression(llvm::StringRef("^std::vector<.+>(( )?&)?$"))),
       TypeSummaryImplSP(
           new StringSummaryFormat(stl_summary_flags, "size=${svar%#}")));
   cpp_category_sp->GetRegexTypeSummariesContainer()->Add(
-      RegularExpression(llvm::StringRef("^std::map<.+> >(( )?&)?$")),
+      RegularExpressionSP(
+          new RegularExpression(llvm::StringRef("^std::map<.+> >(( )?&)?$"))),
       TypeSummaryImplSP(
           new StringSummaryFormat(stl_summary_flags, "size=${svar%#}")));
   cpp_category_sp->GetRegexTypeSummariesContainer()->Add(
-      RegularExpression(llvm::StringRef("^std::(__cxx11::)?list<.+>(( )?&)?$")),
+      RegularExpressionSP(new RegularExpression(
+          llvm::StringRef("^std::(__cxx11::)?list<.+>(( )?&)?$"))),
       TypeSummaryImplSP(
           new StringSummaryFormat(stl_summary_flags, "size=${svar%#}")));
 
@@ -883,6 +937,7 @@ static void LoadLibStdcppFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
                 "libstdc++ std::weak_ptr summary provider",
                 ConstString("^std::weak_ptr<.+>(( )?&)?$"), stl_summary_flags,
                 true);
+#endif
 }
 
 static void LoadSystemFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
@@ -907,16 +962,9 @@ static void LoadSystemFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
       .SetShowMembersOneLiner(false)
       .SetHideItemNames(false);
 
+#ifndef LLDB_DISABLE_PYTHON
   // FIXME because of a bug in the FormattersContainer we need to add a summary
   // for both X* and const X* (<rdar://problem/12717717>)
-  AddCXXSummary(
-      cpp_category_sp, lldb_private::formatters::Char8StringSummaryProvider,
-      "char8_t * summary provider", ConstString("char8_t *"), string_flags);
-  AddCXXSummary(cpp_category_sp,
-                lldb_private::formatters::Char8StringSummaryProvider,
-                "char8_t [] summary provider",
-                ConstString("char8_t \\[[0-9]+\\]"), string_array_flags, true);
-
   AddCXXSummary(
       cpp_category_sp, lldb_private::formatters::Char16StringSummaryProvider,
       "char16_t * summary provider", ConstString("char16_t *"), string_flags);
@@ -954,9 +1002,6 @@ static void LoadSystemFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
       .SetHideItemNames(true)
       .SetShowMembersOneLiner(false);
 
-  AddCXXSummary(cpp_category_sp, lldb_private::formatters::Char8SummaryProvider,
-                "char8_t summary provider", ConstString("char8_t"),
-                widechar_flags);
   AddCXXSummary(
       cpp_category_sp, lldb_private::formatters::Char16SummaryProvider,
       "char16_t summary provider", ConstString("char16_t"), widechar_flags);
@@ -970,12 +1015,13 @@ static void LoadSystemFormatters(lldb::TypeCategoryImplSP cpp_category_sp) {
   AddCXXSummary(
       cpp_category_sp, lldb_private::formatters::Char16SummaryProvider,
       "unichar summary provider", ConstString("unichar"), widechar_flags);
+#endif
 }
 
 std::unique_ptr<Language::TypeScavenger> CPlusPlusLanguage::GetTypeScavenger() {
   class CPlusPlusTypeScavenger : public Language::ImageListTypeScavenger {
   public:
-    CompilerType AdjustForInclusion(CompilerType &candidate) override {
+    virtual CompilerType AdjustForInclusion(CompilerType &candidate) override {
       LanguageType lang_type(candidate.GetMinimumLanguage());
       if (!Language::LanguageIsC(lang_type) &&
           !Language::LanguageIsCPlusPlus(lang_type))
@@ -990,14 +1036,14 @@ std::unique_ptr<Language::TypeScavenger> CPlusPlusLanguage::GetTypeScavenger() {
 }
 
 lldb::TypeCategoryImplSP CPlusPlusLanguage::GetFormatters() {
-  static llvm::once_flag g_initialize;
+  static std::once_flag g_initialize;
   static TypeCategoryImplSP g_category;
 
-  llvm::call_once(g_initialize, [this]() -> void {
+  std::call_once(g_initialize, [this]() -> void {
     DataVisualization::Categories::GetCategory(GetPluginName(), g_category);
     if (g_category) {
-      LoadLibStdcppFormatters(g_category);
       LoadLibCxxFormatters(g_category);
+      LoadLibStdcppFormatters(g_category);
       LoadSystemFormatters(g_category);
     }
   });
@@ -1006,11 +1052,11 @@ lldb::TypeCategoryImplSP CPlusPlusLanguage::GetFormatters() {
 
 HardcodedFormatters::HardcodedSummaryFinder
 CPlusPlusLanguage::GetHardcodedSummaries() {
-  static llvm::once_flag g_initialize;
+  static std::once_flag g_initialize;
   static ConstString g_vectortypes("VectorTypes");
   static HardcodedFormatters::HardcodedSummaryFinder g_formatters;
 
-  llvm::call_once(g_initialize, []() -> void {
+  std::call_once(g_initialize, []() -> void {
     g_formatters.push_back(
         [](lldb_private::ValueObject &valobj, lldb::DynamicValueType,
            FormatManager &) -> TypeSummaryImpl::SharedPointer {
@@ -1070,11 +1116,11 @@ CPlusPlusLanguage::GetHardcodedSummaries() {
 
 HardcodedFormatters::HardcodedSyntheticFinder
 CPlusPlusLanguage::GetHardcodedSynthetics() {
-  static llvm::once_flag g_initialize;
+  static std::once_flag g_initialize;
   static ConstString g_vectortypes("VectorTypes");
   static HardcodedFormatters::HardcodedSyntheticFinder g_formatters;
 
-  llvm::call_once(g_initialize, []() -> void {
+  std::call_once(g_initialize, []() -> void {
     g_formatters.push_back([](lldb_private::ValueObject &valobj,
                               lldb::DynamicValueType,
                               FormatManager &
@@ -1116,17 +1162,4 @@ CPlusPlusLanguage::GetHardcodedSynthetics() {
   });
 
   return g_formatters;
-}
-
-bool CPlusPlusLanguage::IsSourceFile(llvm::StringRef file_path) const {
-  const auto suffixes = {".cpp", ".cxx", ".c++", ".cc",  ".c",
-                         ".h",   ".hh",  ".hpp", ".hxx", ".h++"};
-  for (auto suffix : suffixes) {
-    if (file_path.endswith_lower(suffix))
-      return true;
-  }
-
-  // Check if we're in a STL path (where the files usually have no extension
-  // that we could check for.
-  return file_path.contains("/usr/include/c++/");
 }

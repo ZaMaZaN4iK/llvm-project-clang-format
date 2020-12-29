@@ -1,8 +1,9 @@
 //===-- NativeProcessDarwin.cpp ---------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,11 +19,11 @@
 
 // C++ includes
 // LLDB includes
-#include "lldb/Host/PseudoTerminal.h"
+#include "lldb/Core/Log.h"
+#include "lldb/Core/State.h"
+#include "lldb/Core/StreamString.h"
 #include "lldb/Target/ProcessLaunchInfo.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/State.h"
-#include "lldb/Utility/StreamString.h"
+#include "lldb/Utility/PseudoTerminal.h"
 
 #include "CFBundle.h"
 #include "CFString.h"
@@ -30,14 +31,14 @@
 
 #include "MachException.h"
 
-#include "llvm/Support/FileSystem.h"
-
 using namespace lldb;
 using namespace lldb_private;
 using namespace lldb_private::process_darwin;
 using namespace lldb_private::darwin_process_launcher;
 
+// -----------------------------------------------------------------------------
 // Hidden Impl
+// -----------------------------------------------------------------------------
 
 namespace {
 struct hack_task_dyld_info {
@@ -46,25 +47,26 @@ struct hack_task_dyld_info {
 };
 }
 
+// -----------------------------------------------------------------------------
 // Public Static Methods
+// -----------------------------------------------------------------------------
 
-Status NativeProcessProtocol::Launch(
+Error NativeProcessProtocol::Launch(
     ProcessLaunchInfo &launch_info,
     NativeProcessProtocol::NativeDelegate &native_delegate, MainLoop &mainloop,
     NativeProcessProtocolSP &native_process_sp) {
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
 
-  Status error;
+  Error error;
 
   // Verify the working directory is valid if one was specified.
   FileSpec working_dir(launch_info.GetWorkingDirectory());
-  if (working_dir) {
-    FileInstance::Instance().Resolve(working_dir);
-    if (!FileSystem::Instance().IsDirectory(working_dir)) {
-      error.SetErrorStringWithFormat("No such file or directory: %s",
+  if (working_dir &&
+      (!working_dir.ResolvePath() ||
+       working_dir.GetFileType() != FileSpec::eFileTypeDirectory)) {
+    error.SetErrorStringWithFormat("No such file or directory: %s",
                                    working_dir.GetCString());
-      return error;
-    }
+    return error;
   }
 
   // Launch the inferior.
@@ -75,19 +77,19 @@ Status NativeProcessProtocol::Launch(
 
   // Handle launch failure.
   if (!error.Success()) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s() failed to launch process: "
-              "%s",
-              __FUNCTION__, error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s() failed to launch process: "
+                  "%s",
+                  __FUNCTION__, error.AsCString());
     return error;
   }
 
   // Handle failure to return a pid.
   if (launch_info.GetProcessID() == LLDB_INVALID_PROCESS_ID) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s() launch succeeded but no "
-              "pid was returned!  Aborting.",
-              __FUNCTION__);
+    if (log)
+      log->Printf("NativeProcessDarwin::%s() launch succeeded but no "
+                  "pid was returned!  Aborting.",
+                  __FUNCTION__);
     return error;
   }
 
@@ -100,14 +102,14 @@ Status NativeProcessProtocol::Launch(
     return error;
   }
 
-  // Finalize the processing needed to debug the launched process with a
-  // NativeProcessDarwin instance.
+  // Finalize the processing needed to debug the launched process with
+  // a NativeProcessDarwin instance.
   error = np_darwin_sp->FinalizeLaunch(launch_flavor, mainloop);
   if (!error.Success()) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s() aborting, failed to finalize"
-              " the launching of the process: %s",
-              __FUNCTION__, error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s() aborting, failed to finalize"
+                  " the launching of the process: %s",
+                  __FUNCTION__, error.AsCString());
     return error;
   }
 
@@ -116,16 +118,17 @@ Status NativeProcessProtocol::Launch(
   return error;
 }
 
-Status NativeProcessProtocol::Attach(
+Error NativeProcessProtocol::Attach(
     lldb::pid_t pid, NativeProcessProtocol::NativeDelegate &native_delegate,
     MainLoop &mainloop, NativeProcessProtocolSP &native_process_sp) {
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
-  LLDB_LOGF(log, "NativeProcessDarwin::%s(pid = %" PRIi64 ")", __FUNCTION__,
-            pid);
+  if (log)
+    log->Printf("NativeProcessDarwin::%s(pid = %" PRIi64 ")", __FUNCTION__,
+                pid);
 
   // Retrieve the architecture for the running process.
   ArchSpec process_arch;
-  Status error = ResolveProcessArchitecture(pid, process_arch);
+  Error error = ResolveProcessArchitecture(pid, process_arch);
   if (!error.Success())
     return error;
 
@@ -148,7 +151,9 @@ Status NativeProcessProtocol::Attach(
   return error;
 }
 
+// -----------------------------------------------------------------------------
 // ctor/dtor
+// -----------------------------------------------------------------------------
 
 NativeProcessDarwin::NativeProcessDarwin(lldb::pid_t pid, int pty_master_fd)
     : NativeProcessProtocol(pid), m_task(TASK_NULL), m_did_exec(false),
@@ -163,23 +168,33 @@ NativeProcessDarwin::NativeProcessDarwin(lldb::pid_t pid, int pty_master_fd)
 
 NativeProcessDarwin::~NativeProcessDarwin() {}
 
+// -----------------------------------------------------------------------------
 // Instance methods
+// -----------------------------------------------------------------------------
 
-Status NativeProcessDarwin::FinalizeLaunch(LaunchFlavor launch_flavor,
-                                           MainLoop &main_loop) {
-  Status error;
+Error NativeProcessDarwin::FinalizeLaunch(LaunchFlavor launch_flavor,
+                                          MainLoop &main_loop) {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
+
+#if 0
+    m_path = path;
+    size_t i;
+    char const *arg;
+    for (i=0; (arg = argv[i]) != NULL; i++)
+        m_args.push_back(arg);
+#endif
 
   error = StartExceptionThread();
   if (!error.Success()) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): failure starting the "
-              "mach exception port monitor thread: %s",
-              __FUNCTION__, error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): failure starting the "
+                  "mach exception port monitor thread: %s",
+                  __FUNCTION__, error.AsCString());
 
-    // Terminate the inferior process.  There's nothing meaningful we can do if
-    // we can't receive signals and exceptions.  Since we launched the process,
-    // it's fair game for us to kill it.
+    // Terminate the inferior process.  There's nothing meaningful we can
+    // do if we can't receive signals and exceptions.  Since we launched
+    // the process, it's fair game for us to kill it.
     ::ptrace(PT_KILL, m_pid, 0, 0);
     SetState(eStateExited);
 
@@ -194,43 +209,45 @@ Status NativeProcessDarwin::FinalizeLaunch(LaunchFlavor launch_flavor,
     int err = ::ptrace(PT_ATTACHEXC, m_pid, 0, 0);
     if (err == 0) {
       // m_flags |= eMachProcessFlagsAttached;
-      LLDB_LOGF(log,
-                "NativeProcessDarwin::%s(): successfully spawned "
-                "process with pid %" PRIu64,
-                __FUNCTION__, m_pid);
+      if (log)
+        log->Printf("NativeProcessDarwin::%s(): successfully spawned "
+                    "process with pid %" PRIu64,
+                    __FUNCTION__, m_pid);
     } else {
       error.SetErrorToErrno();
       SetState(eStateExited);
-      LLDB_LOGF(log,
-                "NativeProcessDarwin::%s(): error: failed to "
-                "attach to spawned pid %" PRIu64 " (error=%d (%s))",
-                __FUNCTION__, m_pid, (int)error.GetError(), error.AsCString());
+      if (log)
+        log->Printf("NativeProcessDarwin::%s(): error: failed to "
+                    "attach to spawned pid %" PRIu64 " (error=%d (%s))",
+                    __FUNCTION__, m_pid, (int)error.GetError(),
+                    error.AsCString());
       return error;
     }
   }
 
-  LLDB_LOGF(log, "NativeProcessDarwin::%s(): new pid is %" PRIu64 "...",
-            __FUNCTION__, m_pid);
+  if (log)
+    log->Printf("NativeProcessDarwin::%s(): new pid is %" PRIu64 "...",
+                __FUNCTION__, m_pid);
 
   // Spawn a thread to reap our child inferior process...
   error = StartWaitpidThread(main_loop);
   if (error.Fail()) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): failed to start waitpid() "
-              "thread: %s",
-              __FUNCTION__, error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): failed to start waitpid() "
+                  "thread: %s",
+                  __FUNCTION__, error.AsCString());
     kill(SIGKILL, static_cast<::pid_t>(m_pid));
     return error;
   }
 
   if (TaskPortForProcessID(error) == TASK_NULL) {
-    // We failed to get the task for our process ID which is bad. Kill our
-    // process; otherwise, it will be stopped at the entry point and get
-    // reparented to someone else and never go away.
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): could not get task port "
-              "for process, sending SIGKILL and exiting: %s",
-              __FUNCTION__, error.AsCString());
+    // We failed to get the task for our process ID which is bad.
+    // Kill our process; otherwise, it will be stopped at the entry
+    // point and get reparented to someone else and never go away.
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): could not get task port "
+                  "for process, sending SIGKILL and exiting: %s",
+                  __FUNCTION__, error.AsCString());
     kill(SIGKILL, static_cast<::pid_t>(m_pid));
     return error;
   }
@@ -242,7 +259,7 @@ Status NativeProcessDarwin::FinalizeLaunch(LaunchFlavor launch_flavor,
   return error;
 }
 
-Status NativeProcessDarwin::SaveExceptionPortInfo() {
+Error NativeProcessDarwin::SaveExceptionPortInfo() {
   return m_exc_port_info.Save(m_task);
 }
 
@@ -258,9 +275,9 @@ bool NativeProcessDarwin::ProcessUsingBackBoard() const {
   return false;
 }
 
-// Called by the exception thread when an exception has been received from our
-// process. The exception message is completely filled and the exception data
-// has already been copied.
+// Called by the exception thread when an exception has been received from
+// our process. The exception message is completely filled and the exception
+// data has already been copied.
 void NativeProcessDarwin::ExceptionMessageReceived(
     const MachException::Message &message) {
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_VERBOSE));
@@ -271,21 +288,22 @@ void NativeProcessDarwin::ExceptionMessageReceived(
     SuspendTask();
   }
 
-  // Use a locker to automatically unlock our mutex in case of exceptions Add
-  // the exception to our internal exception stack
+  // Use a locker to automatically unlock our mutex in case of exceptions
+  // Add the exception to our internal exception stack
   m_exception_messages.push_back(message);
 
-  LLDB_LOGF(log, "NativeProcessDarwin::%s(): new queued message count: %lu",
-            __FUNCTION__, m_exception_messages.size());
+  if (log)
+    log->Printf("NativeProcessDarwin::%s(): new queued message count: %lu",
+                __FUNCTION__, m_exception_messages.size());
 }
 
 void *NativeProcessDarwin::ExceptionThread(void *arg) {
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_VERBOSE));
   if (!arg) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): cannot run mach exception "
-              "thread, mandatory process arg was null",
-              __FUNCTION__);
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): cannot run mach exception "
+                  "thread, mandatory process arg was null",
+                  __FUNCTION__);
     return nullptr;
   }
 
@@ -295,20 +313,22 @@ void *NativeProcessDarwin::ExceptionThread(void *arg) {
 void *NativeProcessDarwin::DoExceptionThread() {
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_VERBOSE));
 
-  LLDB_LOGF(log, "NativeProcessDarwin::%s(arg=%p) starting thread...",
-            __FUNCTION__, this);
+  if (log)
+    log->Printf("NativeProcessDarwin::%s(arg=%p) starting thread...",
+                __FUNCTION__, this);
 
   pthread_setname_np("exception monitoring thread");
 
   // Ensure we don't get CPU starved.
   MaybeRaiseThreadPriority();
 
-  // We keep a count of the number of consecutive exceptions received so we
-  // know to grab all exceptions without a timeout. We do this to get a bunch
-  // of related exceptions on our exception port so we can process then
-  // together. When we have multiple threads, we can get an exception per
-  // thread and they will come in consecutively. The main loop in this thread
-  // can stop periodically if needed to service things related to this process.
+  // We keep a count of the number of consecutive exceptions received so
+  // we know to grab all exceptions without a timeout. We do this to get a
+  // bunch of related exceptions on our exception port so we can process
+  // then together. When we have multiple threads, we can get an exception
+  // per thread and they will come in consecutively. The main loop in this
+  // thread can stop periodically if needed to service things related to this
+  // process.
   //
   // [did we lose some words here?]
   //
@@ -316,17 +336,17 @@ void *NativeProcessDarwin::DoExceptionThread() {
   // 0 our exception port. After we get one exception, we then will use the
   // MACH_RCV_TIMEOUT option with a zero timeout to grab all other current
   // exceptions for our process. After we have received the last pending
-  // exception, we will get a timeout which enables us to then notify our main
-  // thread that we have an exception bundle available. We then wait for the
-  // main thread to tell this exception thread to start trying to get
+  // exception, we will get a timeout which enables us to then notify
+  // our main thread that we have an exception bundle available. We then wait
+  // for the main thread to tell this exception thread to start trying to get
   // exceptions messages again and we start again with a mach_msg read with
   // infinite timeout.
   //
   // We choose to park a thread on this, rather than polling, because the
-  // polling is expensive.  On devices, we need to minimize overhead caused by
-  // the process monitor.
+  // polling is expensive.  On devices, we need to minimize overhead caused
+  // by the process monitor.
   uint32_t num_exceptions_received = 0;
-  Status error;
+  Error error;
   task_t task = m_task;
   mach_msg_timeout_t periodic_timeout = 0;
 
@@ -337,22 +357,23 @@ void *NativeProcessDarwin::DoExceptionThread() {
   CFReleaser<SBSWatchdogAssertionRef> watchdog;
 
   if (process->ProcessUsingSpringBoard()) {
-    // Request a renewal for every 60 seconds if we attached using SpringBoard.
+    // Request a renewal for every 60 seconds if we attached using
+    // SpringBoard.
     watchdog.reset(::SBSWatchdogAssertionCreateForPID(nullptr, pid, 60));
-    LLDB_LOGF(log,
-              "::SBSWatchdogAssertionCreateForPID(NULL, %4.4x, 60) "
-              "=> %p",
-              pid, watchdog.get());
+    if (log)
+      log->Printf("::SBSWatchdogAssertionCreateForPID(NULL, %4.4x, 60) "
+                  "=> %p",
+                  pid, watchdog.get());
 
     if (watchdog.get()) {
       ::SBSWatchdogAssertionRenew(watchdog.get());
 
       CFTimeInterval watchdogRenewalInterval =
           ::SBSWatchdogAssertionGetRenewalInterval(watchdog.get());
-      LLDB_LOGF(log,
-                "::SBSWatchdogAssertionGetRenewalInterval(%p) => "
-                "%g seconds",
-                watchdog.get(), watchdogRenewalInterval);
+      if (log)
+        log->Printf("::SBSWatchdogAssertionGetRenewalInterval(%p) => "
+                    "%g seconds",
+                    watchdog.get(), watchdogRenewalInterval);
       if (watchdogRenewalInterval > 0.0) {
         watchdog_timeout = (mach_msg_timeout_t)watchdogRenewalInterval * 1000;
         if (watchdog_timeout > 3000) {
@@ -378,18 +399,18 @@ void *NativeProcessDarwin::DoExceptionThread() {
   }
 #endif // #ifdef WITH_BKS
 
-  // Do we want to use a weak pointer to the NativeProcessDarwin here, in which
-  // case we can guarantee we don't whack the process monitor if we race
-  // between this thread and the main one on shutdown?
+  // Do we want to use a weak pointer to the NativeProcessDarwin here, in
+  // which case we can guarantee we don't whack the process monitor if we
+  // race between this thread and the main one on shutdown?
   while (IsExceptionPortValid()) {
     ::pthread_testcancel();
 
     MachException::Message exception_message;
 
     if (num_exceptions_received > 0) {
-      // We don't want a timeout here, just receive as many exceptions as we
-      // can since we already have one.  We want to get all currently available
-      // exceptions for this task at once.
+      // We don't want a timeout here, just receive as many exceptions as
+      // we can since we already have one.  We want to get all currently
+      // available exceptions for this task at once.
       error = exception_message.Receive(
           GetExceptionPort(),
           MACH_RCV_MSG | MACH_RCV_INTERRUPT | MACH_RCV_TIMEOUT, 0);
@@ -401,8 +422,8 @@ void *NativeProcessDarwin::DoExceptionThread() {
                                             MACH_RCV_TIMEOUT,
                                         periodic_timeout);
     } else {
-      // We don't need to parse all current exceptions or stop periodically,
-      // just wait for an exception forever.
+      // We don't need to parse all current exceptions or stop
+      // periodically, just wait for an exception forever.
       error = exception_message.Receive(GetExceptionPort(),
                                         MACH_RCV_MSG | MACH_RCV_INTERRUPT, 0);
     }
@@ -420,11 +441,11 @@ void *NativeProcessDarwin::DoExceptionThread() {
         // If we have no task port we should exit this thread, as it implies
         // the inferior went down.
         if (!IsExceptionPortValid()) {
-          LLDB_LOGF(log,
-                    "NativeProcessDarwin::%s(): the inferior "
-                    "exception port is no longer valid, "
-                    "canceling exception thread...",
-                    __FUNCTION__);
+          if (log)
+            log->Printf("NativeProcessDarwin::%s(): the inferior "
+                        "exception port is no longer valid, "
+                        "canceling exception thread...",
+                        __FUNCTION__);
           // Should we be setting a process state here?
           break;
         }
@@ -432,19 +453,19 @@ void *NativeProcessDarwin::DoExceptionThread() {
         // Make sure the inferior task is still valid.
         if (IsTaskValid()) {
           // Task is still ok.
-          LLDB_LOGF(log,
-                    "NativeProcessDarwin::%s(): interrupted, but "
-                    "the inferior task iss till valid, "
-                    "continuing...",
-                    __FUNCTION__);
+          if (log)
+            log->Printf("NativeProcessDarwin::%s(): interrupted, but "
+                        "the inferior task iss till valid, "
+                        "continuing...",
+                        __FUNCTION__);
           continue;
         } else {
-          // The inferior task is no longer valid.  Time to exit as the process
-          // has gone away.
-          LLDB_LOGF(log,
-                    "NativeProcessDarwin::%s(): the inferior task "
-                    "has exited, and so will we...",
-                    __FUNCTION__);
+          // The inferior task is no longer valid.  Time to exit as
+          // the process has gone away.
+          if (log)
+            log->Printf("NativeProcessDarwin::%s(): the inferior task "
+                        "has exited, and so will we...",
+                        __FUNCTION__);
           // Does this race at all with our waitpid()?
           SetState(eStateExited);
           break;
@@ -453,31 +474,32 @@ void *NativeProcessDarwin::DoExceptionThread() {
         // We timed out when waiting for exceptions.
 
         if (num_exceptions_received > 0) {
-          // We were receiving all current exceptions with a timeout of zero.
-          // It is time to go back to our normal looping mode.
+          // We were receiving all current exceptions with a timeout of
+          // zero.  It is time to go back to our normal looping mode.
           num_exceptions_received = 0;
 
-          // Notify our main thread we have a complete exception message bundle
-          // available.  Get the possibly updated task port back from the
-          // process in case we exec'ed and our task port changed.
+          // Notify our main thread we have a complete exception message
+          // bundle available.  Get the possibly updated task port back
+          // from the process in case we exec'ed and our task port
+          // changed.
           task = ExceptionMessageBundleComplete();
 
-          // In case we use a timeout value when getting exceptions, make sure
-          // our task is still valid.
+          // In case we use a timeout value when getting exceptions,
+          // make sure our task is still valid.
           if (IsTaskValid(task)) {
             // Task is still ok.
-            LLDB_LOGF(log,
-                      "NativeProcessDarwin::%s(): got a timeout, "
-                      "continuing...",
-                      __FUNCTION__);
+            if (log)
+              log->Printf("NativeProcessDarwin::%s(): got a timeout, "
+                          "continuing...",
+                          __FUNCTION__);
             continue;
           } else {
-            // The inferior task is no longer valid.  Time to exit as the
-            // process has gone away.
-            LLDB_LOGF(log,
-                      "NativeProcessDarwin::%s(): the inferior "
-                      "task has exited, and so will we...",
-                      __FUNCTION__);
+            // The inferior task is no longer valid.  Time to exit as
+            // the process has gone away.
+            if (log)
+              log->Printf("NativeProcessDarwin::%s(): the inferior "
+                          "task has exited, and so will we...",
+                          __FUNCTION__);
             // Does this race at all with our waitpid()?
             SetState(eStateExited);
             break;
@@ -488,17 +510,18 @@ void *NativeProcessDarwin::DoExceptionThread() {
         if (watchdog.get()) {
           watchdog_elapsed += periodic_timeout;
           if (watchdog_elapsed >= watchdog_timeout) {
-            LLDB_LOGF(log, "SBSWatchdogAssertionRenew(%p)", watchdog.get());
+            if (log)
+              log->Printf("SBSWatchdogAssertionRenew(%p)", watchdog.get());
             ::SBSWatchdogAssertionRenew(watchdog.get());
             watchdog_elapsed = 0;
           }
         }
 #endif
       } else {
-        LLDB_LOGF(log,
-                  "NativeProcessDarwin::%s(): continuing after "
-                  "receiving an unexpected error: %u (%s)",
-                  __FUNCTION__, error.GetError(), error.AsCString());
+        if (log)
+          log->Printf("NativeProcessDarwin::%s(): continuing after "
+                      "receiving an unexpected error: %u (%s)",
+                      __FUNCTION__, error.GetError(), error.AsCString());
         // TODO: notify of error?
       }
     }
@@ -509,23 +532,27 @@ void *NativeProcessDarwin::DoExceptionThread() {
     // TODO: change SBSWatchdogAssertionRelease to SBSWatchdogAssertionCancel
     // when we
     // all are up and running on systems that support it. The SBS framework has
-    // a #define that will forward SBSWatchdogAssertionRelease to
-    // SBSWatchdogAssertionCancel for now so it should still build either way.
+    // a #define
+    // that will forward SBSWatchdogAssertionRelease to
+    // SBSWatchdogAssertionCancel for now
+    // so it should still build either way.
     DNBLogThreadedIf(LOG_TASK, "::SBSWatchdogAssertionRelease(%p)",
                      watchdog.get());
     ::SBSWatchdogAssertionRelease(watchdog.get());
   }
 #endif // #if defined (WITH_SPRINGBOARD) && !defined (WITH_BKS)
 
-  LLDB_LOGF(log, "NativeProcessDarwin::%s(%p): thread exiting...", __FUNCTION__,
-            this);
+  if (log)
+    log->Printf("NativeProcessDarwin::%s(%p): thread exiting...", __FUNCTION__,
+                this);
   return nullptr;
 }
 
-Status NativeProcessDarwin::StartExceptionThread() {
-  Status error;
+Error NativeProcessDarwin::StartExceptionThread() {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
-  LLDB_LOGF(log, "NativeProcessDarwin::%s() called", __FUNCTION__);
+  if (log)
+    log->Printf("NativeProcessDarwin::%s() called", __FUNCTION__);
 
   // Make sure we've looked up the inferior port.
   TaskPortForProcessID(error);
@@ -546,11 +573,11 @@ Status NativeProcessDarwin::StartExceptionThread() {
                                        &m_exception_port);
   error.SetError(mach_err, eErrorTypeMachKernel);
   if (error.Fail()) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): mach_port_allocate("
-              "task_self=0x%4.4x, MACH_PORT_RIGHT_RECEIVE, "
-              "&m_exception_port) failed: %u (%s)",
-              __FUNCTION__, task_self, error.GetError(), error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): mach_port_allocate("
+                  "task_self=0x%4.4x, MACH_PORT_RIGHT_RECEIVE, "
+                  "&m_exception_port) failed: %u (%s)",
+                  __FUNCTION__, task_self, error.GetError(), error.AsCString());
     return error;
   }
 
@@ -559,23 +586,23 @@ Status NativeProcessDarwin::StartExceptionThread() {
       task_self, m_exception_port, m_exception_port, MACH_MSG_TYPE_MAKE_SEND);
   error.SetError(mach_err, eErrorTypeMachKernel);
   if (error.Fail()) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): mach_port_insert_right("
-              "task_self=0x%4.4x, m_exception_port=0x%4.4x, "
-              "m_exception_port=0x%4.4x, MACH_MSG_TYPE_MAKE_SEND) "
-              "failed: %u (%s)",
-              __FUNCTION__, task_self, m_exception_port, m_exception_port,
-              error.GetError(), error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): mach_port_insert_right("
+                  "task_self=0x%4.4x, m_exception_port=0x%4.4x, "
+                  "m_exception_port=0x%4.4x, MACH_MSG_TYPE_MAKE_SEND) "
+                  "failed: %u (%s)",
+                  __FUNCTION__, task_self, m_exception_port, m_exception_port,
+                  error.GetError(), error.AsCString());
     return error;
   }
 
   // Save the original state of the exception ports for our child process.
   error = SaveExceptionPortInfo();
   if (error.Fail() || (m_exc_port_info.mask == 0)) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): SaveExceptionPortInfo() "
-              "failed, cannot install exception handler: %s",
-              __FUNCTION__, error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): SaveExceptionPortInfo() "
+                  "failed, cannot install exception handler: %s",
+                  __FUNCTION__, error.AsCString());
     return error;
   }
 
@@ -585,14 +612,14 @@ Status NativeProcessDarwin::StartExceptionThread() {
       EXCEPTION_DEFAULT | MACH_EXCEPTION_CODES, THREAD_STATE_NONE);
   error.SetError(mach_err, eErrorTypeMachKernel);
   if (error.Fail()) {
-    LLDB_LOGF(log,
-              "::task_set_exception_ports (task = 0x%4.4x, "
-              "exception_mask = 0x%8.8x, new_port = 0x%4.4x, "
-              "behavior = 0x%8.8x, new_flavor = 0x%8.8x) failed: "
-              "%u (%s)",
-              m_task, m_exc_port_info.mask, m_exception_port,
-              (EXCEPTION_DEFAULT | MACH_EXCEPTION_CODES), THREAD_STATE_NONE,
-              error.GetError(), error.AsCString());
+    if (log)
+      log->Printf("::task_set_exception_ports (task = 0x%4.4x, "
+                  "exception_mask = 0x%8.8x, new_port = 0x%4.4x, "
+                  "behavior = 0x%8.8x, new_flavor = 0x%8.8x) failed: "
+                  "%u (%s)",
+                  m_task, m_exc_port_info.mask, m_exception_port,
+                  (EXCEPTION_DEFAULT | MACH_EXCEPTION_CODES), THREAD_STATE_NONE,
+                  error.GetError(), error.AsCString());
     return error;
   }
 
@@ -601,17 +628,17 @@ Status NativeProcessDarwin::StartExceptionThread() {
       ::pthread_create(&m_exception_thread, nullptr, ExceptionThread, this);
   error.SetError(pthread_err, eErrorTypePOSIX);
   if (error.Fail()) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): failed to create Mach "
-              "exception-handling thread: %u (%s)",
-              __FUNCTION__, error.GetError(), error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): failed to create Mach "
+                  "exception-handling thread: %u (%s)",
+                  __FUNCTION__, error.GetError(), error.AsCString());
   }
 
   return error;
 }
 
 lldb::addr_t
-NativeProcessDarwin::GetDYLDAllImageInfosAddress(Status &error) const {
+NativeProcessDarwin::GetDYLDAllImageInfosAddress(Error &error) const {
   error.Clear();
 
   struct hack_task_dyld_info dyld_info;
@@ -665,14 +692,14 @@ uint32_t NativeProcessDarwin::GetCPUType() const {
 
 task_t NativeProcessDarwin::ExceptionMessageBundleComplete() {
   // We have a complete bundle of exceptions for our child process.
-  Status error;
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_VERBOSE));
 
   std::lock_guard<std::recursive_mutex> locker(m_exception_messages_mutex);
-  LLDB_LOGF(log,
-            "NativeProcessDarwin::%s(): processing %lu exception "
-            "messages.",
-            __FUNCTION__, m_exception_messages.size());
+  if (log)
+    log->Printf("NativeProcessDarwin::%s(): processing %lu exception "
+                "messages.",
+                __FUNCTION__, m_exception_messages.size());
 
   if (m_exception_messages.empty()) {
     // Not particularly useful...
@@ -699,8 +726,8 @@ task_t NativeProcessDarwin::ExceptionMessageBundleComplete() {
       const int signo = m_exception_messages[i].state.SoftSignal();
       if (signo == SIGTRAP) {
         // SIGTRAP could mean that we exec'ed. We need to check the
-        // dyld all_image_infos.infoArray to see if it is NULL and if so, say
-        // that we exec'ed.
+        // dyld all_image_infos.infoArray to see if it is NULL and if
+        // so, say that we exec'ed.
         const addr_t aii_addr = GetDYLDAllImageInfosAddress(error);
         if (aii_addr == LLDB_INVALID_ADDRESS)
           break;
@@ -708,35 +735,35 @@ task_t NativeProcessDarwin::ExceptionMessageBundleComplete() {
         const addr_t info_array_count_addr = aii_addr + 4;
         uint32_t info_array_count = 0;
         size_t bytes_read = 0;
-        Status read_error;
+        Error read_error;
         read_error = ReadMemory(info_array_count_addr, // source addr
                                 &info_array_count,     // dest addr
                                 4,                     // byte count
                                 bytes_read);           // #bytes read
         if (read_error.Success() && (bytes_read == 4)) {
           if (info_array_count == 0) {
-            // We got the all infos address, and there are zero entries.  We
-            // think we exec'd.
+            // We got the all infos address, and there are zero
+            // entries.  We think we exec'd.
             m_did_exec = true;
 
-            // Force the task port to update itself in case the task port
-            // changed after exec
+            // Force the task port to update itself in case the
+            // task port changed after exec
             const task_t old_task = m_task;
             const bool force_update = true;
             const task_t new_task = TaskPortForProcessID(error, force_update);
             if (old_task != new_task) {
-              LLDB_LOGF(log,
-                        "exec: inferior task port changed "
-                        "from 0x%4.4x to 0x%4.4x",
-                        old_task, new_task);
+              if (log)
+                log->Printf("exec: inferior task port changed "
+                            "from 0x%4.4x to 0x%4.4x",
+                            old_task, new_task);
             }
           }
         } else {
-          LLDB_LOGF(log,
-                    "NativeProcessDarwin::%s() warning: "
-                    "failed to read all_image_infos."
-                    "infoArrayCount from 0x%8.8llx",
-                    __FUNCTION__, info_array_count_addr);
+          if (log)
+            log->Printf("NativeProcessDarwin::%s() warning: "
+                        "failed to read all_image_infos."
+                        "infoArrayCount from 0x%8.8llx",
+                        __FUNCTION__, info_array_count_addr);
         }
       } else if ((m_sent_interrupt_signo != 0) &&
                  (signo == m_sent_interrupt_signo)) {
@@ -748,10 +775,10 @@ task_t NativeProcessDarwin::ExceptionMessageBundleComplete() {
     if (m_did_exec) {
       cpu_type_t process_cpu_type = GetCPUTypeForLocalProcess(m_pid);
       if (m_cpu_type != process_cpu_type) {
-        LLDB_LOGF(log,
-                  "NativeProcessDarwin::%s(): arch changed from "
-                  "0x%8.8x to 0x%8.8x",
-                  __FUNCTION__, m_cpu_type, process_cpu_type);
+        if (log)
+          log->Printf("NativeProcessDarwin::%s(): arch changed from "
+                      "0x%8.8x to 0x%8.8x",
+                      __FUNCTION__, m_cpu_type, process_cpu_type);
         m_cpu_type = process_cpu_type;
         // TODO figure out if we need to do something here.
         // DNBArchProtocol::SetArchitecture (process_cpu_type);
@@ -764,10 +791,10 @@ task_t NativeProcessDarwin::ExceptionMessageBundleComplete() {
 
     if (m_sent_interrupt_signo != 0) {
       if (received_interrupt) {
-        LLDB_LOGF(log,
-                  "NativeProcessDarwin::%s(): process "
-                  "successfully interrupted with signal %i",
-                  __FUNCTION__, m_sent_interrupt_signo);
+        if (log)
+          log->Printf("NativeProcessDarwin::%s(): process "
+                      "successfully interrupted with signal %i",
+                      __FUNCTION__, m_sent_interrupt_signo);
 
         // Mark that we received the interrupt signal
         m_sent_interrupt_signo = 0;
@@ -781,28 +808,29 @@ task_t NativeProcessDarwin::ExceptionMessageBundleComplete() {
         // 4 - We might need to resume if we stopped only with the
         //     interrupt signal that we never handled.
         if (m_auto_resume_signo != 0) {
-          // Only auto_resume if we stopped with _only_ the interrupt signal.
+          // Only auto_resume if we stopped with _only_ the interrupt
+          // signal.
           if (num_task_exceptions == 1) {
             auto_resume = true;
-            LLDB_LOGF(log,
-                      "NativeProcessDarwin::%s(): auto "
-                      "resuming due to unhandled interrupt "
-                      "signal %i",
-                      __FUNCTION__, m_auto_resume_signo);
+            if (log)
+              log->Printf("NativeProcessDarwin::%s(): auto "
+                          "resuming due to unhandled interrupt "
+                          "signal %i",
+                          __FUNCTION__, m_auto_resume_signo);
           }
           m_auto_resume_signo = 0;
         }
       } else {
-        LLDB_LOGF(log,
-                  "NativeProcessDarwin::%s(): didn't get signal "
-                  "%i after MachProcess::Interrupt()",
-                  __FUNCTION__, m_sent_interrupt_signo);
+        if (log)
+          log->Printf("NativeProcessDarwin::%s(): didn't get signal "
+                      "%i after MachProcess::Interrupt()",
+                      __FUNCTION__, m_sent_interrupt_signo);
       }
     }
   }
 
-  // Let all threads recover from stopping and do any clean up based on the
-  // previous thread state (if any).
+  // Let all threads recover from stopping and do any clean up based
+  // on the previous thread state (if any).
   m_thread_list.ProcessDidStop(*this);
 
   // Let each thread know of any exceptions
@@ -833,8 +861,8 @@ task_t NativeProcessDarwin::ExceptionMessageBundleComplete() {
 // TODO - need to hook up event system here. !!!!
 #if 0
         // Wait for the eEventProcessRunningStateChanged event to be reset
-        // before changing state to stopped to avoid race condition with very
-        // fast start/stops.
+        // before changing state to stopped to avoid race condition with
+        // very fast start/stops.
         struct timespec timeout;
 
         //DNBTimer::OffsetTimeOfDay(&timeout, 0, 250 * 1000);   // Wait for 250 ms
@@ -855,25 +883,25 @@ void NativeProcessDarwin::StartSTDIOThread() {
   // TODO implement
 }
 
-Status NativeProcessDarwin::StartWaitpidThread(MainLoop &main_loop) {
-  Status error;
+Error NativeProcessDarwin::StartWaitpidThread(MainLoop &main_loop) {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
 
-  // Strategy: create a thread that sits on waitpid(), waiting for the inferior
-  // process to die, reaping it in the process.  Arrange for the thread to have
-  // a pipe file descriptor that it can send a byte over when the waitpid
-  // completes.  Have the main loop have a read object for the other side of
-  // the pipe, and have the callback for the read do the process termination
-  // message sending.
+  // Strategy: create a thread that sits on waitpid(), waiting for the
+  // inferior process to die, reaping it in the process.  Arrange for
+  // the thread to have a pipe file descriptor that it can send a byte
+  // over when the waitpid completes.  Have the main loop have a read
+  // object for the other side of the pipe, and have the callback for
+  // the read do the process termination message sending.
 
   // Create a single-direction communication channel.
   const bool child_inherits = false;
   error = m_waitpid_pipe.CreateNew(child_inherits);
   if (error.Fail()) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): failed to create waitpid "
-              "communication pipe: %s",
-              __FUNCTION__, error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): failed to create waitpid "
+                  "communication pipe: %s",
+                  __FUNCTION__, error.AsCString());
     return error;
   }
 
@@ -881,8 +909,8 @@ Status NativeProcessDarwin::StartWaitpidThread(MainLoop &main_loop) {
 
   // TODO make PipePOSIX derive from IOObject.  This is goofy here.
   const bool transfer_ownership = false;
-  auto io_sp = IOObjectSP(new NativeFile(m_waitpid_pipe.GetReadFileDescriptor(),
-                                         transfer_ownership));
+  auto io_sp = IOObjectSP(
+      new File(m_waitpid_pipe.GetReadFileDescriptor(), transfer_ownership));
   m_waitpid_reader_handle = main_loop.RegisterReadObject(
       io_sp, [this](MainLoopBase &) { HandleWaitpidResult(); }, error);
 
@@ -891,10 +919,10 @@ Status NativeProcessDarwin::StartWaitpidThread(MainLoop &main_loop) {
       ::pthread_create(&m_waitpid_thread, nullptr, WaitpidThread, this);
   error.SetError(pthread_err, eErrorTypePOSIX);
   if (error.Fail()) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): failed to create waitpid "
-              "handling thread: %u (%s)",
-              __FUNCTION__, error.GetError(), error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): failed to create waitpid "
+                  "handling thread: %u (%s)",
+                  __FUNCTION__, error.GetError(), error.AsCString());
     return error;
   }
 
@@ -904,10 +932,10 @@ Status NativeProcessDarwin::StartWaitpidThread(MainLoop &main_loop) {
 void *NativeProcessDarwin::WaitpidThread(void *arg) {
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
   if (!arg) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): cannot run waitpid "
-              "thread, mandatory process arg was null",
-              __FUNCTION__);
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): cannot run waitpid "
+                  "thread, mandatory process arg was null",
+                  __FUNCTION__);
     return nullptr;
   }
 
@@ -930,10 +958,10 @@ void *NativeProcessDarwin::DoWaitpidThread() {
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
 
   if (m_pid == LLDB_INVALID_PROCESS_ID) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): inferior process ID is "
-              "not set, cannot waitpid on it",
-              __FUNCTION__);
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): inferior process ID is "
+                  "not set, cannot waitpid on it",
+                  __FUNCTION__);
     return nullptr;
   }
 
@@ -943,7 +971,7 @@ void *NativeProcessDarwin::DoWaitpidThread() {
   // Ensure we don't get CPU starved.
   MaybeRaiseThreadPriority();
 
-  Status error;
+  Error error;
   int status = -1;
 
   while (1) {
@@ -954,62 +982,63 @@ void *NativeProcessDarwin::DoWaitpidThread() {
     if (error.Fail()) {
       if (error.GetError() == EINTR) {
         // This is okay, we can keep going.
-        LLDB_LOGF(log,
-                  "NativeProcessDarwin::%s(): waitpid(pid = %" PRIu64
-                  ", &status, 0) interrupted, continuing",
-                  __FUNCTION__, m_pid);
+        if (log)
+          log->Printf("NativeProcessDarwin::%s(): waitpid(pid = %" PRIu64
+                      ", &status, 0) interrupted, continuing",
+                      __FUNCTION__, m_pid);
         continue;
       }
 
       // This error is not okay, abort.
-      LLDB_LOGF(log,
-                "NativeProcessDarwin::%s(): waitpid(pid = %" PRIu64
-                ", &status, 0) aborting due to error: %u (%s)",
-                __FUNCTION__, m_pid, error.GetError(), error.AsCString());
+      if (log)
+        log->Printf("NativeProcessDarwin::%s(): waitpid(pid = %" PRIu64
+                    ", &status, 0) aborting due to error: %u (%s)",
+                    __FUNCTION__, m_pid, error.GetError(), error.AsCString());
       break;
     }
 
     // Log the successful result.
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): waitpid(pid = %" PRIu64
-              ", &status, 0) => %i, status = %i",
-              __FUNCTION__, m_pid, child_pid, status);
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): waitpid(pid = %" PRIu64
+                  ", &status, 0) => %i, status = %i",
+                  __FUNCTION__, m_pid, child_pid, status);
 
     // Handle the result.
     if (WIFSTOPPED(status)) {
-      LLDB_LOGF(log,
-                "NativeProcessDarwin::%s(): waitpid(pid = %" PRIu64
-                ") received a stop, continuing waitpid() loop",
-                __FUNCTION__, m_pid);
+      if (log)
+        log->Printf("NativeProcessDarwin::%s(): waitpid(pid = %" PRIu64
+                    ") received a stop, continuing waitpid() loop",
+                    __FUNCTION__, m_pid);
       continue;
     } else // if (WIFEXITED(status) || WIFSIGNALED(status))
     {
-      LLDB_LOGF(log,
-                "NativeProcessDarwin::%s(pid = %" PRIu64 "): "
-                "waitpid thread is setting exit status for pid = "
-                "%i to %i",
-                __FUNCTION__, m_pid, child_pid, status);
+      if (log)
+        log->Printf("NativeProcessDarwin::%s(pid = %" PRIu64 "): "
+                    "waitpid thread is setting exit status for pid = "
+                    "%i to %i",
+                    __FUNCTION__, m_pid, child_pid, status);
 
       error = SendInferiorExitStatusToMainLoop(child_pid, status);
       return nullptr;
     }
   }
 
-  // We should never exit as long as our child process is alive.  If we get
-  // here, something completely unexpected went wrong and we should exit.
-  LLDB_LOGF(log,
-            "NativeProcessDarwin::%s(): internal error: waitpid thread "
-            "exited out of its main loop in an unexpected way. pid = %" PRIu64
-            ". Sending exit status of -1.",
-            __FUNCTION__, m_pid);
+  // We should never exit as long as our child process is alive.  If we
+  // get here, something completely unexpected went wrong and we should exit.
+  if (log)
+    log->Printf(
+        "NativeProcessDarwin::%s(): internal error: waitpid thread "
+        "exited out of its main loop in an unexpected way. pid = %" PRIu64
+        ". Sending exit status of -1.",
+        __FUNCTION__, m_pid);
 
   error = SendInferiorExitStatusToMainLoop((::pid_t)m_pid, -1);
   return nullptr;
 }
 
-Status NativeProcessDarwin::SendInferiorExitStatusToMainLoop(::pid_t pid,
-                                                             int status) {
-  Status error;
+Error NativeProcessDarwin::SendInferiorExitStatusToMainLoop(::pid_t pid,
+                                                            int status) {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
 
   size_t bytes_written = 0;
@@ -1017,11 +1046,11 @@ Status NativeProcessDarwin::SendInferiorExitStatusToMainLoop(::pid_t pid,
   // Send the pid.
   error = m_waitpid_pipe.Write(&pid, sizeof(pid), bytes_written);
   if (error.Fail() || (bytes_written < sizeof(pid))) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s() - failed to write "
-              "waitpid exiting pid to the pipe.  Client will not "
-              "hear about inferior exit status!",
-              __FUNCTION__);
+    if (log)
+      log->Printf("NativeProcessDarwin::%s() - failed to write "
+                  "waitpid exiting pid to the pipe.  Client will not "
+                  "hear about inferior exit status!",
+                  __FUNCTION__);
     return error;
   }
 
@@ -1029,17 +1058,17 @@ Status NativeProcessDarwin::SendInferiorExitStatusToMainLoop(::pid_t pid,
   bytes_written = 0;
   error = m_waitpid_pipe.Write(&status, sizeof(status), bytes_written);
   if (error.Fail() || (bytes_written < sizeof(status))) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s() - failed to write "
-              "waitpid exit result to the pipe.  Client will not "
-              "hear about inferior exit status!",
-              __FUNCTION__);
+    if (log)
+      log->Printf("NativeProcessDarwin::%s() - failed to write "
+                  "waitpid exit result to the pipe.  Client will not "
+                  "hear about inferior exit status!",
+                  __FUNCTION__);
   }
   return error;
 }
 
-Status NativeProcessDarwin::HandleWaitpidResult() {
-  Status error;
+Error NativeProcessDarwin::HandleWaitpidResult() {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
 
   // Read the pid.
@@ -1049,12 +1078,13 @@ Status NativeProcessDarwin::HandleWaitpidResult() {
   size_t bytes_read = 0;
   error = m_waitpid_pipe.Read(&pid, sizeof(pid), bytes_read);
   if (error.Fail() || (bytes_read < sizeof(pid))) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s() - failed to read "
-              "waitpid exiting pid from the pipe.  Will notify "
-              "as if parent process died with exit status -1.",
-              __FUNCTION__);
-    SetExitStatus(WaitStatus(WaitStatus::Exit, -1), notify_status);
+    if (log)
+      log->Printf("NativeProcessDarwin::%s() - failed to read "
+                  "waitpid exiting pid from the pipe.  Will notify "
+                  "as if parent process died with exit status -1.",
+                  __FUNCTION__);
+    SetExitStatus(eExitTypeInvalid, -1, "failed to receive waitpid result",
+                  notify_status);
     return error;
   }
 
@@ -1062,35 +1092,47 @@ Status NativeProcessDarwin::HandleWaitpidResult() {
   int status = -1;
   error = m_waitpid_pipe.Read(&status, sizeof(status), bytes_read);
   if (error.Fail() || (bytes_read < sizeof(status))) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s() - failed to read "
-              "waitpid exit status from the pipe.  Will notify "
-              "as if parent process died with exit status -1.",
-              __FUNCTION__);
-    SetExitStatus(WaitStatus(WaitStatus::Exit, -1), notify_status);
+    if (log)
+      log->Printf("NativeProcessDarwin::%s() - failed to read "
+                  "waitpid exit status from the pipe.  Will notify "
+                  "as if parent process died with exit status -1.",
+                  __FUNCTION__);
+    SetExitStatus(eExitTypeInvalid, -1, "failed to receive waitpid result",
+                  notify_status);
     return error;
   }
 
   // Notify the monitor that our state has changed.
-  LLDB_LOGF(log,
-            "NativeProcessDarwin::%s(): main loop received waitpid "
-            "exit status info: pid=%i (%s), status=%i",
-            __FUNCTION__, pid,
-            (pid == m_pid) ? "the inferior" : "not the inferior", status);
+  if (log)
+    log->Printf("NativeProcessDarwin::%s(): main loop received waitpid "
+                "exit status info: pid=%i (%s), status=%i",
+                __FUNCTION__, pid,
+                (pid == m_pid) ? "the inferior" : "not the inferior", status);
 
-  SetExitStatus(WaitStatus::Decode(status), notify_status);
+  ExitType exit_type = eExitTypeInvalid;
+  int exit_status = -1;
+
+  if (WIFEXITED(status)) {
+    exit_type = eExitTypeExit;
+    exit_status = WEXITSTATUS(status);
+  } else if (WIFSIGNALED(status)) {
+    exit_type = eExitTypeSignal;
+    exit_status = WTERMSIG(status);
+  }
+
+  SetExitStatus(exit_type, exit_status, nullptr, notify_status);
   return error;
 }
 
-task_t NativeProcessDarwin::TaskPortForProcessID(Status &error,
+task_t NativeProcessDarwin::TaskPortForProcessID(Error &error,
                                                  bool force) const {
   if ((m_task == TASK_NULL) || force) {
     Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
     if (m_pid == LLDB_INVALID_PROCESS_ID) {
-      LLDB_LOGF(log,
-                "NativeProcessDarwin::%s(): cannot get task due "
-                "to invalid pid",
-                __FUNCTION__);
+      if (log)
+        log->Printf("NativeProcessDarwin::%s(): cannot get task due "
+                    "to invalid pid",
+                    __FUNCTION__);
       return TASK_NULL;
     }
 
@@ -1106,21 +1148,19 @@ task_t NativeProcessDarwin::TaskPortForProcessID(Status &error,
         // Succeeded.  Save and return it.
         error.Clear();
         m_task = task;
-        LLDB_LOGF(log,
-                  "NativeProcessDarwin::%s(): ::task_for_pid("
-                  "stub_port = 0x%4.4x, pid = %llu, &task) "
-                  "succeeded: inferior task port = 0x%4.4x",
-                  __FUNCTION__, task_self, m_pid, m_task);
+        log->Printf("NativeProcessDarwin::%s(): ::task_for_pid("
+                    "stub_port = 0x%4.4x, pid = %llu, &task) "
+                    "succeeded: inferior task port = 0x%4.4x",
+                    __FUNCTION__, task_self, m_pid, m_task);
         return m_task;
       } else {
         // Failed to get the task for the inferior process.
         error.SetError(err, eErrorTypeMachKernel);
         if (log) {
-          LLDB_LOGF(log,
-                    "NativeProcessDarwin::%s(): ::task_for_pid("
-                    "stub_port = 0x%4.4x, pid = %llu, &task) "
-                    "failed, err = 0x%8.8x (%s)",
-                    __FUNCTION__, task_self, m_pid, err, error.AsCString());
+          log->Printf("NativeProcessDarwin::%s(): ::task_for_pid("
+                      "stub_port = 0x%4.4x, pid = %llu, &task) "
+                      "failed, err = 0x%8.8x (%s)",
+                      __FUNCTION__, task_self, m_pid, err, error.AsCString());
         }
       }
 
@@ -1128,20 +1168,20 @@ task_t NativeProcessDarwin::TaskPortForProcessID(Status &error,
       ::usleep(usec_interval);
     }
 
-    // We failed to get the task for the inferior process. Ensure that it is
-    // cleared out.
+    // We failed to get the task for the inferior process.
+    // Ensure that it is cleared out.
     m_task = TASK_NULL;
   }
   return m_task;
 }
 
 void NativeProcessDarwin::AttachToInferior(MainLoop &mainloop, lldb::pid_t pid,
-                                           Status &error) {
+                                           Error &error) {
   error.SetErrorString("TODO: implement");
 }
 
-Status NativeProcessDarwin::PrivateResume() {
-  Status error;
+Error NativeProcessDarwin::PrivateResume() {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
 
   std::lock_guard<std::recursive_mutex> locker(m_exception_messages_mutex);
@@ -1149,28 +1189,27 @@ Status NativeProcessDarwin::PrivateResume() {
 
   if (log) {
     if (m_auto_resume_signo)
-      LLDB_LOGF(log,
-                "NativeProcessDarwin::%s(): task 0x%x resuming (with "
-                "unhandled interrupt signal %i)...",
-                __FUNCTION__, m_task, m_auto_resume_signo);
+      log->Printf("NativeProcessDarwin::%s(): task 0x%x resuming (with "
+                  "unhandled interrupt signal %i)...",
+                  __FUNCTION__, m_task, m_auto_resume_signo);
     else
-      LLDB_LOGF(log, "NativeProcessDarwin::%s(): task 0x%x resuming...",
-                __FUNCTION__, m_task);
+      log->Printf("NativeProcessDarwin::%s(): task 0x%x resuming...",
+                  __FUNCTION__, m_task);
   }
 
   error = ReplyToAllExceptions();
   if (error.Fail()) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): aborting, failed to "
-              "reply to exceptions: %s",
-              __FUNCTION__, error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): aborting, failed to "
+                  "reply to exceptions: %s",
+                  __FUNCTION__, error.AsCString());
     return error;
   }
   //    bool stepOverBreakInstruction = step;
 
-  // Let the thread prepare to resume and see if any threads want us to step
-  // over a breakpoint instruction (ProcessWillResume will modify the value of
-  // stepOverBreakInstruction).
+  // Let the thread prepare to resume and see if any threads want us to
+  // step over a breakpoint instruction (ProcessWillResume will modify
+  // the value of stepOverBreakInstruction).
   m_thread_list.ProcessWillResume(*this, m_thread_actions);
 
   // Set our state accordingly
@@ -1184,14 +1223,15 @@ Status NativeProcessDarwin::PrivateResume() {
   return error;
 }
 
-Status NativeProcessDarwin::ReplyToAllExceptions() {
-  Status error;
+Error NativeProcessDarwin::ReplyToAllExceptions() {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_VERBOSE));
 
   TaskPortForProcessID(error);
   if (error.Fail()) {
-    LLDB_LOGF(log, "NativeProcessDarwin::%s(): no task port, aborting",
-              __FUNCTION__);
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): no task port, aborting",
+                  __FUNCTION__);
     return error;
   }
 
@@ -1204,10 +1244,9 @@ Status NativeProcessDarwin::ReplyToAllExceptions() {
   size_t index = 0;
   for (auto &message : m_exception_messages) {
     if (log) {
-      LLDB_LOGF(log,
-                "NativeProcessDarwin::%s(): replying to exception "
-                "%zu...",
-                __FUNCTION__, index++);
+      log->Printf("NativeProcessDarwin::%s(): replying to exception "
+                  "%zu...",
+                  __FUNCTION__, index++);
     }
 
     int thread_reply_signal = 0;
@@ -1226,32 +1265,31 @@ Status NativeProcessDarwin::ReplyToAllExceptions() {
 
     error = message.Reply(m_pid, m_task, thread_reply_signal);
     if (error.Fail() && log) {
-      // We log any error here, but we don't stop the exception response
-      // handling.
-      LLDB_LOGF(log,
-                "NativeProcessDarwin::%s(): failed to reply to "
-                "exception: %s",
-                __FUNCTION__, error.AsCString());
+      // We log any error here, but we don't stop the exception
+      // response handling.
+      log->Printf("NativeProcessDarwin::%s(): failed to reply to "
+                  "exception: %s",
+                  __FUNCTION__, error.AsCString());
       error.Clear();
     }
   }
 
-  // Erase all exception message as we should have used and replied to them all
-  // already.
+  // Erase all exception message as we should have used and replied
+  // to them all already.
   m_exception_messages.clear();
   return error;
 }
 
-Status NativeProcessDarwin::ResumeTask() {
-  Status error;
+Error NativeProcessDarwin::ResumeTask() {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
 
   TaskPortForProcessID(error);
   if (error.Fail()) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): failed to get task port "
-              "for process when attempting to resume: %s",
-              __FUNCTION__, error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): failed to get task port "
+                  "for process when attempting to resume: %s",
+                  __FUNCTION__, error.AsCString());
     return error;
   }
   if (m_task == TASK_NULL) {
@@ -1260,40 +1298,41 @@ Status NativeProcessDarwin::ResumeTask() {
     return error;
   }
 
-  LLDB_LOGF(log,
-            "NativeProcessDarwin::%s(): requesting resume of task "
-            "0x%4.4x",
-            __FUNCTION__, m_task);
+  if (log)
+    log->Printf("NativeProcessDarwin::%s(): requesting resume of task "
+                "0x%4.4x",
+                __FUNCTION__, m_task);
 
-  // Get the BasicInfo struct to verify that we're suspended before we try to
-  // resume the task.
+  // Get the BasicInfo struct to verify that we're suspended before we try
+  // to resume the task.
   struct task_basic_info task_info;
   error = GetTaskBasicInfo(m_task, &task_info);
   if (error.Fail()) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): failed to get task "
-              "BasicInfo when attempting to resume: %s",
-              __FUNCTION__, error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): failed to get task "
+                  "BasicInfo when attempting to resume: %s",
+                  __FUNCTION__, error.AsCString());
     return error;
   }
 
-  // task_resume isn't counted like task_suspend calls are, so if the task is
-  // not suspended, don't try and resume it since it is already running
+  // task_resume isn't counted like task_suspend calls are, so if the
+  // task is not suspended, don't try and resume it since it is already
+  // running
   if (task_info.suspend_count > 0) {
     auto mach_err = ::task_resume(m_task);
     error.SetError(mach_err, eErrorTypeMachKernel);
     if (log) {
       if (error.Success())
-        LLDB_LOGF(log, "::task_resume(target_task = 0x%4.4x): success", m_task);
+        log->Printf("::task_resume(target_task = 0x%4.4x): success", m_task);
       else
-        LLDB_LOGF(log, "::task_resume(target_task = 0x%4.4x) error: %s", m_task,
-                  error.AsCString());
+        log->Printf("::task_resume(target_task = 0x%4.4x) error: %s", m_task,
+                    error.AsCString());
     }
   } else {
-    LLDB_LOGF(log,
-              "::task_resume(target_task = 0x%4.4x): ignored, "
-              "already running",
-              m_task);
+    if (log)
+      log->Printf("::task_resume(target_task = 0x%4.4x): ignored, "
+                  "already running",
+                  m_task);
   }
 
   return error;
@@ -1323,10 +1362,9 @@ bool NativeProcessDarwin::IsExceptionPortValid() const {
   return MACH_PORT_VALID(m_exception_port);
 }
 
-Status
-NativeProcessDarwin::GetTaskBasicInfo(task_t task,
-                                      struct task_basic_info *info) const {
-  Status error;
+Error NativeProcessDarwin::GetTaskBasicInfo(
+    task_t task, struct task_basic_info *info) const {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
 
   // Validate args.
@@ -1348,11 +1386,11 @@ NativeProcessDarwin::GetTaskBasicInfo(task_t task,
   auto err = ::task_info(m_task, TASK_BASIC_INFO, (task_info_t)info, &count);
   error.SetError(err, eErrorTypeMachKernel);
   if (error.Fail()) {
-    LLDB_LOGF(log,
-              "::task_info(target_task = 0x%4.4x, "
-              "flavor = TASK_BASIC_INFO, task_info_out => %p, "
-              "task_info_outCnt => %u) failed: %u (%s)",
-              m_task, info, count, error.GetError(), error.AsCString());
+    if (log)
+      log->Printf("::task_info(target_task = 0x%4.4x, "
+                  "flavor = TASK_BASIC_INFO, task_info_out => %p, "
+                  "task_info_outCnt => %u) failed: %u (%s)",
+                  m_task, info, count, error.GetError(), error.AsCString());
     return error;
   }
 
@@ -1363,40 +1401,41 @@ NativeProcessDarwin::GetTaskBasicInfo(task_t task,
                  (float)info->user_time.microseconds / 1000000.0f;
     float system = (float)info->user_time.seconds +
                    (float)info->user_time.microseconds / 1000000.0f;
-    verbose_LLDB_LOGF(log,
-                      "task_basic_info = { suspend_count = %i, "
-                      "virtual_size = 0x%8.8llx, resident_size = "
-                      "0x%8.8llx, user_time = %f, system_time = %f }",
-                      info->suspend_count, (uint64_t)info->virtual_size,
-                      (uint64_t)info->resident_size, user, system);
+    verbose_log->Printf("task_basic_info = { suspend_count = %i, "
+                        "virtual_size = 0x%8.8llx, resident_size = "
+                        "0x%8.8llx, user_time = %f, system_time = %f }",
+                        info->suspend_count, (uint64_t)info->virtual_size,
+                        (uint64_t)info->resident_size, user, system);
   }
   return error;
 }
 
-Status NativeProcessDarwin::SuspendTask() {
-  Status error;
+Error NativeProcessDarwin::SuspendTask() {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
 
   if (m_task == TASK_NULL) {
     error.SetErrorString("task port is null, cannot suspend task");
-    LLDB_LOGF(log, "NativeProcessDarwin::%s() failed: %s", __FUNCTION__,
-              error.AsCString());
+    if (log)
+      log->Printf("NativeProcessDarwin::%s() failed: %s", __FUNCTION__,
+                  error.AsCString());
     return error;
   }
 
   auto mach_err = ::task_suspend(m_task);
   error.SetError(mach_err, eErrorTypeMachKernel);
   if (error.Fail() && log)
-    LLDB_LOGF(log, "::task_suspend(target_task = 0x%4.4x)", m_task);
+    log->Printf("::task_suspend(target_task = 0x%4.4x)", m_task);
 
   return error;
 }
 
-Status NativeProcessDarwin::Resume(const ResumeActionList &resume_actions) {
-  Status error;
+Error NativeProcessDarwin::Resume(const ResumeActionList &resume_actions) {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS));
 
-  LLDB_LOGF(log, "NativeProcessDarwin::%s() called", __FUNCTION__);
+  if (log)
+    log->Printf("NativeProcessDarwin::%s() called", __FUNCTION__);
 
   if (CanResume()) {
     m_thread_actions = resume_actions;
@@ -1406,10 +1445,10 @@ Status NativeProcessDarwin::Resume(const ResumeActionList &resume_actions) {
 
   auto state = GetState();
   if (state == eStateRunning) {
-    LLDB_LOGF(log,
-              "NativeProcessDarwin::%s(): task 0x%x is already "
-              "running, ignoring...",
-              __FUNCTION__, TaskPortForProcessID(error));
+    if (log)
+      log->Printf("NativeProcessDarwin::%s(): task 0x%x is already "
+                  "running, ignoring...",
+                  __FUNCTION__, TaskPortForProcessID(error));
     return error;
   }
 
@@ -1420,74 +1459,74 @@ Status NativeProcessDarwin::Resume(const ResumeActionList &resume_actions) {
   return error;
 }
 
-Status NativeProcessDarwin::Halt() {
-  Status error;
+Error NativeProcessDarwin::Halt() {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
 
-Status NativeProcessDarwin::Detach() {
-  Status error;
+Error NativeProcessDarwin::Detach() {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
 
-Status NativeProcessDarwin::Signal(int signo) {
-  Status error;
+Error NativeProcessDarwin::Signal(int signo) {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
 
-Status NativeProcessDarwin::Interrupt() {
-  Status error;
+Error NativeProcessDarwin::Interrupt() {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
 
-Status NativeProcessDarwin::Kill() {
-  Status error;
+Error NativeProcessDarwin::Kill() {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
 
-Status NativeProcessDarwin::GetMemoryRegionInfo(lldb::addr_t load_addr,
-                                                MemoryRegionInfo &range_info) {
-  Status error;
+Error NativeProcessDarwin::GetMemoryRegionInfo(lldb::addr_t load_addr,
+                                               MemoryRegionInfo &range_info) {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
 
-Status NativeProcessDarwin::ReadMemory(lldb::addr_t addr, void *buf,
-                                       size_t size, size_t &bytes_read) {
-  Status error;
+Error NativeProcessDarwin::ReadMemory(lldb::addr_t addr, void *buf, size_t size,
+                                      size_t &bytes_read) {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
 
-Status NativeProcessDarwin::ReadMemoryWithoutTrap(lldb::addr_t addr, void *buf,
-                                                  size_t size,
-                                                  size_t &bytes_read) {
-  Status error;
+Error NativeProcessDarwin::ReadMemoryWithoutTrap(lldb::addr_t addr, void *buf,
+                                                 size_t size,
+                                                 size_t &bytes_read) {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
 
-Status NativeProcessDarwin::WriteMemory(lldb::addr_t addr, const void *buf,
-                                        size_t size, size_t &bytes_written) {
-  Status error;
+Error NativeProcessDarwin::WriteMemory(lldb::addr_t addr, const void *buf,
+                                       size_t size, size_t &bytes_written) {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
 
-Status NativeProcessDarwin::AllocateMemory(size_t size, uint32_t permissions,
-                                           lldb::addr_t &addr) {
-  Status error;
+Error NativeProcessDarwin::AllocateMemory(size_t size, uint32_t permissions,
+                                          lldb::addr_t &addr) {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
 
-Status NativeProcessDarwin::DeallocateMemory(lldb::addr_t addr) {
-  Status error;
+Error NativeProcessDarwin::DeallocateMemory(lldb::addr_t addr) {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
@@ -1502,34 +1541,36 @@ bool NativeProcessDarwin::GetArchitecture(ArchSpec &arch) const {
   return false;
 }
 
-Status NativeProcessDarwin::SetBreakpoint(lldb::addr_t addr, uint32_t size,
-                                          bool hardware) {
-  Status error;
+Error NativeProcessDarwin::SetBreakpoint(lldb::addr_t addr, uint32_t size,
+                                         bool hardware) {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
 
 void NativeProcessDarwin::DoStopIDBumped(uint32_t newBumpId) {}
 
-Status NativeProcessDarwin::GetLoadedModuleFileSpec(const char *module_path,
-                                                    FileSpec &file_spec) {
-  Status error;
+Error NativeProcessDarwin::GetLoadedModuleFileSpec(const char *module_path,
+                                                   FileSpec &file_spec) {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
 
-Status NativeProcessDarwin::GetFileLoadAddress(const llvm::StringRef &file_name,
-                                               lldb::addr_t &load_addr) {
-  Status error;
+Error NativeProcessDarwin::GetFileLoadAddress(const llvm::StringRef &file_name,
+                                              lldb::addr_t &load_addr) {
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }
 
+// -----------------------------------------------------------------
 // NativeProcessProtocol protected interface
-Status NativeProcessDarwin::GetSoftwareBreakpointTrapOpcode(
+// -----------------------------------------------------------------
+Error NativeProcessDarwin::GetSoftwareBreakpointTrapOpcode(
     size_t trap_opcode_size_hint, size_t &actual_opcode_size,
     const uint8_t *&trap_opcode_bytes) {
-  Status error;
+  Error error;
   error.SetErrorString("TODO: implement");
   return error;
 }

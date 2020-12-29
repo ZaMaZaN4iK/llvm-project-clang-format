@@ -1,8 +1,9 @@
 //===-- MachException.cpp ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,11 +22,11 @@
 #include <mutex>
 
 // LLDB includes
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Log.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Target/UnixSignals.h"
 #include "lldb/Utility/LLDBAssert.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -56,6 +57,11 @@ extern "C" kern_return_t catch_mach_exception_raise_state_identity(
 extern "C" boolean_t mach_exc_server(mach_msg_header_t *InHeadP,
                                      mach_msg_header_t *OutHeadP);
 
+// Any access to the g_message variable should be done by locking the
+// g_message_mutex first, using the g_message variable, then unlocking
+// the g_message_mutex. See MachException::Message::CatchExceptionRaise()
+// for sample code.
+
 static MachException::Data *g_message = NULL;
 
 extern "C" kern_return_t catch_mach_exception_raise_state(
@@ -67,11 +73,10 @@ extern "C" kern_return_t catch_mach_exception_raise_state(
   // TODO change to LIBLLDB_LOG_EXCEPTION
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_VERBOSE));
   if (log) {
-    LLDB_LOGF(log,
-              "::%s(exc_port = 0x%4.4x, exc_type = %d (%s), "
-              "exc_data = 0x%llx, exc_data_count = %d)",
-              __FUNCTION__, exc_port, exc_type, MachException::Name(exc_type),
-              (uint64_t)exc_data, exc_data_count);
+    log->Printf("::%s(exc_port = 0x%4.4x, exc_type = %d (%s), "
+                "exc_data = 0x%llx, exc_data_count = %d)",
+                __FUNCTION__, exc_port, exc_type, MachException::Name(exc_type),
+                (uint64_t)exc_data, exc_data_count);
   }
   return KERN_FAILURE;
 }
@@ -84,15 +89,16 @@ extern "C" kern_return_t catch_mach_exception_raise_state_identity(
     thread_state_t new_state, mach_msg_type_number_t *new_stateCnt) {
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_VERBOSE));
   if (log) {
-    LLDB_LOGF(log,
-              "::%s(exc_port = 0x%4.4x, thd_port = 0x%4.4x, "
-              "tsk_port = 0x%4.4x, exc_type = %d (%s), exc_data[%d] = "
-              "{ 0x%llx, 0x%llx })",
-              __FUNCTION__, exc_port, thread_port, task_port, exc_type,
-              MachException::Name(exc_type), exc_data_count,
-              (uint64_t)(exc_data_count > 0 ? exc_data[0] : 0xBADDBADD),
-              (uint64_t)(exc_data_count > 1 ? exc_data[1] : 0xBADDBADD));
+    log->Printf("::%s(exc_port = 0x%4.4x, thd_port = 0x%4.4x, "
+                "tsk_port = 0x%4.4x, exc_type = %d (%s), exc_data[%d] = "
+                "{ 0x%llx, 0x%llx })",
+                __FUNCTION__, exc_port, thread_port, task_port, exc_type,
+                MachException::Name(exc_type), exc_data_count,
+                (uint64_t)(exc_data_count > 0 ? exc_data[0] : 0xBADDBADD),
+                (uint64_t)(exc_data_count > 1 ? exc_data[1] : 0xBADDBADD));
   }
+  mach_port_deallocate(mach_task_self(), task_port);
+  mach_port_deallocate(mach_task_self(), thread_port);
 
   return KERN_FAILURE;
 }
@@ -104,14 +110,13 @@ catch_mach_exception_raise(mach_port_t exc_port, mach_port_t thread_port,
                            mach_msg_type_number_t exc_data_count) {
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_VERBOSE));
   if (log) {
-    LLDB_LOGF(log,
-              "::%s(exc_port = 0x%4.4x, thd_port = 0x%4.4x, "
-              "tsk_port = 0x%4.4x, exc_type = %d (%s), exc_data[%d] "
-              "= { 0x%llx, 0x%llx })",
-              __FUNCTION__, exc_port, thread_port, task_port, exc_type,
-              MachException::Name(exc_type), exc_data_count,
-              (uint64_t)(exc_data_count > 0 ? exc_data[0] : 0xBADDBADD),
-              (uint64_t)(exc_data_count > 1 ? exc_data[1] : 0xBADDBADD));
+    log->Printf("::%s(exc_port = 0x%4.4x, thd_port = 0x%4.4x, "
+                "tsk_port = 0x%4.4x, exc_type = %d (%s), exc_data[%d] "
+                "= { 0x%llx, 0x%llx })",
+                __FUNCTION__, exc_port, thread_port, task_port, exc_type,
+                MachException::Name(exc_type), exc_data_count,
+                (uint64_t)(exc_data_count > 0 ? exc_data[0] : 0xBADDBADD),
+                (uint64_t)(exc_data_count > 1 ? exc_data[1] : 0xBADDBADD));
   }
 
   if (task_port == g_message->task_port) {
@@ -125,6 +130,33 @@ catch_mach_exception_raise(mach_port_t exc_port, mach_port_t thread_port,
   }
   return KERN_FAILURE;
 }
+
+#if 0
+void
+MachException::Message::Dump(Stream &stream) const
+{
+    stream.Printf("exc_msg { bits = 0x%8.8x size = 0x%8.8x remote-port = "
+                  "0x%8.8x local-port = 0x%8.8x reserved = 0x%8.8x "
+                  "id = 0x%8.8x }\n",
+        exc_msg.hdr.msgh_bits,
+        exc_msg.hdr.msgh_size,
+        exc_msg.hdr.msgh_remote_port,
+        exc_msg.hdr.msgh_local_port,
+        exc_msg.hdr.msgh_reserved,
+        exc_msg.hdr.msgh_id);
+
+    stream.Printf("reply_msg { bits = 0x%8.8x size = 0x%8.8x remote-port "
+                  "= 0x%8.8x local-port = 0x%8.8x reserved = 0x%8.8x "
+                  "id = 0x%8.8x }",
+                  reply_msg.hdr.msgh_bits,
+                  reply_msg.hdr.msgh_size,
+                  reply_msg.hdr.msgh_remote_port,
+                  reply_msg.hdr.msgh_local_port,
+                  reply_msg.hdr.msgh_reserved,
+                  reply_msg.hdr.msgh_id);
+    stream.Flush();
+}
+#endif
 
 bool MachException::Data::GetStopInfo(struct ThreadStopInfo *stop_info,
                                       const UnixSignals &signals,
@@ -179,27 +211,26 @@ bool MachException::Data::GetStopInfo(struct ThreadStopInfo *stop_info,
   return true;
 }
 
-Status MachException::Message::Receive(mach_port_t port,
-                                       mach_msg_option_t options,
-                                       mach_msg_timeout_t timeout,
-                                       mach_port_t notify_port) {
-  Status error;
+Error MachException::Message::Receive(mach_port_t port,
+                                      mach_msg_option_t options,
+                                      mach_msg_timeout_t timeout,
+                                      mach_port_t notify_port) {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_VERBOSE));
 
   mach_msg_timeout_t mach_msg_timeout =
       options & MACH_RCV_TIMEOUT ? timeout : 0;
   if (log && ((options & MACH_RCV_TIMEOUT) == 0)) {
     // Dump this log message if we have no timeout in case it never returns
-    LLDB_LOGF(log,
-              "::mach_msg(msg->{bits = %#x, size = %u remote_port = %#x, "
-              "local_port = %#x, reserved = 0x%x, id = 0x%x}, "
-              "option = %#x, send_size = 0, rcv_size = %llu, "
-              "rcv_name = %#x, timeout = %u, notify = %#x)",
-              exc_msg.hdr.msgh_bits, exc_msg.hdr.msgh_size,
-              exc_msg.hdr.msgh_remote_port, exc_msg.hdr.msgh_local_port,
-              exc_msg.hdr.msgh_reserved, exc_msg.hdr.msgh_id, options,
-              (uint64_t)sizeof(exc_msg.data), port, mach_msg_timeout,
-              notify_port);
+    log->Printf("::mach_msg(msg->{bits = %#x, size = %u remote_port = %#x, "
+                "local_port = %#x, reserved = 0x%x, id = 0x%x}, "
+                "option = %#x, send_size = 0, rcv_size = %llu, "
+                "rcv_name = %#x, timeout = %u, notify = %#x)",
+                exc_msg.hdr.msgh_bits, exc_msg.hdr.msgh_size,
+                exc_msg.hdr.msgh_remote_port, exc_msg.hdr.msgh_local_port,
+                exc_msg.hdr.msgh_reserved, exc_msg.hdr.msgh_id, options,
+                (uint64_t)sizeof(exc_msg.data), port, mach_msg_timeout,
+                notify_port);
   }
 
   mach_msg_return_t mach_err =
@@ -217,16 +248,15 @@ Status MachException::Message::Receive(mach_port_t port,
 
   // Dump any errors we get
   if (error.Fail() && log) {
-    LLDB_LOGF(log,
-              "::mach_msg(msg->{bits = %#x, size = %u remote_port = %#x, "
-              "local_port = %#x, reserved = 0x%x, id = 0x%x}, "
-              "option = %#x, send_size = %u, rcv_size = %lu, rcv_name "
-              "= %#x, timeout = %u, notify = %#x) failed: %s",
-              exc_msg.hdr.msgh_bits, exc_msg.hdr.msgh_size,
-              exc_msg.hdr.msgh_remote_port, exc_msg.hdr.msgh_local_port,
-              exc_msg.hdr.msgh_reserved, exc_msg.hdr.msgh_id, options, 0,
-              sizeof(exc_msg.data), port, mach_msg_timeout, notify_port,
-              error.AsCString());
+    log->Printf("::mach_msg(msg->{bits = %#x, size = %u remote_port = %#x, "
+                "local_port = %#x, reserved = 0x%x, id = 0x%x}, "
+                "option = %#x, send_size = %u, rcv_size = %lu, rcv_name "
+                "= %#x, timeout = %u, notify = %#x) failed: %s",
+                exc_msg.hdr.msgh_bits, exc_msg.hdr.msgh_size,
+                exc_msg.hdr.msgh_remote_port, exc_msg.hdr.msgh_local_port,
+                exc_msg.hdr.msgh_reserved, exc_msg.hdr.msgh_id, options, 0,
+                sizeof(exc_msg.data), port, mach_msg_timeout, notify_port,
+                error.AsCString());
   }
   return error;
 }
@@ -249,39 +279,43 @@ void MachException::Message::Dump(Stream &stream) const {
 
 bool MachException::Message::CatchExceptionRaise(task_t task) {
   bool success = false;
+  // locker will keep a mutex locked until it goes out of scope
+  //    PThreadMutex::Locker locker(&g_message_mutex);
+  //    DNBLogThreaded("calling  mach_exc_server");
   state.task_port = task;
   g_message = &state;
-  // The exc_server function is the MIG generated server handling function to
-  // handle messages from the kernel relating to the occurrence of an exception
-  // in a thread. Such messages are delivered to the exception port set via
-  // thread_set_exception_ports or task_set_exception_ports. When an exception
-  // occurs in a thread, the thread sends an exception message to its exception
-  // port, blocking in the kernel waiting for the receipt of a reply. The
-  // exc_server function performs all necessary argument handling for this
-  // kernel message and calls catch_exception_raise,
-  // catch_exception_raise_state or catch_exception_raise_state_identity, which
-  // should handle the exception. If the called routine returns KERN_SUCCESS, a
-  // reply message will be sent, allowing the thread to continue from the point
-  // of the exception; otherwise, no reply message is sent and the called
-  // routine must have dealt with the exception thread directly.
+  // The exc_server function is the MIG generated server handling function
+  // to handle messages from the kernel relating to the occurrence of an
+  // exception in a thread. Such messages are delivered to the exception port
+  // set via thread_set_exception_ports or task_set_exception_ports. When an
+  // exception occurs in a thread, the thread sends an exception message to
+  // its exception port, blocking in the kernel waiting for the receipt of a
+  // reply. The exc_server function performs all necessary argument handling
+  // for this kernel message and calls catch_exception_raise,
+  // catch_exception_raise_state or catch_exception_raise_state_identity,
+  // which should handle the exception. If the called routine returns
+  // KERN_SUCCESS, a reply message will be sent, allowing the thread to
+  // continue from the point of the exception; otherwise, no reply message
+  // is sent and the called routine must have dealt with the exception
+  // thread directly.
   if (mach_exc_server(&exc_msg.hdr, &reply_msg.hdr)) {
     success = true;
   } else {
     Log *log(
         GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_VERBOSE));
-    LLDB_LOGF(log,
-              "MachException::Message::%s(): mach_exc_server "
-              "returned zero...",
-              __FUNCTION__);
+    if (log)
+      log->Printf("MachException::Message::%s(): mach_exc_server "
+                  "returned zero...",
+                  __FUNCTION__);
   }
   g_message = NULL;
   return success;
 }
 
-Status MachException::Message::Reply(::pid_t inferior_pid, task_t inferior_task,
-                                     int signal) {
+Error MachException::Message::Reply(::pid_t inferior_pid, task_t inferior_task,
+                                    int signal) {
   // Reply to the exception...
-  Status error;
+  Error error;
 
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_VERBOSE));
 
@@ -298,10 +332,10 @@ Status MachException::Message::Reply(::pid_t inferior_pid, task_t inferior_task,
       auto mach_err = ::pid_for_task(state.task_port, &state_pid);
       if (mach_err) {
         error.SetError(mach_err, eErrorTypeMachKernel);
-        LLDB_LOGF(log,
-                  "MachException::Message::%s(): pid_for_task() "
-                  "failed: %s",
-                  __FUNCTION__, error.AsCString());
+        if (log)
+          log->Printf("MachException::Message::%s(): pid_for_task() "
+                      "failed: %s",
+                      __FUNCTION__, error.AsCString());
         return error;
       }
     }
@@ -314,25 +348,25 @@ Status MachException::Message::Reply(::pid_t inferior_pid, task_t inferior_task,
         error.SetError(errno, eErrorTypePOSIX);
 
       if (!error.Success()) {
-        LLDB_LOGF(log,
-                  "::ptrace(request = PT_THUPDATE, pid = "
-                  "0x%4.4x, tid = 0x%4.4x, signal = %i)",
-                  state_pid, state.thread_port, soft_signal);
+        if (log)
+          log->Printf("::ptrace(request = PT_THUPDATE, pid = "
+                      "0x%4.4x, tid = 0x%4.4x, signal = %i)",
+                      state_pid, state.thread_port, soft_signal);
         return error;
       }
     }
   }
 
-  LLDB_LOGF(log,
-            "::mach_msg ( msg->{bits = %#x, size = %u, remote_port "
-            "= %#x, local_port = %#x, reserved = 0x%x, id = 0x%x}, "
-            "option = %#x, send_size = %u, rcv_size = %u, rcv_name "
-            "= %#x, timeout = %u, notify = %#x)",
-            reply_msg.hdr.msgh_bits, reply_msg.hdr.msgh_size,
-            reply_msg.hdr.msgh_remote_port, reply_msg.hdr.msgh_local_port,
-            reply_msg.hdr.msgh_reserved, reply_msg.hdr.msgh_id,
-            MACH_SEND_MSG | MACH_SEND_INTERRUPT, reply_msg.hdr.msgh_size, 0,
-            MACH_PORT_NULL, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
+  if (log)
+    log->Printf("::mach_msg ( msg->{bits = %#x, size = %u, remote_port "
+                "= %#x, local_port = %#x, reserved = 0x%x, id = 0x%x}, "
+                "option = %#x, send_size = %u, rcv_size = %u, rcv_name "
+                "= %#x, timeout = %u, notify = %#x)",
+                reply_msg.hdr.msgh_bits, reply_msg.hdr.msgh_size,
+                reply_msg.hdr.msgh_remote_port, reply_msg.hdr.msgh_local_port,
+                reply_msg.hdr.msgh_reserved, reply_msg.hdr.msgh_id,
+                MACH_SEND_MSG | MACH_SEND_INTERRUPT, reply_msg.hdr.msgh_size, 0,
+                MACH_PORT_NULL, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
 
   auto mach_err =
       ::mach_msg(&reply_msg.hdr, MACH_SEND_MSG | MACH_SEND_INTERRUPT,
@@ -347,13 +381,12 @@ Status MachException::Message::Reply(::pid_t inferior_pid, task_t inferior_task,
       log->PutCString("::mach_msg() - send interrupted");
       // TODO: keep retrying to reply???
     } else if (state.task_port == inferior_task) {
-      LLDB_LOGF(log,
-                "mach_msg(): returned an error when replying "
-                "to a mach exception: error = %u (%s)",
-                error.GetError(), error.AsCString());
+      log->Printf("mach_msg(): returned an error when replying "
+                  "to a mach exception: error = %u (%s)",
+                  error.GetError(), error.AsCString());
     } else {
-      LLDB_LOGF(log, "::mach_msg() - failed (child of task): %u (%s)",
-                error.GetError(), error.AsCString());
+      log->Printf("::mach_msg() - failed (child of task): %u (%s)",
+                  error.GetError(), error.AsCString());
     }
   }
 
@@ -379,16 +412,17 @@ Status MachException::Message::Reply(::pid_t inferior_pid, task_t inferior_task,
 
 #define LLDB_EXC_MASK (EXC_MASK_ALL & ~EXC_MASK_RESOURCE)
 
-Status MachException::PortInfo::Save(task_t task) {
-  Status error;
+Error MachException::PortInfo::Save(task_t task) {
+  Error error;
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_VERBOSE));
 
-  LLDB_LOGF(log, "MachException::PortInfo::%s(task = 0x%4.4x)", __FUNCTION__,
-            task);
+  if (log)
+    log->Printf("MachException::PortInfo::%s(task = 0x%4.4x)", __FUNCTION__,
+                task);
 
-  // Be careful to be able to have debugserver built on a newer OS than what it
-  // is currently running on by being able to start with all exceptions and
-  // back off to just what is supported on the current system
+  // Be careful to be able to have debugserver built on a newer OS than what
+  // it is currently running on by being able to start with all exceptions
+  // and back off to just what is supported on the current system
   mask = LLDB_EXC_MASK;
 
   count = (sizeof(ports) / sizeof(ports[0]));
@@ -399,15 +433,13 @@ Status MachException::PortInfo::Save(task_t task) {
 
   if (log) {
     if (error.Success()) {
-      LLDB_LOGF(log,
-                "::task_get_exception_ports(task = 0x%4.4x, mask = "
-                "0x%x, maskCnt => %u, ports, behaviors, flavors)",
-                task, mask, count);
+      log->Printf("::task_get_exception_ports(task = 0x%4.4x, mask = "
+                  "0x%x, maskCnt => %u, ports, behaviors, flavors)",
+                  task, mask, count);
     } else {
-      LLDB_LOGF(log,
-                "::task_get_exception_ports(task = 0x%4.4x, mask = 0x%x, "
-                "maskCnt => %u, ports, behaviors, flavors) error: %u (%s)",
-                task, mask, count, error.GetError(), error.AsCString());
+      log->Printf("::task_get_exception_ports(task = 0x%4.4x, mask = 0x%x, "
+                  "maskCnt => %u, ports, behaviors, flavors) error: %u (%s)",
+                  task, mask, count, error.GetError(), error.AsCString());
     }
   }
 
@@ -420,17 +452,15 @@ Status MachException::PortInfo::Save(task_t task) {
     error.SetError(mach_err, eErrorTypeMachKernel);
     if (log) {
       if (error.Success()) {
-        LLDB_LOGF(log,
-                  "::task_get_exception_ports(task = 0x%4.4x, "
-                  "mask = 0x%x, maskCnt => %u, ports, behaviors, "
-                  "flavors)",
-                  task, mask, count);
+        log->Printf("::task_get_exception_ports(task = 0x%4.4x, "
+                    "mask = 0x%x, maskCnt => %u, ports, behaviors, "
+                    "flavors)",
+                    task, mask, count);
       } else {
-        LLDB_LOGF(log,
-                  "::task_get_exception_ports(task = 0x%4.4x, mask = "
-                  "0x%x, maskCnt => %u, ports, behaviors, flavors) "
-                  "error: %u (%s)",
-                  task, mask, count, error.GetError(), error.AsCString());
+        log->Printf("::task_get_exception_ports(task = 0x%4.4x, mask = "
+                    "0x%x, maskCnt => %u, ports, behaviors, flavors) "
+                    "error: %u (%s)",
+                    task, mask, count, error.GetError(), error.AsCString());
       }
     }
   }
@@ -441,12 +471,13 @@ Status MachException::PortInfo::Save(task_t task) {
   return error;
 }
 
-Status MachException::PortInfo::Restore(task_t task) {
-  Status error;
+Error MachException::PortInfo::Restore(task_t task) {
+  Error error;
 
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_VERBOSE));
 
-  LLDB_LOGF(log, "MachException::PortInfo::Restore(task = 0x%4.4x)", task);
+  if (log)
+    log->Printf("MachException::PortInfo::Restore(task = 0x%4.4x)", task);
 
   uint32_t i = 0;
   if (count > 0) {
@@ -457,19 +488,17 @@ Status MachException::PortInfo::Restore(task_t task) {
         error.SetError(mach_err, eErrorTypeMachKernel);
       if (log) {
         if (error.Success()) {
-          LLDB_LOGF(log,
-                    "::task_set_exception_ports(task = 0x%4.4x, "
-                    "exception_mask = 0x%8.8x, new_port = 0x%4.4x, "
-                    "behavior = 0x%8.8x, new_flavor = 0x%8.8x)",
-                    task, masks[i], ports[i], behaviors[i], flavors[i]);
+          log->Printf("::task_set_exception_ports(task = 0x%4.4x, "
+                      "exception_mask = 0x%8.8x, new_port = 0x%4.4x, "
+                      "behavior = 0x%8.8x, new_flavor = 0x%8.8x)",
+                      task, masks[i], ports[i], behaviors[i], flavors[i]);
         } else {
-          LLDB_LOGF(log,
-                    "::task_set_exception_ports(task = 0x%4.4x, "
-                    "exception_mask = 0x%8.8x, new_port = 0x%4.4x, "
-                    "behavior = 0x%8.8x, new_flavor = 0x%8.8x): "
-                    "error %u (%s)",
-                    task, masks[i], ports[i], behaviors[i], flavors[i],
-                    error.GetError(), error.AsCString());
+          log->Printf("::task_set_exception_ports(task = 0x%4.4x, "
+                      "exception_mask = 0x%8.8x, new_port = 0x%4.4x, "
+                      "behavior = 0x%8.8x, new_flavor = 0x%8.8x): "
+                      "error %u (%s)",
+                      task, masks[i], ports[i], behaviors[i], flavors[i],
+                      error.GetError(), error.AsCString());
         }
       }
 

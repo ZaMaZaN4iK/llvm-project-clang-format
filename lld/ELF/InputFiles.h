@@ -1,8 +1,9 @@
 //===- InputFiles.h ---------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,9 +11,12 @@
 #define LLD_ELF_INPUT_FILES_H
 
 #include "Config.h"
-#include "lld/Common/ErrorHandler.h"
-#include "lld/Common/LLVM.h"
-#include "lld/Common/Reproduce.h"
+#include "InputSection.h"
+#include "Error.h"
+#include "Symbols.h"
+
+#include "lld/Core/LLVM.h"
+#include "lld/Core/Reproduce.h"
 #include "llvm/ADT/CachedHashString.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
@@ -20,375 +24,313 @@
 #include "llvm/Object/Archive.h"
 #include "llvm/Object/ELF.h"
 #include "llvm/Object/IRObjectFile.h"
-#include "llvm/Support/Threading.h"
+
 #include <map>
 
 namespace llvm {
-struct DILineInfo;
+class DWARFDebugLine;
 class TarWriter;
 namespace lto {
 class InputFile;
 }
-} // namespace llvm
+}
 
 namespace lld {
-class DWARFCache;
-
-// Returns "<internal>", "foo.a(bar.o)" or "baz.o".
-std::string toString(const elf::InputFile *f);
-
 namespace elf {
 class InputFile;
-class InputSectionBase;
+}
+
+// Returns "(internal)", "foo.a(bar.o)" or "baz.o".
+std::string toString(const elf::InputFile *F);
+
+namespace elf {
 
 using llvm::object::Archive;
 
-class Symbol;
+class Lazy;
+class SymbolBody;
 
 // If -reproduce option is given, all input files are written
 // to this tar archive.
-extern std::unique_ptr<llvm::TarWriter> tar;
+extern llvm::TarWriter *Tar;
 
 // Opens a given file.
-llvm::Optional<MemoryBufferRef> readFile(StringRef path);
-
-// Add symbols in File to the symbol table.
-void parseFile(InputFile *file);
+llvm::Optional<MemoryBufferRef> readFile(StringRef Path);
 
 // The root class of input files.
 class InputFile {
 public:
   enum Kind {
-    ObjKind,
+    ObjectKind,
     SharedKind,
-    LazyObjKind,
+    LazyObjectKind,
     ArchiveKind,
     BitcodeKind,
     BinaryKind,
   };
 
-  Kind kind() const { return fileKind; }
+  Kind kind() const { return FileKind; }
 
-  bool isElf() const {
-    Kind k = kind();
-    return k == ObjKind || k == SharedKind;
-  }
-
-  StringRef getName() const { return mb.getBufferIdentifier(); }
-  MemoryBufferRef mb;
-
-  // Returns sections. It is a runtime error to call this function
-  // on files that don't have the notion of sections.
-  ArrayRef<InputSectionBase *> getSections() const {
-    assert(fileKind == ObjKind || fileKind == BinaryKind);
-    return sections;
-  }
-
-  // Returns object file symbols. It is a runtime error to call this
-  // function on files of other types.
-  ArrayRef<Symbol *> getSymbols() { return getMutableSymbols(); }
-
-  MutableArrayRef<Symbol *> getMutableSymbols() {
-    assert(fileKind == BinaryKind || fileKind == ObjKind ||
-           fileKind == BitcodeKind);
-    return symbols;
-  }
+  StringRef getName() const { return MB.getBufferIdentifier(); }
+  MemoryBufferRef MB;
 
   // Filename of .a which contained this file. If this file was
   // not in an archive file, it is the empty string. We use this
   // string for creating error messages.
-  std::string archiveName;
+  StringRef ArchiveName;
+
+  // If this file is in an archive, the member contains the offset of
+  // the file in the archive. Otherwise, it's just zero. We store this
+  // field so that we can pass it to lib/LTO in order to disambiguate
+  // between objects.
+  uint64_t OffsetInArchive;
 
   // If this is an architecture-specific file, the following members
   // have ELF type (i.e. ELF{32,64}{LE,BE}) and target machine type.
-  ELFKind ekind = ELFNoneKind;
-  uint16_t emachine = llvm::ELF::EM_NONE;
-  uint8_t osabi = 0;
-  uint8_t abiVersion = 0;
-
-  // Cache for toString(). Only toString() should use this member.
-  mutable std::string toStringCache;
-
-  std::string getSrcMsg(const Symbol &sym, InputSectionBase &sec,
-                        uint64_t offset);
-
-  // True if this is an argument for --just-symbols. Usually false.
-  bool justSymbols = false;
-
-  // outSecOff of .got2 in the current file. This is used by PPC32 -fPIC/-fPIE
-  // to compute offsets in PLT call stubs.
-  uint32_t ppc32Got2OutSecOff = 0;
-
-  // On PPC64 we need to keep track of which files contain small code model
-  // relocations that access the .toc section. To minimize the chance of a
-  // relocation overflow, files that do contain said relocations should have
-  // their .toc sections sorted closer to the .got section than files that do
-  // not contain any small code model relocations. Thats because the toc-pointer
-  // is defined to point at .got + 0x8000 and the instructions used with small
-  // code model relocations support immediates in the range [-0x8000, 0x7FFC],
-  // making the addressable range relative to the toc pointer
-  // [.got, .got + 0xFFFC].
-  bool ppc64SmallCodeModelTocRelocs = false;
-
-  // groupId is used for --warn-backrefs which is an optional error
-  // checking feature. All files within the same --{start,end}-group or
-  // --{start,end}-lib get the same group ID. Otherwise, each file gets a new
-  // group ID. For more info, see checkDependency() in SymbolTable.cpp.
-  uint32_t groupId;
-  static bool isInGroup;
-  static uint32_t nextGroupId;
-
-  // Index of MIPS GOT built for this file.
-  llvm::Optional<size_t> mipsGotIndex;
-
-  std::vector<Symbol *> symbols;
+  ELFKind EKind = ELFNoneKind;
+  uint16_t EMachine = llvm::ELF::EM_NONE;
+  uint8_t OSABI = 0;
 
 protected:
-  InputFile(Kind k, MemoryBufferRef m);
-  std::vector<InputSectionBase *> sections;
+  InputFile(Kind K, MemoryBufferRef M) : MB(M), FileKind(K) {}
 
 private:
-  const Kind fileKind;
+  const Kind FileKind;
 };
 
-class ELFFileBase : public InputFile {
+template <typename ELFT> class ELFFileBase : public InputFile {
 public:
-  ELFFileBase(Kind k, MemoryBufferRef m);
-  static bool classof(const InputFile *f) { return f->isElf(); }
+  typedef typename ELFT::Shdr Elf_Shdr;
+  typedef typename ELFT::Sym Elf_Sym;
+  typedef typename ELFT::Word Elf_Word;
+  typedef typename ELFT::SymRange Elf_Sym_Range;
 
-  template <typename ELFT> llvm::object::ELFFile<ELFT> getObj() const {
-    return check(llvm::object::ELFFile<ELFT>::create(mb.getBuffer()));
+  ELFFileBase(Kind K, MemoryBufferRef M);
+  static bool classof(const InputFile *F) {
+    Kind K = F->kind();
+    return K == ObjectKind || K == SharedKind;
   }
 
-  StringRef getStringTable() const { return stringTable; }
+  llvm::object::ELFFile<ELFT> getObj() const {
+    return llvm::object::ELFFile<ELFT>(MB.getBuffer());
+  }
 
-  template <typename ELFT> typename ELFT::SymRange getELFSyms() const {
-    return typename ELFT::SymRange(
-        reinterpret_cast<const typename ELFT::Sym *>(elfSyms), numELFSyms);
-  }
-  template <typename ELFT> typename ELFT::SymRange getGlobalELFSyms() const {
-    return getELFSyms<ELFT>().slice(firstGlobal);
-  }
+  StringRef getStringTable() const { return StringTable; }
+
+  uint32_t getSectionIndex(const Elf_Sym &Sym) const;
+
+  Elf_Sym_Range getGlobalSymbols();
 
 protected:
-  // Initializes this class's member variables.
-  template <typename ELFT> void init();
-
-  const void *elfSyms = nullptr;
-  size_t numELFSyms = 0;
-  uint32_t firstGlobal = 0;
-  StringRef stringTable;
+  ArrayRef<Elf_Sym> Symbols;
+  uint32_t FirstNonLocal = 0;
+  ArrayRef<Elf_Word> SymtabSHNDX;
+  StringRef StringTable;
+  void initSymtab(ArrayRef<Elf_Shdr> Sections, const Elf_Shdr *Symtab);
 };
 
 // .o file.
-template <class ELFT> class ObjFile : public ELFFileBase {
-  using Elf_Rel = typename ELFT::Rel;
-  using Elf_Rela = typename ELFT::Rela;
-  using Elf_Sym = typename ELFT::Sym;
-  using Elf_Shdr = typename ELFT::Shdr;
-  using Elf_Word = typename ELFT::Word;
-  using Elf_CGProfile = typename ELFT::CGProfile;
+template <class ELFT> class ObjectFile : public ELFFileBase<ELFT> {
+  typedef ELFFileBase<ELFT> Base;
+  typedef typename ELFT::Rel Elf_Rel;
+  typedef typename ELFT::Rela Elf_Rela;
+  typedef typename ELFT::Sym Elf_Sym;
+  typedef typename ELFT::Shdr Elf_Shdr;
+  typedef typename ELFT::SymRange Elf_Sym_Range;
+  typedef typename ELFT::Word Elf_Word;
+  typedef typename ELFT::uint uintX_t;
+
+  StringRef getShtGroupSignature(ArrayRef<Elf_Shdr> Sections,
+                                 const Elf_Shdr &Sec);
+  ArrayRef<Elf_Word> getShtGroupEntries(const Elf_Shdr &Sec);
 
 public:
-  static bool classof(const InputFile *f) { return f->kind() == ObjKind; }
-
-  llvm::object::ELFFile<ELFT> getObj() const {
-    return this->ELFFileBase::getObj<ELFT>();
+  static bool classof(const InputFile *F) {
+    return F->kind() == Base::ObjectKind;
   }
 
-  ArrayRef<Symbol *> getLocalSymbols();
-  ArrayRef<Symbol *> getGlobalSymbols();
+  ArrayRef<SymbolBody *> getSymbols();
+  ArrayRef<SymbolBody *> getLocalSymbols();
+  ArrayRef<SymbolBody *> getNonLocalSymbols();
 
-  ObjFile(MemoryBufferRef m, StringRef archiveName) : ELFFileBase(ObjKind, m) {
-    this->archiveName = archiveName;
-  }
+  explicit ObjectFile(MemoryBufferRef M);
+  void parse(llvm::DenseSet<llvm::CachedHashStringRef> &ComdatGroups);
 
-  void parse(bool ignoreComdats = false);
+  ArrayRef<InputSectionBase<ELFT> *> getSections() const { return Sections; }
+  InputSectionBase<ELFT> *getSection(const Elf_Sym &Sym) const;
 
-  StringRef getShtGroupSignature(ArrayRef<Elf_Shdr> sections,
-                                 const Elf_Shdr &sec);
-
-  Symbol &getSymbol(uint32_t symbolIndex) const {
-    if (symbolIndex >= this->symbols.size())
+  SymbolBody &getSymbolBody(uint32_t SymbolIndex) const {
+    if (SymbolIndex >= SymbolBodies.size())
       fatal(toString(this) + ": invalid symbol index");
-    return *this->symbols[symbolIndex];
+    return *SymbolBodies[SymbolIndex];
   }
 
-  uint32_t getSectionIndex(const Elf_Sym &sym) const;
-
-  template <typename RelT> Symbol &getRelocTargetSym(const RelT &rel) const {
-    uint32_t symIndex = rel.getSymbol(config->isMips64EL);
-    return getSymbol(symIndex);
+  template <typename RelT>
+  SymbolBody &getRelocTargetSym(const RelT &Rel) const {
+    uint32_t SymIndex = Rel.getSymbol(Config->Mips64EL);
+    return getSymbolBody(SymIndex);
   }
 
-  llvm::Optional<llvm::DILineInfo> getDILineInfo(InputSectionBase *, uint64_t);
-  llvm::Optional<std::pair<std::string, unsigned>> getVariableLoc(StringRef name);
+  // Returns source line information for a given offset.
+  // If no information is available, returns "".
+  std::string getLineInfo(InputSectionBase<ELFT> *S, uintX_t Offset);
 
   // MIPS GP0 value defined by this file. This value represents the gp value
   // used to create the relocatable object and required to support
   // R_MIPS_GPREL16 / R_MIPS_GPREL32 relocations.
-  uint32_t mipsGp0 = 0;
-
-  uint32_t andFeatures = 0;
+  uint32_t MipsGp0 = 0;
 
   // Name of source file obtained from STT_FILE symbol value,
   // or empty string if there is no such symbol in object file
   // symbol table.
-  StringRef sourceFile;
-
-  // True if the file defines functions compiled with
-  // -fsplit-stack. Usually false.
-  bool splitStack = false;
-
-  // True if the file defines functions compiled with -fsplit-stack,
-  // but had one or more functions with the no_split_stack attribute.
-  bool someNoSplitStack = false;
-
-  // Pointer to this input file's .llvm_addrsig section, if it has one.
-  const Elf_Shdr *addrsigSec = nullptr;
-
-  // SHT_LLVM_CALL_GRAPH_PROFILE table
-  ArrayRef<Elf_CGProfile> cgProfile;
+  StringRef SourceFile;
 
 private:
-  void initializeSections(bool ignoreComdats);
+  void
+  initializeSections(llvm::DenseSet<llvm::CachedHashStringRef> &ComdatGroups);
   void initializeSymbols();
-  void initializeJustSymbols();
-  void initializeDwarf();
-  InputSectionBase *getRelocTarget(const Elf_Shdr &sec);
-  InputSectionBase *createInputSection(const Elf_Shdr &sec);
-  StringRef getSectionName(const Elf_Shdr &sec);
+  void initializeDwarfLine();
+  InputSectionBase<ELFT> *getRelocTarget(const Elf_Shdr &Sec);
+  InputSectionBase<ELFT> *createInputSection(const Elf_Shdr &Sec,
+                                             StringRef SectionStringTable);
 
-  bool shouldMerge(const Elf_Shdr &sec, StringRef name);
+  bool shouldMerge(const Elf_Shdr &Sec);
+  SymbolBody *createSymbolBody(const Elf_Sym *Sym);
 
-  // Each ELF symbol contains a section index which the symbol belongs to.
-  // However, because the number of bits dedicated for that is limited, a
-  // symbol can directly point to a section only when the section index is
-  // equal to or smaller than 65280.
-  //
-  // If an object file contains more than 65280 sections, the file must
-  // contain .symtab_shndx section. The section contains an array of
-  // 32-bit integers whose size is the same as the number of symbols.
-  // Nth symbol's section index is in the Nth entry of .symtab_shndx.
-  //
-  // The following variable contains the contents of .symtab_shndx.
-  // If the section does not exist (which is common), the array is empty.
-  ArrayRef<Elf_Word> shndxTable;
+  // List of all sections defined by this file.
+  std::vector<InputSectionBase<ELFT> *> Sections;
 
-  // .shstrtab contents.
-  StringRef sectionStringTable;
+  // List of all symbols referenced or defined by this file.
+  std::vector<SymbolBody *> SymbolBodies;
 
   // Debugging information to retrieve source file and line for error
   // reporting. Linker may find reasonable number of errors in a
   // single object file, so we cache debugging information in order to
   // parse it only once for each object file we link.
-  DWARFCache *dwarf;
-  llvm::once_flag initDwarfLine;
+  std::unique_ptr<llvm::DWARFDebugLine> DwarfLine;
 };
 
-// LazyObjFile is analogous to ArchiveFile in the sense that
+// LazyObjectFile is analogous to ArchiveFile in the sense that
 // the file contains lazy symbols. The difference is that
-// LazyObjFile wraps a single file instead of multiple files.
+// LazyObjectFile wraps a single file instead of multiple files.
 //
 // This class is used for --start-lib and --end-lib options which
 // instruct the linker to link object files between them with the
 // archive file semantics.
-class LazyObjFile : public InputFile {
+class LazyObjectFile : public InputFile {
 public:
-  LazyObjFile(MemoryBufferRef m, StringRef archiveName,
-              uint64_t offsetInArchive)
-      : InputFile(LazyObjKind, m), offsetInArchive(offsetInArchive) {
-    this->archiveName = archiveName;
+  explicit LazyObjectFile(MemoryBufferRef M) : InputFile(LazyObjectKind, M) {}
+
+  static bool classof(const InputFile *F) {
+    return F->kind() == LazyObjectKind;
   }
 
-  static bool classof(const InputFile *f) { return f->kind() == LazyObjKind; }
-
   template <class ELFT> void parse();
-  void fetch();
+  MemoryBufferRef getBuffer();
 
 private:
-  uint64_t offsetInArchive;
+  std::vector<StringRef> getSymbols();
+  template <class ELFT> std::vector<StringRef> getElfSymbols();
+  std::vector<StringRef> getBitcodeSymbols();
+
+  bool Seen = false;
 };
 
 // An ArchiveFile object represents a .a file.
 class ArchiveFile : public InputFile {
 public:
-  explicit ArchiveFile(std::unique_ptr<Archive> &&file);
-  static bool classof(const InputFile *f) { return f->kind() == ArchiveKind; }
-  void parse();
+  explicit ArchiveFile(MemoryBufferRef M) : InputFile(ArchiveKind, M) {}
+  static bool classof(const InputFile *F) { return F->kind() == ArchiveKind; }
+  template <class ELFT> void parse();
 
-  // Pulls out an object file that contains a definition for Sym and
-  // returns it. If the same file was instantiated before, this
-  // function does nothing (so we don't instantiate the same file
-  // more than once.)
-  void fetch(const Archive::Symbol &sym);
+  // Returns a memory buffer for a given symbol and the offset in the archive
+  // for the member. An empty memory buffer and an offset of zero
+  // is returned if we have already returned the same memory buffer.
+  // (So that we don't instantiate same members more than once.)
+  std::pair<MemoryBufferRef, uint64_t> getMember(const Archive::Symbol *Sym);
 
 private:
-  std::unique_ptr<Archive> file;
-  llvm::DenseSet<uint64_t> seen;
+  std::unique_ptr<Archive> File;
+  llvm::DenseSet<uint64_t> Seen;
 };
 
 class BitcodeFile : public InputFile {
 public:
-  BitcodeFile(MemoryBufferRef m, StringRef archiveName,
-              uint64_t offsetInArchive);
-  static bool classof(const InputFile *f) { return f->kind() == BitcodeKind; }
-  template <class ELFT> void parse();
-  std::unique_ptr<llvm::lto::InputFile> obj;
+  explicit BitcodeFile(MemoryBufferRef M);
+  static bool classof(const InputFile *F) { return F->kind() == BitcodeKind; }
+  template <class ELFT>
+  void parse(llvm::DenseSet<llvm::CachedHashStringRef> &ComdatGroups);
+  ArrayRef<Symbol *> getSymbols() { return Symbols; }
+  std::unique_ptr<llvm::lto::InputFile> Obj;
+
+private:
+  std::vector<Symbol *> Symbols;
 };
 
 // .so file.
-class SharedFile : public ELFFileBase {
+template <class ELFT> class SharedFile : public ELFFileBase<ELFT> {
+  typedef ELFFileBase<ELFT> Base;
+  typedef typename ELFT::Dyn Elf_Dyn;
+  typedef typename ELFT::Shdr Elf_Shdr;
+  typedef typename ELFT::Sym Elf_Sym;
+  typedef typename ELFT::SymRange Elf_Sym_Range;
+  typedef typename ELFT::Verdef Elf_Verdef;
+  typedef typename ELFT::Versym Elf_Versym;
+  typedef typename ELFT::Word Elf_Word;
+  typedef typename ELFT::uint uintX_t;
+
+  std::vector<StringRef> Undefs;
+  StringRef SoName;
+  const Elf_Shdr *VersymSec = nullptr;
+  const Elf_Shdr *VerdefSec = nullptr;
+
 public:
-  SharedFile(MemoryBufferRef m, StringRef defaultSoName)
-      : ELFFileBase(SharedKind, m), soName(defaultSoName),
-        isNeeded(!config->asNeeded) {}
+  StringRef getSoName() const { return SoName; }
+  const Elf_Shdr *getSection(const Elf_Sym &Sym) const;
+  llvm::ArrayRef<StringRef> getUndefinedSymbols() { return Undefs; }
 
-  // This is actually a vector of Elf_Verdef pointers.
-  std::vector<const void *> verdefs;
+  static bool classof(const InputFile *F) {
+    return F->kind() == Base::SharedKind;
+  }
 
-  // If the output file needs Elf_Verneed data structures for this file, this is
-  // a vector of Elf_Vernaux version identifiers that map onto the entries in
-  // Verdefs, otherwise it is empty.
-  std::vector<unsigned> vernauxs;
+  explicit SharedFile(MemoryBufferRef M);
 
-  static unsigned vernauxNum;
+  void parseSoName();
+  void parseRest();
+  std::vector<const Elf_Verdef *> parseVerdefs(const Elf_Versym *&Versym);
 
-  std::vector<StringRef> dtNeeded;
-  std::string soName;
+  struct NeededVer {
+    // The string table offset of the version name in the output file.
+    size_t StrTab;
 
-  static bool classof(const InputFile *f) { return f->kind() == SharedKind; }
+    // The version identifier for this version name.
+    uint16_t Index;
+  };
 
-  template <typename ELFT> void parse();
-
-  // Used for --no-allow-shlib-undefined.
-  bool allNeededIsKnown;
+  // Mapping from Elf_Verdef data structures to information about Elf_Vernaux
+  // data structures in the output file.
+  std::map<const Elf_Verdef *, NeededVer> VerdefMap;
 
   // Used for --as-needed
-  bool isNeeded;
+  bool AsNeeded = false;
+  bool IsUsed = false;
+  bool isNeeded() const { return !AsNeeded || IsUsed; }
 };
 
 class BinaryFile : public InputFile {
 public:
-  explicit BinaryFile(MemoryBufferRef m) : InputFile(BinaryKind, m) {}
-  static bool classof(const InputFile *f) { return f->kind() == BinaryKind; }
-  void parse();
+  explicit BinaryFile(MemoryBufferRef M) : InputFile(BinaryKind, M) {}
+  static bool classof(const InputFile *F) { return F->kind() == BinaryKind; }
+  template <class ELFT> void parse();
+  ArrayRef<InputSectionData *> getSections() const { return Sections; }
+
+private:
+  std::vector<InputSectionData *> Sections;
 };
 
-InputFile *createObjectFile(MemoryBufferRef mb, StringRef archiveName = "",
-                            uint64_t offsetInArchive = 0);
-
-inline bool isBitcode(MemoryBufferRef mb) {
-  return identify_magic(mb.getBuffer()) == llvm::file_magic::bitcode;
-}
-
-std::string replaceThinLTOSuffix(StringRef path);
-
-extern std::vector<BinaryFile *> binaryFiles;
-extern std::vector<BitcodeFile *> bitcodeFiles;
-extern std::vector<LazyObjFile *> lazyObjFiles;
-extern std::vector<InputFile *> objectFiles;
-extern std::vector<SharedFile *> sharedFiles;
+InputFile *createObjectFile(MemoryBufferRef MB, StringRef ArchiveName = "",
+                            uint64_t OffsetInArchive = 0);
+InputFile *createSharedFile(MemoryBufferRef MB);
 
 } // namespace elf
 } // namespace lld

@@ -1,8 +1,9 @@
 //===-- X86FixupKinds.h - X86 Specific Fixup Entries ------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -29,7 +30,6 @@ enum Fixups {
                                              // of the instruction. Used only
                                              // for _GLOBAL_OFFSET_TABLE_.
   reloc_global_offset_table8,                // 64-bit variant.
-  reloc_branch_4byte_pcrel,                  // 32-bit PC relative branch.
   // Marker
   LastTargetFixupKind,
   NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind

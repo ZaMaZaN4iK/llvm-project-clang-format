@@ -1,18 +1,23 @@
 //===-- EmulateInstructionARM64.h -------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef EmulateInstructionARM64_h_
 #define EmulateInstructionARM64_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "Plugins/Process/Utility/ARMDefines.h"
 #include "lldb/Core/EmulateInstruction.h"
+#include "lldb/Core/Error.h"
 #include "lldb/Interpreter/OptionValue.h"
-#include "lldb/Utility/Status.h"
 
 class EmulateInstructionARM64 : public lldb_private::EmulateInstruction {
 public:
@@ -73,25 +78,25 @@ public:
   bool
   CreateFunctionEntryUnwind(lldb_private::UnwindPlan &unwind_plan) override;
 
-  enum AddrMode { AddrMode_OFF, AddrMode_PRE, AddrMode_POST };
+  typedef enum { AddrMode_OFF, AddrMode_PRE, AddrMode_POST } AddrMode;
 
-  enum BranchType {
+  typedef enum {
     BranchType_CALL,
     BranchType_ERET,
     BranchType_DRET,
     BranchType_RET,
     BranchType_JMP
-  };
+  } BranchType;
 
-  enum CountOp { CountOp_CLZ, CountOp_CLS, CountOp_CNT };
+  typedef enum { CountOp_CLZ, CountOp_CLS, CountOp_CNT } CountOp;
 
-  enum RevOp { RevOp_RBIT, RevOp_REV16, RevOp_REV32, RevOp_REV64 };
+  typedef enum { RevOp_RBIT, RevOp_REV16, RevOp_REV32, RevOp_REV64 } RevOp;
 
-  enum BitwiseOp { BitwiseOp_NOT, BitwiseOp_RBIT };
+  typedef enum { BitwiseOp_NOT, BitwiseOp_RBIT } BitwiseOp;
 
-  enum ExceptionLevel { EL0 = 0, EL1 = 1, EL2 = 2, EL3 = 3 };
+  typedef enum { EL0 = 0, EL1 = 1, EL2 = 2, EL3 = 3 } ExceptionLevel;
 
-  enum ExtendType {
+  typedef enum {
     ExtendType_SXTB,
     ExtendType_SXTH,
     ExtendType_SXTW,
@@ -100,36 +105,44 @@ public:
     ExtendType_UXTH,
     ExtendType_UXTW,
     ExtendType_UXTX
-  };
+  } ExtendType;
 
-  enum ExtractType { ExtractType_LEFT, ExtractType_RIGHT };
+  typedef enum { ExtractType_LEFT, ExtractType_RIGHT } ExtractType;
 
-  enum LogicalOp { LogicalOp_AND, LogicalOp_EOR, LogicalOp_ORR };
+  typedef enum { LogicalOp_AND, LogicalOp_EOR, LogicalOp_ORR } LogicalOp;
 
-  enum MemOp { MemOp_LOAD, MemOp_STORE, MemOp_PREFETCH, MemOp_NOP };
+  typedef enum { MemOp_LOAD, MemOp_STORE, MemOp_PREFETCH, MemOp_NOP } MemOp;
 
-  enum MoveWideOp { MoveWideOp_N, MoveWideOp_Z, MoveWideOp_K };
+  typedef enum { MoveWideOp_N, MoveWideOp_Z, MoveWideOp_K } MoveWideOp;
 
-  enum ShiftType { ShiftType_LSL, ShiftType_LSR, ShiftType_ASR, ShiftType_ROR };
+  typedef enum {
+    ShiftType_LSL,
+    ShiftType_LSR,
+    ShiftType_ASR,
+    ShiftType_ROR
+  } ShiftType;
 
-  enum StackPointerSelection { SP0 = 0, SPx = 1 };
+  typedef enum { SP0 = 0, SPx = 1 } StackPointerSelection;
 
-  enum Unpredictable { Unpredictable_WBOVERLAP, Unpredictable_LDPOVERLAP };
+  typedef enum {
+    Unpredictable_WBOVERLAP,
+    Unpredictable_LDPOVERLAP
+  } Unpredictable;
 
-  enum ConstraintType {
+  typedef enum {
     Constraint_NONE,
     Constraint_UNKNOWN,
     Constraint_SUPPRESSWB,
     Constraint_NOP
-  };
+  } ConstraintType;
 
-  enum AccType {
+  typedef enum {
     AccType_NORMAL,
     AccType_UNPRIV,
     AccType_STREAM,
     AccType_ALIGNED,
     AccType_ORDERED
-  };
+  } AccType;
 
   typedef struct {
     uint32_t N : 1, V : 1, C : 1,

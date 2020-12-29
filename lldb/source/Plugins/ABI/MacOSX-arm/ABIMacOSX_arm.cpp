@@ -1,20 +1,29 @@
 //===-- ABIMacOSX_arm.cpp ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "ABIMacOSX_arm.h"
 
+// C Includes
+// C++ Includes
 #include <vector>
 
+// Other libraries and framework includes
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Triple.h"
 
+// Project includes
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/Error.h"
 #include "lldb/Core/Module.h"
 #include "lldb/Core/PluginManager.h"
+#include "lldb/Core/RegisterValue.h"
+#include "lldb/Core/Scalar.h"
 #include "lldb/Core/Value.h"
 #include "lldb/Core/ValueObjectConstResult.h"
 #include "lldb/Symbol/UnwindPlan.h"
@@ -22,10 +31,6 @@
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Target/Target.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/RegisterValue.h"
-#include "lldb/Utility/Scalar.h"
-#include "lldb/Utility/Status.h"
 
 #include "Plugins/Process/Utility/ARMDefines.h"
 #include "Utility/ARM_DWARF_Registers.h"
@@ -1316,18 +1321,22 @@ ABIMacOSX_arm::GetRegisterInfoArray(uint32_t &count) {
 
 size_t ABIMacOSX_arm::GetRedZoneSize() const { return 0; }
 
+//------------------------------------------------------------------
 // Static Functions
+//------------------------------------------------------------------
 
 ABISP
-ABIMacOSX_arm::CreateInstance(ProcessSP process_sp, const ArchSpec &arch) {
+ABIMacOSX_arm::CreateInstance(const ArchSpec &arch) {
+  static ABISP g_abi_sp;
   const llvm::Triple::ArchType arch_type = arch.GetTriple().getArch();
   const llvm::Triple::VendorType vendor_type = arch.GetTriple().getVendor();
 
   if (vendor_type == llvm::Triple::Apple) {
     if ((arch_type == llvm::Triple::arm) ||
         (arch_type == llvm::Triple::thumb)) {
-      return ABISP(
-          new ABIMacOSX_arm(std::move(process_sp), MakeMCRegisterInfo(arch)));
+      if (!g_abi_sp)
+        g_abi_sp.reset(new ABIMacOSX_arm);
+      return g_abi_sp;
     }
   }
 
@@ -1404,6 +1413,10 @@ bool ABIMacOSX_arm::PrepareTrivialCall(Thread &thread, addr_t sp,
   if (!reg_ctx->WriteRegisterFromUnsigned(ra_reg_num, return_addr))
     return false;
 
+  // Set "sp" to the requested value
+  if (!reg_ctx->WriteRegisterFromUnsigned(sp_reg_num, sp))
+    return false;
+
   // If bit zero or 1 is set, this must be a thumb function, no need to figure
   // this out from the symbols.
   so_addr.SetLoadAddress(function_addr, target_sp.get());
@@ -1427,11 +1440,6 @@ bool ABIMacOSX_arm::PrepareTrivialCall(Thread &thread, addr_t sp,
 
   function_addr &=
       ~1ull; // clear bit zero since the CPSR will take care of the mode for us
-
-  // Update the sp - stack pointer - to be aligned to 16-bytes
-  sp &= ~(0xfull);
-  if (!reg_ctx->WriteRegisterFromUnsigned(sp_reg_num, sp))
-    return false;
 
   // Set "pc" to the address requested
   if (!reg_ctx->WriteRegisterFromUnsigned(pc_reg_num, function_addr))
@@ -1457,8 +1465,8 @@ bool ABIMacOSX_arm::GetArgumentValues(Thread &thread, ValueList &values) const {
   addr_t sp = 0;
 
   for (uint32_t value_idx = 0; value_idx < num_values; ++value_idx) {
-    // We currently only support extracting values with Clang QualTypes. Do we
-    // care about others?
+    // We currently only support extracting values with Clang QualTypes.
+    // Do we care about others?
     Value *value = values.GetValueAtIndex(value_idx);
 
     if (!value)
@@ -1468,16 +1476,14 @@ bool ABIMacOSX_arm::GetArgumentValues(Thread &thread, ValueList &values) const {
     if (compiler_type) {
       bool is_signed = false;
       size_t bit_width = 0;
-      llvm::Optional<uint64_t> bit_size = compiler_type.GetBitSize(&thread);
-      if (!bit_size)
-        return false;
-      if (compiler_type.IsIntegerOrEnumerationType(is_signed))
-        bit_width = *bit_size;
-      else if (compiler_type.IsPointerOrReferenceType())
-        bit_width = *bit_size;
-      else
+      if (compiler_type.IsIntegerOrEnumerationType(is_signed)) {
+        bit_width = compiler_type.GetBitSize(&thread);
+      } else if (compiler_type.IsPointerOrReferenceType()) {
+        bit_width = compiler_type.GetBitSize(&thread);
+      } else {
         // We only handle integer, pointer and reference types currently...
         return false;
+      }
 
       if (bit_width <= (exe_ctx.GetProcessRef().GetAddressByteSize() * 8)) {
         if (value_idx < 4) {
@@ -1527,7 +1533,7 @@ bool ABIMacOSX_arm::GetArgumentValues(Thread &thread, ValueList &values) const {
 
           // Arguments 5 on up are on the stack
           const uint32_t arg_byte_size = (bit_width + (8 - 1)) / 8;
-          Status error;
+          Error error;
           if (!exe_ctx.GetProcessRef().ReadScalarIntegerFromMemory(
                   sp, arg_byte_size, is_signed, value->GetScalar(), error))
             return false;
@@ -1540,14 +1546,16 @@ bool ABIMacOSX_arm::GetArgumentValues(Thread &thread, ValueList &values) const {
   return true;
 }
 
-bool ABIMacOSX_arm::IsArmv7kProcess() const {
+bool ABIMacOSX_arm::IsArmv7kProcess(Thread *thread) const {
   bool is_armv7k = false;
-  ProcessSP process_sp(GetProcessSP());
-  if (process_sp) {
-    const ArchSpec &arch(process_sp->GetTarget().GetArchitecture());
-    const ArchSpec::Core system_core = arch.GetCore();
-    if (system_core == ArchSpec::eCore_arm_armv7k) {
-      is_armv7k = true;
+  if (thread) {
+    ProcessSP process_sp(thread->GetProcess());
+    if (process_sp) {
+      const ArchSpec &arch(process_sp->GetTarget().GetArchitecture());
+      const ArchSpec::Core system_core = arch.GetCore();
+      if (system_core == ArchSpec::eCore_arm_armv7k) {
+        is_armv7k = true;
+      }
     }
   }
   return is_armv7k;
@@ -1574,18 +1582,18 @@ ValueObjectSP ABIMacOSX_arm::GetReturnValueObjectImpl(
 
   const RegisterInfo *r0_reg_info = reg_ctx->GetRegisterInfoByName("r0", 0);
   if (compiler_type.IsIntegerOrEnumerationType(is_signed)) {
-    llvm::Optional<uint64_t> bit_width = compiler_type.GetBitSize(&thread);
-    if (!bit_width)
-      return return_valobj_sp;
+    size_t bit_width = compiler_type.GetBitSize(&thread);
 
-    switch (*bit_width) {
+    switch (bit_width) {
     default:
       return return_valobj_sp;
     case 128:
-      if (IsArmv7kProcess()) {
+      if (IsArmv7kProcess(&thread)) {
         // "A composite type not larger than 16 bytes is returned in r0-r3. The
-        // format is as if the result had been stored in memory at a word-
-        // aligned address and then loaded into r0-r3 with an ldm instruction"
+        // format is
+        // as if the result had been stored in memory at a word-aligned address
+        // and then
+        // loaded into r0-r3 with an ldm instruction"
         {
           const RegisterInfo *r1_reg_info =
               reg_ctx->GetRegisterInfoByName("r1", 0);
@@ -1594,17 +1602,14 @@ ValueObjectSP ABIMacOSX_arm::GetReturnValueObjectImpl(
           const RegisterInfo *r3_reg_info =
               reg_ctx->GetRegisterInfoByName("r3", 0);
           if (r1_reg_info && r2_reg_info && r3_reg_info) {
-            llvm::Optional<uint64_t> byte_size =
-                compiler_type.GetByteSize(&thread);
-            if (!byte_size)
-              return return_valobj_sp;
+            const size_t byte_size = compiler_type.GetByteSize(&thread);
             ProcessSP process_sp(thread.GetProcess());
-            if (*byte_size <= r0_reg_info->byte_size + r1_reg_info->byte_size +
-                                  r2_reg_info->byte_size +
-                                  r3_reg_info->byte_size &&
+            if (byte_size <= r0_reg_info->byte_size + r1_reg_info->byte_size +
+                                 r2_reg_info->byte_size +
+                                 r3_reg_info->byte_size &&
                 process_sp) {
-              std::unique_ptr<DataBufferHeap> heap_data_up(
-                  new DataBufferHeap(*byte_size, 0));
+              std::unique_ptr<DataBufferHeap> heap_data_ap(
+                  new DataBufferHeap(byte_size, 0));
               const ByteOrder byte_order = process_sp->GetByteOrder();
               RegisterValue r0_reg_value;
               RegisterValue r1_reg_value;
@@ -1614,20 +1619,20 @@ ValueObjectSP ABIMacOSX_arm::GetReturnValueObjectImpl(
                   reg_ctx->ReadRegister(r1_reg_info, r1_reg_value) &&
                   reg_ctx->ReadRegister(r2_reg_info, r2_reg_value) &&
                   reg_ctx->ReadRegister(r3_reg_info, r3_reg_value)) {
-                Status error;
+                Error error;
                 if (r0_reg_value.GetAsMemoryData(r0_reg_info,
-                                                 heap_data_up->GetBytes() + 0,
+                                                 heap_data_ap->GetBytes() + 0,
                                                  4, byte_order, error) &&
                     r1_reg_value.GetAsMemoryData(r1_reg_info,
-                                                 heap_data_up->GetBytes() + 4,
+                                                 heap_data_ap->GetBytes() + 4,
                                                  4, byte_order, error) &&
                     r2_reg_value.GetAsMemoryData(r2_reg_info,
-                                                 heap_data_up->GetBytes() + 8,
+                                                 heap_data_ap->GetBytes() + 8,
                                                  4, byte_order, error) &&
                     r3_reg_value.GetAsMemoryData(r3_reg_info,
-                                                 heap_data_up->GetBytes() + 12,
+                                                 heap_data_ap->GetBytes() + 12,
                                                  4, byte_order, error)) {
-                  DataExtractor data(DataBufferSP(heap_data_up.release()),
+                  DataExtractor data(DataBufferSP(heap_data_ap.release()),
                                      byte_order,
                                      process_sp->GetAddressByteSize());
 
@@ -1697,9 +1702,9 @@ ValueObjectSP ABIMacOSX_arm::GetReturnValueObjectImpl(
   return return_valobj_sp;
 }
 
-Status ABIMacOSX_arm::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
-                                           lldb::ValueObjectSP &new_value_sp) {
-  Status error;
+Error ABIMacOSX_arm::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
+                                          lldb::ValueObjectSP &new_value_sp) {
+  Error error;
   if (!new_value_sp) {
     error.SetErrorString("Empty value object for return value.");
     return error;
@@ -1723,7 +1728,7 @@ Status ABIMacOSX_arm::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
   if (compiler_type.IsIntegerOrEnumerationType(is_signed) ||
       compiler_type.IsPointerType()) {
     DataExtractor data;
-    Status data_error;
+    Error data_error;
     size_t num_bytes = new_value_sp->GetData(data, data_error);
     if (data_error.Fail()) {
       error.SetErrorStringWithFormat(
@@ -1750,10 +1755,13 @@ Status ABIMacOSX_arm::SetReturnValueObject(lldb::StackFrameSP &frame_sp,
             set_it_simple = true;
         }
       }
-    } else if (num_bytes <= 16 && IsArmv7kProcess()) {
+    } else if (num_bytes <= 16 &&
+               IsArmv7kProcess(frame_sp->GetThread().get())) {
       // "A composite type not larger than 16 bytes is returned in r0-r3. The
-      // format is as if the result had been stored in memory at a word-aligned
-      // address and then loaded into r0-r3 with an ldm instruction"
+      // format is
+      // as if the result had been stored in memory at a word-aligned address
+      // and then
+      // loaded into r0-r3 with an ldm instruction"
 
       const RegisterInfo *r0_info = reg_ctx->GetRegisterInfoByName("r0", 0);
       const RegisterInfo *r1_info = reg_ctx->GetRegisterInfoByName("r1", 0);
@@ -1847,7 +1855,6 @@ bool ABIMacOSX_arm::CreateDefaultUnwindPlan(UnwindPlan &unwind_plan) {
   unwind_plan.SetSourceName("arm-apple-ios default unwind plan");
   unwind_plan.SetSourcedFromCompiler(eLazyBoolNo);
   unwind_plan.SetUnwindPlanValidAtAllInstructions(eLazyBoolNo);
-  unwind_plan.SetUnwindPlanForSignalTrap(eLazyBoolNo);
 
   return true;
 }
@@ -2045,7 +2052,9 @@ lldb_private::ConstString ABIMacOSX_arm::GetPluginNameStatic() {
   return g_name;
 }
 
+//------------------------------------------------------------------
 // PluginInterface protocol
+//------------------------------------------------------------------
 
 lldb_private::ConstString ABIMacOSX_arm::GetPluginName() {
   return GetPluginNameStatic();

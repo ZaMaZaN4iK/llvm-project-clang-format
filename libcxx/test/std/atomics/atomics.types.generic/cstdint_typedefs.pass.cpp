@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -39,9 +40,7 @@
 #include <type_traits>
 #include <cstdint>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     static_assert((std::is_same<std::atomic<  std::int_least8_t>,   std::atomic_int_least8_t>::value), "");
     static_assert((std::is_same<std::atomic< std::uint_least8_t>,  std::atomic_uint_least8_t>::value), "");
@@ -67,6 +66,4 @@ int main(int, char**)
     static_assert((std::is_same<std::atomic<std::ptrdiff_t>, std::atomic_ptrdiff_t>::value), "");
     static_assert((std::is_same<std::atomic< std::intmax_t>,  std::atomic_intmax_t>::value), "");
     static_assert((std::is_same<std::atomic<std::uintmax_t>, std::atomic_uintmax_t>::value), "");
-
-  return 0;
 }

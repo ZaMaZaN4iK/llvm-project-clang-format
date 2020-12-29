@@ -1,16 +1,17 @@
 //===-- AppleObjCClassDescriptorV2.cpp -----------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "AppleObjCClassDescriptorV2.h"
 
+#include "lldb/Core/Log.h"
 #include "lldb/Expression/FunctionCaller.h"
-#include "lldb/Utility/Log.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -51,7 +52,7 @@ bool ClassDescriptorV2::objc_class_t::Read(Process *process,
                            + ptr_size; // uintptr_t data_NEVER_USE;
 
   DataBufferHeap objc_class_buf(objc_class_size, '\0');
-  Status error;
+  Error error;
 
   process->ReadMemory(addr, objc_class_buf.GetBytes(), objc_class_size, error);
   if (error.Fail()) {
@@ -91,7 +92,7 @@ bool ClassDescriptorV2::class_rw_t::Read(Process *process, lldb::addr_t addr) {
                 + ptr_size;        // Class nextSiblingClass;
 
   DataBufferHeap buffer(size, '\0');
-  Status error;
+  Error error;
 
   process->ReadMemory(addr, buffer.GetBytes(), size, error);
   if (error.Fail()) {
@@ -110,18 +111,6 @@ bool ClassDescriptorV2::class_rw_t::Read(Process *process, lldb::addr_t addr) {
   m_properties_ptr = extractor.GetAddress_unchecked(&cursor);
   m_firstSubclass = extractor.GetAddress_unchecked(&cursor);
   m_nextSiblingClass = extractor.GetAddress_unchecked(&cursor);
-
-  if (m_ro_ptr & 1) {
-    DataBufferHeap buffer(ptr_size, '\0');
-    process->ReadMemory(m_ro_ptr ^ 1, buffer.GetBytes(), ptr_size, error);
-    if (error.Fail())
-      return false;
-    cursor = 0;
-    DataExtractor extractor(buffer.GetBytes(), ptr_size,
-                            process->GetByteOrder(),
-                            process->GetAddressByteSize());
-    m_ro_ptr = extractor.GetAddress_unchecked(&cursor);
-  }
 
   return true;
 }
@@ -143,7 +132,7 @@ bool ClassDescriptorV2::class_ro_t::Read(Process *process, lldb::addr_t addr) {
                 + ptr_size;           // const property_list_t *baseProperties;
 
   DataBufferHeap buffer(size, '\0');
-  Status error;
+  Error error;
 
   process->ReadMemory(addr, buffer.GetBytes(), size, error);
   if (error.Fail()) {
@@ -191,7 +180,7 @@ bool ClassDescriptorV2::Read_class_row(
   class_ro.reset();
   class_rw.reset();
 
-  Status error;
+  Error error;
   uint32_t class_row_t_flags = process->ReadUnsignedIntegerFromMemory(
       objc_class.m_data_ptr, sizeof(uint32_t), 0, error);
   if (!error.Success())
@@ -230,7 +219,7 @@ bool ClassDescriptorV2::method_list_t::Read(Process *process,
                 + sizeof(uint32_t); // uint32_t count;
 
   DataBufferHeap buffer(size, '\0');
-  Status error;
+  Error error;
 
   process->ReadMemory(addr, buffer.GetBytes(), size, error);
   if (error.Fail()) {
@@ -253,7 +242,7 @@ bool ClassDescriptorV2::method_t::Read(Process *process, lldb::addr_t addr) {
   size_t size = GetSize(process);
 
   DataBufferHeap buffer(size, '\0');
-  Status error;
+  Error error;
 
   process->ReadMemory(addr, buffer.GetBytes(), size, error);
   if (error.Fail()) {
@@ -275,7 +264,11 @@ bool ClassDescriptorV2::method_t::Read(Process *process, lldb::addr_t addr) {
   }
 
   process->ReadCStringFromMemory(m_types_ptr, m_types, error);
-  return !error.Fail();
+  if (error.Fail()) {
+    return false;
+  }
+
+  return true;
 }
 
 bool ClassDescriptorV2::ivar_list_t::Read(Process *process, lldb::addr_t addr) {
@@ -283,7 +276,7 @@ bool ClassDescriptorV2::ivar_list_t::Read(Process *process, lldb::addr_t addr) {
                 + sizeof(uint32_t); // uint32_t count;
 
   DataBufferHeap buffer(size, '\0');
-  Status error;
+  Error error;
 
   process->ReadMemory(addr, buffer.GetBytes(), size, error);
   if (error.Fail()) {
@@ -306,7 +299,7 @@ bool ClassDescriptorV2::ivar_t::Read(Process *process, lldb::addr_t addr) {
   size_t size = GetSize(process);
 
   DataBufferHeap buffer(size, '\0');
-  Status error;
+  Error error;
 
   process->ReadMemory(addr, buffer.GetBytes(), size, error);
   if (error.Fail()) {
@@ -330,7 +323,11 @@ bool ClassDescriptorV2::ivar_t::Read(Process *process, lldb::addr_t addr) {
   }
 
   process->ReadCStringFromMemory(m_type_ptr, m_type, error);
-  return !error.Fail();
+  if (error.Fail()) {
+    return false;
+  }
+
+  return true;
 }
 
 bool ClassDescriptorV2::Describe(
@@ -346,9 +343,9 @@ bool ClassDescriptorV2::Describe(
   std::unique_ptr<class_rw_t> class_rw;
 
   if (!Read_objc_class(process, objc_class))
-    return false;
+    return 0;
   if (!Read_class_row(process, *objc_class, class_ro, class_rw))
-    return false;
+    return 0;
 
   static ConstString NSObject_name("NSObject");
 
@@ -381,7 +378,8 @@ bool ClassDescriptorV2::Describe(
     AppleObjCRuntime::ClassDescriptorSP metaclass(GetMetaclass());
 
     // We don't care about the metaclass's superclass, or its class methods.
-    // Its instance methods are our class methods.
+    // Its instance methods are
+    // our class methods.
 
     if (metaclass) {
       metaclass->Describe(
@@ -503,8 +501,10 @@ void ClassDescriptorV2::iVarsStorage::fill(AppleObjCRuntimeV2 &runtime,
   if (m_filled)
     return;
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
-  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_TYPES));
-  LLDB_LOGV(log, "class_name = {0}", descriptor.GetClassName());
+  Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_TYPES | LIBLLDB_LOG_VERBOSE));
+  if (log)
+    log->Printf("[ClassDescriptorV2::iVarsStorage::fill] class_name = %s",
+                descriptor.GetClassName().AsCString("<unknown"));
   m_filled = true;
   ObjCLanguageRuntime::EncodingToTypeSP encoding_to_type_sp(
       runtime.GetEncodingToType());
@@ -519,30 +519,38 @@ void ClassDescriptorV2::iVarsStorage::fill(AppleObjCRuntimeV2 &runtime,
                                                        uint64_t size) -> bool {
     const bool for_expression = false;
     const bool stop_loop = false;
-    LLDB_LOGV(log, "name = {0}, encoding = {1}, offset_ptr = {2:x}, size = {3}",
-              name, type, offset_ptr, size);
+    if (log)
+      log->Printf("[ClassDescriptorV2::iVarsStorage::fill] name = %s, encoding "
+                  "= %s, offset_ptr = %" PRIx64 ", size = %" PRIu64,
+                  name, type, offset_ptr, size);
     CompilerType ivar_type =
         encoding_to_type_sp->RealizeType(type, for_expression);
     if (ivar_type) {
-      LLDB_LOGV(log,
-                "name = {0}, encoding = {1}, offset_ptr = {2:x}, size = "
-                "{3}, type_size = {4}",
-                name, type, offset_ptr, size,
-                ivar_type.GetByteSize(nullptr).getValueOr(0));
+      if (log)
+        log->Printf("[ClassDescriptorV2::iVarsStorage::fill] name = %s, "
+                    "encoding = %s, offset_ptr = %" PRIx64 ", size = %" PRIu64
+                    " , type_size = %" PRIu64,
+                    name, type, offset_ptr, size,
+                    ivar_type.GetByteSize(nullptr));
       Scalar offset_scalar;
-      Status error;
+      Error error;
       const int offset_ptr_size = 4;
       const bool is_signed = false;
       size_t read = process->ReadScalarIntegerFromMemory(
           offset_ptr, offset_ptr_size, is_signed, offset_scalar, error);
       if (error.Success() && 4 == read) {
-        LLDB_LOGV(log, "offset_ptr = {0:x} --> {1}", offset_ptr,
-                  offset_scalar.SInt());
+        if (log)
+          log->Printf(
+              "[ClassDescriptorV2::iVarsStorage::fill] offset_ptr = %" PRIx64
+              " --> %" PRIu32,
+              offset_ptr, offset_scalar.SInt());
         m_ivars.push_back(
             {ConstString(name), ivar_type, size, offset_scalar.SInt()});
-      } else
-        LLDB_LOGV(log, "offset_ptr = {0:x} --> read fail, read = %{1}",
-                  offset_ptr, read);
+      } else if (log)
+        log->Printf(
+            "[ClassDescriptorV2::iVarsStorage::fill] offset_ptr = %" PRIx64
+            " --> read fail, read = %zu",
+            offset_ptr, read);
     }
     return stop_loop;
   });

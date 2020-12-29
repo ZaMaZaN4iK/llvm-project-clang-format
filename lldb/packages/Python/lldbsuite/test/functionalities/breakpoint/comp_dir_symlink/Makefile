@@ -1,12 +1,7 @@
-CXX_SOURCES := relative.cpp
+LEVEL = ../../../make
+
+CXX_SOURCES := main.cpp
 
 EXE := CompDirSymLink
 
-include Makefile.rules
-
-# Force relative filenames by copying it into the build directory.
-relative.cpp: main.cpp
-	cp -f $< $@
-
-clean::
-	rm -rf relative.cpp
+include $(LEVEL)/Makefile.rules

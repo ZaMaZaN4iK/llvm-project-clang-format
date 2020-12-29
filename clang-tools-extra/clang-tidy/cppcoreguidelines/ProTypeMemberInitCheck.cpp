@@ -1,8 +1,9 @@
 //===--- ProTypeMemberInitCheck.cpp - clang-tidy---------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,16 +32,22 @@ AST_MATCHER(CXXRecordDecl, hasDefaultConstructor) {
 }
 
 // Iterate over all the fields in a record type, both direct and indirect (e.g.
-// if the record contains an anonymous struct).
+// if the record contains an anonmyous struct). If OneFieldPerUnion is true and
+// the record type (or indirect field) is a union, forEachField will stop after
+// the first field.
 template <typename T, typename Func>
-void forEachField(const RecordDecl &Record, const T &Fields, Func &&Fn) {
+void forEachField(const RecordDecl &Record, const T &Fields,
+                  bool OneFieldPerUnion, Func &&Fn) {
   for (const FieldDecl *F : Fields) {
     if (F->isAnonymousStructOrUnion()) {
       if (const CXXRecordDecl *R = F->getType()->getAsCXXRecordDecl())
-        forEachField(*R, R->fields(), Fn);
+        forEachField(*R, R->fields(), OneFieldPerUnion, Fn);
     } else {
       Fn(F);
     }
+
+    if (OneFieldPerUnion && Record.isUnion())
+      break;
   }
 }
 
@@ -118,15 +125,13 @@ struct IntializerInsertion {
     SourceLocation Location;
     switch (Placement) {
     case InitializerPlacement::New:
-      Location = utils::lexer::getPreviousToken(
-                     Constructor.getBody()->getBeginLoc(),
-                     Context.getSourceManager(), Context.getLangOpts())
+      Location = utils::lexer::getPreviousNonCommentToken(
+                     Context, Constructor.getBody()->getLocStart())
                      .getLocation();
       break;
     case InitializerPlacement::Before:
-      Location = utils::lexer::getPreviousToken(
-                     Where->getSourceRange().getBegin(),
-                     Context.getSourceManager(), Context.getLangOpts())
+      Location = utils::lexer::getPreviousNonCommentToken(
+                     Context, Where->getSourceRange().getBegin())
                      .getLocation();
       break;
     case InitializerPlacement::After:
@@ -222,7 +227,7 @@ void getInitializationsInOrder(const CXXRecordDecl &ClassDecl,
       Decls.emplace_back(Decl);
     }
   }
-  forEachField(ClassDecl, ClassDecl.fields(),
+  forEachField(ClassDecl, ClassDecl.fields(), false,
                [&](const FieldDecl *F) { Decls.push_back(F); });
 }
 
@@ -231,7 +236,7 @@ void fixInitializerList(const ASTContext &Context, DiagnosticBuilder &Diag,
                         const CXXConstructorDecl *Ctor,
                         const SmallPtrSetImpl<const T *> &DeclsToInit) {
   // Do not propose fixes in macros since we cannot place them correctly.
-  if (Ctor->getBeginLoc().isMacroID())
+  if (Ctor->getLocStart().isMacroID())
     return;
 
   SmallVector<const NamedDecl *, 16> OrderedDecls;
@@ -250,8 +255,7 @@ void fixInitializerList(const ASTContext &Context, DiagnosticBuilder &Diag,
 ProTypeMemberInitCheck::ProTypeMemberInitCheck(StringRef Name,
                                                ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
-      IgnoreArrays(Options.get("IgnoreArrays", false)),
-      UseAssignment(Options.getLocalOrGlobal("UseAssignment", false)) {}
+      IgnoreArrays(Options.get("IgnoreArrays", false)) {}
 
 void ProTypeMemberInitCheck::registerMatchers(MatchFinder *Finder) {
   if (!getLangOpts().CPlusPlus)
@@ -315,7 +319,6 @@ void ProTypeMemberInitCheck::check(const MatchFinder::MatchResult &Result) {
 
 void ProTypeMemberInitCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
   Options.store(Opts, "IgnoreArrays", IgnoreArrays);
-  Options.store(Opts, "UseAssignment", UseAssignment);
 }
 
 // FIXME: Copied from clang/lib/Sema/SemaDeclCXX.cpp.
@@ -340,56 +343,6 @@ static bool isEmpty(ASTContext &Context, const QualType &Type) {
   return isIncompleteOrZeroLengthArrayType(Context, Type);
 }
 
-static const char *getInitializer(QualType QT, bool UseAssignment) {
-  const char *DefaultInitializer = "{}";
-  if (!UseAssignment)
-    return DefaultInitializer;
-
-  if (QT->isPointerType())
-    return " = nullptr";
-
-  const BuiltinType *BT =
-      dyn_cast<BuiltinType>(QT.getCanonicalType().getTypePtr());
-  if (!BT)
-    return DefaultInitializer;
-
-  switch (BT->getKind()) {
-  case BuiltinType::Bool:
-    return " = false";
-  case BuiltinType::Float:
-    return " = 0.0F";
-  case BuiltinType::Double:
-    return " = 0.0";
-  case BuiltinType::LongDouble:
-    return " = 0.0L";
-  case BuiltinType::SChar:
-  case BuiltinType::Char_S:
-  case BuiltinType::WChar_S:
-  case BuiltinType::Char16:
-  case BuiltinType::Char32:
-  case BuiltinType::Short:
-  case BuiltinType::Int:
-    return " = 0";
-  case BuiltinType::UChar:
-  case BuiltinType::Char_U:
-  case BuiltinType::WChar_U:
-  case BuiltinType::UShort:
-  case BuiltinType::UInt:
-    return " = 0U";
-  case BuiltinType::Long:
-    return " = 0L";
-  case BuiltinType::ULong:
-    return " = 0UL";
-  case BuiltinType::LongLong:
-    return " = 0LL";
-  case BuiltinType::ULongLong:
-    return " = 0ULL";
-
-  default:
-    return DefaultInitializer;
-  }
-}
-
 void ProTypeMemberInitCheck::checkMissingMemberInitializer(
     ASTContext &Context, const CXXRecordDecl &ClassDecl,
     const CXXConstructorDecl *Ctor) {
@@ -400,7 +353,7 @@ void ProTypeMemberInitCheck::checkMissingMemberInitializer(
 
   // Gather all fields (direct and indirect) that need to be initialized.
   SmallPtrSet<const FieldDecl *, 16> FieldsToInit;
-  forEachField(ClassDecl, ClassDecl.fields(), [&](const FieldDecl *F) {
+  forEachField(ClassDecl, ClassDecl.fields(), false, [&](const FieldDecl *F) {
     if (!F->hasInClassInitializer() &&
         utils::type_traits::isTriviallyDefaultConstructible(F->getType(),
                                                             Context) &&
@@ -424,20 +377,20 @@ void ProTypeMemberInitCheck::checkMissingMemberInitializer(
   }
 
   // Collect all fields in order, both direct fields and indirect fields from
-  // anonymous record types.
+  // anonmyous record types.
   SmallVector<const FieldDecl *, 16> OrderedFields;
-  forEachField(ClassDecl, ClassDecl.fields(),
+  forEachField(ClassDecl, ClassDecl.fields(), false,
                [&](const FieldDecl *F) { OrderedFields.push_back(F); });
 
   // Collect all the fields we need to initialize, including indirect fields.
   SmallPtrSet<const FieldDecl *, 16> AllFieldsToInit;
-  forEachField(ClassDecl, FieldsToInit,
+  forEachField(ClassDecl, FieldsToInit, false,
                [&](const FieldDecl *F) { AllFieldsToInit.insert(F); });
   if (AllFieldsToInit.empty())
     return;
 
   DiagnosticBuilder Diag =
-      diag(Ctor ? Ctor->getBeginLoc() : ClassDecl.getLocation(),
+      diag(Ctor ? Ctor->getLocStart() : ClassDecl.getLocation(),
            IsUnion
                ? "union constructor should initialize one of these fields: %0"
                : "constructor does not initialize these fields: %0")
@@ -445,23 +398,17 @@ void ProTypeMemberInitCheck::checkMissingMemberInitializer(
 
   // Do not propose fixes for constructors in macros since we cannot place them
   // correctly.
-  if (Ctor && Ctor->getBeginLoc().isMacroID())
+  if (Ctor && Ctor->getLocStart().isMacroID())
     return;
 
   // Collect all fields but only suggest a fix for the first member of unions,
   // as initializing more than one union member is an error.
   SmallPtrSet<const FieldDecl *, 16> FieldsToFix;
-  SmallPtrSet<const RecordDecl *, 4> UnionsSeen;
-  forEachField(ClassDecl, OrderedFields, [&](const FieldDecl *F) {
-    if (!FieldsToInit.count(F))
-      return;
+  forEachField(ClassDecl, FieldsToInit, true, [&](const FieldDecl *F) {
     // Don't suggest fixes for enums because we don't know a good default.
     // Don't suggest fixes for bitfields because in-class initialization is not
-    // possible until C++2a.
-    if (F->getType()->isEnumeralType() ||
-        (!getLangOpts().CPlusPlus2a && F->isBitField()))
-      return;
-    if (!F->getParent()->isUnion() || UnionsSeen.insert(F->getParent()).second)
+    // possible.
+    if (!F->getType()->isEnumeralType() && !F->isBitField())
       FieldsToFix.insert(F);
   });
   if (FieldsToFix.empty())
@@ -472,7 +419,7 @@ void ProTypeMemberInitCheck::checkMissingMemberInitializer(
     for (const FieldDecl *Field : FieldsToFix) {
       Diag << FixItHint::CreateInsertion(
           getLocationForEndOfToken(Context, Field->getSourceRange().getEnd()),
-          getInitializer(Field->getType(), UseAssignment));
+          "{}");
     }
   } else if (Ctor) {
     // Otherwise, rewrite the constructor's initializer list.
@@ -502,9 +449,6 @@ void ProTypeMemberInitCheck::checkMissingBaseClassInitializer(
 
   // Remove any bases that were explicitly written in the initializer list.
   if (Ctor) {
-    if (Ctor->isImplicit())
-      return;
-
     for (const CXXCtorInitializer *Init : Ctor->inits()) {
       if (Init->isBaseInitializer() && Init->isWritten())
         BasesToInit.erase(Init->getBaseClass()->getAsCXXRecordDecl());
@@ -515,7 +459,7 @@ void ProTypeMemberInitCheck::checkMissingBaseClassInitializer(
     return;
 
   DiagnosticBuilder Diag =
-      diag(Ctor ? Ctor->getBeginLoc() : ClassDecl.getLocation(),
+      diag(Ctor ? Ctor->getLocStart() : ClassDecl.getLocation(),
            "constructor does not initialize these bases: %0")
       << toCommaSeparatedString(AllBases, BasesToInit);
 
@@ -526,7 +470,7 @@ void ProTypeMemberInitCheck::checkMissingBaseClassInitializer(
 void ProTypeMemberInitCheck::checkUninitializedTrivialType(
     const ASTContext &Context, const VarDecl *Var) {
   DiagnosticBuilder Diag =
-      diag(Var->getBeginLoc(), "uninitialized record type: %0") << Var;
+      diag(Var->getLocStart(), "uninitialized record type: %0") << Var;
 
   Diag << FixItHint::CreateInsertion(
       getLocationForEndOfToken(Context, Var->getSourceRange().getEnd()),

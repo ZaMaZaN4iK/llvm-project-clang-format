@@ -1,8 +1,9 @@
 //===-- asan_init_version.h -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,8 +14,6 @@
 //===----------------------------------------------------------------------===//
 #ifndef ASAN_INIT_VERSION_H
 #define ASAN_INIT_VERSION_H
-
-#include "sanitizer_common/sanitizer_platform.h"
 
 extern "C" {
   // Every time the ASan ABI changes we also change the version number in the
@@ -33,12 +32,7 @@ extern "C" {
   // v6=>v7: added 'odr_indicator' to __asan_global
   // v7=>v8: added '__asan_(un)register_image_globals' functions for dead
   //         stripping support on Mach-O platforms
-#if SANITIZER_WORDSIZE == 32 && SANITIZER_ANDROID
-  // v8=>v9: 32-bit Android switched to dynamic shadow
-  #define __asan_version_mismatch_check __asan_version_mismatch_check_v9
-#else
   #define __asan_version_mismatch_check __asan_version_mismatch_check_v8
-#endif
 }
 
 #endif  // ASAN_INIT_VERSION_H

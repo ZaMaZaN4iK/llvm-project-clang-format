@@ -1,8 +1,9 @@
 //===-- MipsSEInstrInfo.h - Mips32/64 Instruction Information ---*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -43,7 +44,7 @@ public:
                               int &FrameIndex) const override;
 
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
-                   const DebugLoc &DL, MCRegister DestReg, MCRegister SrcReg,
+                   const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
                    bool KillSrc) const override;
 
   void storeRegToStack(MachineBasicBlock &MBB,
@@ -74,13 +75,6 @@ public:
   unsigned loadImmediate(int64_t Imm, MachineBasicBlock &MBB,
                          MachineBasicBlock::iterator II, const DebugLoc &DL,
                          unsigned *NewImm) const;
-
-protected:
-  /// If the specific machine instruction is a instruction that moves/copies
-  /// value from one register to another register return destination and source
-  /// registers as machine operands.
-  Optional<DestSourcePair>
-  isCopyInstrImpl(const MachineInstr &MI) const override;
 
 private:
   unsigned getAnalyzableBrOpc(unsigned Opc) const override;
@@ -113,11 +107,9 @@ private:
                       unsigned CvtOpc, unsigned MovOpc, bool IsI64) const;
 
   void expandExtractElementF64(MachineBasicBlock &MBB,
-                               MachineBasicBlock::iterator I, bool isMicroMips,
-                               bool FP64) const;
+                               MachineBasicBlock::iterator I, bool FP64) const;
   void expandBuildPairF64(MachineBasicBlock &MBB,
-                          MachineBasicBlock::iterator I, bool isMicroMips,
-                          bool FP64) const;
+                          MachineBasicBlock::iterator I, bool FP64) const;
   void expandEhReturn(MachineBasicBlock &MBB,
                       MachineBasicBlock::iterator I) const;
 };

@@ -1,13 +1,15 @@
 //===-- CommandHistory.cpp --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include <inttypes.h>
 
+#include "lldb/Host/StringConvert.h"
 #include "lldb/Interpreter/CommandHistory.h"
 
 using namespace lldb;
@@ -46,13 +48,13 @@ CommandHistory::FindString(llvm::StringRef input_str) const {
 
   size_t idx = 0;
   if (input_str.front() == '-') {
-    if (input_str.drop_front(1).getAsInteger(0, idx))
+    if (input_str.drop_front(2).getAsInteger(0, idx))
       return llvm::None;
     if (idx >= m_history.size())
       return llvm::None;
     idx = m_history.size() - idx;
   } else {
-    if (input_str.getAsInteger(0, idx))
+    if (input_str.drop_front().getAsInteger(0, idx))
       return llvm::None;
     if (idx >= m_history.size())
       return llvm::None;

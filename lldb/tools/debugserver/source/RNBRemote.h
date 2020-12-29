@@ -1,8 +1,9 @@
 
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -33,7 +34,7 @@ enum class compression_types { zlib_deflate, lz4, lzma, lzfse, none };
 
 class RNBRemote {
 public:
-  enum PacketEnum {
+  typedef enum {
     invalid_packet = 0,
     ack,                           // '+'
     nack,                          // '-'
@@ -138,7 +139,7 @@ public:
     query_supported_async_json_packets, // 'QSupportedAsyncJSONPackets'
     configure_darwin_log,               // 'ConfigureDarwinLog:'
     unknown_type
-  };
+  } PacketEnum;
 
   typedef rnb_err_t (RNBRemote::*HandlePacketCallback)(const char *p);
 
@@ -264,7 +265,8 @@ public:
   RNBSocket &Comm() { return m_comm; }
 
 private:
-  RNBRemote(const RNBRemote &) = delete;
+  // Outlaw some constructors
+  RNBRemote(const RNBRemote &);
 
 protected:
   rnb_err_t GetCommData();

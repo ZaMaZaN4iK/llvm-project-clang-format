@@ -1,8 +1,9 @@
-//===- RegisterClassInfo.h - Dynamic Register Class Info --------*- C++ -*-===//
+//===-- RegisterClassInfo.h - Dynamic Register Class Info -*- C++ -*-------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,25 +19,22 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/MC/MCRegisterInfo.h"
-#include <cassert>
-#include <cstdint>
-#include <memory>
+#include "llvm/Target/TargetRegisterInfo.h"
 
 namespace llvm {
 
 class RegisterClassInfo {
   struct RCInfo {
-    unsigned Tag = 0;
-    unsigned NumRegs = 0;
-    bool ProperSubClass = false;
-    uint8_t MinCost = 0;
-    uint16_t LastCostChange = 0;
+    unsigned Tag;
+    unsigned NumRegs;
+    bool ProperSubClass;
+    uint8_t MinCost;
+    uint16_t LastCostChange;
     std::unique_ptr<MCPhysReg[]> Order;
 
-    RCInfo() = default;
+    RCInfo()
+      : Tag(0), NumRegs(0), ProperSubClass(false), MinCost(0),
+        LastCostChange(0) {}
 
     operator ArrayRef<MCPhysReg>() const {
       return makeArrayRef(Order.get(), NumRegs);
@@ -48,18 +46,17 @@ class RegisterClassInfo {
 
   // Tag changes whenever cached information needs to be recomputed. An RCInfo
   // entry is valid when its tag matches.
-  unsigned Tag = 0;
+  unsigned Tag;
 
-  const MachineFunction *MF = nullptr;
-  const TargetRegisterInfo *TRI = nullptr;
+  const MachineFunction *MF;
+  const TargetRegisterInfo *TRI;
 
   // Callee saved registers of last MF. Assumed to be valid until the next
   // runOnFunction() call.
-  // Used only to determine if an update was made to CalleeSavedAliases.
-  const MCPhysReg *CalleeSavedRegs = nullptr;
+  const MCPhysReg *CalleeSaved;
 
-  // Map register alias to the callee saved Register.
-  SmallVector<MCPhysReg, 4> CalleeSavedAliases;
+  // Map register number to CalleeSaved index + 1;
+  SmallVector<uint8_t, 4> CSRNum;
 
   // Reserved registers in the current MF.
   BitVector Reserved;
@@ -108,11 +105,11 @@ public:
   }
 
   /// getLastCalleeSavedAlias - Returns the last callee saved register that
-  /// overlaps PhysReg, or 0 if Reg doesn't overlap a CalleeSavedAliases.
+  /// overlaps PhysReg, or 0 if Reg doesn't overlap a CSR.
   unsigned getLastCalleeSavedAlias(unsigned PhysReg) const {
-    assert(Register::isPhysicalRegister(PhysReg));
-    if (PhysReg < CalleeSavedAliases.size())
-      return CalleeSavedAliases[PhysReg];
+    assert(TargetRegisterInfo::isPhysicalRegister(PhysReg));
+    if (unsigned N = CSRNum[PhysReg])
+      return CalleeSaved[N-1];
     return 0;
   }
 
@@ -143,7 +140,6 @@ public:
 protected:
   unsigned computePSetLimit(unsigned Idx) const;
 };
-
 } // end namespace llvm
 
-#endif // LLVM_CODEGEN_REGISTERCLASSINFO_H
+#endif

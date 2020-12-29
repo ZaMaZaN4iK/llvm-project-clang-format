@@ -2,8 +2,11 @@
 Test that CoreFoundation classes CFGregorianDate and CFRange are not improperly uniqued
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -30,7 +33,7 @@ class Rdar10967107TestCase(TestBase):
         self.build(dictionary=d)
         self.setTearDownCleanup(dictionary=d)
 
-        exe = self.getBuildArtifact(self.exe_name)
+        exe = os.path.join(os.getcwd(), self.exe_name)
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(

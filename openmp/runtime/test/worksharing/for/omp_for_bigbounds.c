@@ -1,13 +1,10 @@
 // RUN: %libomp-compile -DMY_SCHEDULE=static && %libomp-run
 // RUN: %libomp-compile -DMY_SCHEDULE=dynamic && %libomp-run
 // RUN: %libomp-compile -DMY_SCHEDULE=guided && %libomp-run
-
-// Only works with Intel Compiler since at least version 15.0
-// XFAIL: gcc, clang
-
+// XFAIL: *
 /*
  * Test that large bounds are handled properly and calculations of
- * loop iterations don't accidentally overflow
+ * loop iterations don't accidently overflow
  */
 #include <stdio.h>
 #include <omp.h>

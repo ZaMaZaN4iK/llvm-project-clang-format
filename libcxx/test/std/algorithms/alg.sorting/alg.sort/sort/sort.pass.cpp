@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,12 +17,7 @@
 
 #include <algorithm>
 #include <iterator>
-#include <random>
 #include <cassert>
-
-#include "test_macros.h"
-
-std::mt19937 randomness;
 
 template <class RI>
 void
@@ -96,7 +92,7 @@ test_larger_sorts(int N, int M)
     std::sort(array, array+N);
     assert(std::is_sorted(array, array+N));
     // test random pattern
-    std::shuffle(array, array+N, randomness);
+    std::random_shuffle(array, array+N);
     std::sort(array, array+N);
     assert(std::is_sorted(array, array+N));
     // test sorted pattern
@@ -132,7 +128,7 @@ test_larger_sorts(int N)
     test_larger_sorts(N, N);
 }
 
-int main(int, char**)
+int main()
 {
     // test null range
     int d = 0;
@@ -154,6 +150,4 @@ int main(int, char**)
     test_larger_sorts(997);
     test_larger_sorts(1000);
     test_larger_sorts(1009);
-
-  return 0;
 }

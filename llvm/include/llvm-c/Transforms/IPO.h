@@ -1,9 +1,9 @@
 /*===-- IPO.h - Interprocedural Transformations C Interface -----*- C++ -*-===*\
 |*                                                                            *|
-|* Part of the LLVM Project, under the Apache License v2.0 with LLVM          *|
-|* Exceptions.                                                                *|
-|* See https://llvm.org/LICENSE.txt for license information.                  *|
-|* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception                    *|
+|*                     The LLVM Compiler Infrastructure                       *|
+|*                                                                            *|
+|* This file is distributed under the University of Illinois Open Source      *|
+|* License. See LICENSE.TXT for details.                                      *|
 |*                                                                            *|
 |*===----------------------------------------------------------------------===*|
 |*                                                                            *|
@@ -15,10 +15,11 @@
 #ifndef LLVM_C_TRANSFORMS_IPO_H
 #define LLVM_C_TRANSFORMS_IPO_H
 
-#include "llvm-c/ExternC.h"
 #include "llvm-c/Types.h"
 
-LLVM_C_EXTERN_C_BEGIN
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * @defgroup LLVMCTransformsIPO Interprocedural transformations
@@ -32,12 +33,6 @@ void LLVMAddArgumentPromotionPass(LLVMPassManagerRef PM);
 
 /** See llvm::createConstantMergePass function. */
 void LLVMAddConstantMergePass(LLVMPassManagerRef PM);
-
-/** See llvm::createMergeFunctionsPass function. */
-void LLVMAddMergeFunctionsPass(LLVMPassManagerRef PM);
-
-/** See llvm::createCalledValuePropagationPass function. */
-void LLVMAddCalledValuePropagationPass(LLVMPassManagerRef PM);
 
 /** See llvm::createDeadArgEliminationPass function. */
 void LLVMAddDeadArgEliminationPass(LLVMPassManagerRef PM);
@@ -69,21 +64,6 @@ void LLVMAddIPSCCPPass(LLVMPassManagerRef PM);
 /** See llvm::createInternalizePass function. */
 void LLVMAddInternalizePass(LLVMPassManagerRef, unsigned AllButMain);
 
-/**
- * Create and add the internalize pass to the given pass manager with the
- * provided preservation callback.
- *
- * The context parameter is forwarded to the callback on each invocation.
- * As such, it is the responsibility of the caller to extend its lifetime
- * until execution of this pass has finished.
- *
- * @see llvm::createInternalizePass function.
- */
-void LLVMAddInternalizePassWithMustPreservePredicate(
-    LLVMPassManagerRef PM,
-    void *Context,
-    LLVMBool (*MustPreserve)(LLVMValueRef, void *));
-
 /** See llvm::createStripDeadPrototypesPass function. */
 void LLVMAddStripDeadPrototypesPass(LLVMPassManagerRef PM);
 
@@ -94,6 +74,8 @@ void LLVMAddStripSymbolsPass(LLVMPassManagerRef PM);
  * @}
  */
 
-LLVM_C_EXTERN_C_END
+#ifdef __cplusplus
+}
+#endif /* defined(__cplusplus) */
 
 #endif

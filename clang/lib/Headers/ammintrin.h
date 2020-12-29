@@ -1,8 +1,22 @@
 /*===---- ammintrin.h - SSE4a intrinsics -----------------------------------===
  *
- * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
- * See https://llvm.org/LICENSE.txt for license information.
- * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  *
  *===-----------------------------------------------------------------------===
  */
@@ -13,9 +27,9 @@
 #include <pmmintrin.h>
 
 /* Define the default attributes for the functions in this file. */
-#define __DEFAULT_FN_ATTRS __attribute__((__always_inline__, __nodebug__, __target__("sse4a"), __min_vector_width__(128)))
+#define __DEFAULT_FN_ATTRS __attribute__((__always_inline__, __nodebug__, __target__("sse4a")))
 
-/// Extracts the specified bits from the lower 64 bits of the 128-bit
+/// \brief Extracts the specified bits from the lower 64 bits of the 128-bit
 ///    integer vector operand at the index \a idx and of the length \a len.
 ///
 /// \headerfile <x86intrin.h>
@@ -43,7 +57,7 @@
   ((__m128i)__builtin_ia32_extrqi((__v2di)(__m128i)(x), \
                                   (char)(len), (char)(idx)))
 
-/// Extracts the specified bits from the lower 64 bits of the 128-bit
+/// \brief Extracts the specified bits from the lower 64 bits of the 128-bit
 ///    integer vector operand at the index and of the length specified by
 ///    \a __y.
 ///
@@ -68,7 +82,7 @@ _mm_extract_si64(__m128i __x, __m128i __y)
   return (__m128i)__builtin_ia32_extrq((__v2di)__x, (__v16qi)__y);
 }
 
-/// Inserts bits of a specified length from the source integer vector
+/// \brief Inserts bits of a specified length from the source integer vector
 ///    \a y into the lower 64 bits of the destination integer vector \a x at
 ///    the index \a idx and of the length \a len.
 ///
@@ -106,7 +120,7 @@ _mm_extract_si64(__m128i __x, __m128i __y)
                                     (__v2di)(__m128i)(y), \
                                     (char)(len), (char)(idx)))
 
-/// Inserts bits of a specified length from the source integer vector
+/// \brief Inserts bits of a specified length from the source integer vector
 ///    \a __y into the lower 64 bits of the destination integer vector \a __x
 ///    at the index and of the length specified by \a __y.
 ///
@@ -138,7 +152,7 @@ _mm_insert_si64(__m128i __x, __m128i __y)
   return (__m128i)__builtin_ia32_insertq((__v2di)__x, (__v2di)__y);
 }
 
-/// Stores a 64-bit double-precision value in a 64-bit memory location.
+/// \brief Stores a 64-bit double-precision value in a 64-bit memory location.
 ///    To minimize caching, the data is flagged as non-temporal (unlikely to be
 ///    used again soon).
 ///
@@ -156,7 +170,7 @@ _mm_stream_sd(double *__p, __m128d __a)
   __builtin_ia32_movntsd(__p, (__v2df)__a);
 }
 
-/// Stores a 32-bit single-precision floating-point value in a 32-bit
+/// \brief Stores a 32-bit single-precision floating-point value in a 32-bit
 ///    memory location. To minimize caching, the data is flagged as
 ///    non-temporal (unlikely to be used again soon).
 ///

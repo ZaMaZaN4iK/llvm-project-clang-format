@@ -1,4 +1,3 @@
-// REQUIRES: x86
 // RUN: llvm-mc -filetype=obj -triple=x86_64-unknown-linux %s -o %t.o
 // RUN: llvm-mc -filetype=obj -triple=x86_64-unknown-linux %p/Inputs/shared.s -o %t2.o
 // RUN: ld.lld -shared %t2.o -o %t2.so
@@ -9,7 +8,7 @@
 
 // CHECK:      Relocations [
 // CHECK-NEXT:   Section ({{.*}}) .rela.plt {
-// CHECK-NEXT:     {{.*}} R_X86_64_JUMP_SLOT bar 0x0
+// CHECK-NEXT:     0x202018 R_X86_64_JUMP_SLOT bar 0x0
 // CHECK-NEXT:   }
 // CHECK-NEXT: ]
 

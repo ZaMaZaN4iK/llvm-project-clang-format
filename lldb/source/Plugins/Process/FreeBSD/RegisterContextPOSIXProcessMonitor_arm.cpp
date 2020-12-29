@@ -1,19 +1,20 @@
 //===-- RegisterContextPOSIXProcessMonitor_arm.cpp -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===---------------------------------------------------------------------===//
 
+#include "lldb/Core/DataBufferHeap.h"
+#include "lldb/Core/RegisterValue.h"
 #include "lldb/Target/Thread.h"
-#include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/RegisterValue.h"
 
 #include "ProcessFreeBSD.h"
 #include "ProcessMonitor.h"
 #include "RegisterContextPOSIXProcessMonitor_arm.h"
-#include "Plugins/Process/Utility/RegisterContextPOSIX_arm.h"
+#include "RegisterContextPOSIX_arm.h"
 
 using namespace lldb_private;
 using namespace lldb;
@@ -74,7 +75,7 @@ bool RegisterContextPOSIXProcessMonitor_arm::WriteRegister(
 
     // Read the full register.
     if (ReadRegister(full_reg_info, full_value)) {
-      Status error;
+      Error error;
       ByteOrder byte_order = GetByteOrder();
       uint8_t dst[RegisterValue::kMaxRegisterByteSize];
 
@@ -155,7 +156,7 @@ bool RegisterContextPOSIXProcessMonitor_arm::ReadAllRegisterValues(
     DataBufferSP &data_sp) {
   bool success = false;
   data_sp.reset(new DataBufferHeap(REG_CONTEXT_SIZE, 0));
-  if (ReadGPR() && ReadFPR()) {
+  if (data_sp && ReadGPR() && ReadFPR()) {
     uint8_t *dst = data_sp->GetBytes();
     success = dst != 0;
 

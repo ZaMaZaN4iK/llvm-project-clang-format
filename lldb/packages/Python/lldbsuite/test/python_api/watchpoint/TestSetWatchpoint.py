@@ -5,6 +5,9 @@ Use lldb Python SBValue API to create a watchpoint for read_write of 'globl' var
 from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -14,7 +17,6 @@ from lldbsuite.test import lldbutil
 class SetWatchpointAPITestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
-    NO_DEBUG_INFO_TESTCASE = True
 
     def setUp(self):
         # Call super's setUp().
@@ -26,12 +28,17 @@ class SetWatchpointAPITestCase(TestBase):
             self.source, '// Set break point at this line.')
 
     @add_test_categories(['pyapi'])
+    # Watchpoints not supported
+    @expectedFailureAndroid(archs=['arm', 'aarch64'])
+    @expectedFailureAll(
+        oslist=["windows"],
+        bugnumber="llvm.org/pr24446: WINDOWS XFAIL TRIAGE - Watchpoints not supported on Windows")
     # Read-write watchpoints not supported on SystemZ
     @expectedFailureAll(archs=['s390x'])
     def test_watch_val(self):
         """Exercise SBValue.Watch() API to set a watchpoint."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)
@@ -101,6 +108,3 @@ class SetWatchpointAPITestCase(TestBase):
         self.assertTrue(
             process.GetState() == lldb.eStateExited,
             PROCESS_EXITED)
-
-        self.dbg.DeleteTarget(target)
-        self.assertFalse(watchpoint.IsValid())

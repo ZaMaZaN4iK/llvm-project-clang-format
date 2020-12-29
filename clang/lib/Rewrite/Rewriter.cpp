@@ -1,8 +1,9 @@
-//===- Rewriter.cpp - Code rewriting interface ----------------------------===//
+//===--- Rewriter.cpp - Code rewriting interface --------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,24 +15,11 @@
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticIDs.h"
-#include "clang/Basic/FileManager.h"
-#include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
-#include "clang/Rewrite/Core/RewriteBuffer.h"
-#include "clang/Rewrite/Core/RewriteRope.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/raw_ostream.h"
-#include <cassert>
-#include <iterator>
-#include <map>
-#include <memory>
-#include <system_error>
-#include <utility>
-
 using namespace clang;
 
 raw_ostream &RewriteBuffer::write(raw_ostream &os) const {
@@ -43,7 +31,7 @@ raw_ostream &RewriteBuffer::write(raw_ostream &os) const {
   return os;
 }
 
-/// Return true if this character is non-new-line whitespace:
+/// \brief Return true if this character is non-new-line whitespace:
 /// ' ', '\\t', '\\f', '\\v', '\\r'.
 static inline bool isWhitespaceExceptNL(unsigned char c) {
   switch (c) {
@@ -87,7 +75,7 @@ void RewriteBuffer::RemoveText(unsigned OrigOffset, unsigned Size,
       }
       ++posI;
     }
-
+  
     unsigned lineSize = 0;
     posI = curLineStart;
     while (posI != end() && isWhitespaceExceptNL(*posI)) {
@@ -96,17 +84,6 @@ void RewriteBuffer::RemoveText(unsigned OrigOffset, unsigned Size,
     }
     if (posI != end() && *posI == '\n') {
       Buffer.erase(curLineStartOffs, lineSize + 1/* + '\n'*/);
-      // FIXME: Here, the offset of the start of the line is supposed to be
-      // expressed in terms of the original input not the "real" rewrite
-      // buffer.  How do we compute that reliably?  It might be tempting to use
-      // curLineStartOffs + OrigOffset - RealOffset, but that assumes the
-      // difference between the original and real offset is the same at the
-      // removed text and at the start of the line, but that's not true if
-      // edits were previously made earlier on the line.  This bug is also
-      // documented by a FIXME on the definition of
-      // clang::Rewriter::RewriteOptions::RemoveLineIfEmpty.  A reproducer for
-      // the implementation below is the test RemoveLineIfEmpty in
-      // clang/unittests/Rewrite/RewriteBufferTest.cpp.
       AddReplaceDelta(curLineStartOffs, -(lineSize + 1/* + '\n'*/));
     }
   }
@@ -114,6 +91,7 @@ void RewriteBuffer::RemoveText(unsigned OrigOffset, unsigned Size,
 
 void RewriteBuffer::InsertText(unsigned OrigOffset, StringRef Str,
                                bool InsertAfter) {
+
   // Nothing to insert, exit early.
   if (Str.empty()) return;
 
@@ -136,6 +114,7 @@ void RewriteBuffer::ReplaceText(unsigned OrigOffset, unsigned OrigLength,
     AddReplaceDelta(OrigOffset, NewStr.size() - OrigLength);
 }
 
+
 //===----------------------------------------------------------------------===//
 // Rewriter class
 //===----------------------------------------------------------------------===//
@@ -148,8 +127,10 @@ int Rewriter::getRangeSize(const CharSourceRange &Range,
       !isRewritable(Range.getEnd())) return -1;
 
   FileID StartFileID, EndFileID;
-  unsigned StartOff = getLocationOffsetAndFileID(Range.getBegin(), StartFileID);
-  unsigned EndOff = getLocationOffsetAndFileID(Range.getEnd(), EndFileID);
+  unsigned StartOff, EndOff;
+
+  StartOff = getLocationOffsetAndFileID(Range.getBegin(), StartFileID);
+  EndOff   = getLocationOffsetAndFileID(Range.getEnd(), EndFileID);
 
   if (StartFileID != EndFileID)
     return -1;
@@ -164,6 +145,7 @@ int Rewriter::getRangeSize(const CharSourceRange &Range,
     StartOff = RB.getMappedOffset(StartOff, !opts.IncludeInsertsAtBeginOfRange);
   }
 
+
   // Adjust the end offset to the end of the last token, instead of being the
   // start of the last token if this is a token range.
   if (Range.isTokenRange())
@@ -176,15 +158,17 @@ int Rewriter::getRangeSize(SourceRange Range, RewriteOptions opts) const {
   return getRangeSize(CharSourceRange::getTokenRange(Range), opts);
 }
 
+
 /// getRewrittenText - Return the rewritten form of the text in the specified
 /// range.  If the start or end of the range was unrewritable or if they are
 /// in different buffers, this returns an empty string.
 ///
 /// Note that this method is not particularly efficient.
-std::string Rewriter::getRewrittenText(CharSourceRange Range) const {
+///
+std::string Rewriter::getRewrittenText(SourceRange Range) const {
   if (!isRewritable(Range.getBegin()) ||
       !isRewritable(Range.getEnd()))
-    return {};
+    return "";
 
   FileID StartFileID, EndFileID;
   unsigned StartOff, EndOff;
@@ -192,7 +176,7 @@ std::string Rewriter::getRewrittenText(CharSourceRange Range) const {
   EndOff   = getLocationOffsetAndFileID(Range.getEnd(), EndFileID);
 
   if (StartFileID != EndFileID)
-    return {}; // Start and end in different buffers.
+    return ""; // Start and end in different buffers.
 
   // If edits have been made to this buffer, the delta between the range may
   // have changed.
@@ -204,9 +188,7 @@ std::string Rewriter::getRewrittenText(CharSourceRange Range) const {
 
     // Adjust the end offset to the end of the last token, instead of being the
     // start of the last token.
-    if (Range.isTokenRange())
-      EndOff +=
-          Lexer::MeasureTokenLength(Range.getEnd(), *SourceMgr, *LangOpts);
+    EndOff += Lexer::MeasureTokenLength(Range.getEnd(), *SourceMgr, *LangOpts);
     return std::string(Ptr, Ptr+EndOff-StartOff);
   }
 
@@ -216,8 +198,7 @@ std::string Rewriter::getRewrittenText(CharSourceRange Range) const {
 
   // Adjust the end offset to the end of the last token, instead of being the
   // start of the last token.
-  if (Range.isTokenRange())
-    EndOff += Lexer::MeasureTokenLength(Range.getEnd(), *SourceMgr, *LangOpts);
+  EndOff += Lexer::MeasureTokenLength(Range.getEnd(), *SourceMgr, *LangOpts);
 
   // Advance the iterators to the right spot, yay for linear time algorithms.
   RewriteBuffer::iterator Start = RB.begin();
@@ -231,12 +212,14 @@ std::string Rewriter::getRewrittenText(CharSourceRange Range) const {
 unsigned Rewriter::getLocationOffsetAndFileID(SourceLocation Loc,
                                               FileID &FID) const {
   assert(Loc.isValid() && "Invalid location");
-  std::pair<FileID, unsigned> V = SourceMgr->getDecomposedLoc(Loc);
+  std::pair<FileID,unsigned> V = SourceMgr->getDecomposedLoc(Loc);
   FID = V.first;
   return V.second;
 }
 
+
 /// getEditBuffer - Get or create a RewriteBuffer for the specified FileID.
+///
 RewriteBuffer &Rewriter::getEditBuffer(FileID FID) {
   std::map<FileID, RewriteBuffer>::iterator I =
     RewriteBuffers.lower_bound(FID);
@@ -366,10 +349,10 @@ bool Rewriter::IncreaseIndentation(CharSourceRange range,
   unsigned parentLineNo = SourceMgr->getLineNumber(FID, parentOff) - 1;
   unsigned startLineNo = SourceMgr->getLineNumber(FID, StartOff) - 1;
   unsigned endLineNo = SourceMgr->getLineNumber(FID, EndOff) - 1;
-
+  
   const SrcMgr::ContentCache *
       Content = SourceMgr->getSLocEntry(FID).getFile().getContentCache();
-
+  
   // Find where the lines start.
   unsigned parentLineOffs = Content->SourceLineCache[parentLineNo];
   unsigned startLineOffs = Content->SourceLineCache[startLineNo];
@@ -410,7 +393,6 @@ bool Rewriter::IncreaseIndentation(CharSourceRange range,
 }
 
 namespace {
-
 // A wrapper for a file stream that atomically overwrites the target.
 //
 // Creates a file output stream for a temporary file in the constructor,
@@ -421,7 +403,7 @@ class AtomicallyMovedFile {
 public:
   AtomicallyMovedFile(DiagnosticsEngine &Diagnostics, StringRef Filename,
                       bool &AllWritten)
-      : Diagnostics(Diagnostics), Filename(Filename), AllWritten(AllWritten) {
+    : Diagnostics(Diagnostics), Filename(Filename), AllWritten(AllWritten) {
     TempFilename = Filename;
     TempFilename += "-%%%%%%%%";
     int FD;
@@ -459,8 +441,7 @@ private:
   std::unique_ptr<llvm::raw_fd_ostream> FileStream;
   bool &AllWritten;
 };
-
-} // namespace
+} // end anonymous namespace
 
 bool Rewriter::overwriteChangedFiles() {
   bool AllWritten = true;

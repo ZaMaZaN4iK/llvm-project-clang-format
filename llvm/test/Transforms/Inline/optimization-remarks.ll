@@ -5,20 +5,15 @@
 ; RUN:       -pass-remarks-analysis=inline -pass-remarks-with-hotness -S 2>&1 | \
 ; RUN:       FileCheck -check-prefix=CHECK -check-prefix=HOTNESS %s
 
-; RUN: opt < %s -passes=inline -pass-remarks=inline -pass-remarks-missed=inline \
-; RUN:       -pass-remarks-analysis=inline -S 2>&1 | \
-; RUN:       FileCheck -check-prefix=CHECK -check-prefix=NO_HOTNESS %s
-; RUN: opt < %s -passes=inline -pass-remarks=inline -pass-remarks-missed=inline \
-; RUN:       -pass-remarks-analysis=inline -pass-remarks-with-hotness -S 2>&1 | \
-; RUN:       FileCheck -check-prefix=CHECK -check-prefix=HOTNESS %s
-
 ; HOTNESS: fox will not be inlined into bar because its definition is unavailable
 ; NO_HOTNESS-NOT: fox will not be inlined into bar because its definition is unavailable
-; CHECK: foo inlined into bar with (cost=always): always inline attribute
-; CHECK: foz not inlined into bar because it should never be inlined (cost=never): noinline function attribute
+; CHECK: foo should always be inlined (cost=always)
+; CHECK: foo inlined into bar
+; CHECK: foz should never be inlined (cost=never)
+; CHECK: foz will not be inlined into bar
 
 ; Function Attrs: alwaysinline nounwind uwtable
-define i32 @foo(i32 %x, i32 %y) #0 !prof !1 {
+define i32 @foo(i32 %x, i32 %y) #0 {
 entry:
   %x.addr = alloca i32, align 4
   %y.addr = alloca i32, align 4
@@ -31,7 +26,7 @@ entry:
 }
 
 ; Function Attrs: noinline nounwind uwtable
-define float @foz(i32 %x, i32 %y) #1 !prof !1 {
+define float @foz(i32 %x, i32 %y) #1 {
 entry:
   %x.addr = alloca i32, align 4
   %y.addr = alloca i32, align 4
@@ -47,7 +42,7 @@ entry:
 declare i32 @fox()
 
 ; Function Attrs: nounwind uwtable
-define i32 @bar(i32 %j) #2 !prof !1 {
+define i32 @bar(i32 %j) #2 {
 entry:
   %j.addr = alloca i32, align 4
   store i32 %j, i32* %j.addr, align 4
@@ -67,11 +62,10 @@ entry:
   ret i32 %add
 }
 
-attributes #0 = { alwaysinline nounwind uwtable "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #1 = { noinline nounwind uwtable "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
-attributes #2 = { nounwind uwtable "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { alwaysinline nounwind uwtable "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #1 = { noinline nounwind uwtable "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #2 = { nounwind uwtable "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
 
 !llvm.ident = !{!0}
 
 !0 = !{!"clang version 3.5.0 "}
-!1 = !{!"function_entry_count", i64 10}

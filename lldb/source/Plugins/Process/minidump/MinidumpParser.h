@@ -1,27 +1,28 @@
-//===-- MinidumpParser.h -----------------------------------------*- C++-*-===//
+//===-- MinidumpParser.h -----------------------------------------*- C++
+//-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_MinidumpParser_h_
 #define liblldb_MinidumpParser_h_
 
+// Project includes
 #include "MinidumpTypes.h"
 
-#include "lldb/Target/MemoryRegionInfo.h"
-#include "lldb/Utility/ArchSpec.h"
-#include "lldb/Utility/DataBuffer.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/UUID.h"
+// Other libraries and framework includes
+#include "lldb/Core/ArchSpec.h"
+#include "lldb/Core/DataBuffer.h"
+#include "lldb/Core/Error.h"
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Object/Minidump.h"
 
 // C includes
 
@@ -41,30 +42,26 @@ struct Range {
 
   Range(lldb::addr_t start, llvm::ArrayRef<uint8_t> range_ref)
       : start(start), range_ref(range_ref) {}
-
-  friend bool operator==(const Range &lhs, const Range &rhs) {
-    return lhs.start == rhs.start && lhs.range_ref == rhs.range_ref;
-  }
 };
 
 class MinidumpParser {
 public:
-  static llvm::Expected<MinidumpParser>
+  static llvm::Optional<MinidumpParser>
   Create(const lldb::DataBufferSP &data_buf_sp);
 
   llvm::ArrayRef<uint8_t> GetData();
 
-  llvm::ArrayRef<uint8_t> GetStream(StreamType stream_type);
+  llvm::ArrayRef<uint8_t> GetStream(MinidumpStreamType stream_type);
 
-  UUID GetModuleUUID(const minidump::Module *module);
+  llvm::Optional<std::string> GetMinidumpString(uint32_t rva);
 
-  llvm::ArrayRef<minidump::Thread> GetThreads();
+  llvm::ArrayRef<MinidumpThread> GetThreads();
 
-  llvm::ArrayRef<uint8_t> GetThreadContext(const LocationDescriptor &location);
+  llvm::ArrayRef<uint8_t> GetThreadContext(const MinidumpThread &td);
 
-  llvm::ArrayRef<uint8_t> GetThreadContext(const minidump::Thread &td);
+  llvm::ArrayRef<uint8_t> GetThreadContextWow64(const MinidumpThread &td);
 
-  llvm::ArrayRef<uint8_t> GetThreadContextWow64(const minidump::Thread &td);
+  const MinidumpSystemInfo *GetSystemInfo();
 
   ArchSpec GetArchitecture();
 
@@ -74,36 +71,30 @@ public:
 
   llvm::Optional<lldb::pid_t> GetPid();
 
-  llvm::ArrayRef<minidump::Module> GetModuleList();
+  llvm::ArrayRef<MinidumpModule> GetModuleList();
 
   // There are cases in which there is more than one record in the ModuleList
   // for the same module name.(e.g. when the binary has non contiguous segments)
   // So this function returns a filtered module list - if it finds records that
   // have the same name, it keeps the copy with the lowest load address.
-  std::vector<const minidump::Module *> GetFilteredModuleList();
+  std::vector<const MinidumpModule *> GetFilteredModuleList();
 
-  const llvm::minidump::ExceptionStream *GetExceptionStream();
+  const MinidumpExceptionStream *GetExceptionStream();
 
   llvm::Optional<Range> FindMemoryRange(lldb::addr_t addr);
 
   llvm::ArrayRef<uint8_t> GetMemory(lldb::addr_t addr, size_t size);
 
-  /// Returns a list of memory regions and a flag indicating whether the list is
-  /// complete (includes all regions mapped into the process memory).
-  std::pair<MemoryRegionInfos, bool> BuildMemoryRegions();
-
-  static llvm::StringRef GetStreamTypeAsString(StreamType stream_type);
-
-  llvm::object::MinidumpFile &GetMinidumpFile() { return *m_file; }
-
-private:
-  MinidumpParser(lldb::DataBufferSP data_sp,
-                 std::unique_ptr<llvm::object::MinidumpFile> file);
+  llvm::Optional<MemoryRegionInfo> GetMemoryRegionInfo(lldb::addr_t);
 
 private:
   lldb::DataBufferSP m_data_sp;
-  std::unique_ptr<llvm::object::MinidumpFile> m_file;
-  ArchSpec m_arch;
+  const MinidumpHeader *m_header;
+  llvm::DenseMap<uint32_t, MinidumpLocationDescriptor> m_directory_map;
+
+  MinidumpParser(
+      const lldb::DataBufferSP &data_buf_sp, const MinidumpHeader *header,
+      llvm::DenseMap<uint32_t, MinidumpLocationDescriptor> &&directory_map);
 };
 
 } // end namespace minidump

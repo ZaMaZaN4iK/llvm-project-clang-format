@@ -1,8 +1,9 @@
 //===-- AVRRegisterInfo.cpp - AVR Register Information --------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,9 +17,8 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/IR/Function.h"
-#include "llvm/CodeGen/TargetFrameLowering.h"
+#include "llvm/Target/TargetFrameLowering.h"
 
 #include "AVR.h"
 #include "AVRInstrInfo.h"
@@ -34,7 +34,7 @@ AVRRegisterInfo::AVRRegisterInfo() : AVRGenRegisterInfo(0) {}
 
 const uint16_t *
 AVRRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  CallingConv::ID CC = MF->getFunction().getCallingConv();
+  CallingConv::ID CC = MF->getFunction()->getCallingConv();
 
   return ((CC == CallingConv::AVR_INTR || CC == CallingConv::AVR_SIGNAL)
               ? CSR_Interrupts_SaveList
@@ -51,6 +51,8 @@ AVRRegisterInfo::getCallPreservedMask(const MachineFunction &MF,
 
 BitVector AVRRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
+  const AVRTargetMachine &TM = static_cast<const AVRTargetMachine&>(MF.getTarget());
+  const TargetFrameLowering *TFI = TM.getSubtargetImpl()->getFrameLowering();
 
   // Reserve the intermediate result registers r1 and r2
   // The result of instructions like 'mul' is always stored here.
@@ -63,18 +65,12 @@ BitVector AVRRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(AVR::SPH);
   Reserved.set(AVR::SP);
 
-  // We tenatively reserve the frame pointer register r29:r28 because the
-  // function may require one, but we cannot tell until register allocation
-  // is complete, which can be too late.
-  //
-  // Instead we just unconditionally reserve the Y register.
-  //
-  // TODO: Write a pass to enumerate functions which reserved the Y register
-  //       but didn't end up needing a frame pointer. In these, we can
-  //       convert one or two of the spills inside to use the Y register.
-  Reserved.set(AVR::R28);
-  Reserved.set(AVR::R29);
-  Reserved.set(AVR::R29R28);
+  // Reserve the frame pointer registers r28 and r29 if the function requires one.
+  if (TFI->hasFP(MF)) {
+    Reserved.set(AVR::R28);
+    Reserved.set(AVR::R29);
+    Reserved.set(AVR::R29R28);
+  }
 
   return Reserved;
 }
@@ -82,12 +78,11 @@ BitVector AVRRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
 const TargetRegisterClass *
 AVRRegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
                                            const MachineFunction &MF) const {
-  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
-  if (TRI->isTypeLegalForClass(*RC, MVT::i16)) {
+  if (RC->hasType(MVT::i16)) {
     return &AVR::DREGSRegClass;
   }
 
-  if (TRI->isTypeLegalForClass(*RC, MVT::i8)) {
+  if (RC->hasType(MVT::i8)) {
     return &AVR::GPR8RegClass;
   }
 
@@ -95,8 +90,7 @@ AVRRegisterInfo::getLargestLegalSuperClass(const TargetRegisterClass *RC,
 }
 
 /// Fold a frame offset shared between two add instructions into a single one.
-static void foldFrameOffset(MachineBasicBlock::iterator &II, int &Offset, unsigned DstReg) {
-  MachineInstr &MI = *II;
+static void foldFrameOffset(MachineInstr &MI, int &Offset, unsigned DstReg) {
   int Opcode = MI.getOpcode();
 
   // Don't bother trying if the next instruction is not an add or a sub.
@@ -121,7 +115,6 @@ static void foldFrameOffset(MachineBasicBlock::iterator &II, int &Offset, unsign
   }
 
   // Finally remove the instruction.
-  II++;
   MI.eraseFromParent();
 }
 
@@ -152,16 +145,13 @@ void AVRRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   if (MI.getOpcode() == AVR::FRMIDX) {
     MI.setDesc(TII.get(AVR::MOVWRdRr));
     MI.getOperand(FIOperandNum).ChangeToRegister(AVR::R29R28, false);
-    MI.RemoveOperand(2);
 
     assert(Offset > 0 && "Invalid offset");
 
     // We need to materialize the offset via an add instruction.
     unsigned Opcode;
-    Register DstReg = MI.getOperand(0).getReg();
+    unsigned DstReg = MI.getOperand(0).getReg();
     assert(DstReg != AVR::R29R28 && "Dest reg cannot be the frame pointer");
-
-    II++; // Skip over the FRMIDX (and now MOVW) instruction.
 
     // Generally, to load a frame address two add instructions are emitted that
     // could get folded into a single one:
@@ -171,8 +161,7 @@ void AVRRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     // to:
     //  movw    r31:r30, r29:r28
     //  adiw    r31:r30, 45
-    if (II != MBB.end())
-      foldFrameOffset(II, Offset, DstReg);
+    foldFrameOffset(*std::next(II), Offset, DstReg);
 
     // Select the best opcode based on DstReg and the offset size.
     switch (DstReg) {
@@ -193,7 +182,7 @@ void AVRRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     }
     }
 
-    MachineInstr *New = BuildMI(MBB, II, dl, TII.get(Opcode), DstReg)
+    MachineInstr *New = BuildMI(MBB, std::next(II), dl, TII.get(Opcode), DstReg)
                             .addReg(DstReg, RegState::Kill)
                             .addImm(Offset);
     New->getOperand(3).setIsDead();
@@ -204,7 +193,7 @@ void AVRRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   // If the offset is too big we have to adjust and restore the frame pointer
   // to materialize a valid load/store with displacement.
   //:TODO: consider using only one adiw/sbiw chain for more than one frame index
-  if (Offset > 62) {
+  if (Offset > 63) {
     unsigned AddOpc = AVR::ADIWRdK, SubOpc = AVR::SBIWRdK;
     int AddOffset = Offset - 63 + 1;
 
@@ -233,9 +222,9 @@ void AVRRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
     // No need to set SREG as dead here otherwise if the next instruction is a
     // cond branch it will be using a dead register.
-    BuildMI(MBB, std::next(II), dl, TII.get(SubOpc), AVR::R29R28)
-        .addReg(AVR::R29R28, RegState::Kill)
-        .addImm(Offset - 63 + 1);
+    New = BuildMI(MBB, std::next(II), dl, TII.get(SubOpc), AVR::R29R28)
+              .addReg(AVR::R29R28, RegState::Kill)
+              .addImm(Offset - 63 + 1);
 
     Offset = 62;
   }
@@ -245,7 +234,7 @@ void AVRRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
 }
 
-Register AVRRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
+unsigned AVRRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
   if (TFI->hasFP(MF)) {
     // The Y pointer register
@@ -273,18 +262,5 @@ void AVRRegisterInfo::splitReg(unsigned Reg,
     HiReg = getSubReg(Reg, AVR::sub_hi);
 }
 
-bool AVRRegisterInfo::shouldCoalesce(MachineInstr *MI,
-                                     const TargetRegisterClass *SrcRC,
-                                     unsigned SubReg,
-                                     const TargetRegisterClass *DstRC,
-                                     unsigned DstSubReg,
-                                     const TargetRegisterClass *NewRC,
-                                     LiveIntervals &LIS) const {
-  if(this->getRegClass(AVR::PTRDISPREGSRegClassID)->hasSubClassEq(NewRC)) {
-    return false;
-  }
-
-  return TargetRegisterInfo::shouldCoalesce(MI, SrcRC, SubReg, DstRC, DstSubReg, NewRC, LIS);
-}
-
 } // end of namespace llvm
+

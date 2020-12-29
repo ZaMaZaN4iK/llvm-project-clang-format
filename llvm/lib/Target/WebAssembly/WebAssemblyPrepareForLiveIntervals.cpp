@@ -1,13 +1,14 @@
 //===- WebAssemblyPrepareForLiveIntervals.cpp - Prepare for LiveIntervals -===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Fix up code to meet LiveInterval's requirements.
+/// \brief Fix up code to meet LiveInterval's requirements.
 ///
 /// Some CodeGen passes don't preserve LiveInterval's requirements, because
 /// they run after register allocation and it isn't important. However,
@@ -18,8 +19,8 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
 #include "WebAssembly.h"
+#include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
 #include "WebAssemblyMachineFunctionInfo.h"
 #include "WebAssemblySubtarget.h"
 #include "WebAssemblyUtilities.h"
@@ -54,24 +55,20 @@ private:
 } // end anonymous namespace
 
 char WebAssemblyPrepareForLiveIntervals::ID = 0;
-INITIALIZE_PASS(WebAssemblyPrepareForLiveIntervals, DEBUG_TYPE,
-                "Fix up code for LiveIntervals", false, false)
-
 FunctionPass *llvm::createWebAssemblyPrepareForLiveIntervals() {
   return new WebAssemblyPrepareForLiveIntervals();
 }
 
 // Test whether the given register has an ARGUMENT def.
-static bool hasArgumentDef(unsigned Reg, const MachineRegisterInfo &MRI) {
+static bool HasArgumentDef(unsigned Reg, const MachineRegisterInfo &MRI) {
   for (const auto &Def : MRI.def_instructions(Reg))
-    if (WebAssembly::isArgument(Def.getOpcode()))
+    if (WebAssembly::isArgument(Def))
       return true;
   return false;
 }
 
-bool WebAssemblyPrepareForLiveIntervals::runOnMachineFunction(
-    MachineFunction &MF) {
-  LLVM_DEBUG({
+bool WebAssemblyPrepareForLiveIntervals::runOnMachineFunction(MachineFunction &MF) {
+  DEBUG({
     dbgs() << "********** Prepare For LiveIntervals **********\n"
            << "********** Function: " << MF.getName() << '\n';
   });
@@ -94,15 +91,15 @@ bool WebAssemblyPrepareForLiveIntervals::runOnMachineFunction(
   //
   // TODO: This is fairly heavy-handed; find a better approach.
   //
-  for (unsigned I = 0, E = MRI.getNumVirtRegs(); I < E; ++I) {
-    unsigned Reg = Register::index2VirtReg(I);
+  for (unsigned i = 0, e = MRI.getNumVirtRegs(); i < e; ++i) {
+    unsigned Reg = TargetRegisterInfo::index2VirtReg(i);
 
     // Skip unused registers.
     if (MRI.use_nodbg_empty(Reg))
       continue;
 
     // Skip registers that have an ARGUMENT definition.
-    if (hasArgumentDef(Reg, MRI))
+    if (HasArgumentDef(Reg, MRI))
       continue;
 
     BuildMI(Entry, Entry.begin(), DebugLoc(),
@@ -112,15 +109,15 @@ bool WebAssemblyPrepareForLiveIntervals::runOnMachineFunction(
 
   // Move ARGUMENT_* instructions to the top of the entry block, so that their
   // liveness reflects the fact that these really are live-in values.
-  for (auto MII = Entry.begin(), MIE = Entry.end(); MII != MIE;) {
+  for (auto MII = Entry.begin(), MIE = Entry.end(); MII != MIE; ) {
     MachineInstr &MI = *MII++;
-    if (WebAssembly::isArgument(MI.getOpcode())) {
+    if (WebAssembly::isArgument(MI)) {
       MI.removeFromParent();
       Entry.insert(Entry.begin(), &MI);
     }
   }
 
-  // Ok, we're now ready to run the LiveIntervals analysis again.
+  // Ok, we're now ready to run LiveIntervalAnalysis again.
   MF.getProperties().set(MachineFunctionProperties::Property::TracksLiveness);
 
   return Changed;

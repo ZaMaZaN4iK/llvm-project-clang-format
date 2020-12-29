@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -24,8 +25,6 @@
 #include <unordered_map>
 #include <cassert>
 #include <tuple>
-
-#include "test_macros.h"
 
 class Moveable
 {
@@ -62,7 +61,7 @@ namespace std {
     };
 }
 
-int main(int, char**)
+int main()
 {
 
     { // pair<iterator, bool> try_emplace(const key_type& k, Args&&... args);
@@ -187,6 +186,4 @@ int main(int, char**)
         assert(r->first.get()  == 3); // key
         assert(r->second.get() == 4); // value
     }
-
-  return 0;
 }

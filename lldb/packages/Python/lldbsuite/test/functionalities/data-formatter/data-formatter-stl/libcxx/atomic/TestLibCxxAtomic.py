@@ -5,6 +5,8 @@ Test lldb data formatter subsystem.
 from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -21,12 +23,12 @@ class LibCxxAtomicTestCase(TestBase):
         var.SetPreferSyntheticValue(True)
         return var
 
-    @skipIf(compiler=["gcc"])
-    @add_test_categories(["libc++"])
+    @skipIf(compiler="gcc")
+    @skipIfWindows  # libc++ not ported to Windows yet
     def test(self):
         """Test that std::atomic as defined by libc++ is correctly printed by LLDB"""
         self.build()
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         bkpt = self.target().FindBreakpointByID(
             lldbutil.run_break_set_by_source_regexp(

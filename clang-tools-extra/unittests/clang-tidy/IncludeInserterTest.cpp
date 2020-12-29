@@ -1,8 +1,9 @@
 //===---- IncludeInserterTest.cpp - clang-tidy ----------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -31,11 +32,12 @@ public:
   IncludeInserterCheckBase(StringRef CheckName, ClangTidyContext *Context)
       : ClangTidyCheck(CheckName, Context) {}
 
-  void registerPPCallbacks(const SourceManager &SM, Preprocessor *PP,
-                           Preprocessor *ModuleExpanderPP) override {
-    Inserter = std::make_unique<utils::IncludeInserter>(
-        SM, getLangOpts(), utils::IncludeSorter::IS_Google);
-    PP->addPPCallbacks(Inserter->CreatePPCallbacks());
+  void registerPPCallbacks(CompilerInstance &Compiler) override {
+    Inserter.reset(new utils::IncludeInserter(
+        Compiler.getSourceManager(),
+        Compiler.getLangOpts(),
+        utils::IncludeSorter::IS_Google));
+    Compiler.getPreprocessor().addPPCallbacks(Inserter->CreatePPCallbacks());
   }
 
   void registerMatchers(ast_matchers::MatchFinder *Finder) override {
@@ -43,7 +45,7 @@ public:
   }
 
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override {
-    auto Diag = diag(Result.Nodes.getNodeAs<DeclStmt>("stmt")->getBeginLoc(),
+    auto Diag = diag(Result.Nodes.getNodeAs<DeclStmt>("stmt")->getLocStart(),
                      "foo, bar");
     for (StringRef header : HeadersToInclude()) {
       auto Fixit = Inserter->CreateIncludeInsertion(

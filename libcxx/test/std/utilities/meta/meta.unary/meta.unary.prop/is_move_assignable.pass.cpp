@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -53,7 +54,7 @@ struct A
     A();
 };
 
-int main(int, char**)
+int main()
 {
     test_is_move_assignable<int> ();
     test_is_move_assignable<A> ();
@@ -62,11 +63,10 @@ int main(int, char**)
     test_is_move_assignable<NotEmpty> ();
     test_is_move_assignable<Empty> ();
 
+#if TEST_STD_VER >= 11
     test_is_not_move_assignable<const int> ();
     test_is_not_move_assignable<int[]> ();
     test_is_not_move_assignable<int[3]> ();
-
+#endif
     test_is_not_move_assignable<void> ();
-
-  return 0;
 }

@@ -1,10 +1,9 @@
-// RUN: %clang_builtins %s %librt -o %t && %run %t
-// REQUIRES: librt_has_fixunsdfsivfp
 //===-- fixunsdfsivfp_test.c - Test __fixunsdfsivfp -----------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,7 +19,7 @@
 
 extern COMPILER_RT_ABI unsigned int __fixunsdfsivfp(double a);
 
-#if __arm__ && __VFP_FP__
+#if __arm__
 int test__fixunsdfsivfp(double a)
 {
     unsigned int actual = __fixunsdfsivfp(a);
@@ -34,7 +33,7 @@ int test__fixunsdfsivfp(double a)
 
 int main()
 {
-#if __arm__ && __VFP_FP__
+#if __arm__
     if (test__fixunsdfsivfp(0.0))
         return 1;
     if (test__fixunsdfsivfp(1.0))

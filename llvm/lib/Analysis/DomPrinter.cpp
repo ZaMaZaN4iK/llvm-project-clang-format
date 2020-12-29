@@ -1,8 +1,9 @@
 //===- DomPrinter.cpp - DOT printer for the dominance trees    ------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,7 +21,6 @@
 #include "llvm/Analysis/DomPrinter.h"
 #include "llvm/Analysis/DOTGraphTraitsPass.h"
 #include "llvm/Analysis/PostDominators.h"
-#include "llvm/InitializePasses.h"
 
 using namespace llvm;
 
@@ -78,22 +78,6 @@ struct DOTGraphTraits<PostDominatorTree*>
     return DOTGraphTraits<DomTreeNode*>::getNodeLabel(Node, G->getRootNode());
   }
 };
-}
-
-void DominatorTree::viewGraph(const Twine &Name, const Twine &Title) {
-#ifndef NDEBUG
-  ViewGraph(this, Name, false, Title);
-#else
-  errs() << "DomTree dump not available, build with DEBUG\n";
-#endif  // NDEBUG
-}
-
-void DominatorTree::viewGraph() {
-#ifndef NDEBUG
-  this->viewGraph("domtree", "Dominator Tree for function");
-#else
-  errs() << "DomTree dump not available, build with DEBUG\n";
-#endif  // NDEBUG
 }
 
 namespace {

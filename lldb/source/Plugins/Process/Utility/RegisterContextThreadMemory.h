@@ -1,16 +1,21 @@
 //===-- RegisterContextThreadMemory.h ---------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef lldb_RegisterContextThreadMemory_h_
 #define lldb_RegisterContextThreadMemory_h_
 
+// C Includes
+// C++ Includes
 #include <vector>
 
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/lldb-private.h"
@@ -75,13 +80,13 @@ public:
 
   bool HardwareSingleStep(bool enable) override;
 
-  Status ReadRegisterValueFromMemory(const lldb_private::RegisterInfo *reg_info,
-                                     lldb::addr_t src_addr, uint32_t src_len,
-                                     RegisterValue &reg_value) override;
+  Error ReadRegisterValueFromMemory(const lldb_private::RegisterInfo *reg_info,
+                                    lldb::addr_t src_addr, uint32_t src_len,
+                                    RegisterValue &reg_value) override;
 
-  Status WriteRegisterValueToMemory(const lldb_private::RegisterInfo *reg_info,
-                                    lldb::addr_t dst_addr, uint32_t dst_len,
-                                    const RegisterValue &reg_value) override;
+  Error WriteRegisterValueToMemory(const lldb_private::RegisterInfo *reg_info,
+                                   lldb::addr_t dst_addr, uint32_t dst_len,
+                                   const RegisterValue &reg_value) override;
 
 protected:
   void UpdateRegisterContext();

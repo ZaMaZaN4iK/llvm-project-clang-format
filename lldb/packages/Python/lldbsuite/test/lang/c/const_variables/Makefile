@@ -1,5 +1,7 @@
+LEVEL = ../../../make
+
 C_SOURCES := main.c functions.c
 
-CFLAGS_EXTRAS := -O3
+CFLAGS_EXTRAS += -O3
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

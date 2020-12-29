@@ -1,8 +1,9 @@
 //===-- MipsTargetMachine.cpp - Define TargetMachine for Mips -------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,59 +12,43 @@
 //===----------------------------------------------------------------------===//
 
 #include "MipsTargetMachine.h"
-#include "MCTargetDesc/MipsABIInfo.h"
-#include "MCTargetDesc/MipsMCTargetDesc.h"
 #include "Mips.h"
+#include "Mips16FrameLowering.h"
 #include "Mips16ISelDAGToDAG.h"
+#include "Mips16ISelLowering.h"
+#include "Mips16InstrInfo.h"
+#include "MipsFrameLowering.h"
+#include "MipsInstrInfo.h"
+#include "MipsSEFrameLowering.h"
 #include "MipsSEISelDAGToDAG.h"
-#include "MipsSubtarget.h"
+#include "MipsSEISelLowering.h"
+#include "MipsSEInstrInfo.h"
 #include "MipsTargetObjectFile.h"
-#include "TargetInfo/MipsTargetInfo.h"
-#include "llvm/ADT/Optional.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
-#include "llvm/CodeGen/BasicTTIImpl.h"
-#include "llvm/CodeGen/GlobalISel/IRTranslator.h"
-#include "llvm/CodeGen/GlobalISel/InstructionSelect.h"
-#include "llvm/CodeGen/GlobalISel/Legalizer.h"
-#include "llvm/CodeGen/GlobalISel/RegBankSelect.h"
-#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
-#include "llvm/IR/Attributes.h"
-#include "llvm/IR/Function.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/Support/CodeGen.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetOptions.h"
-#include <string>
+#include "llvm/Transforms/Scalar.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "mips"
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeMipsTarget() {
+extern "C" void LLVMInitializeMipsTarget() {
   // Register the target.
   RegisterTargetMachine<MipsebTargetMachine> X(getTheMipsTarget());
   RegisterTargetMachine<MipselTargetMachine> Y(getTheMipselTarget());
   RegisterTargetMachine<MipsebTargetMachine> A(getTheMips64Target());
   RegisterTargetMachine<MipselTargetMachine> B(getTheMips64elTarget());
-
-  PassRegistry *PR = PassRegistry::getPassRegistry();
-  initializeGlobalISel(*PR);
-  initializeMipsDelaySlotFillerPass(*PR);
-  initializeMipsBranchExpansionPass(*PR);
-  initializeMicroMipsSizeReducePass(*PR);
-  initializeMipsPreLegalizerCombinerPass(*PR);
 }
 
 static std::string computeDataLayout(const Triple &TT, StringRef CPU,
                                      const TargetOptions &Options,
                                      bool isLittle) {
-  std::string Ret;
+  std::string Ret = "";
   MipsABIInfo ABI = MipsABIInfo::computeTargetABI(TT, CPU, Options.MCOptions);
 
   // There are both little and big endian mips.
@@ -96,9 +81,9 @@ static std::string computeDataLayout(const Triple &TT, StringRef CPU,
   return Ret;
 }
 
-static Reloc::Model getEffectiveRelocModel(bool JIT,
+static Reloc::Model getEffectiveRelocModel(CodeModel::Model CM,
                                            Optional<Reloc::Model> RM) {
-  if (!RM.hasValue() || JIT)
+  if (!RM.hasValue() || CM == CodeModel::JITDefault)
     return Reloc::Static;
   return *RM;
 }
@@ -112,48 +97,43 @@ MipsTargetMachine::MipsTargetMachine(const Target &T, const Triple &TT,
                                      StringRef CPU, StringRef FS,
                                      const TargetOptions &Options,
                                      Optional<Reloc::Model> RM,
-                                     Optional<CodeModel::Model> CM,
-                                     CodeGenOpt::Level OL, bool JIT,
+                                     CodeModel::Model CM, CodeGenOpt::Level OL,
                                      bool isLittle)
     : LLVMTargetMachine(T, computeDataLayout(TT, CPU, Options, isLittle), TT,
-                        CPU, FS, Options, getEffectiveRelocModel(JIT, RM),
-                        getEffectiveCodeModel(CM, CodeModel::Small), OL),
-      isLittle(isLittle), TLOF(std::make_unique<MipsTargetObjectFile>()),
+                        CPU, FS, Options, getEffectiveRelocModel(CM, RM), CM,
+                        OL),
+      isLittle(isLittle), TLOF(make_unique<MipsTargetObjectFile>()),
       ABI(MipsABIInfo::computeTargetABI(TT, CPU, Options.MCOptions)),
-      Subtarget(nullptr),
-      DefaultSubtarget(TT, CPU, FS, isLittle, *this,
-                       MaybeAlign(Options.StackAlignmentOverride)),
+      Subtarget(nullptr), DefaultSubtarget(TT, CPU, FS, isLittle, *this),
       NoMips16Subtarget(TT, CPU, FS.empty() ? "-mips16" : FS.str() + ",-mips16",
-                        isLittle, *this,
-                        MaybeAlign(Options.StackAlignmentOverride)),
+                        isLittle, *this),
       Mips16Subtarget(TT, CPU, FS.empty() ? "+mips16" : FS.str() + ",+mips16",
-                      isLittle, *this,
-                      MaybeAlign(Options.StackAlignmentOverride)) {
+                      isLittle, *this) {
   Subtarget = &DefaultSubtarget;
   initAsmInfo();
 }
 
-MipsTargetMachine::~MipsTargetMachine() = default;
+MipsTargetMachine::~MipsTargetMachine() {}
 
-void MipsebTargetMachine::anchor() {}
+void MipsebTargetMachine::anchor() { }
 
 MipsebTargetMachine::MipsebTargetMachine(const Target &T, const Triple &TT,
                                          StringRef CPU, StringRef FS,
                                          const TargetOptions &Options,
                                          Optional<Reloc::Model> RM,
-                                         Optional<CodeModel::Model> CM,
-                                         CodeGenOpt::Level OL, bool JIT)
-    : MipsTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, JIT, false) {}
+                                         CodeModel::Model CM,
+                                         CodeGenOpt::Level OL)
+    : MipsTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, false) {}
 
-void MipselTargetMachine::anchor() {}
+void MipselTargetMachine::anchor() { }
 
 MipselTargetMachine::MipselTargetMachine(const Target &T, const Triple &TT,
                                          StringRef CPU, StringRef FS,
                                          const TargetOptions &Options,
                                          Optional<Reloc::Model> RM,
-                                         Optional<CodeModel::Model> CM,
-                                         CodeGenOpt::Level OL, bool JIT)
-    : MipsTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, JIT, true) {}
+                                         CodeModel::Model CM,
+                                         CodeGenOpt::Level OL)
+    : MipsTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, true) {}
 
 const MipsSubtarget *
 MipsTargetMachine::getSubtargetImpl(const Function &F) const {
@@ -171,11 +151,6 @@ MipsTargetMachine::getSubtargetImpl(const Function &F) const {
   bool hasNoMips16Attr =
       !F.getFnAttribute("nomips16").hasAttribute(Attribute::None);
 
-  bool HasMicroMipsAttr =
-      !F.getFnAttribute("micromips").hasAttribute(Attribute::None);
-  bool HasNoMicroMipsAttr =
-      !F.getFnAttribute("nomicromips").hasAttribute(Attribute::None);
-
   // FIXME: This is related to the code below to reset the target options,
   // we need to know whether or not the soft float flag is set on the
   // function, so we can enable it as a subtarget feature.
@@ -187,10 +162,6 @@ MipsTargetMachine::getSubtargetImpl(const Function &F) const {
     FS += FS.empty() ? "+mips16" : ",+mips16";
   else if (hasNoMips16Attr)
     FS += FS.empty() ? "-mips16" : ",-mips16";
-  if (HasMicroMipsAttr)
-    FS += FS.empty() ? "+micromips" : ",+micromips";
-  else if (HasNoMicroMipsAttr)
-    FS += FS.empty() ? "-micromips" : ",-micromips";
   if (softFloat)
     FS += FS.empty() ? "+soft-float" : ",+soft-float";
 
@@ -200,26 +171,26 @@ MipsTargetMachine::getSubtargetImpl(const Function &F) const {
     // creation will depend on the TM and the code generation flags on the
     // function that reside in TargetOptions.
     resetTargetOptions(F);
-    I = std::make_unique<MipsSubtarget>(
-        TargetTriple, CPU, FS, isLittle, *this,
-        MaybeAlign(Options.StackAlignmentOverride));
+    I = llvm::make_unique<MipsSubtarget>(TargetTriple, CPU, FS, isLittle,
+                                         *this);
   }
   return I.get();
 }
 
 void MipsTargetMachine::resetSubtarget(MachineFunction *MF) {
-  LLVM_DEBUG(dbgs() << "resetSubtarget\n");
+  DEBUG(dbgs() << "resetSubtarget\n");
 
-  Subtarget = &MF->getSubtarget<MipsSubtarget>();
+  Subtarget = const_cast<MipsSubtarget *>(getSubtargetImpl(*MF->getFunction()));
+  MF->setSubtarget(Subtarget);
+  return;
 }
 
 namespace {
-
 /// Mips Code Generator Pass Configuration Options.
 class MipsPassConfig : public TargetPassConfig {
 public:
-  MipsPassConfig(MipsTargetMachine &TM, PassManagerBase &PM)
-      : TargetPassConfig(TM, PM) {
+  MipsPassConfig(MipsTargetMachine *TM, PassManagerBase &PM)
+    : TargetPassConfig(TM, PM) {
     // The current implementation of long branch pass requires a scratch
     // register ($at) to be available before branch instructions. Tail merging
     // can break this requirement, so disable it when long branch pass is
@@ -238,107 +209,62 @@ public:
   void addIRPasses() override;
   bool addInstSelector() override;
   void addPreEmitPass() override;
+
   void addPreRegAlloc() override;
-  bool addIRTranslator() override;
-  void addPreLegalizeMachineIR() override;
-  bool addLegalizeMachineIR() override;
-  bool addRegBankSelect() override;
-  bool addGlobalInstructionSelect() override;
 
-  std::unique_ptr<CSEConfigBase> getCSEConfig() const override;
 };
-
-} // end anonymous namespace
+} // namespace
 
 TargetPassConfig *MipsTargetMachine::createPassConfig(PassManagerBase &PM) {
-  return new MipsPassConfig(*this, PM);
-}
-
-std::unique_ptr<CSEConfigBase> MipsPassConfig::getCSEConfig() const {
-  return getStandardCSEConfigForOpt(TM->getOptLevel());
+  return new MipsPassConfig(this, PM);
 }
 
 void MipsPassConfig::addIRPasses() {
   TargetPassConfig::addIRPasses();
-  addPass(createAtomicExpandPass());
+  addPass(createAtomicExpandPass(&getMipsTargetMachine()));
   if (getMipsSubtarget().os16())
-    addPass(createMipsOs16Pass());
+    addPass(createMipsOs16Pass(getMipsTargetMachine()));
   if (getMipsSubtarget().inMips16HardFloat())
-    addPass(createMips16HardFloatPass());
+    addPass(createMips16HardFloatPass(getMipsTargetMachine()));
 }
 // Install an instruction selector pass using
 // the ISelDag to gen Mips code.
 bool MipsPassConfig::addInstSelector() {
-  addPass(createMipsModuleISelDagPass());
+  addPass(createMipsModuleISelDagPass(getMipsTargetMachine()));
   addPass(createMips16ISelDag(getMipsTargetMachine(), getOptLevel()));
   addPass(createMipsSEISelDag(getMipsTargetMachine(), getOptLevel()));
   return false;
 }
 
 void MipsPassConfig::addPreRegAlloc() {
-  addPass(createMipsOptimizePICCallPass());
+  addPass(createMipsOptimizePICCallPass(getMipsTargetMachine()));
 }
 
-TargetTransformInfo
-MipsTargetMachine::getTargetTransformInfo(const Function &F) {
-  if (Subtarget->allowMixed16_32()) {
-    LLVM_DEBUG(errs() << "No Target Transform Info Pass Added\n");
-    // FIXME: This is no longer necessary as the TTI returned is per-function.
-    return TargetTransformInfo(F.getParent()->getDataLayout());
-  }
+TargetIRAnalysis MipsTargetMachine::getTargetIRAnalysis() {
+  return TargetIRAnalysis([this](const Function &F) {
+    if (Subtarget->allowMixed16_32()) {
+      DEBUG(errs() << "No Target Transform Info Pass Added\n");
+      // FIXME: This is no longer necessary as the TTI returned is per-function.
+      return TargetTransformInfo(F.getParent()->getDataLayout());
+    }
 
-  LLVM_DEBUG(errs() << "Target Transform Info Pass Added\n");
-  return TargetTransformInfo(BasicTTIImpl(this, F));
+    DEBUG(errs() << "Target Transform Info Pass Added\n");
+    return TargetTransformInfo(BasicTTIImpl(this, F));
+  });
 }
 
 // Implemented by targets that want to run passes immediately before
 // machine code is emitted. return true if -print-machineinstrs should
 // print out the code after the passes.
 void MipsPassConfig::addPreEmitPass() {
-  // Expand pseudo instructions that are sensitive to register allocation.
-  addPass(createMipsExpandPseudoPass());
+  MipsTargetMachine &TM = getMipsTargetMachine();
 
-  // The microMIPS size reduction pass performs instruction reselection for
-  // instructions which can be remapped to a 16 bit instruction.
-  addPass(createMicroMipsSizeReducePass());
-
-  // The delay slot filler pass can potientially create forbidden slot hazards
-  // for MIPSR6 and therefore it should go before MipsBranchExpansion pass.
-  addPass(createMipsDelaySlotFillerPass());
-
-  // This pass expands branches and takes care about the forbidden slot hazards.
-  // Expanding branches may potentially create forbidden slot hazards for
-  // MIPSR6, and fixing such hazard may potentially break a branch by extending
-  // its offset out of range. That's why this pass combine these two tasks, and
-  // runs them alternately until one of them finishes without any changes. Only
-  // then we can be sure that all branches are expanded properly and no hazards
-  // exists.
-  // Any new pass should go before this pass.
-  addPass(createMipsBranchExpansion());
-
+  // The delay slot filler pass can potientially create forbidden slot (FS)
+  // hazards for MIPSR6 which the hazard schedule pass (HSP) will fix. Any
+  // (new) pass that creates compact branches after the HSP must handle FS
+  // hazards itself or be pipelined before the HSP.
+  addPass(createMipsDelaySlotFillerPass(TM));
+  addPass(createMipsHazardSchedule());
+  addPass(createMipsLongBranchPass(TM));
   addPass(createMipsConstantIslandPass());
-}
-
-bool MipsPassConfig::addIRTranslator() {
-  addPass(new IRTranslator());
-  return false;
-}
-
-void MipsPassConfig::addPreLegalizeMachineIR() {
-  addPass(createMipsPreLegalizeCombiner());
-}
-
-bool MipsPassConfig::addLegalizeMachineIR() {
-  addPass(new Legalizer());
-  return false;
-}
-
-bool MipsPassConfig::addRegBankSelect() {
-  addPass(new RegBankSelect());
-  return false;
-}
-
-bool MipsPassConfig::addGlobalInstructionSelect() {
-  addPass(new InstructionSelect());
-  return false;
 }

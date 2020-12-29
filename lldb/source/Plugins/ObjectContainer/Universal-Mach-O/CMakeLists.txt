@@ -1,10 +1,3 @@
-add_lldb_library(lldbPluginObjectContainerMachOArchive PLUGIN
+add_lldb_library(lldbPluginObjectContainerMachOArchive
   ObjectContainerUniversalMachO.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbHost
-    lldbSymbol
-    lldbTarget
-    lldbUtility
   )

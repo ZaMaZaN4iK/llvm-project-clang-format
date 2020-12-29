@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -67,6 +68,7 @@ test3(unsigned n, Allocator const &alloc = Allocator())
 {
 #if TEST_STD_VER > 11
     typedef std::deque<T, Allocator> C;
+    typedef typename C::const_iterator const_iterator;
     {
     C d(n, alloc);
     assert(d.size() == n);
@@ -86,7 +88,7 @@ test(unsigned n)
     test2<T, Allocator> ( n );
 }
 
-int main(int, char**)
+int main()
 {
     test<DefaultOnly, std::allocator<DefaultOnly> >(0);
     test<DefaultOnly, std::allocator<DefaultOnly> >(1);
@@ -113,6 +115,4 @@ int main(int, char**)
     test3<int, min_allocator<int>> (3);
 #endif
 
-
-  return 0;
 }

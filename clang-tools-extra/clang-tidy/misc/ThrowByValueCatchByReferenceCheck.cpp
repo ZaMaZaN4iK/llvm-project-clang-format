@@ -1,8 +1,9 @@
 //===--- ThrowByValueCatchByReferenceCheck.cpp - clang-tidy----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,10 +21,7 @@ namespace misc {
 ThrowByValueCatchByReferenceCheck::ThrowByValueCatchByReferenceCheck(
     StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
-      CheckAnonymousTemporaries(Options.get("CheckThrowTemporaries", true)),
-      WarnOnLargeObject(Options.get("WarnOnLargeObject", false)),
-      // Cannot access `ASTContext` from here so set it to an extremal value.
-      MaxSize(Options.get("MaxSize", std::numeric_limits<uint64_t>::max())) {}
+      CheckAnonymousTemporaries(Options.get("CheckThrowTemporaries", true)) {}
 
 void ThrowByValueCatchByReferenceCheck::registerMatchers(MatchFinder *Finder) {
   // This is a C++ only check thus we register the matchers only for C++
@@ -83,7 +81,7 @@ void ThrowByValueCatchByReferenceCheck::diagnoseThrowLocations(
     if (declRef && isCatchVariable(declRef)) {
       return;
     }
-    diag(subExpr->getBeginLoc(), "throw expression throws a pointer; it should "
+    diag(subExpr->getLocStart(), "throw expression throws a pointer; it should "
                                  "throw a non-pointer value instead");
   }
   // If the throw statement does not throw by pointer then it throws by value
@@ -126,13 +124,16 @@ void ThrowByValueCatchByReferenceCheck::diagnoseThrowLocations(
       }
     }
     if (emit)
-      diag(subExpr->getBeginLoc(),
+      diag(subExpr->getLocStart(),
            "throw expression should throw anonymous temporary values instead");
   }
 }
 
 void ThrowByValueCatchByReferenceCheck::diagnoseCatchLocations(
     const CXXCatchStmt *catchStmt, ASTContext &context) {
+  const char *diagMsgCatchReference = "catch handler catches a pointer value; "
+                                      "should throw a non-pointer value and "
+                                      "catch by reference instead";
   if (!catchStmt)
     return;
   auto caughtType = catchStmt->getCaughtType();
@@ -140,32 +141,16 @@ void ThrowByValueCatchByReferenceCheck::diagnoseCatchLocations(
     return;
   auto *varDecl = catchStmt->getExceptionDecl();
   if (const auto *PT = caughtType.getCanonicalType()->getAs<PointerType>()) {
-    const char *diagMsgCatchReference = "catch handler catches a pointer value; "
-                                        "should throw a non-pointer value and "
-                                        "catch by reference instead";
     // We do not diagnose when catching pointer to strings since we also allow
     // throwing string literals.
     if (!PT->getPointeeType()->isAnyCharacterType())
-      diag(varDecl->getBeginLoc(), diagMsgCatchReference);
+      diag(varDecl->getLocStart(), diagMsgCatchReference);
   } else if (!caughtType->isReferenceType()) {
-    const char *diagMsgCatchReference = "catch handler catches by value; "
-                                        "should catch by reference instead";
-    // If it's not a pointer and not a reference then it must be caught "by
+    // If it's not a pointer and not a reference then it must be thrown "by
     // value". In this case we should emit a diagnosis message unless the type
     // is trivial.
-    if (!caughtType.isTrivialType(context)) {
-      diag(varDecl->getBeginLoc(), diagMsgCatchReference);
-    } else if (WarnOnLargeObject) {
-      // If the type is trivial, then catching it by reference is not dangerous.
-      // However, catching large objects by value decreases the performance.
-
-      // We can now access `ASTContext` so if `MaxSize` is an extremal value
-      // then set it to the size of `size_t`.
-      if (MaxSize == std::numeric_limits<uint64_t>::max())
-        MaxSize = context.getTypeSize(context.getSizeType());
-      if (context.getTypeSize(caughtType) > MaxSize)
-        diag(varDecl->getBeginLoc(), diagMsgCatchReference);
-    }
+    if (!caughtType.isTrivialType(context))
+      diag(varDecl->getLocStart(), diagMsgCatchReference);
   }
 }
 

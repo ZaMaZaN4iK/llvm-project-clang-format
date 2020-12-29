@@ -1,8 +1,9 @@
 //===-- AMDGPUAnnotateUniformValues.cpp - ---------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,13 +14,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "AMDGPU.h"
+#include "AMDGPUIntrinsicInfo.h"
 #include "llvm/ADT/SetVector.h"
-#include "llvm/Analysis/LegacyDivergenceAnalysis.h"
+#include "llvm/Analysis/DivergenceAnalysis.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/MemoryDependenceAnalysis.h"
-#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstVisitor.h"
-#include "llvm/InitializePasses.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -31,7 +32,7 @@ namespace {
 
 class AMDGPUAnnotateUniformValues : public FunctionPass,
                        public InstVisitor<AMDGPUAnnotateUniformValues> {
-  LegacyDivergenceAnalysis *DA;
+  DivergenceAnalysis *DA;
   MemoryDependenceResults *MDR;
   LoopInfo *LI;
   DenseMap<Value*, GetElementPtrInst*> noClobberClones;
@@ -47,7 +48,7 @@ public:
     return "AMDGPU Annotate Uniform Values";
   }
   void getAnalysisUsage(AnalysisUsage &AU) const override {
-    AU.addRequired<LegacyDivergenceAnalysis>();
+    AU.addRequired<DivergenceAnalysis>();
     AU.addRequired<MemoryDependenceWrapperPass>();
     AU.addRequired<LoopInfoWrapperPass>();
     AU.setPreservesAll();
@@ -62,7 +63,7 @@ public:
 
 INITIALIZE_PASS_BEGIN(AMDGPUAnnotateUniformValues, DEBUG_TYPE,
                       "Add AMDGPU uniform metadata", false, false)
-INITIALIZE_PASS_DEPENDENCY(LegacyDivergenceAnalysis)
+INITIALIZE_PASS_DEPENDENCY(DivergenceAnalysis)
 INITIALIZE_PASS_DEPENDENCY(MemoryDependenceWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
 INITIALIZE_PASS_END(AMDGPUAnnotateUniformValues, DEBUG_TYPE,
@@ -105,26 +106,31 @@ bool AMDGPUAnnotateUniformValues::isClobberedInFunction(LoadInst * Load) {
 
   DFS(Start, Checklist);
   for (auto &BB : Checklist) {
-    BasicBlock::iterator StartIt = (!L && (BB == Load->getParent())) ?
-      BasicBlock::iterator(Load) : BB->end();
-    auto Q = MDR->getPointerDependencyFrom(MemoryLocation(Ptr), true,
-                                           StartIt, BB, Load);
-    if (Q.isClobber() || Q.isUnknown())
-      return true;
+    BasicBlock::iterator StartIt = (BB == Load->getParent()) ?
+     BasicBlock::iterator(Load) : BB->end();
+     if (MDR->getPointerDependencyFrom(MemoryLocation(Ptr),
+       true, StartIt, BB, Load).isClobber())
+       return true;
   }
   return false;
 }
 
 void AMDGPUAnnotateUniformValues::visitBranchInst(BranchInst &I) {
-  if (DA->isUniform(&I))
-    setUniformMetadata(I.getParent()->getTerminator());
+  if (I.isUnconditional())
+    return;
+
+  Value *Cond = I.getCondition();
+  if (!DA->isUniform(Cond))
+    return;
+
+  setUniformMetadata(I.getParent()->getTerminator());
 }
 
 void AMDGPUAnnotateUniformValues::visitLoadInst(LoadInst &I) {
   Value *Ptr = I.getPointerOperand();
   if (!DA->isUniform(Ptr))
     return;
-  auto isGlobalLoad = [&](LoadInst &Load)->bool {
+  auto isGlobalLoad = [](LoadInst &Load)->bool {
     return Load.getPointerAddressSpace() == AMDGPUAS::GLOBAL_ADDRESS;
   };
   // We're tracking up to the Function boundaries
@@ -167,7 +173,7 @@ bool AMDGPUAnnotateUniformValues::runOnFunction(Function &F) {
   if (skipFunction(F))
     return false;
 
-  DA  = &getAnalysis<LegacyDivergenceAnalysis>();
+  DA  = &getAnalysis<DivergenceAnalysis>();
   MDR = &getAnalysis<MemoryDependenceWrapperPass>().getMemDep();
   LI  = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
   isKernelFunc = F.getCallingConv() == CallingConv::AMDGPU_KERNEL;

@@ -1,17 +1,23 @@
 //===-- CommandReturnObject.h -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_CommandReturnObject_h_
 #define liblldb_CommandReturnObject_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/STLUtils.h"
 #include "lldb/Core/StreamFile.h"
-#include "lldb/Utility/StreamString.h"
-#include "lldb/Utility/StreamTee.h"
+#include "lldb/Core/StreamString.h"
+#include "lldb/Core/StreamTee.h"
 #include "lldb/lldb-private.h"
 
 #include "llvm/ADT/StringRef.h"
@@ -61,13 +67,13 @@ public:
     return m_err_stream;
   }
 
-  void SetImmediateOutputFile(lldb::FileSP file_sp) {
-    lldb::StreamSP stream_sp(new StreamFile(file_sp));
+  void SetImmediateOutputFile(FILE *fh, bool transfer_fh_ownership = false) {
+    lldb::StreamSP stream_sp(new StreamFile(fh, transfer_fh_ownership));
     m_out_stream.SetStreamAtIndex(eImmediateStreamIndex, stream_sp);
   }
 
-  void SetImmediateErrorFile(lldb::FileSP file_sp) {
-    lldb::StreamSP stream_sp(new StreamFile(file_sp));
+  void SetImmediateErrorFile(FILE *fh, bool transfer_fh_ownership = false) {
+    lldb::StreamSP stream_sp(new StreamFile(fh, transfer_fh_ownership));
     m_err_stream.SetStreamAtIndex(eImmediateStreamIndex, stream_sp);
   }
 
@@ -123,7 +129,7 @@ public:
     AppendError(llvm::formatv(format, std::forward<Args>(args)...).str());
   }
 
-  void SetError(const Status &error, const char *fallback_error_cstr = nullptr);
+  void SetError(const Error &error, const char *fallback_error_cstr = nullptr);
 
   void SetError(llvm::StringRef error_cstr);
 
@@ -143,6 +149,14 @@ public:
 
   void SetInteractive(bool b);
 
+  bool GetAbnormalStopWasExpected() const {
+    return m_abnormal_stop_was_expected;
+  }
+
+  void SetAbnormalStopWasExpected(bool signal_was_expected) {
+    m_abnormal_stop_was_expected = signal_was_expected;
+  }
+
 private:
   enum { eStreamStringIndex = 0, eImmediateStreamIndex = 1 };
 
@@ -153,6 +167,14 @@ private:
   bool m_did_change_process_state;
   bool m_interactive; // If true, then the input handle from the debugger will
                       // be hooked up
+  bool m_abnormal_stop_was_expected; // This is to support
+                                     // eHandleCommandFlagStopOnCrash vrs.
+                                     // attach.
+  // The attach command often ends up with the process stopped due to a signal.
+  // Normally that would mean stop on crash should halt batch execution, but we
+  // obviously don't want that for attach.  Using this flag, the attach command
+  // (and anything else for which this is relevant) can say that the signal is
+  // expected, and batch command execution can continue.
 };
 
 } // namespace lldb_private

@@ -1,7 +1,10 @@
 """Show bitfields and check that they display correctly."""
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -24,7 +27,7 @@ class BitfieldsTestCase(TestBase):
     def test_and_run_command(self):
         """Test 'frame variable ...' on a variable with bitfields."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Break inside the main.
@@ -113,41 +116,6 @@ class BitfieldsTestCase(TestBase):
         self.expect("expr/x (packed.c)", VARIABLES_DISPLAYED_CORRECTLY,
                     substrs=['uint32_t', "7112233"])
 
-        for bit in range(1,18):
-            expected = "1" if bit in [1, 5, 7, 13] else "0"
-            self.expect("expr even_more_bits.b" + str(bit), VARIABLES_DISPLAYED_CORRECTLY,
-                    substrs=['uint8_t', expected])
-
-        for bit in [3, 10, 14]:
-            self.expect("expr even_more_bits.b" + str(bit) + " = 1", VARIABLES_DISPLAYED_CORRECTLY,
-                    substrs=['uint8_t', "1"])
-
-        self.expect(
-            "frame variable --show-types even_more_bits",
-            VARIABLES_DISPLAYED_CORRECTLY,
-            substrs=[
-                '(uint8_t:1) b1 = \'\\x01\'',
-                '(uint8_t:1) b2 = \'\\0\'',
-                '(uint8_t:1) b3 = \'\\x01\'',
-                '(uint8_t:1) b4 = \'\\0\'',
-                '(uint8_t:1) b5 = \'\\x01\'',
-                '(uint8_t:1) b6 = \'\\0\'',
-                '(uint8_t:1) b7 = \'\\x01\'',
-                '(uint8_t:1) b8 = \'\\0\'',
-                '(uint8_t:1) b9 = \'\\0\'',
-                '(uint8_t:1) b10 = \'\\x01\'',
-                '(uint8_t:1) b12 = \'\\0\'',
-                '(uint8_t:1) b13 = \'\\x01\'',
-                '(uint8_t:1) b14 = \'\\x01\'',
-                '(uint8_t:1) b15 = \'\\0\'',
-                '(uint8_t:1) b16 = \'\\0\'',
-                '(uint8_t:1) b17 = \'\\0\'',
-                ])
-
-        self.expect("v/x large_packed", VARIABLES_DISPLAYED_CORRECTLY,
-                    substrs=["a = 0x0000000cbbbbaaaa", "b = 0x0000000dffffeee"])
-
-
     @add_test_categories(['pyapi'])
     # BitFields exhibit crashes in record layout on Windows
     # (http://llvm.org/pr21800)
@@ -155,7 +123,7 @@ class BitfieldsTestCase(TestBase):
     def test_and_python_api(self):
         """Use Python APIs to inspect a bitfields variable."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)

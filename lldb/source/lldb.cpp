@@ -1,8 +1,9 @@
 //===-- lldb.cpp ------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,8 +14,12 @@ using namespace lldb_private;
 
 #include "clang/Basic/Version.h"
 
-#ifdef HAVE_VCS_VERSION_INC
-#include "VCSVersion.inc"
+#ifdef HAVE_SVN_VERSION_INC
+#  include "SVNVersion.inc"
+#endif
+
+#ifdef HAVE_APPLE_VERSION_INC
+#  include "AppleVersion.inc"
 #endif
 
 static const char *GetLLDBRevision() {
@@ -33,6 +38,7 @@ static const char *GetLLDBRepository() {
 #endif
 }
 
+
 #define QUOTE(str) #str
 #define EXPAND_AND_QUOTE(str) QUOTE(str)
 
@@ -41,9 +47,13 @@ const char *lldb_private::GetVersion() {
   // as the clang tool.
   static std::string g_version_str;
   if (g_version_str.empty()) {
+
+#ifdef LLDB_VERSION_STRING
+    g_version_str += EXPAND_AND_QUOTE(LLDB_VERSION_STRING);
+#else
     g_version_str += "lldb version ";
     g_version_str += CLANG_VERSION_STRING;
-
+#endif
     const char *lldb_repo = GetLLDBRepository();
     const char *lldb_rev = GetLLDBRevision();
     if (lldb_repo || lldb_rev) {
@@ -67,6 +77,7 @@ const char *lldb_private::GetVersion() {
       g_version_str += "\n  llvm revision ";
       g_version_str += llvm_rev;
     }
+      
   }
   return g_version_str.c_str();
 }

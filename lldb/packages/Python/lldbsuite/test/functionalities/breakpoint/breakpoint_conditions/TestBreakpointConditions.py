@@ -2,6 +2,12 @@
 Test breakpoint conditions with 'breakpoint modify -c <expr> id'.
 """
 
+from __future__ import print_function
+
+
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -12,22 +18,30 @@ class BreakpointConditionsTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
+    # Requires EE to support COFF on Windows (http://llvm.org/pr22232)
+    @skipIfWindows
     def test_breakpoint_condition_and_run_command(self):
         """Exercise breakpoint condition with 'breakpoint modify -c <expr> id'."""
         self.build()
         self.breakpoint_conditions()
 
+    # Requires EE to support COFF on Windows (http://llvm.org/pr22232)
+    @skipIfWindows
     def test_breakpoint_condition_inline_and_run_command(self):
         """Exercise breakpoint condition inline with 'breakpoint set'."""
         self.build()
         self.breakpoint_conditions(inline=True)
 
+    # Requires EE to support COFF on Windows (http://llvm.org/pr22232)
+    @skipIfWindows
     @add_test_categories(['pyapi'])
     def test_breakpoint_condition_and_python_api(self):
         """Use Python APIs to set breakpoint conditions."""
         self.build()
         self.breakpoint_conditions_python()
 
+    # Requires EE to support COFF on Windows (http://llvm.org/pr22232)
+    @skipIfWindows
     @add_test_categories(['pyapi'])
     def test_breakpoint_invalid_condition_and_python_api(self):
         """Use Python APIs to set breakpoint conditions."""
@@ -45,7 +59,7 @@ class BreakpointConditionsTestCase(TestBase):
 
     def breakpoint_conditions(self, inline=False):
         """Exercise breakpoint condition with 'breakpoint modify -c <expr> id'."""
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         if inline:
@@ -118,7 +132,7 @@ class BreakpointConditionsTestCase(TestBase):
 
     def breakpoint_conditions_python(self):
         """Use Python APIs to set breakpoint conditions."""
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)
@@ -186,7 +200,7 @@ class BreakpointConditionsTestCase(TestBase):
 
     def breakpoint_invalid_conditions_python(self):
         """Use Python APIs to set breakpoint conditions."""
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)

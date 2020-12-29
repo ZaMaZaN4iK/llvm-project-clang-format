@@ -1,10 +1,8 @@
-// RUN: %clang_cc1 -verify -fopenmp -ferror-limit 100 %s -Wuninitialized
-
-// RUN: %clang_cc1 -verify -fopenmp-simd -ferror-limit 100 %s -Wuninitialized
+// RUN: %clang_cc1 -verify -fopenmp -ferror-limit 100 %s
 
 template <class T>
 T tmain(T argc) {
-#pragma omp taskwait allocate(argc) // expected-error {{unexpected OpenMP clause 'allocate' in directive '#pragma omp taskwait'}}
+#pragma omp taskwait
   ;
 #pragma omp taskwait untied  // expected-error {{unexpected OpenMP clause 'untied' in directive '#pragma omp taskwait'}}
 #pragma omp taskwait unknown // expected-warning {{extra tokens at the end of '#pragma omp taskwait' are ignored}}
@@ -29,7 +27,7 @@ T tmain(T argc) {
 #pragma omp taskwait // expected-error {{'#pragma omp taskwait' cannot be an immediate substatement}}
     switch (argc)
     case 1:
-#pragma omp taskwait // expected-error {{'#pragma omp taskwait' cannot be an immediate substatement}}
+#pragma omp taskwait
   switch (argc)
   case 1: {
 #pragma omp taskwait
@@ -49,7 +47,7 @@ T tmain(T argc) {
 #pragma omp taskwait
     }
 label:
-#pragma omp taskwait
+#pragma omp taskwait // expected-error {{'#pragma omp taskwait' cannot be an immediate substatement}}
 label1 : {
 #pragma omp taskwait
 }
@@ -83,7 +81,7 @@ int main(int argc, char **argv) {
 #pragma omp taskwait // expected-error {{'#pragma omp taskwait' cannot be an immediate substatement}}
     switch (argc)
     case 1:
-#pragma omp taskwait // expected-error {{'#pragma omp taskwait' cannot be an immediate substatement}}
+#pragma omp taskwait
   switch (argc)
   case 1: {
 #pragma omp taskwait
@@ -103,7 +101,7 @@ int main(int argc, char **argv) {
 #pragma omp taskwait
     }
 label:
-#pragma omp taskwait
+#pragma omp taskwait // expected-error {{'#pragma omp taskwait' cannot be an immediate substatement}}
 label1 : {
 #pragma omp taskwait
 }

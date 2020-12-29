@@ -1,6 +1,8 @@
+LEVEL = ../../../../../make
+
 CXX_SOURCES := main.cpp
 
-CFLAGS_EXTRAS := -O0
+CFLAGS_EXTRAS += -O0
 USE_LIBSTDCPP := 1
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

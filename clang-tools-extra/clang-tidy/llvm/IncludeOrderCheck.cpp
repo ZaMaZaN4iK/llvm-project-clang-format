@@ -1,8 +1,9 @@
 //===--- IncludeOrderCheck.cpp - clang-tidy -------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,21 +16,19 @@
 
 namespace clang {
 namespace tidy {
-namespace llvm_check {
+namespace llvm {
 
 namespace {
 class IncludeOrderPPCallbacks : public PPCallbacks {
 public:
-  explicit IncludeOrderPPCallbacks(ClangTidyCheck &Check,
-                                   const SourceManager &SM)
+  explicit IncludeOrderPPCallbacks(ClangTidyCheck &Check, SourceManager &SM)
       : LookForMainModule(true), Check(Check), SM(SM) {}
 
   void InclusionDirective(SourceLocation HashLoc, const Token &IncludeTok,
                           StringRef FileName, bool IsAngled,
                           CharSourceRange FilenameRange, const FileEntry *File,
                           StringRef SearchPath, StringRef RelativePath,
-                          const Module *Imported,
-                          SrcMgr::CharacteristicKind FileType) override;
+                          const Module *Imported) override;
   void EndOfMainFile() override;
 
 private:
@@ -46,14 +45,14 @@ private:
   bool LookForMainModule;
 
   ClangTidyCheck &Check;
-  const SourceManager &SM;
+  SourceManager &SM;
 };
 } // namespace
 
-void IncludeOrderCheck::registerPPCallbacks(const SourceManager &SM,
-                                            Preprocessor *PP,
-                                            Preprocessor *ModuleExpanderPP) {
-  PP->addPPCallbacks(::std::make_unique<IncludeOrderPPCallbacks>(*this, SM));
+void IncludeOrderCheck::registerPPCallbacks(CompilerInstance &Compiler) {
+  Compiler.getPreprocessor().addPPCallbacks(
+      ::llvm::make_unique<IncludeOrderPPCallbacks>(
+          *this, Compiler.getSourceManager()));
 }
 
 static int getPriority(StringRef Filename, bool IsAngled, bool IsMainModule) {
@@ -77,8 +76,7 @@ static int getPriority(StringRef Filename, bool IsAngled, bool IsMainModule) {
 void IncludeOrderPPCallbacks::InclusionDirective(
     SourceLocation HashLoc, const Token &IncludeTok, StringRef FileName,
     bool IsAngled, CharSourceRange FilenameRange, const FileEntry *File,
-    StringRef SearchPath, StringRef RelativePath, const Module *Imported,
-    SrcMgr::CharacteristicKind FileType) {
+    StringRef SearchPath, StringRef RelativePath, const Module *Imported) {
   // We recognize the first include as a special main module header and want
   // to leave it in the top position.
   IncludeDirective ID = {HashLoc, FilenameRange, FileName, IsAngled, false};
@@ -176,6 +174,6 @@ void IncludeOrderPPCallbacks::EndOfMainFile() {
   IncludeDirectives.clear();
 }
 
-} // namespace llvm_check
+} // namespace llvm
 } // namespace tidy
 } // namespace clang

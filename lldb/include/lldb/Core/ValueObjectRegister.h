@@ -1,35 +1,29 @@
 //===-- ValueObjectRegister.h -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ValueObjectRegister_h_
 #define liblldb_ValueObjectRegister_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/RegisterValue.h"
 #include "lldb/Core/ValueObject.h"
-#include "lldb/Symbol/CompilerType.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/RegisterValue.h"
-#include "lldb/lldb-defines.h"
-#include "lldb/lldb-enumerations.h"
-#include "lldb/lldb-forward.h"
-#include "lldb/lldb-private-types.h"
-
-#include <stddef.h>
-#include <stdint.h>
+#include "lldb/lldb-private.h"
 
 namespace lldb_private {
-class DataExtractor;
-class Status;
-class ExecutionContextScope;
-class Scalar;
-class Stream;
 
+//----------------------------------------------------------------------
 // A ValueObject that contains a root variable that may or may not
 // have children.
+//----------------------------------------------------------------------
 class ValueObjectRegisterContext : public ValueObject {
 public:
   ~ValueObjectRegisterContext() override;
@@ -61,7 +55,9 @@ protected:
 private:
   ValueObjectRegisterContext(ValueObject &parent,
                              lldb::RegisterContextSP &reg_ctx_sp);
+  //------------------------------------------------------------------
   // For ValueObject only
+  //------------------------------------------------------------------
   DISALLOW_COPY_AND_ASSIGN(ValueObjectRegisterContext);
 };
 
@@ -88,10 +84,10 @@ public:
   ValueObject *CreateChildAtIndex(size_t idx, bool synthetic_array_member,
                                   int32_t synthetic_index) override;
 
-  lldb::ValueObjectSP GetChildMemberWithName(ConstString name,
+  lldb::ValueObjectSP GetChildMemberWithName(const ConstString &name,
                                              bool can_create) override;
 
-  size_t GetIndexOfChildWithName(ConstString name) override;
+  size_t GetIndexOfChildWithName(const ConstString &name) override;
 
 protected:
   bool UpdateValue() override;
@@ -108,7 +104,9 @@ private:
   ValueObjectRegisterSet(ExecutionContextScope *exe_scope,
                          lldb::RegisterContextSP &reg_ctx_sp, uint32_t set_idx);
 
+  //------------------------------------------------------------------
   // For ValueObject only
+  //------------------------------------------------------------------
   DISALLOW_COPY_AND_ASSIGN(ValueObjectRegisterSet);
 };
 
@@ -130,9 +128,9 @@ public:
 
   size_t CalculateNumChildren(uint32_t max) override;
 
-  bool SetValueFromCString(const char *value_str, Status &error) override;
+  bool SetValueFromCString(const char *value_str, Error &error) override;
 
-  bool SetData(DataExtractor &data, Status &error) override;
+  bool SetData(DataExtractor &data, Error &error) override;
 
   bool ResolveValue(Scalar &scalar) override;
 
@@ -162,7 +160,9 @@ private:
   ValueObjectRegister(ExecutionContextScope *exe_scope,
                       lldb::RegisterContextSP &reg_ctx_sp, uint32_t reg_num);
 
+  //------------------------------------------------------------------
   // For ValueObject only
+  //------------------------------------------------------------------
   DISALLOW_COPY_AND_ASSIGN(ValueObjectRegister);
 };
 

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,12 +15,9 @@
 
 #include <strstream>
 #include <cassert>
-#include <cstring>
 #include <string>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     std::strstream inout;
     int i = 123;
@@ -33,8 +31,6 @@ int main(int, char**)
     inout >> i >> d >> s;
     assert(i == 123);
     assert(d == 4.5);
-    assert(std::strcmp(s.c_str(), "dog") == 0);
+    assert(strcmp(s.c_str(), "dog") == 0);
     inout.freeze(false);
-
-  return 0;
 }

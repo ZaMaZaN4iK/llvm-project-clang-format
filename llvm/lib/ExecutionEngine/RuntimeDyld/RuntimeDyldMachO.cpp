@@ -1,8 +1,9 @@
 //===-- RuntimeDyldMachO.cpp - Run-time dynamic linker for MC-JIT -*- C++ -*-=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -26,8 +27,7 @@ using namespace llvm::object;
 namespace {
 
 class LoadedMachOObjectInfo final
-    : public LoadedObjectInfoHelper<LoadedMachOObjectInfo,
-                                    RuntimeDyld::LoadedObjectInfo> {
+    : public RuntimeDyld::LoadedObjectInfoHelper<LoadedMachOObjectInfo> {
 public:
   LoadedMachOObjectInfo(RuntimeDyldImpl &RTDyld,
                         ObjSectionToIDMap ObjSecToIDMap)
@@ -54,8 +54,7 @@ Expected<relocation_iterator>
 RuntimeDyldMachO::processScatteredVANILLA(
                           unsigned SectionID, relocation_iterator RelI,
                           const ObjectFile &BaseObjT,
-                          RuntimeDyldMachO::ObjSectionToIDMap &ObjSectionToID,
-                          bool TargetIsLocalThumbFunc) {
+                          RuntimeDyldMachO::ObjSectionToIDMap &ObjSectionToID) {
   const MachOObjectFile &Obj =
     static_cast<const MachOObjectFile&>(BaseObjT);
   MachO::any_relocation_info RE =
@@ -85,7 +84,6 @@ RuntimeDyldMachO::processScatteredVANILLA(
 
   Addend -= SectionBaseAddr;
   RelocationEntry R(SectionID, Offset, RelocType, Addend, IsPCRel, Size);
-  R.IsTargetThumbFunc = TargetIsLocalThumbFunc;
 
   addRelocationForSection(R, TargetSectionID);
 
@@ -195,10 +193,10 @@ Error RuntimeDyldMachO::populateIndirectSymbolPointersSection(
   assert((PTSectionSize % PTEntrySize) == 0 &&
          "Pointers section does not contain a whole number of stubs?");
 
-  LLVM_DEBUG(dbgs() << "Populating pointer table section "
-                    << Sections[PTSectionID].getName() << ", Section ID "
-                    << PTSectionID << ", " << NumPTEntries << " entries, "
-                    << PTEntrySize << " bytes each:\n");
+  DEBUG(dbgs() << "Populating pointer table section "
+               << Sections[PTSectionID].getName() << ", Section ID "
+               << PTSectionID << ", " << NumPTEntries << " entries, "
+               << PTEntrySize << " bytes each:\n");
 
   for (unsigned i = 0; i < NumPTEntries; ++i) {
     unsigned SymbolIndex =
@@ -209,8 +207,8 @@ Error RuntimeDyldMachO::populateIndirectSymbolPointersSection(
       IndirectSymbolName = *IndirectSymbolNameOrErr;
     else
       return IndirectSymbolNameOrErr.takeError();
-    LLVM_DEBUG(dbgs() << "  " << IndirectSymbolName << ": index " << SymbolIndex
-                      << ", PT offset: " << PTEntryOffset << "\n");
+    DEBUG(dbgs() << "  " << IndirectSymbolName << ": index " << SymbolIndex
+          << ", PT offset: " << PTEntryOffset << "\n");
     RelocationEntry RE(PTSectionID, PTEntryOffset,
                        MachO::GENERIC_RELOC_VANILLA, 0, false, 2);
     addRelocationForSymbol(RE, IndirectSymbolName);
@@ -233,10 +231,7 @@ RuntimeDyldMachOCRTPBase<Impl>::finalizeLoad(const ObjectFile &Obj,
 
   for (const auto &Section : Obj.sections()) {
     StringRef Name;
-    if (Expected<StringRef> NameOrErr = Section.getName())
-      Name = *NameOrErr;
-    else
-      consumeError(NameOrErr.takeError());
+    Section.getName(Name);
 
     // Force emission of the __text, __eh_frame, and __gcc_except_tab sections
     // if they're present. Otherwise call down to the impl to handle other
@@ -277,8 +272,8 @@ unsigned char *RuntimeDyldMachOCRTPBase<Impl>::processFDE(uint8_t *P,
                                                           int64_t DeltaForEH) {
   typedef typename Impl::TargetPtrT TargetPtrT;
 
-  LLVM_DEBUG(dbgs() << "Processing FDE: Delta for text: " << DeltaForText
-                    << ", Delta for EH: " << DeltaForEH << "\n");
+  DEBUG(dbgs() << "Processing FDE: Delta for text: " << DeltaForText
+               << ", Delta for EH: " << DeltaForEH << "\n");
   uint32_t Length = readBytesUnaligned(P, 4);
   P += 4;
   uint8_t *Ret = P + Length;
@@ -354,27 +349,25 @@ RuntimeDyldMachO::create(Triple::ArchType Arch,
     llvm_unreachable("Unsupported target for RuntimeDyldMachO.");
     break;
   case Triple::arm:
-    return std::make_unique<RuntimeDyldMachOARM>(MemMgr, Resolver);
+    return make_unique<RuntimeDyldMachOARM>(MemMgr, Resolver);
   case Triple::aarch64:
-    return std::make_unique<RuntimeDyldMachOAArch64>(MemMgr, Resolver);
-  case Triple::aarch64_32:
-    return std::make_unique<RuntimeDyldMachOAArch64>(MemMgr, Resolver);
+    return make_unique<RuntimeDyldMachOAArch64>(MemMgr, Resolver);
   case Triple::x86:
-    return std::make_unique<RuntimeDyldMachOI386>(MemMgr, Resolver);
+    return make_unique<RuntimeDyldMachOI386>(MemMgr, Resolver);
   case Triple::x86_64:
-    return std::make_unique<RuntimeDyldMachOX86_64>(MemMgr, Resolver);
+    return make_unique<RuntimeDyldMachOX86_64>(MemMgr, Resolver);
   }
 }
 
 std::unique_ptr<RuntimeDyld::LoadedObjectInfo>
 RuntimeDyldMachO::loadObject(const object::ObjectFile &O) {
   if (auto ObjSectionToIDOrErr = loadObjectImpl(O))
-    return std::make_unique<LoadedMachOObjectInfo>(*this,
+    return llvm::make_unique<LoadedMachOObjectInfo>(*this,
                                                     *ObjSectionToIDOrErr);
   else {
     HasError = true;
     raw_string_ostream ErrStream(ErrorStr);
-    logAllUnhandledErrors(ObjSectionToIDOrErr.takeError(), ErrStream);
+    logAllUnhandledErrors(ObjSectionToIDOrErr.takeError(), ErrStream, "");
     return nullptr;
   }
 }

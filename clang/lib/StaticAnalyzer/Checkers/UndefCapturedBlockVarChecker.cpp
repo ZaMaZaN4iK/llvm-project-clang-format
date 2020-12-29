@@ -1,8 +1,9 @@
 // UndefCapturedBlockVarChecker.cpp - Uninitialized captured vars -*- C++ -*-=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/AST/Attr.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -54,7 +55,9 @@ UndefCapturedBlockVarChecker::checkPostStmt(const BlockExpr *BE,
     return;
 
   ProgramStateRef state = C.getState();
-  auto *R = cast<BlockDataRegion>(C.getSVal(BE).getAsRegion());
+  const BlockDataRegion *R =
+    cast<BlockDataRegion>(state->getSVal(BE,
+                                         C.getLocationContext()).getAsRegion());
 
   BlockDataRegion::referenced_vars_iterator I = R->referenced_vars_begin(),
                                             E = R->referenced_vars_end();
@@ -83,12 +86,11 @@ UndefCapturedBlockVarChecker::checkPostStmt(const BlockExpr *BE,
         os << "Variable '" << VD->getName()
            << "' is uninitialized when captured by block";
 
-        auto R = std::make_unique<PathSensitiveBugReport>(*BT, os.str(), N);
+        auto R = llvm::make_unique<BugReport>(*BT, os.str(), N);
         if (const Expr *Ex = FindBlockDeclRefExpr(BE->getBody(), VD))
           R->addRange(Ex->getSourceRange());
-        R->addVisitor(std::make_unique<FindLastStoreBRVisitor>(
-            *V, VR, /*EnableNullFPSuppression*/ false,
-            bugreporter::TrackingKind::Thorough));
+        R->addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
+            *V, VR, /*EnableNullFPSuppression*/ false));
         R->disablePathPruning();
         // need location of block
         C.emitReport(std::move(R));
@@ -99,8 +101,4 @@ UndefCapturedBlockVarChecker::checkPostStmt(const BlockExpr *BE,
 
 void ento::registerUndefCapturedBlockVarChecker(CheckerManager &mgr) {
   mgr.registerChecker<UndefCapturedBlockVarChecker>();
-}
-
-bool ento::shouldRegisterUndefCapturedBlockVarChecker(const LangOptions &LO) {
-  return true;
 }

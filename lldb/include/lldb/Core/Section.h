@@ -1,36 +1,27 @@
 //===-- Section.h -----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_Section_h_
 #define liblldb_Section_h_
 
+#include "lldb/Core/AddressRange.h"
+#include "lldb/Core/ConstString.h"
+#include "lldb/Core/Flags.h"
 #include "lldb/Core/ModuleChild.h"
-#include "lldb/Utility/ConstString.h"
-#include "lldb/Utility/Flags.h"
-#include "lldb/Utility/UserID.h"
-#include "lldb/lldb-defines.h"
-#include "lldb/lldb-enumerations.h"
-#include "lldb/lldb-forward.h"
-#include "lldb/lldb-types.h"
-
-#include <memory>
-#include <vector>
-
-#include <stddef.h>
-#include <stdint.h>
+#include "lldb/Core/RangeMap.h"
+#include "lldb/Core/UserID.h"
+#include "lldb/Core/VMRange.h"
+#include "lldb/Symbol/ObjectFile.h"
+#include "lldb/lldb-private.h"
+#include <limits.h>
 
 namespace lldb_private {
-class Address;
-class DataExtractor;
-class ObjectFile;
-class Section;
-class Stream;
-class Target;
 
 class SectionList {
 public:
@@ -38,13 +29,9 @@ public:
   typedef collection::iterator iterator;
   typedef collection::const_iterator const_iterator;
 
-  const_iterator begin() const { return m_sections.begin(); }
-  const_iterator end() const { return m_sections.end(); }
-  const_iterator begin() { return m_sections.begin(); }
-  const_iterator end() { return m_sections.end(); }
+  SectionList();
 
-  /// Create an empty list.
-  SectionList() = default;
+  ~SectionList();
 
   SectionList &operator=(const SectionList &rhs);
 
@@ -58,7 +45,7 @@ public:
 
   void Dump(Stream *s, Target *target, bool show_header, uint32_t depth) const;
 
-  lldb::SectionSP FindSectionByName(ConstString section_dstr) const;
+  lldb::SectionSP FindSectionByName(const ConstString &section_dstr) const;
 
   lldb::SectionSP FindSectionByID(lldb::user_id_t sect_id) const;
 
@@ -100,7 +87,7 @@ class Section : public std::enable_shared_from_this<Section>,
 public:
   // Create a root section (one that has no parent)
   Section(const lldb::ModuleSP &module_sp, ObjectFile *obj_file,
-          lldb::user_id_t sect_id, ConstString name,
+          lldb::user_id_t sect_id, const ConstString &name,
           lldb::SectionType sect_type, lldb::addr_t file_vm_addr,
           lldb::addr_t vm_size, lldb::offset_t file_offset,
           lldb::offset_t file_size, uint32_t log2align, uint32_t flags,
@@ -111,7 +98,7 @@ public:
                                                     // sections, non-NULL for
                                                     // child sections
           const lldb::ModuleSP &module_sp, ObjectFile *obj_file,
-          lldb::user_id_t sect_id, ConstString name,
+          lldb::user_id_t sect_id, const ConstString &name,
           lldb::SectionType sect_type, lldb::addr_t file_vm_addr,
           lldb::addr_t vm_size, lldb::offset_t file_offset,
           lldb::offset_t file_size, uint32_t log2align, uint32_t flags,
@@ -133,8 +120,7 @@ public:
 
   lldb::addr_t GetLoadBaseAddress(Target *target) const;
 
-  bool ResolveContainedAddress(lldb::addr_t offset, Address &so_addr,
-                               bool allow_section_end = false) const;
+  bool ResolveContainedAddress(lldb::addr_t offset, Address &so_addr) const;
 
   lldb::offset_t GetFileOffset() const { return m_file_offset; }
 
@@ -166,13 +152,11 @@ public:
 
   bool IsDescendant(const Section *section);
 
-  ConstString GetName() const { return m_name; }
+  const ConstString &GetName() const { return m_name; }
 
   bool Slide(lldb::addr_t slide_amount, bool slide_children);
 
   lldb::SectionType GetType() const { return m_type; }
-
-  const char *GetTypeAsCString() const;
 
   lldb::SectionSP GetParent() const { return m_parent_wp.lock(); }
 
@@ -180,49 +164,57 @@ public:
 
   void SetIsThreadSpecific(bool b) { m_thread_specific = b; }
 
+  //------------------------------------------------------------------
   /// Get the permissions as OR'ed bits from lldb::Permissions
+  //------------------------------------------------------------------
   uint32_t GetPermissions() const;
 
+  //------------------------------------------------------------------
   /// Set the permissions using bits OR'ed from lldb::Permissions
+  //------------------------------------------------------------------
   void SetPermissions(uint32_t permissions);
 
   ObjectFile *GetObjectFile() { return m_obj_file; }
   const ObjectFile *GetObjectFile() const { return m_obj_file; }
 
+  //------------------------------------------------------------------
   /// Read the section data from the object file that the section
   /// resides in.
   ///
-  /// \param[in] dst
+  /// @param[in] dst
   ///     Where to place the data
   ///
-  /// \param[in] dst_len
+  /// @param[in] dst_len
   ///     How many bytes of section data to read
   ///
-  /// \param[in] offset
+  /// @param[in] offset
   ///     The offset in bytes within this section's data at which to
   ///     start copying data from.
   ///
-  /// \return
+  /// @return
   ///     The number of bytes read from the section, or zero if the
   ///     section has no data or \a offset is not a valid offset
   ///     in this section.
+  //------------------------------------------------------------------
   lldb::offset_t GetSectionData(void *dst, lldb::offset_t dst_len,
                                 lldb::offset_t offset = 0);
 
+  //------------------------------------------------------------------
   /// Get the shared reference to the section data from the object
   /// file that the section resides in. No copies of the data will be
   /// make unless the object file has been read from memory. If the
   /// object file is on disk, it will shared the mmap data for the
   /// entire object file.
   ///
-  /// \param[in] data
+  /// @param[in] data
   ///     Where to place the data, address byte size, and byte order
   ///
-  /// \return
+  /// @return
   ///     The number of bytes read from the section, or zero if the
   ///     section has no data or \a offset is not a valid offset
   ///     in this section.
-  lldb::offset_t GetSectionData(DataExtractor &data);
+  //------------------------------------------------------------------
+  lldb::offset_t GetSectionData(DataExtractor &data) const;
 
   uint32_t GetLog2Align() { return m_log2align; }
 
@@ -230,10 +222,6 @@ public:
 
   // Get the number of host bytes required to hold a target byte
   uint32_t GetTargetByteSize() const { return m_target_byte_size; }
-
-  bool IsRelocated() const { return m_relocated; }
-
-  void SetIsRelocated(bool b) { m_relocated = b; }
 
 protected:
   ObjectFile *m_obj_file;   // The object file that data for this section should
@@ -254,15 +242,15 @@ protected:
   SectionList m_children; // Child sections
   bool m_fake : 1, // If true, then this section only can contain the address if
                    // one of its
-      // children contains an address. This allows for gaps between the
-      // children that are contained in the address range for this section, but
-      // do not produce hits unless the children contain the address.
+      // children contains an address. This allows for gaps between the children
+      // that are contained in the address range for this section, but do not
+      // produce
+      // hits unless the children contain the address.
       m_encrypted : 1,         // Set to true if the contents are encrypted
       m_thread_specific : 1,   // This section is thread specific
       m_readable : 1,          // If this section has read permissions
       m_writable : 1,          // If this section has write permissions
-      m_executable : 1,        // If this section has executable permissions
-      m_relocated : 1;         // If this section has had relocations applied
+      m_executable : 1;        // If this section has executable permissions
   uint32_t m_target_byte_size; // Some architectures have non-8-bit byte size.
                                // This is specified as
                                // as a multiple number of a host bytes

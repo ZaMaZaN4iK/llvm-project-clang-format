@@ -1,19 +1,23 @@
 //===-- CommandAlias.h -----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_CommandAlias_h_
 #define liblldb_CommandAlias_h_
 
+// C Includes
+// C++ Includes
 #include <memory>
 
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Interpreter/Args.h"
 #include "lldb/Interpreter/CommandObject.h"
-#include "lldb/Utility/Args.h"
-#include "lldb/Utility/CompletionRequest.h"
 #include "lldb/lldb-forward.h"
 
 namespace lldb_private {
@@ -36,11 +40,17 @@ public:
 
   bool WantsCompletion() override;
 
-  void HandleCompletion(CompletionRequest &request) override;
+  int HandleCompletion(Args &input, int &cursor_index,
+                       int &cursor_char_position, int match_start_point,
+                       int max_return_elements, bool &word_complete,
+                       StringList &matches) override;
 
-  void
-  HandleArgumentCompletion(CompletionRequest &request,
-                           OptionElementVector &opt_element_vector) override;
+  int HandleArgumentCompletion(Args &input, int &cursor_index,
+                               int &cursor_char_position,
+                               OptionElementVector &opt_element_vector,
+                               int match_start_point, int max_return_elements,
+                               bool &word_complete,
+                               StringList &matches) override;
 
   Options *GetOptions() override;
 
@@ -64,8 +74,8 @@ public:
   OptionArgVectorSP GetOptionArguments() const { return m_option_args_sp; }
   const char *GetOptionString() { return m_option_string.c_str(); }
 
-  // this takes an alias - potentially nested (i.e. an alias to an alias) and
-  // expands it all the way to a non-alias command
+  // this takes an alias - potentially nested (i.e. an alias to an alias)
+  // and expands it all the way to a non-alias command
   std::pair<lldb::CommandObjectSP, OptionArgVectorSP> Desugar();
 
 protected:

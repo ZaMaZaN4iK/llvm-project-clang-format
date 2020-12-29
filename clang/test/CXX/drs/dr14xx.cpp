@@ -1,35 +1,32 @@
 // RUN: %clang_cc1 -std=c++98 %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
 // RUN: %clang_cc1 -std=c++11 %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
 // RUN: %clang_cc1 -std=c++14 %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
-// RUN: %clang_cc1 -std=c++17 %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
-// RUN: %clang_cc1 -std=c++2a %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
+// RUN: %clang_cc1 -std=c++1z %s -verify -fexceptions -fcxx-exceptions -pedantic-errors
 
 #if __cplusplus < 201103L
 // expected-no-diagnostics
 #endif
 
-// dr1425: na abi
-
 namespace dr1460 { // dr1460: 3.5
 #if __cplusplus >= 201103L
   namespace DRExample {
     union A {
-      union {}; // expected-error {{does not declare anything}}
-      union {}; // expected-error {{does not declare anything}}
+      union {};
+      union {};
       constexpr A() {}
     };
     constexpr A a = A();
 
     union B {
-      union {}; // expected-error {{does not declare anything}}
-      union {}; // expected-error {{does not declare anything}}
+      union {};
+      union {};
       constexpr B() = default;
     };
     constexpr B b = B();
 
     union C {
-      union {}; // expected-error {{does not declare anything}}
-      union {}; // expected-error {{does not declare anything}}
+      union {};
+      union {};
     };
     constexpr C c = C();
 #if __cplusplus > 201103L
@@ -39,24 +36,18 @@ namespace dr1460 { // dr1460: 3.5
   }
 
   union A {};
-  union B { int n; }; // expected-note 0+{{here}}
+  union B { int n; }; // expected-note +{{here}}
   union C { int n = 0; };
-  struct D { union {}; }; // expected-error {{does not declare anything}}
-  struct E { union { int n; }; }; // expected-note 0+{{here}}
+  struct D { union {}; };
+  struct E { union { int n; }; }; // expected-note +{{here}}
   struct F { union { int n = 0; }; };
 
   struct X {
     friend constexpr A::A() noexcept;
-    friend constexpr B::B() noexcept;
-#if __cplusplus <= 201703L
-    // expected-error@-2 {{follows non-constexpr declaration}}
-#endif
+    friend constexpr B::B() noexcept; // expected-error {{follows non-constexpr declaration}}
     friend constexpr C::C() noexcept;
     friend constexpr D::D() noexcept;
-    friend constexpr E::E() noexcept;
-#if __cplusplus <= 201703L
-    // expected-error@-2 {{follows non-constexpr declaration}}
-#endif
+    friend constexpr E::E() noexcept; // expected-error {{follows non-constexpr declaration}}
     friend constexpr F::F() noexcept;
   };
 
@@ -71,61 +62,37 @@ namespace dr1460 { // dr1460: 3.5
 
   namespace Defaulted {
     union A { constexpr A() = default; };
-    union B { int n; constexpr B() = default; };
-#if __cplusplus <= 201703L
-    // expected-error@-2 {{not constexpr}}
-#endif
+    union B { int n; constexpr B() = default; }; // expected-error {{not constexpr}}
     union C { int n = 0; constexpr C() = default; };
-    struct D { union {}; constexpr D() = default; }; // expected-error {{does not declare anything}}
-    struct E { union { int n; }; constexpr E() = default; };
-#if __cplusplus <= 201703L
-    // expected-error@-2 {{not constexpr}}
-#endif
+    struct D { union {}; constexpr D() = default; };
+    struct E { union { int n; }; constexpr E() = default; }; // expected-error {{not constexpr}}
     struct F { union { int n = 0; }; constexpr F() = default; };
 
-    struct G { union { int n = 0; }; union { int m; }; constexpr G() = default; };
-#if __cplusplus <= 201703L
-    // expected-error@-2 {{not constexpr}}
-#endif
+    struct G { union { int n = 0; }; union { int m; }; constexpr G() = default; }; // expected-error {{not constexpr}}
     struct H {
       union {
         int n = 0;
       };
-      union { // expected-note 0-2{{member not initialized}}
+      union { // expected-note 2{{member not initialized}}
         int m;
       };
-      constexpr H() {}
-#if __cplusplus <= 201703L
-      // expected-error@-2 {{initialize all members}}
-#endif
+      constexpr H() {} // expected-error {{must initialize all members}}
       constexpr H(bool) : m(1) {}
-      constexpr H(char) : n(1) {}
-#if __cplusplus <= 201703L
-      // expected-error@-2 {{initialize all members}}
-#endif
+      constexpr H(char) : n(1) {} // expected-error {{must initialize all members}}
       constexpr H(double) : m(1), n(1) {}
     };
   }
 
 #if __cplusplus > 201103L
   template<typename T> constexpr bool check() {
-    T t;
-#if __cplusplus <= 201703L
-    // expected-note-re@-2 2{{non-constexpr constructor '{{[BE]}}'}}
-#endif
+    T t; // expected-note-re 2{{non-constexpr constructor '{{[BE]}}'}}
     return true;
   }
   static_assert(check<A>(), "");
-  static_assert(check<B>(), "");
-#if __cplusplus <= 201703L
-  // expected-error@-2 {{constant}} expected-note@-2 {{in call}}
-#endif
+  static_assert(check<B>(), ""); // expected-error {{constant}} expected-note {{in call}}
   static_assert(check<C>(), "");
   static_assert(check<D>(), "");
-  static_assert(check<E>(), "");
-#if __cplusplus <= 201703L
-  // expected-error@-2 {{constant}} expected-note@-2 {{in call}}
-#endif
+  static_assert(check<E>(), ""); // expected-error {{constant}} expected-note {{in call}}
   static_assert(check<F>(), "");
 #endif
 

@@ -1,11 +1,13 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// REQUIRES: c++experimental
 // UNSUPPORTED: c++98, c++03
 
 // <experimental/memory_resource>
@@ -16,9 +18,7 @@
 #include <type_traits>
 #include <cassert>
 
-#include "count_new.h"
-
-#include "test_macros.h"
+#include "count_new.hpp"
 
 namespace ex = std::experimental::pmr;
 
@@ -93,12 +93,10 @@ void test_allocate_deallocate()
 
 }
 
-int main(int, char**)
+int main()
 {
     static_assert(noexcept(ex::new_delete_resource()), "Must be noexcept");
     test_return();
     test_equality();
     test_allocate_deallocate();
-
-  return 0;
 }

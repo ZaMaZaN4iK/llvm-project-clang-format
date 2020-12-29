@@ -1,8 +1,10 @@
 """Test the SBData APIs."""
 
+from __future__ import print_function
 
 
 from math import fabs
+import os
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -12,7 +14,6 @@ from lldbsuite.test import lldbutil
 class SBDataAPICase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
-    NO_DEBUG_INFO_TESTCASE = True
 
     def setUp(self):
         # Call super's setUp().
@@ -21,30 +22,10 @@ class SBDataAPICase(TestBase):
         self.line = line_number('main.cpp', '// set breakpoint here')
 
     @add_test_categories(['pyapi'])
-    def test_byte_order_and_address_byte_size(self):
-        """Test the SBData::SetData() to ensure the byte order and address
-        byte size are obeyed"""
-        addr_data = b'\x11\x22\x33\x44\x55\x66\x77\x88'
-        error = lldb.SBError()
-        data = lldb.SBData()
-        data.SetData(error, addr_data, lldb.eByteOrderBig, 4)
-        addr = data.GetAddress(error, 0)
-        self.assertTrue(addr == 0x11223344);
-        data.SetData(error, addr_data, lldb.eByteOrderBig, 8)
-        addr = data.GetAddress(error, 0)
-        self.assertTrue(addr == 0x1122334455667788);
-        data.SetData(error, addr_data, lldb.eByteOrderLittle, 4)
-        addr = data.GetAddress(error, 0)
-        self.assertTrue(addr == 0x44332211);
-        data.SetData(error, addr_data, lldb.eByteOrderLittle, 8)
-        addr = data.GetAddress(error, 0)
-        self.assertTrue(addr == 0x8877665544332211);
-
-    @add_test_categories(['pyapi'])
     def test_with_run_command(self):
         """Test the SBData APIs."""
         self.build()
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(
             self, "main.cpp", self.line, num_expected_locations=1, loc_exact=True)
@@ -65,9 +46,18 @@ class SBDataAPICase(TestBase):
         self.assertIsNotNone(thread)
 
         frame = thread.GetSelectedFrame()
+        if self.TraceOn():
+            print(frame)
         foobar = frame.FindVariable('foobar')
         self.assertTrue(foobar.IsValid())
+        if self.TraceOn():
+            print(foobar)
+
         data = foobar.GetPointeeData(0, 2)
+
+        if self.TraceOn():
+            print(data)
+
         offset = 0
         error = lldb.SBError()
 
@@ -124,6 +114,9 @@ class SBDataAPICase(TestBase):
 
         data = star_foobar.GetData()
 
+        if self.TraceOn():
+            print(data)
+
         offset = 0
         self.assert_data(data.GetUnsignedInt32, offset, 1)
         offset += 4
@@ -142,7 +135,13 @@ class SBDataAPICase(TestBase):
         new_foobar = foobar.CreateValueFromAddress(
             "f00", foobar_addr, star_foobar.GetType())
         self.assertTrue(new_foobar.IsValid())
+        if self.TraceOn():
+            print(new_foobar)
+
         data = new_foobar.GetData()
+
+        if self.TraceOn():
+            print(data)
 
         self.assertTrue(data.uint32[0] == 8, 'then foo[1].a == 8')
         self.assertTrue(data.uint32[1] == 7, 'then foo[1].b == 7')
@@ -167,6 +166,9 @@ class SBDataAPICase(TestBase):
 
         data = new_foobar.GetData()
 
+        if self.TraceOn():
+            print(data)
+
         offset = 0
         self.assert_data(data.GetUnsignedInt32, offset, 8)
         offset += 4
@@ -186,6 +188,13 @@ class SBDataAPICase(TestBase):
         barfoo = frame.FindVariable('barfoo')
 
         data = barfoo.GetData()
+
+        if self.TraceOn():
+            print(barfoo)
+
+        if self.TraceOn():
+            print(data)
+
         offset = 0
         self.assert_data(data.GetUnsignedInt32, offset, 1)
         offset += 4
@@ -216,6 +225,10 @@ class SBDataAPICase(TestBase):
         new_object = barfoo.CreateValueFromData(
             "new_object", data, barfoo.GetType().GetBasicType(
                 lldb.eBasicTypeInt))
+
+        if self.TraceOn():
+            print(new_object)
+
         self.assertTrue(new_object.GetValue() == "1", 'new_object == 1')
 
         if data.GetByteOrder() == lldb.eByteOrderBig:
@@ -241,6 +254,9 @@ class SBDataAPICase(TestBase):
         self.assertTrue(error.Success())
 
         data.Append(data2)
+
+        if self.TraceOn():
+            print(data)
 
         # this breaks on EBCDIC
         offset = 0

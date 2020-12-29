@@ -1,5 +1,5 @@
 set(LLVM_LINK_COMPONENTS
-  AllTargetsInfos
+  ${LLVM_TARGETS_TO_BUILD}
   Object
   Support
   )

@@ -1,6 +1,5 @@
 // RUN: %clang %s -### \
 // RUN:     -fuse-ld=/usr/local/bin/or1k-linux-ld 2>&1 \
-// RUN:     -target x86_64-unknown-linux \
 // RUN:   | FileCheck %s --check-prefix=CHECK-ABSOLUTE-LD
 // CHECK-ABSOLUTE-LD: /usr/local/bin/or1k-linux-ld
 
@@ -68,29 +67,3 @@
 // RUN:     -gcc-toolchain %S/Inputs/basic_android_tree 2>&1 \
 // RUN:   | FileCheck %s -check-prefix=CHECK-ANDROID-ARM-GOLD-TC
 // CHECK-ANDROID-ARM-GOLD-TC: Inputs/basic_android_tree/lib/gcc/arm-linux-androideabi/4.4.3/../../../../arm-linux-androideabi/bin{{/|\\+}}ld.gold
-
-
-// RUN: %clang %s -### -fuse-ld=link \
-// RUN:     -target i686-unknown-windows-msvc 2>&1 \
-// RUN:   | FileCheck %s --check-prefix CHECK-WINDOWS-MSVC-LINK
-// CHECK-WINDOWS-MSVC-LINK: "{{.*}}link.exe"
-// CHECK-WINDOWS-MSVC-LINK-SAME: "-out:{{.*}}"
-
-// RUN: %clang %s -### -fuse-ld=lld \
-// RUN:     -target i686-unknown-windows-msvc 2>&1 \
-// RUN:   | FileCheck %s --check-prefix CHECK-WINDOWS-MSVC-LLD
-// CHECK-WINDOWS-MSVC-LLD: "{{.*}}lld-link{{\.exe"|"}}
-// CHECK-WINDOWS-MSVC-LLD-SAME: "-out:{{.*}}"
-
-// RUN: %clang %s -### -fuse-ld=lld-link \
-// RUN:     -target i686-unknown-windows-msvc 2>&1 \
-// RUN:   | FileCheck %s --check-prefix CHECK-WINDOWS-MSVC-LLD-LINK
-// CHECK-WINDOWS-MSVC-LLD-LINK: "{{.*}}lld-link{{\.exe"|"}}
-// CHECK-WINDOWS-MSVC-LLD-LINK-SAME: "-out:{{.*}}"
-
-// RUN: %clang %s -### -fuse-ld=bfd \
-// RUN:     -target i686-unknown-windows-msvc \
-// RUN:     -B %S/Inputs/Windows/usr/bin 2>&1 \
-// RUN:   | FileCheck %s --check-prefix CHECK-WINDOWS-MSVC-BFD
-// CHECK-WINDOWS-MSVC-BFD: "{{.*}}ld.bfd"
-// CHECK-WINDOWS-MSVC-BFD-SAME: "-o"

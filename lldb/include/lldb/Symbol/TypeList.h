@@ -1,8 +1,9 @@
 //===-- TypeList.h ----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,7 +20,9 @@ namespace lldb_private {
 
 class TypeList {
 public:
+  //------------------------------------------------------------------
   // Constructors and Destructors
+  //------------------------------------------------------------------
   TypeList();
 
   virtual ~TypeList();
@@ -28,13 +31,14 @@ public:
 
   void Dump(Stream *s, bool show_context);
 
-  TypeList FindTypes(ConstString name);
+  //    lldb::TypeSP
+  //    FindType(lldb::user_id_t uid);
+
+  TypeList FindTypes(const ConstString &name);
 
   void Insert(const lldb::TypeSP &type);
 
   uint32_t GetSize() const;
-
-  bool Empty() const { return !GetSize(); }
 
   lldb::TypeSP GetTypeAtIndex(uint32_t idx);
 

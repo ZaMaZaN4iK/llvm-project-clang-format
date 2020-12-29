@@ -1,8 +1,9 @@
 //===- Version.cpp - Clang Version Number -----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,8 +18,8 @@
 #include <cstdlib>
 #include <cstring>
 
-#ifdef HAVE_VCS_VERSION_INC
-#include "VCSVersion.inc"
+#ifdef HAVE_SVN_VERSION_INC
+#  include "SVNVersion.inc"
 #endif
 
 namespace clang {
@@ -27,13 +28,13 @@ std::string getClangRepositoryPath() {
 #if defined(CLANG_REPOSITORY_STRING)
   return CLANG_REPOSITORY_STRING;
 #else
-#ifdef CLANG_REPOSITORY
-  StringRef URL(CLANG_REPOSITORY);
+#ifdef SVN_REPOSITORY
+  StringRef URL(SVN_REPOSITORY);
 #else
   StringRef URL("");
 #endif
 
-  // If the CLANG_REPOSITORY is empty, try to use the SVN keyword. This helps us
+  // If the SVN_REPOSITORY is empty, try to use the SVN keyword. This helps us
   // pick up a tag in an SVN export, for example.
   StringRef SVNRepository("$URL$");
   if (URL.empty()) {
@@ -71,8 +72,8 @@ std::string getLLVMRepositoryPath() {
 }
 
 std::string getClangRevision() {
-#ifdef CLANG_REVISION
-  return CLANG_REVISION;
+#ifdef SVN_REVISION
+  return SVN_REVISION;
 #else
   return "";
 #endif
@@ -126,6 +127,11 @@ std::string getClangToolFullVersion(StringRef ToolName) {
 #endif
   OS << ToolName << " version " CLANG_VERSION_STRING " "
      << getClangFullRepositoryVersion();
+
+  // If vendor supplied, include the base LLVM version as well.
+#ifdef CLANG_VENDOR
+  OS << " (based on " << BACKEND_PACKAGE_STRING << ")";
+#endif
 
   return OS.str();
 }

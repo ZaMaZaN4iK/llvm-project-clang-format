@@ -1,32 +1,36 @@
 //===-- AppleThreadPlanStepThroughObjCTrampoline.cpp
+//--------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "AppleThreadPlanStepThroughObjCTrampoline.h"
-
 #include "AppleObjCTrampolineHandler.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Expression/DiagnosticManager.h"
 #include "lldb/Expression/FunctionCaller.h"
 #include "lldb/Expression/UtilityFunction.h"
 #include "lldb/Target/ExecutionContext.h"
+#include "lldb/Target/ObjCLanguageRuntime.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Thread.h"
 #include "lldb/Target/ThreadPlanRunToAddress.h"
 #include "lldb/Target/ThreadPlanStepOut.h"
-#include "lldb/Utility/Log.h"
-
-#include "Plugins/LanguageRuntime/ObjC/ObjCLanguageRuntime.h"
-
-#include <memory>
 
 using namespace lldb;
 using namespace lldb_private;
 
+//----------------------------------------------------------------------
 // ThreadPlanStepThroughObjCTrampoline constructor
+//----------------------------------------------------------------------
 AppleThreadPlanStepThroughObjCTrampoline::
     AppleThreadPlanStepThroughObjCTrampoline(
         Thread &thread, AppleObjCTrampolineHandler *trampoline_handler,
@@ -37,17 +41,19 @@ AppleThreadPlanStepThroughObjCTrampoline::
                  eVoteNoOpinion),
       m_trampoline_handler(trampoline_handler),
       m_args_addr(LLDB_INVALID_ADDRESS), m_input_values(input_values),
-      m_isa_addr(isa_addr), m_sel_addr(sel_addr), m_impl_function(nullptr),
+      m_isa_addr(isa_addr), m_sel_addr(sel_addr), m_impl_function(NULL),
       m_stop_others(stop_others) {}
 
+//----------------------------------------------------------------------
 // Destructor
+//----------------------------------------------------------------------
 AppleThreadPlanStepThroughObjCTrampoline::
     ~AppleThreadPlanStepThroughObjCTrampoline() {}
 
 void AppleThreadPlanStepThroughObjCTrampoline::DidPush() {
   // Setting up the memory space for the called function text might require
-  // allocations, i.e. a nested function call.  This needs to be done as a
-  // PreResumeAction.
+  // allocations,
+  // i.e. a nested function call.  This needs to be done as a PreResumeAction.
   m_thread.GetProcess()->AddPreResumeAction(PreResumeInitializeFunctionCaller,
                                             (void *)this);
 }
@@ -104,7 +110,8 @@ bool AppleThreadPlanStepThroughObjCTrampoline::DoPlanExplainsStop(
     Event *event_ptr) {
   // If we get asked to explain the stop it will be because something went
   // wrong (like the implementation for selector function crashed...  We're
-  // going to figure out what to do about that, so we do explain the stop.
+  // going
+  // to figure out what to do about that, so we do explain the stop.
   return true;
 }
 
@@ -128,7 +135,8 @@ bool AppleThreadPlanStepThroughObjCTrampoline::ShouldStop(Event *event_ptr) {
   }
 
   // Second stage, if all went well with the function calling, then fetch the
-  // target address, and queue up a "run to that address" plan.
+  // target address, and
+  // queue up a "run to that address" plan.
   if (!m_run_to_sp) {
     Value target_addr_value;
     ExecutionContext exc_ctx;
@@ -141,46 +149,47 @@ bool AppleThreadPlanStepThroughObjCTrampoline::ShouldStop(Event *event_ptr) {
     target_so_addr.SetOpcodeLoadAddress(target_addr, exc_ctx.GetTargetPtr());
     Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_STEP));
     if (target_addr == 0) {
-      LLDB_LOGF(log, "Got target implementation of 0x0, stopping.");
+      if (log)
+        log->Printf("Got target implementation of 0x0, stopping.");
       SetPlanComplete();
       return true;
     }
     if (m_trampoline_handler->AddrIsMsgForward(target_addr)) {
-      LLDB_LOGF(log,
-                "Implementation lookup returned msgForward function: 0x%" PRIx64
-                ", stopping.",
-                target_addr);
+      if (log)
+        log->Printf(
+            "Implementation lookup returned msgForward function: 0x%" PRIx64
+            ", stopping.",
+            target_addr);
 
       SymbolContext sc = m_thread.GetStackFrameAtIndex(0)->GetSymbolContext(
           eSymbolContextEverything);
-      Status status;
       const bool abort_other_plans = false;
       const bool first_insn = true;
       const uint32_t frame_idx = 0;
       m_run_to_sp = m_thread.QueueThreadPlanForStepOutNoShouldStop(
           abort_other_plans, &sc, first_insn, m_stop_others, eVoteNoOpinion,
-          eVoteNoOpinion, frame_idx, status);
-      if (m_run_to_sp && status.Success())
-        m_run_to_sp->SetPrivate(true);
+          eVoteNoOpinion, frame_idx);
+      m_run_to_sp->SetPrivate(true);
       return false;
     }
 
-    LLDB_LOGF(log, "Running to ObjC method implementation: 0x%" PRIx64,
-              target_addr);
+    if (log)
+      log->Printf("Running to ObjC method implementation: 0x%" PRIx64,
+                  target_addr);
 
     ObjCLanguageRuntime *objc_runtime =
-        ObjCLanguageRuntime::Get(*GetThread().GetProcess());
-    assert(objc_runtime != nullptr);
+        GetThread().GetProcess()->GetObjCLanguageRuntime();
+    assert(objc_runtime != NULL);
     objc_runtime->AddToMethodCache(m_isa_addr, m_sel_addr, target_addr);
-    LLDB_LOGF(log,
-              "Adding {isa-addr=0x%" PRIx64 ", sel-addr=0x%" PRIx64
-              "} = addr=0x%" PRIx64 " to cache.",
-              m_isa_addr, m_sel_addr, target_addr);
+    if (log)
+      log->Printf("Adding {isa-addr=0x%" PRIx64 ", sel-addr=0x%" PRIx64
+                  "} = addr=0x%" PRIx64 " to cache.",
+                  m_isa_addr, m_sel_addr, target_addr);
 
     // Extract the target address from the value:
 
-    m_run_to_sp = std::make_shared<ThreadPlanRunToAddress>(
-        m_thread, target_so_addr, m_stop_others);
+    m_run_to_sp.reset(
+        new ThreadPlanRunToAddress(m_thread, target_so_addr, m_stop_others));
     m_thread.QueueThreadPlan(m_run_to_sp, false);
     m_run_to_sp->SetPrivate(true);
     return false;
@@ -192,10 +201,13 @@ bool AppleThreadPlanStepThroughObjCTrampoline::ShouldStop(Event *event_ptr) {
   return false;
 }
 
-// The base class MischiefManaged does some cleanup - so you have to call it in
-// your MischiefManaged derived class.
+// The base class MischiefManaged does some cleanup - so you have to call it
+// in your MischiefManaged derived class.
 bool AppleThreadPlanStepThroughObjCTrampoline::MischiefManaged() {
-  return IsPlanComplete();
+  if (IsPlanComplete())
+    return true;
+  else
+    return false;
 }
 
 bool AppleThreadPlanStepThroughObjCTrampoline::WillStop() { return true; }

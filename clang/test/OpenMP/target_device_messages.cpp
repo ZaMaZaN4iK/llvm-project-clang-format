@@ -1,6 +1,4 @@
-// RUN: %clang_cc1 -triple x86_64-apple-macos10.7.0 -verify -fopenmp -ferror-limit 100 -o - %s -Wuninitialized
-
-// RUN: %clang_cc1 -triple x86_64-apple-macos10.7.0 -verify -fopenmp-simd -ferror-limit 100 -o - %s -Wuninitialized
+// RUN: %clang_cc1 -triple x86_64-apple-macos10.7.0 -verify -fopenmp -ferror-limit 100 -o - %s
 
 void foo() {
 }
@@ -12,7 +10,6 @@ bool foobool(int argc) {
 struct S1; // expected-note {{declared here}}
 
 int main(int argc, char **argv) {
-  int z;
   #pragma omp target device // expected-error {{expected '(' after 'device'}}
   foo();
   #pragma omp target device ( // expected-error {{expected expression}} expected-error {{expected ')'}} expected-note {{to match this '('}}
@@ -21,7 +18,7 @@ int main(int argc, char **argv) {
   foo();
   #pragma omp target device (argc // expected-error {{expected ')'}} expected-note {{to match this '('}}
   foo();
-  #pragma omp target device (z-argc)) // expected-warning {{extra tokens at the end of '#pragma omp target' are ignored}}
+  #pragma omp target device (argc)) // expected-warning {{extra tokens at the end of '#pragma omp target' are ignored}}
   foo();
   #pragma omp target device (argc > 0 ? argv[1] : argv[2]) // expected-error {{expression must have integral or unscoped enumeration type, not 'char *'}}
   foo();

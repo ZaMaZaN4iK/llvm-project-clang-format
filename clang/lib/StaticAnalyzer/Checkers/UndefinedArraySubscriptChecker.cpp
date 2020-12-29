@@ -1,8 +1,9 @@
 //===--- UndefinedArraySubscriptChecker.h ----------------------*- C++ -*--===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -52,16 +53,12 @@ UndefinedArraySubscriptChecker::checkPreStmt(const ArraySubscriptExpr *A,
     BT.reset(new BuiltinBug(this, "Array subscript is undefined"));
 
   // Generate a report for this bug.
-  auto R = std::make_unique<PathSensitiveBugReport>(*BT, BT->getDescription(), N);
+  auto R = llvm::make_unique<BugReport>(*BT, BT->getName(), N);
   R->addRange(A->getIdx()->getSourceRange());
-  bugreporter::trackExpressionValue(N, A->getIdx(), *R);
+  bugreporter::trackNullOrUndefValue(N, A->getIdx(), *R);
   C.emitReport(std::move(R));
 }
 
 void ento::registerUndefinedArraySubscriptChecker(CheckerManager &mgr) {
   mgr.registerChecker<UndefinedArraySubscriptChecker>();
-}
-
-bool ento::shouldRegisterUndefinedArraySubscriptChecker(const LangOptions &LO) {
-  return true;
 }

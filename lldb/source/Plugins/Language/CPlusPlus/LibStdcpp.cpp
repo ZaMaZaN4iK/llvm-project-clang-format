@@ -1,23 +1,28 @@
 //===-- LibStdcpp.cpp -------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "LibStdcpp.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/DataBufferHeap.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Core/ValueObjectConstResult.h"
 #include "lldb/DataFormatters/StringPrinter.h"
 #include "lldb/DataFormatters/VectorIterator.h"
+#include "lldb/Host/Endian.h"
 #include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/Endian.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -49,7 +54,7 @@ public:
 
   bool MightHaveChildren() override;
 
-  size_t GetIndexOfChildWithName(ConstString name) override;
+  size_t GetIndexOfChildWithName(const ConstString &name) override;
 
 private:
   ExecutionContextRef m_exe_ctx_ref;
@@ -70,7 +75,7 @@ public:
 
   bool MightHaveChildren() override;
 
-  size_t GetIndexOfChildWithName(ConstString name) override;
+  size_t GetIndexOfChildWithName(const ConstString &name) override;
 };
 
 } // end of anonymous namespace
@@ -112,8 +117,11 @@ bool LibstdcppMapIteratorSyntheticFrontEnd::Update() {
 
   CompilerType my_type(valobj_sp->GetCompilerType());
   if (my_type.GetNumTemplateArguments() >= 1) {
-    CompilerType pair_type = my_type.GetTypeTemplateArgument(0);
-    if (!pair_type)
+    TemplateArgumentKind kind;
+    CompilerType pair_type = my_type.GetTemplateArgument(0, kind);
+    if (kind != eTemplateArgumentKindType &&
+        kind != eTemplateArgumentKindTemplate &&
+        kind != eTemplateArgumentKindTemplateExpansion)
       return false;
     m_pair_type = pair_type;
   } else
@@ -141,10 +149,10 @@ LibstdcppMapIteratorSyntheticFrontEnd::GetChildAtIndex(size_t idx) {
 bool LibstdcppMapIteratorSyntheticFrontEnd::MightHaveChildren() { return true; }
 
 size_t LibstdcppMapIteratorSyntheticFrontEnd::GetIndexOfChildWithName(
-    ConstString name) {
-  if (name == "first")
+    const ConstString &name) {
+  if (name == ConstString("first"))
     return 0;
-  if (name == "second")
+  if (name == ConstString("second"))
     return 1;
   return UINT32_MAX;
 }
@@ -201,7 +209,7 @@ bool VectorIteratorSyntheticFrontEnd::Update() {
     return false;
   if (item_ptr->GetValueAsUnsigned(0) == 0)
     return false;
-  Status err;
+  Error err;
   m_exe_ctx_ref = valobj_sp->GetExecutionContextRef();
   m_item_sp = CreateValueObjectFromAddress(
       "item", item_ptr->GetValueAsUnsigned(0), m_exe_ctx_ref,
@@ -223,8 +231,8 @@ VectorIteratorSyntheticFrontEnd::GetChildAtIndex(size_t idx) {
 bool VectorIteratorSyntheticFrontEnd::MightHaveChildren() { return true; }
 
 size_t VectorIteratorSyntheticFrontEnd::GetIndexOfChildWithName(
-    ConstString name) {
-  if (name == "item")
+    const ConstString &name) {
+  if (name == ConstString("item"))
     return 0;
   return UINT32_MAX;
 }
@@ -243,7 +251,7 @@ bool lldb_private::formatters::LibStdcppStringSummaryProvider(
         return false;
 
       StringPrinter::ReadStringAndDumpToStreamOptions options(valobj);
-      Status error;
+      Error error;
       lldb::addr_t addr_of_data =
           process_sp->ReadPointerFromMemory(addr_of_string, error);
       if (error.Fail() || addr_of_data == 0 ||
@@ -296,14 +304,11 @@ bool lldb_private::formatters::LibStdcppWStringSummaryProvider(
       if (!wchar_compiler_type)
         return false;
 
-      // Safe to pass nullptr for exe_scope here.
-      llvm::Optional<uint64_t> size = wchar_compiler_type.GetBitSize(nullptr);
-      if (!size)
-        return false;
-      const uint32_t wchar_size = *size;
+      const uint32_t wchar_size = wchar_compiler_type.GetBitSize(
+          nullptr); // Safe to pass NULL for exe_scope here
 
       StringPrinter::ReadStringAndDumpToStreamOptions options(valobj);
-      Status error;
+      Error error;
       lldb::addr_t addr_of_data =
           process_sp->ReadPointerFromMemory(addr_of_string, error);
       if (error.Fail() || addr_of_data == 0 ||
@@ -373,8 +378,8 @@ bool LibStdcppSharedPtrSyntheticFrontEnd::Update() { return false; }
 bool LibStdcppSharedPtrSyntheticFrontEnd::MightHaveChildren() { return true; }
 
 size_t LibStdcppSharedPtrSyntheticFrontEnd::GetIndexOfChildWithName(
-    ConstString name) {
-  if (name == "_M_ptr")
+    const ConstString &name) {
+  if (name == ConstString("_M_ptr"))
     return 0;
   return UINT32_MAX;
 }
@@ -409,7 +414,7 @@ bool lldb_private::formatters::LibStdcppSmartPointerSummaryProvider(
     return true;
   }
 
-  Status error;
+  Error error;
   ValueObjectSP pointee_sp = ptr_sp->Dereference(error);
   if (pointee_sp && error.Success()) {
     if (pointee_sp->DumpPrintableRepresentation(

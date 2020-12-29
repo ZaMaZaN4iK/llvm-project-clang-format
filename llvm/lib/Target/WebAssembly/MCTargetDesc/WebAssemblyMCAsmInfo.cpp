@@ -1,29 +1,28 @@
 //===-- WebAssemblyMCAsmInfo.cpp - WebAssembly asm properties -------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This file contains the declarations of the WebAssemblyMCAsmInfo
+/// \brief This file contains the declarations of the WebAssemblyMCAsmInfo
 /// properties.
 ///
 //===----------------------------------------------------------------------===//
 
 #include "WebAssemblyMCAsmInfo.h"
 #include "llvm/ADT/Triple.h"
-
 using namespace llvm;
 
 #define DEBUG_TYPE "wasm-mc-asm-info"
 
-WebAssemblyMCAsmInfo::~WebAssemblyMCAsmInfo() = default; // anchor.
+WebAssemblyMCAsmInfo::~WebAssemblyMCAsmInfo() {}
 
-WebAssemblyMCAsmInfo::WebAssemblyMCAsmInfo(const Triple &T,
-                                           const MCTargetOptions &Options) {
-  CodePointerSize = CalleeSaveStackSlotSize = T.isArch64Bit() ? 8 : 4;
+WebAssemblyMCAsmInfo::WebAssemblyMCAsmInfo(const Triple &T) {
+  PointerSize = CalleeSaveStackSlotSize = T.isArch64Bit() ? 8 : 4;
 
   // TODO: What should MaxInstLength be?
 
@@ -44,5 +43,11 @@ WebAssemblyMCAsmInfo::WebAssemblyMCAsmInfo(const Triple &T,
 
   SupportsDebugInformation = true;
 
+  // For now, WebAssembly does not support exceptions.
+  ExceptionsType = ExceptionHandling::None;
+
   // TODO: UseIntegratedAssembler?
+
+  // WebAssembly's stack is never executable.
+  UsesNonexecutableStackSection = false;
 }

@@ -1,16 +1,17 @@
 //===-- PipePosix.cpp -------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Host/posix/PipePosix.h"
+#include "lldb/Host/FileSystem.h"
 #include "lldb/Host/HostInfo.h"
 #include "lldb/Utility/SelectHelper.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/Support/Errno.h"
 #include "llvm/Support/FileSystem.h"
 
 #if defined(__GNUC__) && (__GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 8))
@@ -61,13 +62,12 @@ bool SetCloexecFlag(int fd) {
 std::chrono::time_point<std::chrono::steady_clock> Now() {
   return std::chrono::steady_clock::now();
 }
-} // namespace
+}
 
 PipePosix::PipePosix()
     : m_fds{PipePosix::kInvalidDescriptor, PipePosix::kInvalidDescriptor} {}
 
-PipePosix::PipePosix(lldb::pipe_t read, lldb::pipe_t write)
-    : m_fds{read, write} {}
+PipePosix::PipePosix(int read_fd, int write_fd) : m_fds{read_fd, write_fd} {}
 
 PipePosix::PipePosix(PipePosix &&pipe_posix)
     : PipeBase{std::move(pipe_posix)},
@@ -83,11 +83,11 @@ PipePosix &PipePosix::operator=(PipePosix &&pipe_posix) {
 
 PipePosix::~PipePosix() { Close(); }
 
-Status PipePosix::CreateNew(bool child_processes_inherit) {
+Error PipePosix::CreateNew(bool child_processes_inherit) {
   if (CanRead() || CanWrite())
-    return Status(EINVAL, eErrorTypePOSIX);
+    return Error(EINVAL, eErrorTypePOSIX);
 
-  Status error;
+  Error error;
 #if PIPE2_SUPPORTED
   if (::pipe2(m_fds, (child_processes_inherit) ? 0 : O_CLOEXEC) == 0)
     return error;
@@ -112,31 +112,35 @@ Status PipePosix::CreateNew(bool child_processes_inherit) {
   return error;
 }
 
-Status PipePosix::CreateNew(llvm::StringRef name, bool child_process_inherit) {
+Error PipePosix::CreateNew(llvm::StringRef name, bool child_process_inherit) {
   if (CanRead() || CanWrite())
-    return Status("Pipe is already opened");
+    return Error("Pipe is already opened");
 
-  Status error;
+  Error error;
   if (::mkfifo(name.data(), 0660) != 0)
     error.SetErrorToErrno();
 
   return error;
 }
 
-Status PipePosix::CreateWithUniqueName(llvm::StringRef prefix,
-                                       bool child_process_inherit,
-                                       llvm::SmallVectorImpl<char> &name) {
-  llvm::SmallString<128> named_pipe_path;
-  llvm::SmallString<128> pipe_spec((prefix + ".%%%%%%").str());
-  FileSpec tmpdir_file_spec = HostInfo::GetProcessTempDir();
-  if (!tmpdir_file_spec)
+Error PipePosix::CreateWithUniqueName(llvm::StringRef prefix,
+                                      bool child_process_inherit,
+                                      llvm::SmallVectorImpl<char> &name) {
+  llvm::SmallString<PATH_MAX> named_pipe_path;
+  llvm::SmallString<PATH_MAX> pipe_spec((prefix + ".%%%%%%").str());
+  FileSpec tmpdir_file_spec;
+  tmpdir_file_spec.Clear();
+  if (HostInfo::GetLLDBPath(ePathTypeLLDBTempSystemDir, tmpdir_file_spec)) {
+    tmpdir_file_spec.AppendPathComponent(pipe_spec.c_str());
+  } else {
     tmpdir_file_spec.AppendPathComponent("/tmp");
-  tmpdir_file_spec.AppendPathComponent(pipe_spec);
+    tmpdir_file_spec.AppendPathComponent(pipe_spec.c_str());
+  }
 
   // It's possible that another process creates the target path after we've
-  // verified it's available but before we create it, in which case we should
-  // try again.
-  Status error;
+  // verified it's available but before we create it, in which case we
+  // should try again.
+  Error error;
   do {
     llvm::sys::fs::createUniqueFile(tmpdir_file_spec.GetPath(),
                                     named_pipe_path);
@@ -148,17 +152,17 @@ Status PipePosix::CreateWithUniqueName(llvm::StringRef prefix,
   return error;
 }
 
-Status PipePosix::OpenAsReader(llvm::StringRef name,
-                               bool child_process_inherit) {
+Error PipePosix::OpenAsReader(llvm::StringRef name,
+                              bool child_process_inherit) {
   if (CanRead() || CanWrite())
-    return Status("Pipe is already opened");
+    return Error("Pipe is already opened");
 
   int flags = O_RDONLY | O_NONBLOCK;
   if (!child_process_inherit)
     flags |= O_CLOEXEC;
 
-  Status error;
-  int fd = llvm::sys::RetryAfterSignal(-1, ::open, name.data(), flags);
+  Error error;
+  int fd = ::open(name.data(), flags);
   if (fd != -1)
     m_fds[READ] = fd;
   else
@@ -167,12 +171,11 @@ Status PipePosix::OpenAsReader(llvm::StringRef name,
   return error;
 }
 
-Status
-PipePosix::OpenAsWriterWithTimeout(llvm::StringRef name,
-                                   bool child_process_inherit,
-                                   const std::chrono::microseconds &timeout) {
+Error PipePosix::OpenAsWriterWithTimeout(
+    llvm::StringRef name, bool child_process_inherit,
+    const std::chrono::microseconds &timeout) {
   if (CanRead() || CanWrite())
-    return Status("Pipe is already opened");
+    return Error("Pipe is already opened");
 
   int flags = O_WRONLY | O_NONBLOCK;
   if (!child_process_inherit)
@@ -185,7 +188,7 @@ PipePosix::OpenAsWriterWithTimeout(llvm::StringRef name,
     if (timeout != microseconds::zero()) {
       const auto dur = duration_cast<microseconds>(finish_time - Now()).count();
       if (dur <= 0)
-        return Status("timeout exceeded - reader hasn't opened so far");
+        return Error("timeout exceeded - reader hasn't opened so far");
     }
 
     errno = 0;
@@ -193,8 +196,8 @@ PipePosix::OpenAsWriterWithTimeout(llvm::StringRef name,
     if (fd == -1) {
       const auto errno_copy = errno;
       // We may get ENXIO if a reader side of the pipe hasn't opened yet.
-      if (errno_copy != ENXIO && errno_copy != EINTR)
-        return Status(errno_copy, eErrorTypePOSIX);
+      if (errno_copy != ENXIO)
+        return Error(errno_copy, eErrorTypePOSIX);
 
       std::this_thread::sleep_for(
           milliseconds(OPEN_WRITER_SLEEP_TIMEOUT_MSECS));
@@ -203,7 +206,7 @@ PipePosix::OpenAsWriterWithTimeout(llvm::StringRef name,
     }
   }
 
-  return Status();
+  return Error();
 }
 
 int PipePosix::GetReadFileDescriptor() const { return m_fds[READ]; }
@@ -227,8 +230,8 @@ void PipePosix::Close() {
   CloseWriteFileDescriptor();
 }
 
-Status PipePosix::Delete(llvm::StringRef name) {
-  return llvm::sys::fs::remove(name);
+Error PipePosix::Delete(llvm::StringRef name) {
+  return FileSystem::Unlink(FileSpec{name.data(), true});
 }
 
 bool PipePosix::CanRead() const {
@@ -253,12 +256,12 @@ void PipePosix::CloseWriteFileDescriptor() {
   }
 }
 
-Status PipePosix::ReadWithTimeout(void *buf, size_t size,
-                                  const std::chrono::microseconds &timeout,
-                                  size_t &bytes_read) {
+Error PipePosix::ReadWithTimeout(void *buf, size_t size,
+                                 const std::chrono::microseconds &timeout,
+                                 size_t &bytes_read) {
   bytes_read = 0;
   if (!CanRead())
-    return Status(EINVAL, eErrorTypePOSIX);
+    return Error(EINVAL, eErrorTypePOSIX);
 
   const int fd = GetReadFileDescriptor();
 
@@ -266,18 +269,16 @@ Status PipePosix::ReadWithTimeout(void *buf, size_t size,
   select_helper.SetTimeout(timeout);
   select_helper.FDSetRead(fd);
 
-  Status error;
+  Error error;
   while (error.Success()) {
     error = select_helper.Select();
     if (error.Success()) {
-      auto result =
-          ::read(fd, static_cast<char *>(buf) + bytes_read, size - bytes_read);
+      auto result = ::read(fd, reinterpret_cast<char *>(buf) + bytes_read,
+                           size - bytes_read);
       if (result != -1) {
         bytes_read += result;
         if (bytes_read == size || result == 0)
           break;
-      } else if (errno == EINTR) {
-        continue;
       } else {
         error.SetErrorToErrno();
         break;
@@ -287,28 +288,27 @@ Status PipePosix::ReadWithTimeout(void *buf, size_t size,
   return error;
 }
 
-Status PipePosix::Write(const void *buf, size_t size, size_t &bytes_written) {
+Error PipePosix::Write(const void *buf, size_t size, size_t &bytes_written) {
   bytes_written = 0;
   if (!CanWrite())
-    return Status(EINVAL, eErrorTypePOSIX);
+    return Error(EINVAL, eErrorTypePOSIX);
 
   const int fd = GetWriteFileDescriptor();
   SelectHelper select_helper;
   select_helper.SetTimeout(std::chrono::seconds(0));
   select_helper.FDSetWrite(fd);
 
-  Status error;
+  Error error;
   while (error.Success()) {
     error = select_helper.Select();
     if (error.Success()) {
-      auto result = ::write(fd, static_cast<const char *>(buf) + bytes_written,
-                            size - bytes_written);
+      auto result =
+          ::write(fd, reinterpret_cast<const char *>(buf) + bytes_written,
+                  size - bytes_written);
       if (result != -1) {
         bytes_written += result;
         if (bytes_written == size)
           break;
-      } else if (errno == EINTR) {
-        continue;
       } else {
         error.SetErrorToErrno();
       }

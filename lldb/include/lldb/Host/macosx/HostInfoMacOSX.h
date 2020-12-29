@@ -1,17 +1,17 @@
 //===-- HostInfoMacOSX.h ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef lldb_Host_macosx_HostInfoMacOSX_h_
 #define lldb_Host_macosx_HostInfoMacOSX_h_
 
+#include "lldb/Host/FileSpec.h"
 #include "lldb/Host/posix/HostInfoPosix.h"
-#include "lldb/Utility/FileSpec.h"
-#include "llvm/Support/VersionTuple.h"
 
 namespace lldb_private {
 
@@ -22,21 +22,23 @@ class HostInfoMacOSX : public HostInfoPosix {
 
 private:
   // Static class, unconstructable.
-  HostInfoMacOSX() = delete;
-  ~HostInfoMacOSX() = delete;
+  HostInfoMacOSX();
+  ~HostInfoMacOSX();
 
 public:
-  static llvm::VersionTuple GetOSVersion();
-  static llvm::VersionTuple GetMacCatalystVersion();
+  static bool GetOSVersion(uint32_t &major, uint32_t &minor, uint32_t &update);
   static bool GetOSBuildString(std::string &s);
   static bool GetOSKernelDescription(std::string &s);
   static FileSpec GetProgramFileSpec();
+  static uint32_t GetMaxThreadNameLength();
 
 protected:
   static bool ComputeSupportExeDirectory(FileSpec &file_spec);
   static void ComputeHostArchitectureSupport(ArchSpec &arch_32,
                                              ArchSpec &arch_64);
   static bool ComputeHeaderDirectory(FileSpec &file_spec);
+  static bool ComputePythonDirectory(FileSpec &file_spec);
+  static bool ComputeClangDirectory(FileSpec &file_spec);
   static bool ComputeSystemPluginsDirectory(FileSpec &file_spec);
   static bool ComputeUserPluginsDirectory(FileSpec &file_spec);
 };

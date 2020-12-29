@@ -1,8 +1,9 @@
 //===--- TransGCAttrs.cpp - Transformations to ARC mode --------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,7 +23,7 @@ using namespace trans;
 
 namespace {
 
-/// Collects all the places where GC attributes __strong/__weak occur.
+/// \brief Collects all the places where GC attributes __strong/__weak occur.
 class GCAttrsCollector : public RecursiveASTVisitor<GCAttrsCollector> {
   MigrationContext &MigrateCtx;
   bool FullyMigratable;
@@ -47,7 +48,7 @@ public:
       return true;
 
     SaveAndRestore<bool> Save(FullyMigratable, isMigratable(D));
-
+    
     if (ObjCPropertyDecl *PropD = dyn_cast<ObjCPropertyDecl>(D)) {
       lookForAttribute(PropD, PropD->getTypeSourceInfo());
       AllProps.push_back(PropD);
@@ -68,9 +69,6 @@ public:
         if (handleAttr(Attr, D))
           break;
         TL = Attr.getModifiedLoc();
-      } else if (MacroQualifiedTypeLoc MDTL =
-                     TL.getAs<MacroQualifiedTypeLoc>()) {
-        TL = MDTL.getInnerLoc();
       } else if (ArrayTypeLoc Arr = TL.getAs<ArrayTypeLoc>()) {
         TL = Arr.getElementLoc();
       } else if (PointerTypeLoc PT = TL.getAs<PointerTypeLoc>()) {
@@ -83,11 +81,10 @@ public:
   }
 
   bool handleAttr(AttributedTypeLoc TL, Decl *D = nullptr) {
-    auto *OwnershipAttr = TL.getAttrAs<ObjCOwnershipAttr>();
-    if (!OwnershipAttr)
+    if (TL.getAttrKind() != AttributedType::attr_objc_ownership)
       return false;
 
-    SourceLocation Loc = OwnershipAttr->getLocation();
+    SourceLocation Loc = TL.getAttrNameLoc();
     unsigned RawLoc = Loc.getRawEncoding();
     if (MigrateCtx.AttrSet.count(RawLoc))
       return true;
@@ -95,8 +92,14 @@ public:
     ASTContext &Ctx = MigrateCtx.Pass.Ctx;
     SourceManager &SM = Ctx.getSourceManager();
     if (Loc.isMacroID())
-      Loc = SM.getImmediateExpansionRange(Loc).getBegin();
-    StringRef Spell = OwnershipAttr->getKind()->getName();
+      Loc = SM.getImmediateExpansionRange(Loc).first;
+    SmallString<32> Buf;
+    bool Invalid = false;
+    StringRef Spell = Lexer::getSpelling(
+                                  SM.getSpellingLoc(TL.getAttrEnumOperandLoc()),
+                                  Buf, SM, Ctx.getLangOpts(), &Invalid);
+    if (Invalid)
+      return false;
     MigrationContext::GCAttrOccurrence::AttrKind Kind;
     if (Spell == "strong")
       Kind = MigrationContext::GCAttrOccurrence::Strong;
@@ -104,7 +107,7 @@ public:
       Kind = MigrationContext::GCAttrOccurrence::Weak;
     else
       return false;
-
+ 
     MigrateCtx.AttrSet.insert(RawLoc);
     MigrateCtx.GCAttrs.push_back(MigrationContext::GCAttrOccurrence());
     MigrationContext::GCAttrOccurrence &Attr = MigrateCtx.GCAttrs.back();
@@ -161,7 +164,7 @@ public:
     for (auto I : D->redecls())
       if (!isInMainFile(I->getLocation()))
         return false;
-
+    
     return true;
   }
 
@@ -269,7 +272,7 @@ static void checkAllAtProps(MigrationContext &MigrateCtx,
     StringRef toAttr = "strong";
     if (hasWeak) {
       if (canApplyWeak(MigrateCtx.Pass.Ctx, IndProps.front()->getType(),
-                       /*AllowOnUnknownClass=*/true))
+                       /*AllowOnUnkwownClass=*/true))
         toAttr = "weak";
       else
         toAttr = "unsafe_unretained";
@@ -281,11 +284,10 @@ static void checkAllAtProps(MigrationContext &MigrateCtx,
   }
 
   for (unsigned i = 0, e = ATLs.size(); i != e; ++i) {
-    SourceLocation Loc = ATLs[i].first.getAttr()->getLocation();
+    SourceLocation Loc = ATLs[i].first.getAttrNameLoc();
     if (Loc.isMacroID())
       Loc = MigrateCtx.Pass.Ctx.getSourceManager()
-                .getImmediateExpansionRange(Loc)
-                .getBegin();
+                                         .getImmediateExpansionRange(Loc).first;
     TA.remove(Loc);
     TA.clearDiagnostic(diag::err_objc_property_attr_mutually_exclusive, AtLoc);
     TA.clearDiagnostic(diag::err_arc_inconsistent_property_ownership,
@@ -337,7 +339,7 @@ void MigrationContext::dumpGCAttrs() {
     llvm::errs() << "KIND: "
         << (Attr.Kind == GCAttrOccurrence::Strong ? "strong" : "weak");
     llvm::errs() << "\nLOC: ";
-    Attr.Loc.print(llvm::errs(), Pass.Ctx.getSourceManager());
+    Attr.Loc.dump(Pass.Ctx.getSourceManager());
     llvm::errs() << "\nTYPE: ";
     Attr.ModifiedType.dump();
     if (Attr.Dcl) {

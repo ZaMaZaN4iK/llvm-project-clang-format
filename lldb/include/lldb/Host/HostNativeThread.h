@@ -1,8 +1,9 @@
 //===-- HostNativeThread.h --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,10 +14,14 @@
 
 #if defined(_WIN32)
 #include "lldb/Host/windows/HostThreadWindows.h"
+#elif defined(__linux__)
+#include "lldb/Host/linux/HostThreadLinux.h"
+#elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+#include "lldb/Host/freebsd/HostThreadFreeBSD.h"
+#elif defined(__NetBSD__)
+#include "lldb/Host/netbsd/HostThreadNetBSD.h"
 #elif defined(__APPLE__)
 #include "lldb/Host/macosx/HostThreadMacOSX.h"
-#else
-#include "lldb/Host/posix/HostThreadPosix.h"
 #endif
 
 #endif

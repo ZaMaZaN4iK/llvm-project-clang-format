@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,7 +12,7 @@
 // Note that sized delete operator definitions below are simply ignored
 // when sized deallocation is not supported, e.g., prior to C++14.
 
-// UNSUPPORTED: c++14, c++17, c++2a
+// UNSUPPORTED: c++14, c++1z
 // UNSUPPORTED: sanitizer-new-delete
 
 #include <new>
@@ -43,19 +44,15 @@ void operator delete(void* p, std::size_t) TEST_NOEXCEPT
     std::free(p);
 }
 
-int main(int, char**)
+int main()
 {
     int *x = new int(42);
-    DoNotOptimize(x);
     assert(0 == unsized_delete_called);
     assert(0 == unsized_delete_nothrow_called);
     assert(0 == sized_delete_called);
 
     delete x;
-    DoNotOptimize(x);
     assert(1 == unsized_delete_called);
     assert(0 == sized_delete_called);
     assert(0 == unsized_delete_nothrow_called);
-
-  return 0;
 }

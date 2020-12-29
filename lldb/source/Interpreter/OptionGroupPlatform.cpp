@@ -1,23 +1,28 @@
 //===-- OptionGroupPlatform.cpp ---------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Interpreter/OptionGroupPlatform.h"
 
-#include "lldb/Host/OptionParser.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Interpreter/CommandInterpreter.h"
 #include "lldb/Target/Platform.h"
+#include "lldb/Utility/Utils.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
 PlatformSP OptionGroupPlatform::CreatePlatformWithOptions(
     CommandInterpreter &interpreter, const ArchSpec &arch, bool make_selected,
-    Status &error, ArchSpec &platform_arch) const {
+    Error &error, ArchSpec &platform_arch) const {
   PlatformSP platform_sp;
 
   if (!m_platform_name.empty()) {
@@ -39,8 +44,10 @@ PlatformSP OptionGroupPlatform::CreatePlatformWithOptions(
   if (platform_sp) {
     interpreter.GetDebugger().GetPlatformList().Append(platform_sp,
                                                        make_selected);
-    if (!m_os_version.empty())
-      platform_sp->SetOSVersion(m_os_version);
+    if (m_os_version_major != UINT32_MAX) {
+      platform_sp->SetOSVersion(m_os_version_major, m_os_version_minor,
+                                m_os_version_update);
+    }
 
     if (m_sdk_sysroot)
       platform_sp->SetSDKRootDirectory(m_sdk_sysroot);
@@ -57,24 +64,26 @@ void OptionGroupPlatform::OptionParsingStarting(
   m_platform_name.clear();
   m_sdk_sysroot.Clear();
   m_sdk_build.Clear();
-  m_os_version = llvm::VersionTuple();
+  m_os_version_major = UINT32_MAX;
+  m_os_version_minor = UINT32_MAX;
+  m_os_version_update = UINT32_MAX;
 }
 
-static constexpr OptionDefinition g_option_table[] = {
+static OptionDefinition g_option_table[] = {
     {LLDB_OPT_SET_ALL, false, "platform", 'p', OptionParser::eRequiredArgument,
-     nullptr, {}, 0, eArgTypePlatform, "Specify name of the platform to "
-                                       "use for this target, creating the "
-                                       "platform if necessary."},
+     nullptr, nullptr, 0, eArgTypePlatform, "Specify name of the platform to "
+                                            "use for this target, creating the "
+                                            "platform if necessary."},
     {LLDB_OPT_SET_ALL, false, "version", 'v', OptionParser::eRequiredArgument,
-     nullptr, {}, 0, eArgTypeNone,
+     nullptr, nullptr, 0, eArgTypeNone,
      "Specify the initial SDK version to use prior to connecting."},
     {LLDB_OPT_SET_ALL, false, "build", 'b', OptionParser::eRequiredArgument,
-     nullptr, {}, 0, eArgTypeNone,
+     nullptr, nullptr, 0, eArgTypeNone,
      "Specify the initial SDK build number."},
     {LLDB_OPT_SET_ALL, false, "sysroot", 'S', OptionParser::eRequiredArgument,
-     nullptr, {}, 0, eArgTypeFilename, "Specify the SDK root directory "
-                                       "that contains a root of all "
-                                       "remote system files."}};
+     nullptr, nullptr, 0, eArgTypeFilename, "Specify the SDK root directory "
+                                            "that contains a root of all "
+                                            "remote system files."}};
 
 llvm::ArrayRef<OptionDefinition> OptionGroupPlatform::GetDefinitions() {
   llvm::ArrayRef<OptionDefinition> result(g_option_table);
@@ -83,11 +92,10 @@ llvm::ArrayRef<OptionDefinition> OptionGroupPlatform::GetDefinitions() {
   return result.drop_front();
 }
 
-Status
-OptionGroupPlatform::SetOptionValue(uint32_t option_idx,
-                                    llvm::StringRef option_arg,
-                                    ExecutionContext *execution_context) {
-  Status error;
+Error OptionGroupPlatform::SetOptionValue(uint32_t option_idx,
+                                          llvm::StringRef option_arg,
+                                          ExecutionContext *execution_context) {
+  Error error;
   if (!m_include_platform_option)
     ++option_idx;
 
@@ -99,9 +107,10 @@ OptionGroupPlatform::SetOptionValue(uint32_t option_idx,
     break;
 
   case 'v':
-    if (m_os_version.tryParse(option_arg))
-      error.SetErrorStringWithFormatv("invalid version string '{0}'",
-                                      option_arg);
+    if (!Args::StringToVersion(option_arg, m_os_version_major,
+                               m_os_version_minor, m_os_version_update))
+      error.SetErrorStringWithFormat("invalid version string '%s'",
+                                     option_arg.str().c_str());
     break;
 
   case 'b':
@@ -113,7 +122,8 @@ OptionGroupPlatform::SetOptionValue(uint32_t option_idx,
     break;
 
   default:
-    llvm_unreachable("Unimplemented option");
+    error.SetErrorStringWithFormat("unrecognized option '%c'", short_option);
+    break;
   }
   return error;
 }
@@ -132,8 +142,17 @@ bool OptionGroupPlatform::PlatformMatches(
     if (m_sdk_sysroot && m_sdk_sysroot != platform_sp->GetSDKRootDirectory())
       return false;
 
-    if (!m_os_version.empty() && m_os_version != platform_sp->GetOSVersion())
-      return false;
+    if (m_os_version_major != UINT32_MAX) {
+      uint32_t major, minor, update;
+      if (platform_sp->GetOSVersion(major, minor, update)) {
+        if (m_os_version_major != major)
+          return false;
+        if (m_os_version_minor != minor)
+          return false;
+        if (m_os_version_update != update)
+          return false;
+      }
+    }
     return true;
   }
   return false;

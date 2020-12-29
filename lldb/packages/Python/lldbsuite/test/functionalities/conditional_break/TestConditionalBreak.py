@@ -5,6 +5,9 @@ Test conditionally break on a function and inspect its variables.
 from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -31,9 +34,12 @@ class ConditionalBreakTestCase(TestBase):
         self.build()
         self.simulate_conditional_break_by_user()
 
+    @expectedFailureAll(
+        oslist=["windows"],
+        bugnumber="llvm.org/pr26265: args in frames other than #0 are not evaluated correctly")
     def do_conditional_break(self):
         """Exercise some thread and frame APIs to break if c() is called by a()."""
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
@@ -106,9 +112,9 @@ class ConditionalBreakTestCase(TestBase):
         if not self.TraceOn():
             self.HideStdout()
 
-        # Separate out the "file " + self.getBuildArtifact("a.out") command from .lldb file, for the sake of
+        # Separate out the "file a.out" command from .lldb file, for the sake of
         # remote testsuite.
-        self.runCmd("file " + self.getBuildArtifact("a.out"))
+        self.runCmd("file a.out")
         self.runCmd("command source .lldb")
 
         self.runCmd("break list")

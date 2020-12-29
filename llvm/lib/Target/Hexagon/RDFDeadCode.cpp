@@ -1,22 +1,22 @@
 //===--- RDFDeadCode.cpp --------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // RDF-based generic dead code elimination.
 
+#include "RDFGraph.h"
+#include "RDFLiveness.h"
 #include "RDFDeadCode.h"
 
 #include "llvm/ADT/SetVector.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/RDFGraph.h"
-#include "llvm/CodeGen/RDFLiveness.h"
-#include "llvm/Support/Debug.h"
 
 #include <queue>
 
@@ -58,24 +58,13 @@ private:
 bool DeadCodeElimination::isLiveInstr(const MachineInstr *MI) const {
   if (MI->mayStore() || MI->isBranch() || MI->isCall() || MI->isReturn())
     return true;
-  if (MI->hasOrderedMemoryRef() || MI->hasUnmodeledSideEffects() ||
-      MI->isPosition())
+  if (MI->hasOrderedMemoryRef() || MI->hasUnmodeledSideEffects())
     return true;
   if (MI->isPHI())
     return false;
-  for (auto &Op : MI->operands()) {
+  for (auto &Op : MI->operands())
     if (Op.isReg() && MRI.isReserved(Op.getReg()))
       return true;
-    if (Op.isRegMask()) {
-      const uint32_t *BM = Op.getRegMask();
-      for (unsigned R = 0, RN = DFG.getTRI().getNumRegs(); R != RN; ++R) {
-        if (BM[R/32] & (1u << (R%32)))
-          continue;
-        if (MRI.isReserved(R))
-          return true;
-      }
-    }
-  }
   return false;
 }
 
@@ -214,7 +203,7 @@ bool DeadCodeElimination::erase(const SetVector<NodeId> &Nodes) {
       return false;
     return A.Id < B.Id;
   };
-  llvm::sort(DRNs, UsesFirst);
+  std::sort(DRNs.begin(), DRNs.end(), UsesFirst);
 
   if (trace())
     dbgs() << "Removing dead ref nodes:\n";

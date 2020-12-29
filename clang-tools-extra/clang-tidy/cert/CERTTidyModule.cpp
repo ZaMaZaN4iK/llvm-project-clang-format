@@ -1,31 +1,24 @@
 //===--- CERTTidyModule.cpp - clang-tidy ----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "../ClangTidy.h"
 #include "../ClangTidyModule.h"
 #include "../ClangTidyModuleRegistry.h"
-#include "../bugprone/UnhandledSelfAssignmentCheck.h"
-#include "../bugprone/BadSignalToKillThreadCheck.h"
 #include "../google/UnnamedNamespaceInHeaderCheck.h"
+#include "../misc/MoveConstructorInitCheck.h"
 #include "../misc/NewDeleteOverloadsCheck.h"
 #include "../misc/NonCopyableObjects.h"
 #include "../misc/StaticAssertCheck.h"
 #include "../misc/ThrowByValueCatchByReferenceCheck.h"
-#include "../performance/MoveConstructorInitCheck.h"
-#include "../readability/UppercaseLiteralSuffixCheck.h"
 #include "CommandProcessorCheck.h"
-#include "DefaultOperatorNewAlignmentCheck.h"
-#include "DontModifyStdNamespaceCheck.h"
 #include "FloatLoopCounter.h"
 #include "LimitedRandomnessCheck.h"
-#include "MutatingCopyCheck.h"
-#include "PostfixOperatorCheck.h"
-#include "ProperlySeededRandomGeneratorCheck.h"
 #include "SetLongJmpCheck.h"
 #include "StaticObjectExceptionCheck.h"
 #include "StrToNumCheck.h"
@@ -41,15 +34,14 @@ public:
   void addCheckFactories(ClangTidyCheckFactories &CheckFactories) override {
     // C++ checkers
     // DCL
-    CheckFactories.registerCheck<PostfixOperatorCheck>(
-        "cert-dcl21-cpp");
     CheckFactories.registerCheck<VariadicFunctionDefCheck>("cert-dcl50-cpp");
     CheckFactories.registerCheck<misc::NewDeleteOverloadsCheck>(
         "cert-dcl54-cpp");
-    CheckFactories.registerCheck<DontModifyStdNamespaceCheck>(
-        "cert-dcl58-cpp");
     CheckFactories.registerCheck<google::build::UnnamedNamespaceInHeaderCheck>(
         "cert-dcl59-cpp");
+    // OOP
+    CheckFactories.registerCheck<misc::MoveConstructorInitCheck>(
+        "cert-oop11-cpp");
     // ERR
     CheckFactories.registerCheck<misc::ThrowByValueCatchByReferenceCheck>(
         "cert-err09-cpp");
@@ -58,26 +50,12 @@ public:
     CheckFactories.registerCheck<ThrownExceptionTypeCheck>("cert-err60-cpp");
     CheckFactories.registerCheck<misc::ThrowByValueCatchByReferenceCheck>(
         "cert-err61-cpp");
-    // MEM
-    CheckFactories.registerCheck<DefaultOperatorNewAlignmentCheck>(
-        "cert-mem57-cpp");
     // MSC
     CheckFactories.registerCheck<LimitedRandomnessCheck>("cert-msc50-cpp");
-    CheckFactories.registerCheck<ProperlySeededRandomGeneratorCheck>(
-        "cert-msc51-cpp");
-    // OOP
-    CheckFactories.registerCheck<performance::MoveConstructorInitCheck>(
-        "cert-oop11-cpp");
-    CheckFactories.registerCheck<bugprone::UnhandledSelfAssignmentCheck>(
-        "cert-oop54-cpp");
-    CheckFactories.registerCheck<MutatingCopyCheck>(
-        "cert-oop58-cpp");
 
     // C checkers
     // DCL
     CheckFactories.registerCheck<misc::StaticAssertCheck>("cert-dcl03-c");
-    CheckFactories.registerCheck<readability::UppercaseLiteralSuffixCheck>(
-        "cert-dcl16-c");
     // ENV
     CheckFactories.registerCheck<CommandProcessorCheck>("cert-env33-c");
     // FLP
@@ -88,19 +66,6 @@ public:
     CheckFactories.registerCheck<StrToNumCheck>("cert-err34-c");
     // MSC
     CheckFactories.registerCheck<LimitedRandomnessCheck>("cert-msc30-c");
-    CheckFactories.registerCheck<ProperlySeededRandomGeneratorCheck>(
-        "cert-msc32-c");
-    // POS
-    CheckFactories.registerCheck<bugprone::BadSignalToKillThreadCheck>(
-        "cert-pos44-c");
-  }
-
-  ClangTidyOptions getModuleOptions() override {
-    ClangTidyOptions Options;
-    ClangTidyOptions::OptionMap &Opts = Options.CheckOptions;
-    Opts["cert-dcl16-c.NewSuffixes"] = "L;LL;LU;LLU";
-    Opts["cert-oop54-cpp.WarnOnlyIfThisHasSuspiciousField"] = "0";
-    return Options;
   }
 };
 

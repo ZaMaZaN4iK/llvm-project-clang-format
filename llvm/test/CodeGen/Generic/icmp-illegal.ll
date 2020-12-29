@@ -1,3 +1,4 @@
+
 ; RUN: llc < %s | FileCheck %s
 
 ; CHECK-LABEL: test_ult

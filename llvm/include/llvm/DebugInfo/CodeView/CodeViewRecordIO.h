@@ -1,8 +1,9 @@
 //===- CodeViewRecordIO.h ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,76 +17,36 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/DebugInfo/CodeView/CodeViewError.h"
 #include "llvm/DebugInfo/CodeView/TypeRecord.h"
-#include "llvm/Support/BinaryStreamReader.h"
-#include "llvm/Support/BinaryStreamWriter.h"
+#include "llvm/DebugInfo/MSF/StreamReader.h"
+#include "llvm/DebugInfo/MSF/StreamWriter.h"
 #include "llvm/Support/Error.h"
 #include <cassert>
 #include <cstdint>
 #include <type_traits>
 
 namespace llvm {
-
 namespace codeview {
-
-class CodeViewRecordStreamer {
-public:
-  virtual void EmitBytes(StringRef Data) = 0;
-  virtual void EmitIntValue(uint64_t Value, unsigned Size) = 0;
-  virtual void EmitBinaryData(StringRef Data) = 0;
-  virtual void AddComment(const Twine &T) = 0;
-  virtual void AddRawComment(const Twine &T) = 0;
-  virtual bool isVerboseAsm() = 0;
-  virtual std::string getTypeName(TypeIndex TI) = 0;
-  virtual ~CodeViewRecordStreamer() = default;
-};
 
 class CodeViewRecordIO {
   uint32_t getCurrentOffset() const {
-    if (isWriting())
-      return Writer->getOffset();
-    else if (isReading())
-      return Reader->getOffset();
-    else
-      return 0;
+    return (isWriting()) ? Writer->getOffset() : Reader->getOffset();
   }
 
 public:
-  // deserializes records to structures
-  explicit CodeViewRecordIO(BinaryStreamReader &Reader) : Reader(&Reader) {}
-
-  // serializes records to buffer
-  explicit CodeViewRecordIO(BinaryStreamWriter &Writer) : Writer(&Writer) {}
-
-  // writes records to assembly file using MC library interface
-  explicit CodeViewRecordIO(CodeViewRecordStreamer &Streamer)
-      : Streamer(&Streamer) {}
+  explicit CodeViewRecordIO(msf::StreamReader &Reader) : Reader(&Reader) {}
+  explicit CodeViewRecordIO(msf::StreamWriter &Writer) : Writer(&Writer) {}
 
   Error beginRecord(Optional<uint32_t> MaxLength);
   Error endRecord();
 
-  Error mapInteger(TypeIndex &TypeInd, const Twine &Comment = "");
+  Error mapInteger(TypeIndex &TypeInd);
 
-  bool isStreaming() const {
-    return (Streamer != nullptr) && (Reader == nullptr) && (Writer == nullptr);
-  }
-  bool isReading() const {
-    return (Reader != nullptr) && (Streamer == nullptr) && (Writer == nullptr);
-  }
-  bool isWriting() const {
-    return (Writer != nullptr) && (Streamer == nullptr) && (Reader == nullptr);
-  }
+  bool isReading() const { return Reader != nullptr; }
+  bool isWriting() const { return !isReading(); }
 
   uint32_t maxFieldLength() const;
 
   template <typename T> Error mapObject(T &Value) {
-    if (isStreaming()) {
-      StringRef BytesSR =
-          StringRef((reinterpret_cast<const char *>(&Value)), sizeof(Value));
-      Streamer->EmitBytes(BytesSR);
-      incrStreamedLen(sizeof(T));
-      return Error::success();
-    }
-
     if (isWriting())
       return Writer->writeObject(Value);
 
@@ -96,63 +57,41 @@ public:
     return Error::success();
   }
 
-  template <typename T> Error mapInteger(T &Value, const Twine &Comment = "") {
-    if (isStreaming()) {
-      emitComment(Comment);
-      Streamer->EmitIntValue((int)Value, sizeof(T));
-      incrStreamedLen(sizeof(T));
-      return Error::success();
-    }
-
+  template <typename T> Error mapInteger(T &Value) {
     if (isWriting())
       return Writer->writeInteger(Value);
 
     return Reader->readInteger(Value);
   }
 
-  template <typename T> Error mapEnum(T &Value, const Twine &Comment = "") {
-    if (!isStreaming() && sizeof(Value) > maxFieldLength())
+  template <typename T> Error mapEnum(T &Value) {
+    if (sizeof(Value) > maxFieldLength())
       return make_error<CodeViewError>(cv_error_code::insufficient_buffer);
 
     using U = typename std::underlying_type<T>::type;
     U X;
-
-    if (isWriting() || isStreaming())
+    if (isWriting())
       X = static_cast<U>(Value);
 
-    if (auto EC = mapInteger(X, Comment))
+    if (auto EC = mapInteger(X))
       return EC;
-
     if (isReading())
       Value = static_cast<T>(X);
-
     return Error::success();
   }
 
-  Error mapEncodedInteger(int64_t &Value, const Twine &Comment = "");
-  Error mapEncodedInteger(uint64_t &Value, const Twine &Comment = "");
-  Error mapEncodedInteger(APSInt &Value, const Twine &Comment = "");
-  Error mapStringZ(StringRef &Value, const Twine &Comment = "");
-  Error mapGuid(GUID &Guid, const Twine &Comment = "");
+  Error mapEncodedInteger(int64_t &Value);
+  Error mapEncodedInteger(uint64_t &Value);
+  Error mapEncodedInteger(APSInt &Value);
+  Error mapStringZ(StringRef &Value);
+  Error mapGuid(StringRef &Guid);
 
-  Error mapStringZVectorZ(std::vector<StringRef> &Value,
-                          const Twine &Comment = "");
+  Error mapStringZVectorZ(std::vector<StringRef> &Value);
 
   template <typename SizeType, typename T, typename ElementMapper>
-  Error mapVectorN(T &Items, const ElementMapper &Mapper,
-                   const Twine &Comment = "") {
+  Error mapVectorN(T &Items, const ElementMapper &Mapper) {
     SizeType Size;
-    if (isStreaming()) {
-      Size = static_cast<SizeType>(Items.size());
-      emitComment(Comment);
-      Streamer->EmitIntValue(Size, sizeof(Size));
-      incrStreamedLen(sizeof(Size)); // add 1 for the delimiter
-
-      for (auto &X : Items) {
-        if (auto EC = Mapper(*this, X))
-          return EC;
-      }
-    } else if (isWriting()) {
+    if (isWriting()) {
       Size = static_cast<SizeType>(Items.size());
       if (auto EC = Writer->writeInteger(Size))
         return EC;
@@ -176,10 +115,8 @@ public:
   }
 
   template <typename T, typename ElementMapper>
-  Error mapVectorTail(T &Items, const ElementMapper &Mapper,
-                      const Twine &Comment = "") {
-    emitComment(Comment);
-    if (isStreaming() || isWriting()) {
+  Error mapVectorTail(T &Items, const ElementMapper &Mapper) {
+    if (isWriting()) {
       for (auto &Item : Items) {
         if (auto EC = Mapper(*this, Item))
           return EC;
@@ -196,49 +133,14 @@ public:
     return Error::success();
   }
 
-  Error mapByteVectorTail(ArrayRef<uint8_t> &Bytes, const Twine &Comment = "");
-  Error mapByteVectorTail(std::vector<uint8_t> &Bytes,
-                          const Twine &Comment = "");
+  Error mapByteVectorTail(ArrayRef<uint8_t> &Bytes);
+  Error mapByteVectorTail(std::vector<uint8_t> &Bytes);
 
-  Error padToAlignment(uint32_t Align);
   Error skipPadding();
 
-  uint64_t getStreamedLen() {
-    if (isStreaming())
-      return StreamedLen;
-    return 0;
-  }
-
-  void emitRawComment(const Twine &T) {
-    if (isStreaming() && Streamer->isVerboseAsm())
-      Streamer->AddRawComment(T);
-  }
-
 private:
-  void emitEncodedSignedInteger(const int64_t &Value,
-                                const Twine &Comment = "");
-  void emitEncodedUnsignedInteger(const uint64_t &Value,
-                                  const Twine &Comment = "");
   Error writeEncodedSignedInteger(const int64_t &Value);
   Error writeEncodedUnsignedInteger(const uint64_t &Value);
-
-  void incrStreamedLen(const uint64_t &Len) {
-    if (isStreaming())
-      StreamedLen += Len;
-  }
-
-  void resetStreamedLen() {
-    if (isStreaming())
-      StreamedLen = 4; // The record prefix is 4 bytes long
-  }
-
-  void emitComment(const Twine &Comment) {
-    if (isStreaming() && Streamer->isVerboseAsm()) {
-      Twine TComment(Comment);
-      if (!TComment.isTriviallyEmpty())
-        Streamer->AddComment(TComment);
-    }
-  }
 
   struct RecordLimit {
     uint32_t BeginOffset;
@@ -258,10 +160,8 @@ private:
 
   SmallVector<RecordLimit, 2> Limits;
 
-  BinaryStreamReader *Reader = nullptr;
-  BinaryStreamWriter *Writer = nullptr;
-  CodeViewRecordStreamer *Streamer = nullptr;
-  uint64_t StreamedLen = 0;
+  msf::StreamReader *Reader = nullptr;
+  msf::StreamWriter *Writer = nullptr;
 };
 
 } // end namespace codeview

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,10 +19,8 @@
 #include <memory>
 #include <cassert>
 
-#include "archetypes.h"
-#include "test_convertible.h"
-
-#include "test_macros.h"
+#include "archetypes.hpp"
+#include "test_convertible.hpp"
 using namespace ImplicitTypes; // Get implicitly archetypes
 
 template <class T1, class U1,
@@ -65,10 +64,10 @@ struct ImplicitT {
   int value;
 };
 
-int main(int, char**)
+int main()
 {
     {
-        typedef std::pair<std::unique_ptr<Derived>, int> P1;
+        typedef std::pair<std::unique_ptr<Derived>, short> P1;
         typedef std::pair<std::unique_ptr<Base>, long> P2;
         P1 p1(std::unique_ptr<Derived>(), 4);
         P2 p2 = std::move(p1);
@@ -82,7 +81,7 @@ int main(int, char**)
         P1 p1(42, 101);
         P2 p2(std::move(p1));
         assert(p2.first == 42);
-        assert(p2.second == 101);
+        assert(p2.second = 101);
     }
     {
         test_pair_rv<AllCtors, AllCtors>();
@@ -175,6 +174,4 @@ int main(int, char**)
         static_assert(p2.second.value == 43, "");
     }
 #endif
-
-  return 0;
 }

@@ -1,6 +1,4 @@
-// RUN: %clang_cc1 -x c++ -std=c++11 -verify -fopenmp %s -Wuninitialized
-
-// RUN: %clang_cc1 -x c++ -std=c++11 -verify -fopenmp-simd %s -Wuninitialized
+// RUN: %clang_cc1 -x c++ -std=c++11 -verify -fopenmp %s
 
 struct B {
   static int ib[20]; // expected-note 0 {{'B::ib' declared here}}
@@ -136,8 +134,9 @@ S3 h; // expected-note 2 {{'h' defined here}}
 template<class I, class C> int foomain(I argc, C **argv) {
   I e(argc);
   I g(argc);
-  int i; // expected-note {{'i' defined here}}
-  // expected-note@+1 {{declared here}}
+  int i; // expected-note {{declared here}} expected-note {{'i' defined here}}
+  // expected-note@+2 {{declared here}}
+  // expected-note@+1 {{reference to 'i' is not a constant expression}}
   int &j = i;
 
 #pragma omp target
@@ -287,7 +286,7 @@ int main(int argc, char **argv) {
 
 #pragma omp target
 #pragma omp teams
-#pragma omp distribute parallel for simd aligned (a, b) // expected-error {{argument of aligned clause should be array, pointer, reference to array or reference to pointer, not 'S1'}} expected-error {{argument of aligned clause should be array, pointer, reference to array or reference to pointer, not 'S2'}} expected-error {{incomplete type 'S1' where a complete type is required}}
+#pragma omp distribute parallel for simd aligned (a, b) // expected-error {{argument of aligned clause should be array, pointer, reference to array or reference to pointer, not 'S1'}} expected-error {{argument of aligned clause should be array, pointer, reference to array or reference to pointer, not 'S2'}}
   for (int k = 0; k < argc; ++k) ++k;
 
 #pragma omp target

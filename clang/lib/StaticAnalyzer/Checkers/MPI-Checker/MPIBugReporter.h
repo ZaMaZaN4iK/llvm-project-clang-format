@@ -1,8 +1,9 @@
 //===-- MPIBugReporter.h - bug reporter -----------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -77,7 +78,7 @@ private:
 
   /// Bug visitor class to find the node where the request region was previously
   /// used in order to include it into the BugReport path.
-  class RequestNodeVisitor : public BugReporterVisitor {
+  class RequestNodeVisitor : public BugReporterVisitorImpl<RequestNodeVisitor> {
   public:
     RequestNodeVisitor(const MemRegion *const MemoryRegion,
                        const std::string &ErrText)
@@ -89,9 +90,10 @@ private:
       ID.AddPointer(RequestRegion);
     }
 
-    PathDiagnosticPieceRef VisitNode(const ExplodedNode *N,
-                                     BugReporterContext &BRC,
-                                     PathSensitiveBugReport &BR) override;
+    std::shared_ptr<PathDiagnosticPiece> VisitNode(const ExplodedNode *N,
+                                                   const ExplodedNode *PrevN,
+                                                   BugReporterContext &BRC,
+                                                   BugReport &BR) override;
 
   private:
     const MemRegion *const RequestRegion;

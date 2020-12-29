@@ -8,22 +8,9 @@ check.
 
 Checks that long namespaces have a closing comment.
 
-https://llvm.org/docs/CodingStandards.html#namespace-indentation
+http://llvm.org/docs/CodingStandards.html#namespace-indentation
 
 https://google.github.io/styleguide/cppguide.html#Namespaces
-
-.. code-block:: c++
-
-  namespace n1 {
-  void f();
-  }
-
-  // becomes
-
-  namespace n1 {
-  void f();
-  }  // namespace n1
-
 
 Options
 -------

@@ -1,8 +1,9 @@
 //===--- PassByValueCheck.cpp - clang-tidy---------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,8 +23,7 @@ namespace clang {
 namespace tidy {
 namespace modernize {
 
-namespace {
-/// Matches move-constructible classes.
+/// \brief Matches move-constructible classes.
 ///
 /// Given
 /// \code
@@ -44,7 +44,6 @@ AST_MATCHER(CXXRecordDecl, isMoveConstructible) {
   }
   return false;
 }
-} // namespace
 
 static TypeMatcher constRefType() {
   return lValueReferenceType(pointee(isConstQualified()));
@@ -54,12 +53,12 @@ static TypeMatcher nonConstValueType() {
   return qualType(unless(anyOf(referenceType(), isConstQualified())));
 }
 
-/// Whether or not \p ParamDecl is used exactly one time in \p Ctor.
+/// \brief Whether or not \p ParamDecl is used exactly one time in \p Ctor.
 ///
 /// Checks both in the init-list and the body of the constructor.
 static bool paramReferredExactlyOnce(const CXXConstructorDecl *Ctor,
                                      const ParmVarDecl *ParamDecl) {
-  /// \c clang::RecursiveASTVisitor that checks that the given
+  /// \brief \c clang::RecursiveASTVisitor that checks that the given
   /// \c ParmVarDecl is used exactly one time.
   ///
   /// \see ExactlyOneUsageVisitor::hasExactlyOneUsageIn()
@@ -71,7 +70,7 @@ static bool paramReferredExactlyOnce(const CXXConstructorDecl *Ctor,
     ExactlyOneUsageVisitor(const ParmVarDecl *ParamDecl)
         : ParamDecl(ParamDecl) {}
 
-    /// Whether or not the parameter variable is referred only once in
+    /// \brief Whether or not the parameter variable is referred only once in
     /// the
     /// given constructor.
     bool hasExactlyOneUsageIn(const CXXConstructorDecl *Ctor) {
@@ -81,7 +80,7 @@ static bool paramReferredExactlyOnce(const CXXConstructorDecl *Ctor,
     }
 
   private:
-    /// Counts the number of references to a variable.
+    /// \brief Counts the number of references to a variable.
     ///
     /// Stops the AST traversal if more than one usage is found.
     bool VisitDeclRefExpr(DeclRefExpr *D) {
@@ -104,7 +103,7 @@ static bool paramReferredExactlyOnce(const CXXConstructorDecl *Ctor,
   return ExactlyOneUsageVisitor(ParamDecl).hasExactlyOneUsageIn(Ctor);
 }
 
-/// Find all references to \p ParamDecl across all of the
+/// \brief Find all references to \p ParamDecl across all of the
 /// redeclarations of \p Ctor.
 static SmallVector<const ParmVarDecl *, 2>
 collectParamDecls(const CXXConstructorDecl *Ctor,
@@ -120,7 +119,7 @@ collectParamDecls(const CXXConstructorDecl *Ctor,
 PassByValueCheck::PassByValueCheck(StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context),
       IncludeStyle(utils::IncludeSorter::parseIncludeStyle(
-          Options.getLocalOrGlobal("IncludeStyle", "llvm"))),
+          Options.get("IncludeStyle", "llvm"))),
       ValuesOnly(Options.get("ValuesOnly", 0) != 0) {}
 
 void PassByValueCheck::storeOptions(ClangTidyOptions::OptionMap &Opts) {
@@ -164,16 +163,14 @@ void PassByValueCheck::registerMatchers(MatchFinder *Finder) {
       this);
 }
 
-void PassByValueCheck::registerPPCallbacks(const SourceManager &SM,
-                                           Preprocessor *PP,
-                                           Preprocessor *ModuleExpanderPP) {
+void PassByValueCheck::registerPPCallbacks(CompilerInstance &Compiler) {
   // Only register the preprocessor callbacks for C++; the functionality
   // currently does not provide any benefit to other languages, despite being
   // benign.
   if (getLangOpts().CPlusPlus) {
-    Inserter = std::make_unique<utils::IncludeInserter>(SM, getLangOpts(),
-                                                         IncludeStyle);
-    PP->addPPCallbacks(Inserter->CreatePPCallbacks());
+    Inserter.reset(new utils::IncludeInserter(
+        Compiler.getSourceManager(), Compiler.getLangOpts(), IncludeStyle));
+    Compiler.getPreprocessor().addPPCallbacks(Inserter->CreatePPCallbacks());
   }
 }
 
@@ -190,12 +187,12 @@ void PassByValueCheck::check(const MatchFinder::MatchResult &Result) {
     return;
 
   // If the parameter is trivial to copy, don't move it. Moving a trivivally
-  // copyable type will cause a problem with performance-move-const-arg
+  // copyable type will cause a problem with misc-move-const-arg
   if (ParamDecl->getType().getNonReferenceType().isTriviallyCopyableType(
           *Result.Context))
     return;
 
-  auto Diag = diag(ParamDecl->getBeginLoc(), "pass by value and use std::move");
+  auto Diag = diag(ParamDecl->getLocStart(), "pass by value and use std::move");
 
   // Iterate over all declarations of the constructor.
   for (const ParmVarDecl *ParmDecl : collectParamDecls(Ctor, ParamDecl)) {
@@ -207,8 +204,8 @@ void PassByValueCheck::check(const MatchFinder::MatchResult &Result) {
       continue;
 
     TypeLoc ValueTL = RefTL.getPointeeLoc();
-    auto TypeRange = CharSourceRange::getTokenRange(ParmDecl->getBeginLoc(),
-                                                    ParamTL.getEndLoc());
+    auto TypeRange = CharSourceRange::getTokenRange(ParmDecl->getLocStart(),
+                                                    ParamTL.getLocEnd());
     std::string ValueStr = Lexer::getSourceText(CharSourceRange::getTokenRange(
                                                     ValueTL.getSourceRange()),
                                                 SM, getLangOpts())

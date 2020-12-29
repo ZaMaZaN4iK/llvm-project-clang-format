@@ -1,14 +1,19 @@
 //===-- RegisterContextKDP_arm64.cpp ------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "RegisterContextKDP_arm64.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "ProcessKDP.h"
 #include "ThreadKDP.h"
 
@@ -25,7 +30,7 @@ RegisterContextKDP_arm64::~RegisterContextKDP_arm64() {}
 int RegisterContextKDP_arm64::DoReadGPR(lldb::tid_t tid, int flavor, GPR &gpr) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestReadRegisters(tid, GPRRegSet, &gpr, sizeof(gpr),
@@ -40,7 +45,7 @@ int RegisterContextKDP_arm64::DoReadGPR(lldb::tid_t tid, int flavor, GPR &gpr) {
 int RegisterContextKDP_arm64::DoReadFPU(lldb::tid_t tid, int flavor, FPU &fpu) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestReadRegisters(tid, FPURegSet, &fpu, sizeof(fpu),
@@ -55,7 +60,7 @@ int RegisterContextKDP_arm64::DoReadFPU(lldb::tid_t tid, int flavor, FPU &fpu) {
 int RegisterContextKDP_arm64::DoReadEXC(lldb::tid_t tid, int flavor, EXC &exc) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestReadRegisters(tid, EXCRegSet, &exc, sizeof(exc),
@@ -70,7 +75,7 @@ int RegisterContextKDP_arm64::DoReadEXC(lldb::tid_t tid, int flavor, EXC &exc) {
 int RegisterContextKDP_arm64::DoReadDBG(lldb::tid_t tid, int flavor, DBG &dbg) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestReadRegisters(tid, DBGRegSet, &dbg, sizeof(dbg),
@@ -86,7 +91,7 @@ int RegisterContextKDP_arm64::DoWriteGPR(lldb::tid_t tid, int flavor,
                                          const GPR &gpr) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestWriteRegisters(tid, GPRRegSet, &gpr, sizeof(gpr),
@@ -102,7 +107,7 @@ int RegisterContextKDP_arm64::DoWriteFPU(lldb::tid_t tid, int flavor,
                                          const FPU &fpu) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestWriteRegisters(tid, FPURegSet, &fpu, sizeof(fpu),
@@ -118,7 +123,7 @@ int RegisterContextKDP_arm64::DoWriteEXC(lldb::tid_t tid, int flavor,
                                          const EXC &exc) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestWriteRegisters(tid, EXCRegSet, &exc, sizeof(exc),
@@ -134,7 +139,7 @@ int RegisterContextKDP_arm64::DoWriteDBG(lldb::tid_t tid, int flavor,
                                          const DBG &dbg) {
   ProcessSP process_sp(CalculateProcess());
   if (process_sp) {
-    Status error;
+    Error error;
     if (static_cast<ProcessKDP *>(process_sp.get())
             ->GetCommunication()
             .SendRequestWriteRegisters(tid, DBGRegSet, &dbg, sizeof(dbg),

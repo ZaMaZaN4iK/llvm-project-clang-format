@@ -1,8 +1,9 @@
 //===-- llvm/Support/Compression.h ---Compression----------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,27 +18,37 @@
 
 namespace llvm {
 template <typename T> class SmallVectorImpl;
-class Error;
 class StringRef;
 
 namespace zlib {
 
-static constexpr int NoCompression = 0;
-static constexpr int BestSpeedCompression = 1;
-static constexpr int DefaultCompression = 6;
-static constexpr int BestSizeCompression = 9;
+enum CompressionLevel {
+  NoCompression,
+  DefaultCompression,
+  BestSpeedCompression,
+  BestSizeCompression
+};
+
+enum Status {
+  StatusOK,
+  StatusUnsupported,    // zlib is unavailable
+  StatusOutOfMemory,    // there was not enough memory
+  StatusBufferTooShort, // there was not enough room in the output buffer
+  StatusInvalidArg,     // invalid input parameter
+  StatusInvalidData     // data was corrupted or incomplete
+};
 
 bool isAvailable();
 
-Error compress(StringRef InputBuffer, SmallVectorImpl<char> &CompressedBuffer,
-               int Level = DefaultCompression);
+Status compress(StringRef InputBuffer, SmallVectorImpl<char> &CompressedBuffer,
+                CompressionLevel Level = DefaultCompression);
 
-Error uncompress(StringRef InputBuffer, char *UncompressedBuffer,
-                 size_t &UncompressedSize);
+Status uncompress(StringRef InputBuffer, char *UncompressedBuffer,
+                  size_t &UncompressedSize);
 
-Error uncompress(StringRef InputBuffer,
-                 SmallVectorImpl<char> &UncompressedBuffer,
-                 size_t UncompressedSize);
+Status uncompress(StringRef InputBuffer,
+                  SmallVectorImpl<char> &UncompressedBuffer,
+                  size_t UncompressedSize);
 
 uint32_t crc32(StringRef Buffer);
 
@@ -46,3 +57,4 @@ uint32_t crc32(StringRef Buffer);
 } // End of namespace llvm
 
 #endif
+

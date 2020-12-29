@@ -1,15 +1,20 @@
 //===-- SectionLoadHistory.cpp ----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Target/SectionLoadHistory.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/Stream.h"
 #include "lldb/Target/SectionLoadList.h"
-#include "lldb/Utility/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -38,12 +43,13 @@ SectionLoadHistory::GetSectionLoadListForStopID(uint32_t stop_id,
   if (!m_stop_id_to_section_load_list.empty()) {
     if (read_only) {
       // The section load list is for reading data only so we don't need to
-      // create a new SectionLoadList for the current stop ID, just return the
-      // section load list for the stop ID that is equal to or less than the
-      // current stop ID
+      // create
+      // a new SectionLoadList for the current stop ID, just return the section
+      // load list for the stop ID that is equal to or less than the current
+      // stop ID
       if (stop_id == eStopIDNow) {
-        // If we are asking for the latest and greatest value, it is always at
-        // the end of our list because that will be the highest stop ID.
+        // If we are asking for the latest and greatest value, it is always
+        // at the end of our list because that will be the highest stop ID.
         StopIDToSectionLoadList::reverse_iterator rpos =
             m_stop_id_to_section_load_list.rbegin();
         return rpos->second.get();
@@ -64,8 +70,10 @@ SectionLoadHistory::GetSectionLoadListForStopID(uint32_t stop_id,
       assert(stop_id != eStopIDNow);
 
       // We are updating the section load list (not read only), so if the stop
-      // ID passed in isn't the same as the last stop ID in our collection,
-      // then create a new node using the current stop ID
+      // ID
+      // passed in isn't the same as the last stop ID in our collection, then
+      // create
+      // a new node using the current stop ID
       StopIDToSectionLoadList::iterator pos =
           m_stop_id_to_section_load_list.lower_bound(stop_id);
       if (pos != m_stop_id_to_section_load_list.end() &&
@@ -80,7 +88,7 @@ SectionLoadHistory::GetSectionLoadListForStopID(uint32_t stop_id,
       StopIDToSectionLoadList::reverse_iterator rpos =
           m_stop_id_to_section_load_list.rbegin();
       SectionLoadListSP section_load_list_sp(
-          new SectionLoadList(*rpos->second));
+          new SectionLoadList(*rpos->second.get()));
       m_stop_id_to_section_load_list[stop_id] = section_load_list_sp;
       return section_load_list_sp.get();
     }
@@ -97,7 +105,7 @@ SectionLoadList &SectionLoadHistory::GetCurrentSectionLoadList() {
   std::lock_guard<std::recursive_mutex> guard(m_mutex);
   SectionLoadList *section_load_list =
       GetSectionLoadListForStopID(eStopIDNow, read_only);
-  assert(section_load_list != nullptr);
+  assert(section_load_list != NULL);
   return *section_load_list;
 }
 

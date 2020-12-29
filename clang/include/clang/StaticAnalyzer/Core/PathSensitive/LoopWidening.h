@@ -1,8 +1,9 @@
 //===--- LoopWidening.h - Widen loops ---------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -21,7 +22,7 @@
 namespace clang {
 namespace ento {
 
-/// Get the states that result from widening the loop.
+/// \brief Get the states that result from widening the loop.
 ///
 /// Widen the loop by invalidating anything that might be modified
 /// by the loop body in any iteration.

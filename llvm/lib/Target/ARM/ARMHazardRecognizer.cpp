@@ -1,8 +1,9 @@
 //===-- ARMHazardRecognizer.cpp - ARM postra hazard recognizer ------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,7 +13,7 @@
 #include "ARMSubtarget.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/ScheduleDAG.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/Target/TargetRegisterInfo.h"
 using namespace llvm;
 
 static bool hasRAWHazard(MachineInstr *DefMI, MachineInstr *MI,
@@ -36,7 +37,7 @@ ARMHazardRecognizer::getHazardType(SUnit *SU, int Stalls) {
 
   MachineInstr *MI = SU->getInstr();
 
-  if (!MI->isDebugInstr()) {
+  if (!MI->isDebugValue()) {
     // Look for special VMLA / VMLS hazards. A VMUL / VADD / VSUB following
     // a VMLA / VMLS will cause 4 cycle stall.
     const MCInstrDesc &MCID = MI->getDesc();
@@ -80,7 +81,7 @@ void ARMHazardRecognizer::Reset() {
 
 void ARMHazardRecognizer::EmitInstruction(SUnit *SU) {
   MachineInstr *MI = SU->getInstr();
-  if (!MI->isDebugInstr()) {
+  if (!MI->isDebugValue()) {
     LastMI = MI;
     FpMLxStalls = 0;
   }

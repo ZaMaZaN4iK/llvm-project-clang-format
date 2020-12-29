@@ -1,8 +1,9 @@
 //===-- InferiorCallPOSIX.cpp -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,7 +13,7 @@
 #include "lldb/Core/ValueObject.h"
 #include "lldb/Expression/DiagnosticManager.h"
 #include "lldb/Host/Config.h"
-#include "lldb/Symbol/TypeSystem.h"
+#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Target/ExecutionContext.h"
 #include "lldb/Target/Platform.h"
@@ -20,7 +21,7 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Target/ThreadPlanCallFunction.h"
 
-#if LLDB_ENABLE_POSIX
+#ifndef LLDB_DISABLE_POSIX
 #include <sys/mman.h>
 #else
 // define them
@@ -38,16 +39,16 @@ bool lldb_private::InferiorCallMmap(Process *process, addr_t &allocated_addr,
                                     unsigned flags, addr_t fd, addr_t offset) {
   Thread *thread =
       process->GetThreadList().GetExpressionExecutionThread().get();
-  if (thread == nullptr)
+  if (thread == NULL)
     return false;
 
+  const bool append = true;
   const bool include_symbols = true;
   const bool include_inlines = false;
   SymbolContextList sc_list;
-  process->GetTarget().GetImages().FindFunctions(
+  const uint32_t count = process->GetTarget().GetImages().FindFunctions(
       ConstString("mmap"), eFunctionNameTypeFull, include_symbols,
-      include_inlines, sc_list);
-  const uint32_t count = sc_list.GetSize();
+      include_inlines, append, sc_list);
   if (count > 0) {
     SymbolContext sc;
     if (sc_list.GetContextAtIndex(0, sc)) {
@@ -60,10 +61,10 @@ bool lldb_private::InferiorCallMmap(Process *process, addr_t &allocated_addr,
       options.SetIgnoreBreakpoints(true);
       options.SetTryAllThreads(true);
       options.SetDebug(false);
-      options.SetTimeout(process->GetUtilityExpressionTimeout());
+      options.SetTimeout(std::chrono::milliseconds(500));
       options.SetTrapExceptions(false);
 
-      addr_t prot_arg;
+      addr_t prot_arg, flags_arg = 0;
       if (prot == eMmapProtNone)
         prot_arg = PROT_NONE;
       else {
@@ -76,26 +77,22 @@ bool lldb_private::InferiorCallMmap(Process *process, addr_t &allocated_addr,
           prot_arg |= PROT_WRITE;
       }
 
+      const ArchSpec arch = process->GetTarget().GetArchitecture();
+      flags_arg =
+          process->GetTarget().GetPlatform()->ConvertMmapFlagsToPlatform(arch,
+                                                                         flags);
+
       AddressRange mmap_range;
       if (sc.GetAddressRange(range_scope, 0, use_inline_block_range,
                              mmap_range)) {
-        auto type_system_or_err =
-            process->GetTarget().GetScratchTypeSystemForLanguage(
-                eLanguageTypeC);
-        if (!type_system_or_err) {
-          llvm::consumeError(type_system_or_err.takeError());
-          return false;
-        }
-        CompilerType void_ptr_type =
-            type_system_or_err->GetBasicTypeFromAST(eBasicTypeVoid)
-                .GetPointerType();
-        const ArchSpec arch = process->GetTarget().GetArchitecture();
-        MmapArgList args =
-            process->GetTarget().GetPlatform()->GetMmapArgumentList(
-                arch, addr, length, prot_arg, flags, fd, offset);
+        ClangASTContext *clang_ast_context =
+            process->GetTarget().GetScratchClangASTContext();
+        CompilerType clang_void_ptr_type =
+            clang_ast_context->GetBasicType(eBasicTypeVoid).GetPointerType();
+        lldb::addr_t args[] = {addr, length, prot_arg, flags_arg, fd, offset};
         lldb::ThreadPlanSP call_plan_sp(
             new ThreadPlanCallFunction(*thread, mmap_range.GetBaseAddress(),
-                                       void_ptr_type, args, options));
+                                       clang_void_ptr_type, args, options));
         if (call_plan_sp) {
           DiagnosticManager diagnostics;
 
@@ -132,16 +129,16 @@ bool lldb_private::InferiorCallMunmap(Process *process, addr_t addr,
                                       addr_t length) {
   Thread *thread =
       process->GetThreadList().GetExpressionExecutionThread().get();
-  if (thread == nullptr)
+  if (thread == NULL)
     return false;
 
+  const bool append = true;
   const bool include_symbols = true;
   const bool include_inlines = false;
   SymbolContextList sc_list;
-  process->GetTarget().GetImages().FindFunctions(
+  const uint32_t count = process->GetTarget().GetImages().FindFunctions(
       ConstString("munmap"), eFunctionNameTypeFull, include_symbols,
-      include_inlines, sc_list);
-  const uint32_t count = sc_list.GetSize();
+      include_inlines, append, sc_list);
   if (count > 0) {
     SymbolContext sc;
     if (sc_list.GetContextAtIndex(0, sc)) {
@@ -154,7 +151,7 @@ bool lldb_private::InferiorCallMunmap(Process *process, addr_t addr,
       options.SetIgnoreBreakpoints(true);
       options.SetTryAllThreads(true);
       options.SetDebug(false);
-      options.SetTimeout(process->GetUtilityExpressionTimeout());
+      options.SetTimeout(std::chrono::milliseconds(500));
       options.SetTrapExceptions(false);
 
       AddressRange munmap_range;
@@ -178,6 +175,63 @@ bool lldb_private::InferiorCallMunmap(Process *process, addr_t addr,
             }
           }
         }
+      }
+    }
+  }
+
+  return false;
+}
+
+// FIXME: This has nothing to do with Posix, it is just a convenience function
+// that calls a
+// function of the form "void * (*)(void)".  We should find a better place to
+// put this.
+
+bool lldb_private::InferiorCall(Process *process, const Address *address,
+                                addr_t &returned_func, bool trap_exceptions) {
+  Thread *thread =
+      process->GetThreadList().GetExpressionExecutionThread().get();
+  if (thread == NULL || address == NULL)
+    return false;
+
+  EvaluateExpressionOptions options;
+  options.SetStopOthers(true);
+  options.SetUnwindOnError(true);
+  options.SetIgnoreBreakpoints(true);
+  options.SetTryAllThreads(true);
+  options.SetDebug(false);
+  options.SetTimeout(std::chrono::milliseconds(500));
+  options.SetTrapExceptions(trap_exceptions);
+
+  ClangASTContext *clang_ast_context =
+      process->GetTarget().GetScratchClangASTContext();
+  CompilerType clang_void_ptr_type =
+      clang_ast_context->GetBasicType(eBasicTypeVoid).GetPointerType();
+  lldb::ThreadPlanSP call_plan_sp(
+      new ThreadPlanCallFunction(*thread, *address, clang_void_ptr_type,
+                                 llvm::ArrayRef<addr_t>(), options));
+  if (call_plan_sp) {
+    DiagnosticManager diagnostics;
+
+    StackFrame *frame = thread->GetStackFrameAtIndex(0).get();
+    if (frame) {
+      ExecutionContext exe_ctx;
+      frame->CalculateExecutionContext(exe_ctx);
+      ExpressionResults result =
+          process->RunThreadPlan(exe_ctx, call_plan_sp, options, diagnostics);
+      if (result == eExpressionCompleted) {
+        returned_func =
+            call_plan_sp->GetReturnValueObject()->GetValueAsUnsigned(
+                LLDB_INVALID_ADDRESS);
+
+        if (process->GetAddressByteSize() == 4) {
+          if (returned_func == UINT32_MAX)
+            return false;
+        } else if (process->GetAddressByteSize() == 8) {
+          if (returned_func == UINT64_MAX)
+            return false;
+        }
+        return true;
       }
     }
   }

@@ -7,40 +7,29 @@ get_filename_component(CLANG_LINT_SOURCE_DIR
 include_directories(${CLANG_LINT_SOURCE_DIR})
 
 add_extra_unittest(ClangTidyTests
-  AddConstTest.cpp
   ClangTidyDiagnosticConsumerTest.cpp
   ClangTidyOptionsTest.cpp
   IncludeInserterTest.cpp
-  GlobListTest.cpp
   GoogleModuleTest.cpp
   LLVMModuleTest.cpp
+  MiscModuleTest.cpp
   NamespaceAliaserTest.cpp
-  ObjCModuleTest.cpp
   OverlappingReplacementsTest.cpp
   UsingInserterTest.cpp
-  ReadabilityModuleTest.cpp
-  TransformerClangTidyCheckTest.cpp
-  )
+  ReadabilityModuleTest.cpp)
 
-clang_target_link_libraries(ClangTidyTests
-  PRIVATE
+target_link_libraries(ClangTidyTests
   clangAST
   clangASTMatchers
   clangBasic
   clangFrontend
   clangLex
-  clangSerialization
-  clangTooling
-  clangToolingCore
-  clangTransformer
-  )
-target_link_libraries(ClangTidyTests
-  PRIVATE
   clangTidy
-  clangTidyAndroidModule
   clangTidyGoogleModule
   clangTidyLLVMModule
-  clangTidyObjCModule
+  clangTidyMiscModule
   clangTidyReadabilityModule
   clangTidyUtils
+  clangTooling
+  clangToolingCore
   )

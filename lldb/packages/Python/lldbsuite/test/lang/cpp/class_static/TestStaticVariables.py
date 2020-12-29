@@ -2,8 +2,11 @@
 Test display and Python APIs on file and class static variables.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -20,10 +23,11 @@ class StaticVariableTestCase(TestBase):
         # Find the line number to break at.
         self.line = line_number('main.cpp', '// Set break point at this line.')
 
+    @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr24764")
     def test_with_run_command(self):
         """Test that file and class static variables display correctly."""
         self.build()
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_file_and_line(
             self, "main.cpp", self.line, num_expected_locations=1, loc_exact=True)
@@ -35,7 +39,7 @@ class StaticVariableTestCase(TestBase):
                     substrs=['stopped',
                              'stop reason = breakpoint'])
 
-        # Global variables are no longer displayed with the "frame variable"
+        # global variables are no longer displayed with the "frame variable"
         # command.
         self.expect(
             'target variable A::g_points',
@@ -53,62 +57,21 @@ class StaticVariableTestCase(TestBase):
                 startstr="(int) A::g_points[1].x = 11")
 
     @expectedFailureAll(
-        compiler=["gcc"],
+        oslist=lldbplatformutil.getDarwinOSTriples(),
+        bugnumber="<rdar://problem/28706946>")
+    @expectedFailureAll(
+        compiler=[
+            "clang",
+            "gcc"],
         bugnumber="Compiler emits incomplete debug info")
     @expectedFailureAll(
-        compiler=["clang"],
-        compiler_version=["<", "3.9"],
-        bugnumber='llvm.org/pr20550')
-    def test_with_run_command_complete(self):
-        """
-        Test that file and class static variables display correctly with
-        complete debug information.
-        """
-        self.build()
-        target = self.dbg.CreateTarget(self.getBuildArtifact("a.out"))
-        self.assertTrue(target, VALID_TARGET)
-
-        # Global variables are no longer displayed with the "frame variable"
-        # command.
-        self.expect(
-            'target variable A::g_points',
-            VARIABLES_DISPLAYED_CORRECTLY,
-            patterns=[
-                '\(PointType \[[1-9]*\]\) A::g_points = {', '(x = 1, y = 2)',
-                '(x = 11, y = 22)'
-            ])
-
-        # Ensure that we take the context into account and only print
-        # A::g_points.
-        self.expect(
-            'target variable A::g_points',
-            VARIABLES_DISPLAYED_CORRECTLY,
-            matching=False,
-            patterns=['(x = 3, y = 4)', '(x = 33, y = 44)'])
-
-        # Finally, ensure that we print both points when not specifying a
-        # context.
-        self.expect(
-            'target variable g_points',
-            VARIABLES_DISPLAYED_CORRECTLY,
-            substrs=[
-                '(PointType [2]) g_points', '(x = 1, y = 2)',
-                '(x = 11, y = 22)', '(x = 3, y = 4)', '(x = 33, y = 44)'
-            ])
-
-    @expectedFailureAll(
-        compiler=["gcc"],
-        bugnumber="Compiler emits incomplete debug info")
-    @expectedFailureAll(
-        compiler=["clang"],
-        compiler_version=["<", "3.9"],
-        bugnumber='llvm.org/pr20550')
-    @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr24764")
+        oslist=['freebsd'],
+        bugnumber='llvm.org/pr20550 failing on FreeBSD-11')
     @add_test_categories(['pyapi'])
     def test_with_python_api(self):
         """Test Python APIs on file and class static variables."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
@@ -142,11 +105,11 @@ class StaticVariableTestCase(TestBase):
             if name == 'g_points':
                 self.assertTrue(
                     val.GetValueType() == lldb.eValueTypeVariableStatic)
-                self.assertEqual(val.GetNumChildren(), 2)
+                self.assertTrue(val.GetNumChildren() == 2)
             elif name == 'A::g_points':
                 self.assertTrue(
                     val.GetValueType() == lldb.eValueTypeVariableGlobal)
-                self.assertEqual(val.GetNumChildren(), 2)
+                self.assertTrue(val.GetNumChildren() == 2)
                 child1 = val.GetChildAtIndex(1)
                 self.DebugSBValue(child1)
                 child1_x = child1.GetChildAtIndex(0)

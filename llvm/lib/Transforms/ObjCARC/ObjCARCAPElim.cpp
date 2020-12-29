@@ -1,8 +1,9 @@
 //===- ObjCARCAPElim.cpp - ObjC ARC Optimization --------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -26,7 +27,6 @@
 #include "ObjCARC.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -36,7 +36,7 @@ using namespace llvm::objcarc;
 #define DEBUG_TYPE "objc-arc-ap-elim"
 
 namespace {
-  /// Autorelease pool elimination.
+  /// \brief Autorelease pool elimination.
   class ObjCARCAPElim : public ModulePass {
     void getAnalysisUsage(AnalysisUsage &AU) const override;
     bool runOnModule(Module &M) override;
@@ -103,12 +103,10 @@ bool ObjCARCAPElim::OptimizeBB(BasicBlock *BB) {
       // zap the pair.
       if (Push && cast<CallInst>(Inst)->getArgOperand(0) == Push) {
         Changed = true;
-        LLVM_DEBUG(dbgs() << "ObjCARCAPElim::OptimizeBB: Zapping push pop "
-                             "autorelease pair:\n"
-                             "                           Pop: "
-                          << *Inst << "\n"
-                          << "                           Push: " << *Push
-                          << "\n");
+        DEBUG(dbgs() << "ObjCARCAPElim::OptimizeBB: Zapping push pop "
+                        "autorelease pair:\n"
+                        "                           Pop: " << *Inst << "\n"
+                     << "                           Push: " << *Push << "\n");
         Inst->eraseFromParent();
         Push->eraseFromParent();
       }

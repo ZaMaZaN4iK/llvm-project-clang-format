@@ -1,8 +1,9 @@
-//===- IslAst.h - Interface to the isl code generator -----------*- C++ -*-===//
+//===- IslAst.h - Interface to the isl code generator-------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -18,34 +19,39 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef POLLY_ISLAST_H
-#define POLLY_ISLAST_H
+#ifndef POLLY_ISL_AST_H
+#define POLLY_ISL_AST_H
 
+#include "polly/Config/config.h"
 #include "polly/ScopPass.h"
-#include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/IR/PassManager.h"
-#include "isl/ctx.h"
+#include "isl/ast.h"
+
+namespace llvm {
+class raw_ostream;
+} // namespace llvm
+
+struct isl_pw_aff;
+struct isl_ast_node;
+struct isl_ast_expr;
+struct isl_ast_build;
+struct isl_union_map;
+struct isl_pw_multi_aff;
 
 namespace polly {
-
+class Scop;
+class IslAst;
+class MemoryAccess;
 struct Dependences;
 
 class IslAst {
 public:
-  IslAst(const IslAst &) = delete;
-  IslAst &operator=(const IslAst &) = delete;
-  IslAst(IslAst &&);
-  IslAst &operator=(IslAst &&) = delete;
+  static IslAst *create(Scop *Scop, const Dependences &D);
   ~IslAst();
 
-  static IslAst create(Scop &Scop, const Dependences &D);
-
   /// Print a source code representation of the program.
-  void pprint(raw_ostream &OS);
+  void pprint(llvm::raw_ostream &OS);
 
   __isl_give isl_ast_node *getAst();
-
-  const std::shared_ptr<isl_ctx> getSharedIslCtx() const { return Ctx; }
 
   /// Get the run-time conditions for the Scop.
   __isl_give isl_ast_expr *getRunCondition();
@@ -56,70 +62,78 @@ public:
   /// @param Build The isl_build object to use to build the condition.
   ///
   /// @returns An ast expression that describes the necessary run-time check.
-  static isl_ast_expr *buildRunCondition(Scop &S,
+  static isl_ast_expr *buildRunCondition(Scop *S,
                                          __isl_keep isl_ast_build *Build);
 
 private:
-  Scop &S;
-  isl_ast_node *Root = nullptr;
-  isl_ast_expr *RunCondition = nullptr;
+  Scop *S;
+  isl_ast_node *Root;
+  isl_ast_expr *RunCondition;
   std::shared_ptr<isl_ctx> Ctx;
 
-  IslAst(Scop &Scop);
-
+  IslAst(Scop *Scop);
   void init(const Dependences &D);
 };
 
-class IslAstInfo {
+class IslAstInfo : public ScopPass {
 public:
   using MemoryAccessSet = SmallPtrSet<MemoryAccess *, 4>;
 
   /// Payload information used to annotate an AST node.
   struct IslAstUserPayload {
     /// Construct and initialize the payload.
-    IslAstUserPayload() = default;
+    IslAstUserPayload()
+        : IsInnermost(false), IsInnermostParallel(false),
+          IsOutermostParallel(false), IsReductionParallel(false),
+          MinimalDependenceDistance(nullptr), Build(nullptr) {}
 
     /// Cleanup all isl structs on destruction.
     ~IslAstUserPayload();
 
-    /// Does the dependence analysis determine that there are no loop-carried
-    /// dependencies?
-    bool IsParallel = false;
-
     /// Flag to mark innermost loops.
-    bool IsInnermost = false;
+    bool IsInnermost;
 
     /// Flag to mark innermost parallel loops.
-    bool IsInnermostParallel = false;
+    bool IsInnermostParallel;
 
     /// Flag to mark outermost parallel loops.
-    bool IsOutermostParallel = false;
+    bool IsOutermostParallel;
 
     /// Flag to mark parallel loops which break reductions.
-    bool IsReductionParallel = false;
+    bool IsReductionParallel;
 
     /// The minimal dependence distance for non parallel loops.
-    isl::pw_aff MinimalDependenceDistance;
+    isl_pw_aff *MinimalDependenceDistance;
 
     /// The build environment at the time this node was constructed.
-    isl_ast_build *Build = nullptr;
+    isl_ast_build *Build;
 
     /// Set of accesses which break reduction dependences.
     MemoryAccessSet BrokenReductions;
   };
 
 private:
-  Scop &S;
-  IslAst Ast;
+  Scop *S;
+  IslAst *Ast;
 
 public:
-  IslAstInfo(Scop &S, const Dependences &D) : S(S), Ast(IslAst::create(S, D)) {}
+  static char ID;
+  IslAstInfo() : ScopPass(ID), S(nullptr), Ast(nullptr) {}
 
-  /// Return the isl AST computed by this IslAstInfo.
-  IslAst &getIslAst() { return Ast; }
+  /// Build the AST for the given SCoP @p S.
+  bool runOnScop(Scop &S) override;
+
+  /// Register all analyses and transformation required.
+  void getAnalysisUsage(AnalysisUsage &AU) const override;
+
+  /// Release the internal memory.
+  void releaseMemory() override;
+
+  /// Print a source code representation of the program.
+  void printScop(llvm::raw_ostream &OS, Scop &S) const override;
 
   /// Return a copy of the AST root node.
-  __isl_give isl_ast_node *getAst();
+  __isl_give isl_ast_node *getAst() const;
 
   /// Get the run condition.
   ///
@@ -127,13 +141,12 @@ public:
   /// assumptions that have been taken hold. If the run condition evaluates to
   /// zero/false some assumptions do not hold and the original code needs to
   /// be executed.
-  __isl_give isl_ast_expr *getRunCondition();
-
-  void print(raw_ostream &O);
+  __isl_give isl_ast_expr *getRunCondition() const;
 
   /// @name Extract information attached to an isl ast (for) node.
   ///
   ///{
+
   /// Get the complete payload attached to @p Node.
   static IslAstUserPayload *getNodePayload(__isl_keep isl_ast_node *Node);
 
@@ -170,48 +183,10 @@ public:
 
   ///}
 };
-
-struct IslAstAnalysis : public AnalysisInfoMixin<IslAstAnalysis> {
-  static AnalysisKey Key;
-
-  using Result = IslAstInfo;
-
-  IslAstInfo run(Scop &S, ScopAnalysisManager &SAM,
-                 ScopStandardAnalysisResults &SAR);
-};
-
-class IslAstInfoWrapperPass : public ScopPass {
-  std::unique_ptr<IslAstInfo> Ast;
-
-public:
-  static char ID;
-
-  IslAstInfoWrapperPass() : ScopPass(ID) {}
-
-  IslAstInfo &getAI() { return *Ast; }
-  const IslAstInfo &getAI() const { return *Ast; }
-
-  /// Build the AST for the given SCoP @p S.
-  bool runOnScop(Scop &S) override;
-
-  /// Register all analyses and transformation required.
-  void getAnalysisUsage(AnalysisUsage &AU) const override;
-
-  /// Release the internal memory.
-  void releaseMemory() override;
-
-  /// Print a source code representation of the program.
-  void printScop(raw_ostream &OS, Scop &S) const override;
-};
-
-struct IslAstPrinterPass : public PassInfoMixin<IslAstPrinterPass> {
-  IslAstPrinterPass(raw_ostream &OS) : OS(OS) {}
-
-  PreservedAnalyses run(Scop &S, ScopAnalysisManager &SAM,
-                        ScopStandardAnalysisResults &, SPMUpdater &U);
-
-  raw_ostream &OS;
-};
 } // namespace polly
 
-#endif // POLLY_ISLAST_H
+namespace llvm {
+class PassRegistry;
+void initializeIslAstInfoPass(llvm::PassRegistry &);
+} // namespace llvm
+#endif /* POLLY_ISL_AST_H */

@@ -1,8 +1,9 @@
 //===-- RegisterContextLinux_mips.h ---------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,10 +21,6 @@ public:
   size_t GetGPRSize() const override;
 
   const lldb_private::RegisterInfo *GetRegisterInfo() const override;
-
-  const lldb_private::RegisterSet *GetRegisterSet(size_t set) const;
-
-  size_t GetRegisterSetCount() const;
 
   uint32_t GetRegisterCount() const override;
 

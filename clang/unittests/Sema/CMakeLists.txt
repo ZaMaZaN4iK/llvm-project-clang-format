@@ -4,23 +4,13 @@ set(LLVM_LINK_COMPONENTS
 
 add_clang_unittest(SemaTests
   ExternalSemaSourceTest.cpp
-  CodeCompleteTest.cpp
-  GslOwnerPointerInference.cpp
   )
 
-clang_target_link_libraries(SemaTests
-  PRIVATE
+target_link_libraries(SemaTests
   clangAST
-  clangASTMatchers
   clangBasic
   clangFrontend
   clangParse
   clangSema
-  clangSerialization
   clangTooling
   )
-
-target_link_libraries(SemaTests
-  PRIVATE
-  LLVMTestingSupport
-)

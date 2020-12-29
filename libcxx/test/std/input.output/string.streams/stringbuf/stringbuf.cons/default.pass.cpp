@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,24 +17,7 @@
 #include <sstream>
 #include <cassert>
 
-#include "test_macros.h"
-
-template<typename CharT>
-struct testbuf
-    : std::basic_stringbuf<CharT>
-{
-    void check()
-    {
-        assert(this->eback() == NULL);
-        assert(this->gptr() == NULL);
-        assert(this->egptr() == NULL);
-        assert(this->pbase() == NULL);
-        assert(this->pptr() == NULL);
-        assert(this->epptr() == NULL);
-    }
-};
-
-int main(int, char**)
+int main()
 {
     {
         std::stringbuf buf;
@@ -43,14 +27,4 @@ int main(int, char**)
         std::wstringbuf buf;
         assert(buf.str() == L"");
     }
-    {
-        testbuf<char> buf;
-        buf.check();
-    }
-    {
-        testbuf<wchar_t> buf;
-        buf.check();
-    }
-
-  return 0;
 }

@@ -1,8 +1,7 @@
 ---
 GlobalValueMap:
   42:
-    - Live: true
-      TypeTests: [123]
+    - TypeTests: [123]
 TypeIdMap:
   typeid1:
     TTRes:

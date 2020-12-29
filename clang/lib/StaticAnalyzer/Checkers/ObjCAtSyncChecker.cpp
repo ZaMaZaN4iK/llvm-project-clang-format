@@ -1,8 +1,9 @@
 //== ObjCAtSyncChecker.cpp - nil mutex checker for @synchronized -*- C++ -*--=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/AST/StmtObjC.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -38,7 +39,7 @@ void ObjCAtSyncChecker::checkPreStmt(const ObjCAtSynchronizedStmt *S,
 
   const Expr *Ex = S->getSynchExpr();
   ProgramStateRef state = C.getState();
-  SVal V = C.getSVal(Ex);
+  SVal V = state->getSVal(Ex, C.getLocationContext());
 
   // Uninitialized value used for the mutex?
   if (V.getAs<UndefinedVal>()) {
@@ -46,9 +47,9 @@ void ObjCAtSyncChecker::checkPreStmt(const ObjCAtSynchronizedStmt *S,
       if (!BT_undef)
         BT_undef.reset(new BuiltinBug(this, "Uninitialized value used as mutex "
                                             "for @synchronized"));
-      auto report = std::make_unique<PathSensitiveBugReport>(
-          *BT_undef, BT_undef->getDescription(), N);
-      bugreporter::trackExpressionValue(N, Ex, *report);
+      auto report =
+          llvm::make_unique<BugReport>(*BT_undef, BT_undef->getDescription(), N);
+      bugreporter::trackNullOrUndefValue(N, Ex, *report);
       C.emitReport(std::move(report));
     }
     return;
@@ -70,9 +71,9 @@ void ObjCAtSyncChecker::checkPreStmt(const ObjCAtSynchronizedStmt *S,
           BT_null.reset(new BuiltinBug(
               this, "Nil value used as mutex for @synchronized() "
                     "(no synchronization will occur)"));
-        auto report = std::make_unique<PathSensitiveBugReport>(
-            *BT_null, BT_null->getDescription(), N);
-        bugreporter::trackExpressionValue(N, Ex, *report);
+        auto report =
+            llvm::make_unique<BugReport>(*BT_null, BT_null->getDescription(), N);
+        bugreporter::trackNullOrUndefValue(N, Ex, *report);
 
         C.emitReport(std::move(report));
         return;
@@ -88,9 +89,6 @@ void ObjCAtSyncChecker::checkPreStmt(const ObjCAtSynchronizedStmt *S,
 }
 
 void ento::registerObjCAtSyncChecker(CheckerManager &mgr) {
-  mgr.registerChecker<ObjCAtSyncChecker>();
-}
-
-bool ento::shouldRegisterObjCAtSyncChecker(const LangOptions &LO) {
-  return LO.ObjC;
+  if (mgr.getLangOpts().ObjC2)
+    mgr.registerChecker<ObjCAtSyncChecker>();
 }

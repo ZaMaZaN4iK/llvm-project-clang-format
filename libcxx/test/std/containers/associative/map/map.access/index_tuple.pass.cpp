@@ -1,12 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// UNSUPPORTED: c++98, c++03
 
 // <map>
 
@@ -14,21 +13,21 @@
 
 // mapped_type& operator[](const key_type& k);
 
-// https://bugs.llvm.org/show_bug.cgi?id=16542
+// http://llvm.org/bugs/show_bug.cgi?id=16542
 
 #include <map>
 
+#ifndef _LIBCPP_HAS_NO_VARIADICS
 
 #include <tuple>
 
-#include "test_macros.h"
+#endif
 
-
-int main(int, char**)
+int main()
 {
+#ifndef _LIBCPP_HAS_NO_VARIADICS
     using namespace std;
     map<tuple<int,int>, size_t> m;
     m[make_tuple(2,3)]=7;
-
-  return 0;
+#endif
 }

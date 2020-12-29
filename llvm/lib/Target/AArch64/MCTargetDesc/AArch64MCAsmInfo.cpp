@@ -1,8 +1,9 @@
 //===-- AArch64MCAsmInfo.cpp - AArch64 asm properties ---------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -30,17 +31,15 @@ static cl::opt<AsmWriterVariantTy> AsmWriterVariant(
     cl::values(clEnumValN(Generic, "generic", "Emit generic NEON assembly"),
                clEnumValN(Apple, "apple", "Emit Apple-style NEON assembly")));
 
-AArch64MCAsmInfoDarwin::AArch64MCAsmInfoDarwin(bool IsILP32) {
-  // We prefer NEON instructions to be printed in the short, Apple-specific
-  // form when targeting Darwin.
-  AssemblerDialect = AsmWriterVariant == Default ? Apple : AsmWriterVariant;
+AArch64MCAsmInfoDarwin::AArch64MCAsmInfoDarwin() {
+  // We prefer NEON instructions to be printed in the short form.
+  AssemblerDialect = AsmWriterVariant == Default ? 1 : AsmWriterVariant;
 
   PrivateGlobalPrefix = "L";
   PrivateLabelPrefix = "L";
   SeparatorString = "%%";
   CommentString = ";";
-  CalleeSaveStackSlotSize = 8;
-  CodePointerSize = IsILP32 ? 4 : 8;
+  PointerSize = CalleeSaveStackSlotSize = 8;
 
   AlignmentIsInBytes = false;
   UsesELFSectionDirectiveForBSS = true;
@@ -69,11 +68,10 @@ AArch64MCAsmInfoELF::AArch64MCAsmInfoELF(const Triple &T) {
   if (T.getArch() == Triple::aarch64_be)
     IsLittleEndian = false;
 
-  // We prefer NEON instructions to be printed in the generic form when
-  // targeting ELF.
-  AssemblerDialect = AsmWriterVariant == Default ? Generic : AsmWriterVariant;
+  // We prefer NEON instructions to be printed in the short form.
+  AssemblerDialect = AsmWriterVariant == Default ? 0 : AsmWriterVariant;
 
-  CodePointerSize = 8;
+  PointerSize = 8;
 
   // ".comm align is in bytes but .align is pow-2."
   AlignmentIsInBytes = false;
@@ -99,38 +97,4 @@ AArch64MCAsmInfoELF::AArch64MCAsmInfoELF(const Triple &T) {
   UseIntegratedAssembler = true;
 
   HasIdentDirective = true;
-}
-
-AArch64MCAsmInfoMicrosoftCOFF::AArch64MCAsmInfoMicrosoftCOFF() {
-  PrivateGlobalPrefix = ".L";
-  PrivateLabelPrefix = ".L";
-
-  Data16bitsDirective = "\t.hword\t";
-  Data32bitsDirective = "\t.word\t";
-  Data64bitsDirective = "\t.xword\t";
-
-  AlignmentIsInBytes = false;
-  SupportsDebugInformation = true;
-  CodePointerSize = 8;
-
-  CommentString = ";";
-  ExceptionsType = ExceptionHandling::WinEH;
-  WinEHEncodingType = WinEH::EncodingType::Itanium;
-}
-
-AArch64MCAsmInfoGNUCOFF::AArch64MCAsmInfoGNUCOFF() {
-  PrivateGlobalPrefix = ".L";
-  PrivateLabelPrefix = ".L";
-
-  Data16bitsDirective = "\t.hword\t";
-  Data32bitsDirective = "\t.word\t";
-  Data64bitsDirective = "\t.xword\t";
-
-  AlignmentIsInBytes = false;
-  SupportsDebugInformation = true;
-  CodePointerSize = 8;
-
-  CommentString = "//";
-  ExceptionsType = ExceptionHandling::WinEH;
-  WinEHEncodingType = WinEH::EncodingType::Itanium;
 }

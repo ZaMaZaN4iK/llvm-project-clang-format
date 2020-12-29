@@ -1,8 +1,9 @@
 //===- Error.h - system_error extensions for Object -------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -49,7 +50,6 @@ inline std::error_code make_error_code(object_error e) {
 /// Currently inherits from ECError for easy interoperability with
 /// std::error_code, but this will be removed in the future.
 class BinaryError : public ErrorInfo<BinaryError, ECError> {
-  virtual void anchor();
 public:
   static char ID;
   BinaryError() {

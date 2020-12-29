@@ -5,6 +5,9 @@ Test some SBModule and SBSection APIs.
 from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -23,7 +26,7 @@ class ModuleAndSectionAPIsTestCase(TestBase):
     def test_module_and_section(self):
         """Test module and section APIs."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
@@ -42,7 +45,6 @@ class ModuleAndSectionAPIsTestCase(TestBase):
 
         print("Exe module: %s" % str(exe_module))
         print("Number of sections: %d" % exe_module.GetNumSections())
-        print("Number of symbols: %d" % len(exe_module))
         INDENT = ' ' * 4
         INDENT2 = INDENT * 2
         for sec in exe_module.section_iter():
@@ -75,7 +77,7 @@ class ModuleAndSectionAPIsTestCase(TestBase):
     def test_module_and_section_boundary_condition(self):
         """Test module and section APIs by passing None when it expects a Python string."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
@@ -116,7 +118,7 @@ class ModuleAndSectionAPIsTestCase(TestBase):
     def test_module_compile_unit_iter(self):
         """Test module's compile unit iterator APIs."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
@@ -139,29 +141,3 @@ class ModuleAndSectionAPIsTestCase(TestBase):
         INDENT2 = INDENT * 2
         for cu in exe_module.compile_unit_iter():
             print(cu)
-
-    @add_test_categories(['pyapi'])
-    def test_find_compile_units(self):
-        """Exercise SBModule.FindCompileUnits() API."""
-        d = {'EXE': 'b.out'}
-        self.build(dictionary=d)
-        self.setTearDownCleanup(dictionary=d)
-        self.find_compile_units(self.getBuildArtifact('b.out'))
-
-    def find_compile_units(self, exe):
-        """Exercise SBModule.FindCompileUnits() API."""
-        source_name_list = ["main.cpp", "b.cpp", "c.cpp"]
-
-        # Create a target by the debugger.
-        target = self.dbg.CreateTarget(exe)
-        self.assertTrue(target, VALID_TARGET)
-
-        num_modules = target.GetNumModules()
-        for i in range(num_modules):
-            module = target.GetModuleAtIndex(i)
-            for source_name in source_name_list:
-                list = module.FindCompileUnits(lldb.SBFileSpec(source_name, False))
-                for sc in list:
-                    self.assertTrue(
-                        sc.GetCompileUnit().GetFileSpec().GetFilename() ==
-                        source_name)

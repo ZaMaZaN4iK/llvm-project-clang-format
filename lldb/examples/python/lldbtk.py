@@ -1,15 +1,10 @@
 #!/usr/bin/python
-from __future__ import print_function
 
 import lldb
 import shlex
 import sys
-try:
-    from tkinter import *
-    import tkinter.ttk as ttk
-except ImportError:
-    from Tkinter import *
-    import ttk
+from Tkinter import *
+import ttk
 
 
 class ValueTreeItemDelegate(object):
@@ -544,19 +539,19 @@ def tk_variable_display(debugger, command, result, dict):
     sys.argv = ['tk-variables']
     target = debugger.GetSelectedTarget()
     if not target:
-        print("invalid target", file=result)
+        print >>result, "invalid target"
         return
     process = target.GetProcess()
     if not process:
-        print("invalid process", file=result)
+        print >>result, "invalid process"
         return
     thread = process.GetSelectedThread()
     if not thread:
-        print("invalid thread", file=result)
+        print >>result, "invalid thread"
         return
     frame = thread.GetSelectedFrame()
     if not frame:
-        print("invalid frame", file=result)
+        print >>result, "invalid frame"
         return
     # Parse command line args
     command_args = shlex.split(command)
@@ -578,11 +573,11 @@ def tk_process_display(debugger, command, result, dict):
     sys.argv = ['tk-process']
     target = debugger.GetSelectedTarget()
     if not target:
-        print("invalid target", file=result)
+        print >>result, "invalid target"
         return
     process = target.GetProcess()
     if not process:
-        print("invalid process", file=result)
+        print >>result, "invalid process"
         return
     # Parse command line args
     columnd_dicts = [{'id': '#0', 'text': 'Name', 'anchor': W, 'stretch': 0},
@@ -603,7 +598,7 @@ def tk_target_display(debugger, command, result, dict):
     sys.argv = ['tk-target']
     target = debugger.GetSelectedTarget()
     if not target:
-        print("invalid target", file=result)
+        print >>result, "invalid target"
         return
     # Parse command line args
     columnd_dicts = [{'id': '#0', 'text': 'Name', 'anchor': W, 'stretch': 0},

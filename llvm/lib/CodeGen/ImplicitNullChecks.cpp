@@ -1,8 +1,9 @@
-//===- ImplicitNullChecks.cpp - Fold null checks into memory accesses -----===//
+//===-- ImplicitNullChecks.cpp - Fold null checks into memory accesses ----===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,55 +22,40 @@
 // With the help of a runtime that understands the .fault_maps section,
 // faulting_load_op branches to throw_npe if executing movl (%r10), %esi incurs
 // a page fault.
-// Store and LoadStore are also supported.
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/None.h"
-#include "llvm/ADT/Optional.h"
-#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/Analysis/MemoryLocation.h"
-#include "llvm/CodeGen/FaultMaps.h"
-#include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/MachineFunction.h"
-#include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/PseudoSourceValue.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/CodeGen/TargetOpcodes.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/DebugLoc.h"
+#include "llvm/IR/Instruction.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/MC/MCInstrDesc.h"
-#include "llvm/MC/MCRegisterInfo.h"
-#include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
-#include <cassert>
-#include <cstdint>
-#include <iterator>
+#include "llvm/Support/Debug.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
+#include "llvm/Target/TargetInstrInfo.h"
 
 using namespace llvm;
 
 static cl::opt<int> PageSize("imp-null-check-page-size",
                              cl::desc("The page size of the target in bytes"),
-                             cl::init(4096), cl::Hidden);
+                             cl::init(4096));
 
 static cl::opt<unsigned> MaxInstsToConsider(
     "imp-null-max-insts-to-consider",
     cl::desc("The max number of instructions to consider hoisting loads over "
              "(the algorithm is quadratic over this number)"),
-    cl::Hidden, cl::init(8));
+    cl::init(8));
 
 #define DEBUG_TYPE "implicit-null-checks"
 
@@ -90,7 +76,7 @@ class ImplicitNullChecks : public MachineFunctionPass {
   /// A data type for representing the result computed by \c
   /// computeDependence.  States whether it is okay to reorder the
   /// instruction passed to \c computeDependence with at most one
-  /// dependency.
+  /// depednency.
   struct DependenceResult {
     /// Can we actually re-order \p MI with \p Insts (see \c
     /// computeDependence).
@@ -115,7 +101,7 @@ class ImplicitNullChecks : public MachineFunctionPass {
   /// \c canHandle should return true for all instructions in \p
   /// Insts.
   DependenceResult computeDependence(const MachineInstr *MI,
-                                     ArrayRef<MachineInstr *> Block);
+                                     ArrayRef<MachineInstr *> Insts);
 
   /// Represents one null check that can be made implicit.
   class NullCheck {
@@ -134,7 +120,7 @@ class ImplicitNullChecks : public MachineFunctionPass {
     // The block branched to if the pointer is null.
     MachineBasicBlock *NullSucc;
 
-    // If this is non-null, then MemOperation has a dependency on this
+    // If this is non-null, then MemOperation has a dependency on on this
     // instruction; and it needs to be hoisted to execute before MemOperation.
     MachineInstr *OnlyDependency;
 
@@ -164,48 +150,26 @@ class ImplicitNullChecks : public MachineFunctionPass {
   const TargetInstrInfo *TII = nullptr;
   const TargetRegisterInfo *TRI = nullptr;
   AliasAnalysis *AA = nullptr;
-  MachineFrameInfo *MFI = nullptr;
+  MachineModuleInfo *MMI = nullptr;
 
   bool analyzeBlockForNullChecks(MachineBasicBlock &MBB,
                                  SmallVectorImpl<NullCheck> &NullCheckList);
-  MachineInstr *insertFaultingInstr(MachineInstr *MI, MachineBasicBlock *MBB,
-                                    MachineBasicBlock *HandlerMBB);
+  MachineInstr *insertFaultingLoad(MachineInstr *LoadMI, MachineBasicBlock *MBB,
+                                   MachineBasicBlock *HandlerMBB);
   void rewriteNullChecks(ArrayRef<NullCheck> NullCheckList);
 
-  enum AliasResult {
-    AR_NoAlias,
-    AR_MayAlias,
-    AR_WillAliasEverything
-  };
-
-  /// Returns AR_NoAlias if \p MI memory operation does not alias with
-  /// \p PrevMI, AR_MayAlias if they may alias and AR_WillAliasEverything if
-  /// they may alias and any further memory operation may alias with \p PrevMI.
-  AliasResult areMemoryOpsAliased(const MachineInstr &MI,
-                                  const MachineInstr *PrevMI) const;
-
-  enum SuitabilityResult {
-    SR_Suitable,
-    SR_Unsuitable,
-    SR_Impossible
-  };
-
-  /// Return SR_Suitable if \p MI a memory operation that can be used to
-  /// implicitly null check the value in \p PointerReg, SR_Unsuitable if
-  /// \p MI cannot be used to null check and SR_Impossible if there is
-  /// no sense to continue lookup due to any other instruction will not be able
-  /// to be used. \p PrevInsts is the set of instruction seen since
+  /// Is \p MI a memory operation that can be used to implicitly null check the
+  /// value in \p PointerReg?  \p PrevInsts is the set of instruction seen since
   /// the explicit null check on \p PointerReg.
-  SuitabilityResult isSuitableMemoryOp(const MachineInstr &MI,
-                                       unsigned PointerReg,
-                                       ArrayRef<MachineInstr *> PrevInsts);
+  bool isSuitableMemoryOp(MachineInstr &MI, unsigned PointerReg,
+                          ArrayRef<MachineInstr *> PrevInsts);
 
-  /// Return true if \p FaultingMI can be hoisted from after the
+  /// Return true if \p FaultingMI can be hoisted from after the the
   /// instructions in \p InstsSeenSoFar to before them.  Set \p Dependence to a
   /// non-null value if we also need to (and legally can) hoist a depedency.
-  bool canHoistInst(MachineInstr *FaultingMI, unsigned PointerReg,
-                    ArrayRef<MachineInstr *> InstsSeenSoFar,
-                    MachineBasicBlock *NullSucc, MachineInstr *&Dependence);
+  bool canHoistLoadInst(MachineInstr *FaultingMI, unsigned PointerReg,
+                        ArrayRef<MachineInstr *> InstsSeenSoFar,
+                        MachineBasicBlock *NullSucc, MachineInstr *&Dependence);
 
 public:
   static char ID;
@@ -215,7 +179,6 @@ public:
   }
 
   bool runOnMachineFunction(MachineFunction &MF) override;
-
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<AAResultsWrapperPass>();
     MachineFunctionPass::getAnalysisUsage(AU);
@@ -227,11 +190,10 @@ public:
   }
 };
 
-} // end anonymous namespace
+}
 
 bool ImplicitNullChecks::canHandle(const MachineInstr *MI) {
-  if (MI->isCall() || MI->mayRaiseFPException() ||
-      MI->hasUnmodeledSideEffects())
+  if (MI->isCall() || MI->mayStore() || MI->hasUnmodeledSideEffects())
     return false;
   auto IsRegMask = [](const MachineOperand &MO) { return MO.isRegMask(); };
   (void)IsRegMask;
@@ -247,7 +209,7 @@ ImplicitNullChecks::DependenceResult
 ImplicitNullChecks::computeDependence(const MachineInstr *MI,
                                       ArrayRef<MachineInstr *> Block) {
   assert(llvm::all_of(Block, canHandle) && "Check this first!");
-  assert(!is_contained(Block, MI) && "Block must be exclusive of MI!");
+  assert(!llvm::is_contained(Block, MI) && "Block must be exclusive of MI!");
 
   Optional<ArrayRef<MachineInstr *>::iterator> Dep;
 
@@ -279,14 +241,14 @@ bool ImplicitNullChecks::canReorder(const MachineInstr *A,
     if (!(MOA.isReg() && MOA.getReg()))
       continue;
 
-    Register RegA = MOA.getReg();
+    unsigned RegA = MOA.getReg();
     for (auto MOB : B->operands()) {
       if (!(MOB.isReg() && MOB.getReg()))
         continue;
 
-      Register RegB = MOB.getReg();
+      unsigned RegB = MOB.getReg();
 
-      if (TRI->regsOverlap(RegA, RegB) && (MOA.isDef() || MOB.isDef()))
+      if (TRI->regsOverlap(RegA, RegB))
         return false;
     }
   }
@@ -297,7 +259,7 @@ bool ImplicitNullChecks::canReorder(const MachineInstr *A,
 bool ImplicitNullChecks::runOnMachineFunction(MachineFunction &MF) {
   TII = MF.getSubtarget().getInstrInfo();
   TRI = MF.getRegInfo().getTargetRegisterInfo();
-  MFI = &MF.getFrameInfo();
+  MMI = &MF.getMMI();
   AA = &getAnalysis<AAResultsWrapperPass>().getAAResults();
 
   SmallVector<NullCheck, 16> NullCheckList;
@@ -321,77 +283,36 @@ static bool AnyAliasLiveIn(const TargetRegisterInfo *TRI,
   return false;
 }
 
-ImplicitNullChecks::AliasResult
-ImplicitNullChecks::areMemoryOpsAliased(const MachineInstr &MI,
-                                        const MachineInstr *PrevMI) const {
-  // If it is not memory access, skip the check.
-  if (!(PrevMI->mayStore() || PrevMI->mayLoad()))
-    return AR_NoAlias;
-  // Load-Load may alias
-  if (!(MI.mayStore() || PrevMI->mayStore()))
-    return AR_NoAlias;
-  // We lost info, conservatively alias. If it was store then no sense to
-  // continue because we won't be able to check against it further.
-  if (MI.memoperands_empty())
-    return MI.mayStore() ? AR_WillAliasEverything : AR_MayAlias;
-  if (PrevMI->memoperands_empty())
-    return PrevMI->mayStore() ? AR_WillAliasEverything : AR_MayAlias;
-
-  for (MachineMemOperand *MMO1 : MI.memoperands()) {
-    // MMO1 should have a value due it comes from operation we'd like to use
-    // as implicit null check.
-    assert(MMO1->getValue() && "MMO1 should have a Value!");
-    for (MachineMemOperand *MMO2 : PrevMI->memoperands()) {
-      if (const PseudoSourceValue *PSV = MMO2->getPseudoValue()) {
-        if (PSV->mayAlias(MFI))
-          return AR_MayAlias;
-        continue;
-      }
-      llvm::AliasResult AAResult =
-          AA->alias(MemoryLocation(MMO1->getValue(), LocationSize::unknown(),
-                                   MMO1->getAAInfo()),
-                    MemoryLocation(MMO2->getValue(), LocationSize::unknown(),
-                                   MMO2->getAAInfo()));
-      if (AAResult != NoAlias)
-        return AR_MayAlias;
-    }
-  }
-  return AR_NoAlias;
-}
-
-ImplicitNullChecks::SuitabilityResult
-ImplicitNullChecks::isSuitableMemoryOp(const MachineInstr &MI,
-                                       unsigned PointerReg,
-                                       ArrayRef<MachineInstr *> PrevInsts) {
+bool ImplicitNullChecks::isSuitableMemoryOp(
+    MachineInstr &MI, unsigned PointerReg, ArrayRef<MachineInstr *> PrevInsts) {
   int64_t Offset;
-  const MachineOperand *BaseOp;
+  unsigned BaseReg;
 
-  if (!TII->getMemOperandWithOffset(MI, BaseOp, Offset, TRI) ||
-      !BaseOp->isReg() || BaseOp->getReg() != PointerReg)
-    return SR_Unsuitable;
+  if (!TII->getMemOpBaseRegImmOfs(MI, BaseReg, Offset, TRI) ||
+      BaseReg != PointerReg)
+    return false;
 
-  // We want the mem access to be issued at a sane offset from PointerReg,
-  // so that if PointerReg is null then the access reliably page faults.
-  if (!(MI.mayLoadOrStore() && !MI.isPredicable() &&
-        -PageSize < Offset && Offset < PageSize))
-    return SR_Unsuitable;
+  // We want the load to be issued at a sane offset from PointerReg, so that
+  // if PointerReg is null then the load reliably page faults.
+  if (!(MI.mayLoad() && !MI.isPredicable() && Offset < PageSize))
+    return false;
 
-  // Finally, check whether the current memory access aliases with previous one.
-  for (auto *PrevMI : PrevInsts) {
-    AliasResult AR = areMemoryOpsAliased(MI, PrevMI);
-    if (AR == AR_WillAliasEverything)
-      return SR_Impossible;
-    if (AR == AR_MayAlias)
-      return SR_Unsuitable;
-  }
-  return SR_Suitable;
+  // Finally, we need to make sure that the load instruction actually is
+  // loading from PointerReg, and there isn't some re-definition of PointerReg
+  // between the compare and the load.
+  for (auto *PrevMI : PrevInsts)
+    for (auto &PrevMO : PrevMI->operands())
+      if (PrevMO.isReg() && PrevMO.getReg() &&
+          TRI->regsOverlap(PrevMO.getReg(), PointerReg))
+        return false;
+
+  return true;
 }
 
-bool ImplicitNullChecks::canHoistInst(MachineInstr *FaultingMI,
-                                      unsigned PointerReg,
-                                      ArrayRef<MachineInstr *> InstsSeenSoFar,
-                                      MachineBasicBlock *NullSucc,
-                                      MachineInstr *&Dependence) {
+bool ImplicitNullChecks::canHoistLoadInst(
+    MachineInstr *FaultingMI, unsigned PointerReg,
+    ArrayRef<MachineInstr *> InstsSeenSoFar, MachineBasicBlock *NullSucc,
+    MachineInstr *&Dependence) {
   auto DepResult = computeDependence(FaultingMI, InstsSeenSoFar);
   if (!DepResult.CanReorder)
     return false;
@@ -407,10 +328,8 @@ bool ImplicitNullChecks::canHoistInst(MachineInstr *FaultingMI,
   // We don't want to reason about speculating loads.  Note -- at this point
   // we should have already filtered out all of the other non-speculatable
   // things, like calls and stores.
-  // We also do not want to hoist stores because it might change the memory
-  // while the FaultingMI may result in faulting.
   assert(canHandle(DependenceMI) && "Should never have reached here!");
-  if (DependenceMI->mayLoadOrStore())
+  if (DependenceMI->mayLoad())
     return false;
 
   for (auto &DependenceMO : DependenceMI->operands()) {
@@ -425,7 +344,7 @@ bool ImplicitNullChecks::canHoistInst(MachineInstr *FaultingMI,
     //    test %rcx, %rcx
     //    je _null_block
     //  _non_null_block:
-    //    %rdx = INST
+    //    %rdx<def> = INST
     //    ...
     //
     // This restriction does not apply to the faulting load inst because in
@@ -440,8 +359,7 @@ bool ImplicitNullChecks::canHoistInst(MachineInstr *FaultingMI,
     // The Dependency can't be re-defining the base register -- then we won't
     // get the memory operation on the address we want.  This is already
     // checked in \c IsSuitableMemoryOp.
-    assert(!(DependenceMO.isDef() &&
-             TRI->regsOverlap(DependenceMO.getReg(), PointerReg)) &&
+    assert(!TRI->regsOverlap(DependenceMO.getReg(), PointerReg) &&
            "Should have been checked before!");
   }
 
@@ -460,7 +378,7 @@ bool ImplicitNullChecks::canHoistInst(MachineInstr *FaultingMI,
 /// NullCheckList and return true, else return false.
 bool ImplicitNullChecks::analyzeBlockForNullChecks(
     MachineBasicBlock &MBB, SmallVectorImpl<NullCheck> &NullCheckList) {
-  using MachineBranchPredicate = TargetInstrInfo::MachineBranchPredicate;
+  typedef TargetInstrInfo::MachineBranchPredicate MachineBranchPredicate;
 
   MDNode *BranchMD = nullptr;
   if (auto *BB = MBB.getBasicBlock())
@@ -500,35 +418,9 @@ bool ImplicitNullChecks::analyzeBlockForNullChecks(
   if (NotNullSucc->pred_size() != 1)
     return false;
 
-  // To prevent the invalid transformation of the following code:
-  //
-  //   mov %rax, %rcx
-  //   test %rax, %rax
-  //   %rax = ...
-  //   je throw_npe
-  //   mov(%rcx), %r9
-  //   mov(%rax), %r10
-  //
-  // into:
-  //
-  //   mov %rax, %rcx
-  //   %rax = ....
-  //   faulting_load_op("movl (%rax), %r10", throw_npe)
-  //   mov(%rcx), %r9
-  //
-  // we must ensure that there are no instructions between the 'test' and
-  // conditional jump that modify %rax.
-  const Register PointerReg = MBP.LHS.getReg();
-
-  assert(MBP.ConditionDef->getParent() ==  &MBB && "Should be in basic block");
-
-  for (auto I = MBB.rbegin(); MBP.ConditionDef != &*I; ++I)
-    if (I->modifiesRegister(PointerReg, TRI))
-      return false;
-
   // Starting with a code fragment like:
   //
-  //   test %rax, %rax
+  //   test %RAX, %RAX
   //   jne LblNotNull
   //
   //  LblNull:
@@ -538,13 +430,13 @@ bool ImplicitNullChecks::analyzeBlockForNullChecks(
   //   Inst0
   //   Inst1
   //   ...
-  //   Def = Load (%rax + <offset>)
+  //   Def = Load (%RAX + <offset>)
   //   ...
   //
   //
   // we want to end up with
   //
-  //   Def = FaultingLoad (%rax + <offset>), LblNull
+  //   Def = FaultingLoad (%RAX + <offset>), LblNull
   //   jmp LblNotNull ;; explicit or fallthrough
   //
   //  LblNotNull:
@@ -558,11 +450,11 @@ bool ImplicitNullChecks::analyzeBlockForNullChecks(
   //
   // To see why this is legal, consider the two possibilities:
   //
-  //  1. %rax is null: since we constrain <offset> to be less than PageSize, the
+  //  1. %RAX is null: since we constrain <offset> to be less than PageSize, the
   //     load instruction dereferences the null page, causing a segmentation
   //     fault.
   //
-  //  2. %rax is not null: in this case we know that the load cannot fault, as
+  //  2. %RAX is not null: in this case we know that the load cannot fault, as
   //     otherwise the load would've faulted in the original program too and the
   //     original program would've been undefined.
   //
@@ -580,6 +472,8 @@ bool ImplicitNullChecks::analyzeBlockForNullChecks(
   // ptr could be some non-null invalid reference that never gets loaded from
   // because some_cond is always true.
 
+  const unsigned PointerReg = MBP.LHS.getReg();
+
   SmallVector<MachineInstr *, 8> InstsSeenSoFar;
 
   for (auto &MI : *NotNullSucc) {
@@ -587,75 +481,50 @@ bool ImplicitNullChecks::analyzeBlockForNullChecks(
       return false;
 
     MachineInstr *Dependence;
-    SuitabilityResult SR = isSuitableMemoryOp(MI, PointerReg, InstsSeenSoFar);
-    if (SR == SR_Impossible)
-      return false;
-    if (SR == SR_Suitable &&
-        canHoistInst(&MI, PointerReg, InstsSeenSoFar, NullSucc, Dependence)) {
+    if (isSuitableMemoryOp(MI, PointerReg, InstsSeenSoFar) &&
+        canHoistLoadInst(&MI, PointerReg, InstsSeenSoFar, NullSucc,
+                         Dependence)) {
       NullCheckList.emplace_back(&MI, MBP.ConditionDef, &MBB, NotNullSucc,
                                  NullSucc, Dependence);
       return true;
     }
 
-    // If MI re-defines the PointerReg then we cannot move further.
-    if (llvm::any_of(MI.operands(), [&](MachineOperand &MO) {
-          return MO.isReg() && MO.getReg() && MO.isDef() &&
-                 TRI->regsOverlap(MO.getReg(), PointerReg);
-        }))
-      return false;
     InstsSeenSoFar.push_back(&MI);
   }
 
   return false;
 }
 
-/// Wrap a machine instruction, MI, into a FAULTING machine instruction.
-/// The FAULTING instruction does the same load/store as MI
-/// (defining the same register), and branches to HandlerMBB if the mem access
-/// faults.  The FAULTING instruction is inserted at the end of MBB.
-MachineInstr *ImplicitNullChecks::insertFaultingInstr(
-    MachineInstr *MI, MachineBasicBlock *MBB, MachineBasicBlock *HandlerMBB) {
+/// Wrap a machine load instruction, LoadMI, into a FAULTING_LOAD_OP machine
+/// instruction.  The FAULTING_LOAD_OP instruction does the same load as LoadMI
+/// (defining the same register), and branches to HandlerMBB if the load
+/// faults.  The FAULTING_LOAD_OP instruction is inserted at the end of MBB.
+MachineInstr *
+ImplicitNullChecks::insertFaultingLoad(MachineInstr *LoadMI,
+                                       MachineBasicBlock *MBB,
+                                       MachineBasicBlock *HandlerMBB) {
   const unsigned NoRegister = 0; // Guaranteed to be the NoRegister value for
                                  // all targets.
 
   DebugLoc DL;
-  unsigned NumDefs = MI->getDesc().getNumDefs();
+  unsigned NumDefs = LoadMI->getDesc().getNumDefs();
   assert(NumDefs <= 1 && "other cases unhandled!");
 
   unsigned DefReg = NoRegister;
   if (NumDefs != 0) {
-    DefReg = MI->getOperand(0).getReg();
-    assert(NumDefs == 1 && "expected exactly one def!");
+    DefReg = LoadMI->defs().begin()->getReg();
+    assert(std::distance(LoadMI->defs().begin(), LoadMI->defs().end()) == 1 &&
+           "expected exactly one def!");
   }
 
-  FaultMaps::FaultKind FK;
-  if (MI->mayLoad())
-    FK =
-        MI->mayStore() ? FaultMaps::FaultingLoadStore : FaultMaps::FaultingLoad;
-  else
-    FK = FaultMaps::FaultingStore;
-
-  auto MIB = BuildMI(MBB, DL, TII->get(TargetOpcode::FAULTING_OP), DefReg)
-                 .addImm(FK)
+  auto MIB = BuildMI(MBB, DL, TII->get(TargetOpcode::FAULTING_LOAD_OP), DefReg)
                  .addMBB(HandlerMBB)
-                 .addImm(MI->getOpcode());
+                 .addImm(LoadMI->getOpcode());
 
-  for (auto &MO : MI->uses()) {
-    if (MO.isReg()) {
-      MachineOperand NewMO = MO;
-      if (MO.isUse()) {
-        NewMO.setIsKill(false);
-      } else {
-        assert(MO.isDef() && "Expected def or use");
-        NewMO.setIsDead(false);
-      }
-      MIB.add(NewMO);
-    } else {
-      MIB.add(MO);
-    }
-  }
+  for (auto &MO : LoadMI->uses())
+    MIB.addOperand(MO);
 
-  MIB.setMemRefs(MI->memoperands());
+  MIB.setMemRefs(LoadMI->memoperands_begin(), LoadMI->memoperands_end());
 
   return MIB;
 }
@@ -676,21 +545,21 @@ void ImplicitNullChecks::rewriteNullChecks(
       NC.getCheckBlock()->insert(NC.getCheckBlock()->end(), DepMI);
     }
 
-    // Insert a faulting instruction where the conditional branch was
-    // originally. We check earlier ensures that this bit of code motion
-    // is legal.  We do not touch the successors list for any basic block
-    // since we haven't changed control flow, we've just made it implicit.
-    MachineInstr *FaultingInstr = insertFaultingInstr(
+    // Insert a faulting load where the conditional branch was originally.  We
+    // check earlier ensures that this bit of code motion is legal.  We do not
+    // touch the successors list for any basic block since we haven't changed
+    // control flow, we've just made it implicit.
+    MachineInstr *FaultingLoad = insertFaultingLoad(
         NC.getMemOperation(), NC.getCheckBlock(), NC.getNullSucc());
     // Now the values defined by MemOperation, if any, are live-in of
     // the block of MemOperation.
-    // The original operation may define implicit-defs alongside
-    // the value.
+    // The original load operation may define implicit-defs alongside
+    // the loaded value.
     MachineBasicBlock *MBB = NC.getMemOperation()->getParent();
-    for (const MachineOperand &MO : FaultingInstr->operands()) {
+    for (const MachineOperand &MO : FaultingLoad->operands()) {
       if (!MO.isReg() || !MO.isDef())
         continue;
-      Register Reg = MO.getReg();
+      unsigned Reg = MO.getReg();
       if (!Reg || MBB->isLiveIn(Reg))
         continue;
       MBB->addLiveIn(Reg);
@@ -698,7 +567,7 @@ void ImplicitNullChecks::rewriteNullChecks(
 
     if (auto *DepMI = NC.getOnlyDependency()) {
       for (auto &MO : DepMI->operands()) {
-        if (!MO.isReg() || !MO.getReg() || !MO.isDef() || MO.isDead())
+        if (!MO.isReg() || !MO.getReg() || !MO.isDef())
           continue;
         if (!NC.getNotNullSucc()->isLiveIn(MO.getReg()))
           NC.getNotNullSucc()->addLiveIn(MO.getReg());
@@ -716,12 +585,11 @@ void ImplicitNullChecks::rewriteNullChecks(
   }
 }
 
+
 char ImplicitNullChecks::ID = 0;
-
 char &llvm::ImplicitNullChecksID = ImplicitNullChecks::ID;
-
-INITIALIZE_PASS_BEGIN(ImplicitNullChecks, DEBUG_TYPE,
+INITIALIZE_PASS_BEGIN(ImplicitNullChecks, "implicit-null-checks",
                       "Implicit null checks", false, false)
 INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
-INITIALIZE_PASS_END(ImplicitNullChecks, DEBUG_TYPE,
+INITIALIZE_PASS_END(ImplicitNullChecks, "implicit-null-checks",
                     "Implicit null checks", false, false)

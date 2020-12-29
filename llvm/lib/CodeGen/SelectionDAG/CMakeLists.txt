@@ -1,4 +1,4 @@
-add_llvm_component_library(LLVMSelectionDAG
+add_llvm_library(LLVMSelectionDAG
   DAGCombiner.cpp
   FastISel.cpp
   FunctionLoweringInfo.cpp
@@ -17,14 +17,13 @@ add_llvm_component_library(LLVMSelectionDAG
   ScheduleDAGVLIW.cpp
   SelectionDAGBuilder.cpp
   SelectionDAG.cpp
-  SelectionDAGAddressAnalysis.cpp
   SelectionDAGDumper.cpp
   SelectionDAGISel.cpp
   SelectionDAGPrinter.cpp
   SelectionDAGTargetInfo.cpp
   StatepointLowering.cpp
   TargetLowering.cpp
-
+  
   DEPENDS
   intrinsics_gen
   )

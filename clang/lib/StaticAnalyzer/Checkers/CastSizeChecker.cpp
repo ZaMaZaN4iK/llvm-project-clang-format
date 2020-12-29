@@ -1,8 +1,9 @@
 //=== CastSizeChecker.cpp ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,7 +11,7 @@
 // whether the size of the symbolic region is a multiple of the size of T.
 //
 //===----------------------------------------------------------------------===//
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/AST/CharUnits.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -100,7 +101,7 @@ void CastSizeChecker::checkPreStmt(const CastExpr *CE,CheckerContext &C) const {
     return;
 
   ProgramStateRef state = C.getState();
-  const MemRegion *R = C.getSVal(E).getAsRegion();
+  const MemRegion *R = state->getSVal(E, C.getLocationContext()).getAsRegion();
   if (!R)
     return;
 
@@ -132,21 +133,17 @@ void CastSizeChecker::checkPreStmt(const CastExpr *CE,CheckerContext &C) const {
       BT.reset(new BuiltinBug(this, "Cast region with wrong size.",
                                     "Cast a region whose size is not a multiple"
                                     " of the destination type size."));
-    auto R = std::make_unique<PathSensitiveBugReport>(*BT, BT->getDescription(),
-                                                      errorNode);
+    auto R = llvm::make_unique<BugReport>(*BT, BT->getDescription(), errorNode);
     R->addRange(CE->getSourceRange());
     C.emitReport(std::move(R));
   }
 }
 
 void ento::registerCastSizeChecker(CheckerManager &mgr) {
-  mgr.registerChecker<CastSizeChecker>();
-}
-
-bool ento::shouldRegisterCastSizeChecker(const LangOptions &LO) {
   // PR31226: C++ is more complicated than what this checker currently supports.
   // There are derived-to-base casts, there are different rules for 0-size
   // structures, no flexible arrays, etc.
   // FIXME: Disabled on C++ for now.
-  return !LO.CPlusPlus;
+  if (!mgr.getLangOpts().CPlusPlus)
+    mgr.registerChecker<CastSizeChecker>();
 }

@@ -1,12 +1,12 @@
 // -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-#include "test_macros.h"
 #include "demangle.h"
 #include <typeinfo>
 #include <cassert>
@@ -15,12 +15,12 @@ struct MyType {};
 
 template <class T, class U> struct ArgumentListID {};
 
-int main(int, char**) {
+int main() {
   struct {
     const char* raw;
     const char* expect;
   } TestCases[] = {
-      {typeid(int).name(), "int"},
+      {typeid(int).name(), "i"}, // FIXME
       {typeid(MyType).name(), "MyType"},
       {typeid(ArgumentListID<int, MyType>).name(), "ArgumentListID<int, MyType>"}
   };
@@ -35,6 +35,4 @@ int main(int, char**) {
     assert(demangle(raw) == expect);
 #endif
   }
-
-  return 0;
 }

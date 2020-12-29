@@ -1,8 +1,9 @@
 //===-- Passes.h - Target independent code generation passes ----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -32,7 +33,7 @@ class raw_ostream;
 
 /// List of target independent CodeGen pass IDs.
 namespace llvm {
-  FunctionPass *createAtomicExpandPass();
+  FunctionPass *createAtomicExpandPass(const TargetMachine *TM);
 
   /// createUnreachableBlockEliminationPass - The LLVM code generator does not
   /// work well with unreachable basic blocks (what live ranges make sense for a
@@ -41,6 +42,9 @@ namespace llvm {
   /// last LLVM modifying pass to clean up blocks that are not reachable from
   /// the entry block.
   FunctionPass *createUnreachableBlockEliminationPass();
+
+  /// Insert mcount-like function calls.
+  FunctionPass *createCountingFunctionInserterPass();
 
   /// MachineFunctionPrinter pass - This pass prints out the machine function to
   /// the given stream as a debugging tool.
@@ -56,17 +60,11 @@ namespace llvm {
   /// as if it was just created.
   /// If EmitFallbackDiag is true, the pass will emit a
   /// DiagnosticInfoISelFallback for every MachineFunction it resets.
-  /// If AbortOnFailedISel is true, abort compilation instead of resetting.
-  MachineFunctionPass *createResetMachineFunctionPass(bool EmitFallbackDiag,
-                                                      bool AbortOnFailedISel);
+  MachineFunctionPass *createResetMachineFunctionPass(bool EmitFallbackDiag);
 
   /// createCodeGenPreparePass - Transform the code to expose more pattern
   /// matching during instruction selection.
-  FunctionPass *createCodeGenPreparePass();
-
-  /// createScalarizeMaskedMemIntrinPass - Replace masked load, store, gather
-  /// and scatter intrinsics with scalar code when target doesn't support them.
-  FunctionPass *createScalarizeMaskedMemIntrinPass();
+  FunctionPass *createCodeGenPreparePass(const TargetMachine *TM = nullptr);
 
   /// AtomicExpandID -- Lowers atomic operations in terms of either cmpxchg
   /// load-linked/store-conditional loops.
@@ -80,9 +78,6 @@ namespace llvm {
 
 /// MachineDominanaceFrontier - This pass is a machine dominators analysis pass.
   extern char &MachineDominanceFrontierID;
-
-  /// MachineRegionInfo - This pass computes SESE regions for machine functions.
-  extern char &MachineRegionInfoPassID;
 
   /// EdgeBundles analysis - Bundle machine CFG edges.
   extern char &EdgeBundlesID;
@@ -129,15 +124,8 @@ namespace llvm {
   // instruction and update the MachineFunctionInfo with that information.
   extern char &ShrinkWrapID;
 
-  /// LiveRangeShrink pass. Move instruction close to its definition to shrink
-  /// the definition's live range.
-  extern char &LiveRangeShrinkID;
-
   /// Greedy register allocator.
   extern char &RAGreedyID;
-
-  /// Basic register allocator.
-  extern char &RABasicID;
 
   /// VirtRegRewriter pass. Rewrite virtual registers to physical registers as
   /// assigned in VirtRegMap.
@@ -152,9 +140,6 @@ namespace llvm {
 
   /// This pass adds dead/undef flags after analyzing subregister lanes.
   extern char &DetectDeadLanesID;
-
-  /// This pass perform post-ra machine sink for COPY instructions.
-  extern char &PostRAMachineSinkingID;
 
   /// FastRegisterAllocation Pass - This pass register allocates as fast as
   /// possible. It is best suited for debug code where live ranges are short.
@@ -179,7 +164,7 @@ namespace llvm {
   /// PrologEpilogCodeInserter - This pass inserts prolog and epilog code,
   /// and eliminates abstract frame references.
   extern char &PrologEpilogCodeInserterID;
-  MachineFunctionPass *createPrologEpilogInserterPass();
+  MachineFunctionPass *createPrologEpilogInserterPass(const TargetMachine *TM);
 
   /// ExpandPostRAPseudos - This pass expands pseudo instructions after
   /// register allocation.
@@ -214,10 +199,6 @@ namespace llvm {
   /// into tails of their predecessors.
   extern char &TailDuplicateID;
 
-  /// Duplicate blocks with unconditional branches into tails of their
-  /// predecessors. Variant that works before register allocation.
-  extern char &EarlyTailDuplicateID;
-
   /// MachineTraceMetrics - This pass computes critical path and CPU resource
   /// usage in an ensemble of traces.
   extern char &MachineTraceMetricsID;
@@ -225,10 +206,6 @@ namespace llvm {
   /// EarlyIfConverter - This pass performs if-conversion on SSA form by
   /// inserting cmov instructions.
   extern char &EarlyIfConverterID;
-
-  /// EarlyIfPredicator - This pass performs if-conversion on SSA form by
-  /// predicating if/else block and insert select at the join point.
-  extern char &EarlyIfPredicatorID;
 
   /// This pass performs instruction combining using trace metrics to estimate
   /// critical-path and resource depth.
@@ -275,21 +252,12 @@ namespace llvm {
   /// MachineCSE - This pass performs global CSE on machine instructions.
   extern char &MachineCSEID;
 
-  /// MIRCanonicalizer - This pass canonicalizes MIR by renaming vregs
-  /// according to the semantics of the instruction as well as hoists
-  /// code.
-  extern char &MIRCanonicalizerID;
-
   /// ImplicitNullChecks - This pass folds null pointer checks into nearby
   /// memory operations.
   extern char &ImplicitNullChecksID;
 
-  /// This pass performs loop invariant code motion on machine instructions.
+  /// MachineLICM - This pass performs LICM on machine instructions.
   extern char &MachineLICMID;
-
-  /// This pass performs loop invariant code motion on machine instructions.
-  /// This variant works before register allocation. \see MachineLICMID.
-  extern char &EarlyMachineLICMID;
 
   /// MachineSinking - This pass performs sinking on machine instructions.
   extern char &MachineSinkingID;
@@ -309,22 +277,19 @@ namespace llvm {
   /// StackSlotColoring - This pass performs stack slot coloring.
   extern char &StackSlotColoringID;
 
-  /// This pass lays out funclets contiguously.
+  /// \brief This pass lays out funclets contiguously.
   extern char &FuncletLayoutID;
 
   /// This pass inserts the XRay instrumentation sleds if they are supported by
   /// the target platform.
   extern char &XRayInstrumentationID;
 
-  /// This pass inserts FEntry calls
-  extern char &FEntryInserterID;
-
-  /// This pass implements the "patchable-function" attribute.
+  /// \brief This pass implements the "patchable-function" attribute.
   extern char &PatchableFunctionID;
 
   /// createStackProtectorPass - This pass adds stack protectors to functions.
   ///
-  FunctionPass *createStackProtectorPass();
+  FunctionPass *createStackProtectorPass(const TargetMachine *TM);
 
   /// createMachineVerifierPass - This pass verifies cenerated machine code
   /// instructions for correctness.
@@ -333,20 +298,16 @@ namespace llvm {
 
   /// createDwarfEHPass - This pass mulches exception handling code into a form
   /// adapted to code generation.  Required if using dwarf exception handling.
-  FunctionPass *createDwarfEHPass();
+  FunctionPass *createDwarfEHPass(const TargetMachine *TM);
 
   /// createWinEHPass - Prepares personality functions used by MSVC on Windows,
   /// in addition to the Itanium LSDA based personalities.
-  FunctionPass *createWinEHPass(bool DemoteCatchSwitchPHIOnly = false);
+  FunctionPass *createWinEHPass(const TargetMachine *TM);
 
   /// createSjLjEHPreparePass - This pass adapts exception handling code to use
   /// the GCC-style builtin setjmp/longjmp (sjlj) to handling EH control flow.
   ///
   FunctionPass *createSjLjEHPreparePass();
-
-  /// createWasmEHPass - This pass adapts exception handling code to use
-  /// WebAssembly's exception handling scheme.
-  FunctionPass *createWasmEHPass();
 
   /// LocalStackSlotAllocation - This pass assigns local frame indices to stack
   /// slots relative to one another and allocates base registers to access them
@@ -354,9 +315,16 @@ namespace llvm {
   /// pointer or stack pointer index addressing.
   extern char &LocalStackSlotAllocationID;
 
-  /// This pass expands pseudo-instructions, reserves registers and adjusts
-  /// machine frame information.
-  extern char &FinalizeISelID;
+  /// ExpandISelPseudos - This pass expands pseudo-instructions.
+  extern char &ExpandISelPseudosID;
+
+  /// createExecutionDependencyFixPass - This pass fixes execution time
+  /// problems with dependent instructions, such as switching execution
+  /// domains to match.
+  ///
+  /// The pass will examine instructions using and defining registers in RC.
+  ///
+  FunctionPass *createExecutionDependencyFixPass(const TargetRegisterClass *RC);
 
   /// UnpackMachineBundles - This pass unpack machine instruction bundles.
   extern char &UnpackMachineBundlesID;
@@ -386,22 +354,16 @@ namespace llvm {
   /// InterleavedAccess Pass - This pass identifies and matches interleaved
   /// memory accesses to target specific intrinsics.
   ///
-  FunctionPass *createInterleavedAccessPass();
-
-  /// InterleavedLoadCombines Pass - This pass identifies interleaved loads and
-  /// combines them into wide loads detectable by InterleavedAccessPass
-  ///
-  FunctionPass *createInterleavedLoadCombinePass();
+  FunctionPass *createInterleavedAccessPass(const TargetMachine *TM);
 
   /// LowerEmuTLS - This pass generates __emutls_[vt].xyz variables for all
   /// TLS variables for the emulated TLS model.
   ///
-  ModulePass *createLowerEmuTLSPass();
+  ModulePass *createLowerEmuTLSPass(const TargetMachine *TM);
 
-  /// This pass lowers the \@llvm.load.relative and \@llvm.objc.* intrinsics to
-  /// instructions.  This is unsafe to do earlier because a pass may combine the
-  /// constant initializer into the load, which may result in an overflowing
-  /// evaluation.
+  /// This pass lowers the @llvm.load.relative intrinsic to instructions.
+  /// This is unsafe to do earlier because a pass may combine the constant
+  /// initializer into the load, which may result in an overflowing evaluation.
   ModulePass *createPreISelIntrinsicLoweringPass();
 
   /// GlobalMerge - This pass merges internal (by default) globals into structs
@@ -414,7 +376,7 @@ namespace llvm {
 
   /// This pass splits the stack into a safe stack and an unsafe stack to
   /// protect against stack-based overflow vulnerabilities.
-  FunctionPass *createSafeStackPass();
+  FunctionPass *createSafeStackPass(const TargetMachine *TM = nullptr);
 
   /// This pass detects subregister lanes in a virtual register that are used
   /// independently of other lanes and splits them into separate virtual
@@ -435,37 +397,35 @@ namespace llvm {
 
   /// This pass frees the memory occupied by the MachineFunction.
   FunctionPass *createFreeMachineFunctionPass();
-
-  /// This pass performs outlining on machine instructions directly before
-  /// printing assembly.
-  ModulePass *createMachineOutlinerPass(bool RunOnAllFunctions = true);
-
-  /// This pass expands the experimental reduction intrinsics into sequences of
-  /// shuffles.
-  FunctionPass *createExpandReductionsPass();
-
-  // This pass expands memcmp() to load/stores.
-  FunctionPass *createExpandMemCmpPass();
-
-  /// Creates Break False Dependencies pass. \see BreakFalseDeps.cpp
-  FunctionPass *createBreakFalseDeps();
-
-  // This pass expands indirectbr instructions.
-  FunctionPass *createIndirectBrExpandPass();
-
-  /// Creates CFI Instruction Inserter pass. \see CFIInstrInserter.cpp
-  FunctionPass *createCFIInstrInserter();
-
-  /// Creates CFGuard longjmp target identification pass.
-  /// \see CFGuardLongjmp.cpp
-  FunctionPass *createCFGuardLongjmpPass();
-
-  /// Create Hardware Loop pass. \see HardwareLoops.cpp
-  FunctionPass *createHardwareLoopsPass();
-
-  /// Create IR Type Promotion pass. \see TypePromotion.cpp
-  FunctionPass *createTypePromotionPass();
-
 } // End llvm namespace
+
+/// Target machine pass initializer for passes with dependencies. Use with
+/// INITIALIZE_TM_PASS_END.
+#define INITIALIZE_TM_PASS_BEGIN INITIALIZE_PASS_BEGIN
+
+/// Target machine pass initializer for passes with dependencies. Use with
+/// INITIALIZE_TM_PASS_BEGIN.
+#define INITIALIZE_TM_PASS_END(passName, arg, name, cfg, analysis)             \
+  PassInfo *PI = new PassInfo(                                                 \
+      name, arg, &passName::ID,                                                \
+      PassInfo::NormalCtor_t(callDefaultCtor<passName>), cfg, analysis,        \
+      PassInfo::TargetMachineCtor_t(callTargetMachineCtor<passName>));         \
+  Registry.registerPass(*PI, true);                                            \
+  return PI;                                                                   \
+  }                                                                            \
+  LLVM_DEFINE_ONCE_FLAG(Initialize##passName##PassFlag);                       \
+  void llvm::initialize##passName##Pass(PassRegistry &Registry) {              \
+    llvm::call_once(Initialize##passName##PassFlag,                            \
+                    initialize##passName##PassOnce, std::ref(Registry));       \
+  }
+
+/// This initializer registers TargetMachine constructor, so the pass being
+/// initialized can use target dependent interfaces. Please do not move this
+/// macro to be together with INITIALIZE_PASS, which is a complete target
+/// independent initializer, and we don't want to make libScalarOpts depend
+/// on libCodeGen.
+#define INITIALIZE_TM_PASS(passName, arg, name, cfg, analysis)                 \
+  INITIALIZE_TM_PASS_BEGIN(passName, arg, name, cfg, analysis)                 \
+  INITIALIZE_TM_PASS_END(passName, arg, name, cfg, analysis)
 
 #endif

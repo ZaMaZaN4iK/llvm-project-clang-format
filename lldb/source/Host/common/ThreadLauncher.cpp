@@ -1,29 +1,36 @@
-//===-- ThreadLauncher.cpp --------------------------------------*- C++ -*-===//
+//===-- ThreadLauncher.cpp ---------------------------------------*- C++
+//-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // lldb Includes
 #include "lldb/Host/ThreadLauncher.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Host/HostNativeThread.h"
 #include "lldb/Host/HostThread.h"
-#include "lldb/Utility/Log.h"
+#include "lldb/Host/ThisThread.h"
 
 #if defined(_WIN32)
 #include "lldb/Host/windows/windows.h"
 #endif
 
-#include "llvm/Support/WindowsError.h"
-
 using namespace lldb;
 using namespace lldb_private;
 
-llvm::Expected<HostThread> ThreadLauncher::LaunchThread(
-    llvm::StringRef name, lldb::thread_func_t thread_function,
-    lldb::thread_arg_t thread_arg, size_t min_stack_byte_size) {
+HostThread ThreadLauncher::LaunchThread(llvm::StringRef name,
+                                        lldb::thread_func_t thread_function,
+                                        lldb::thread_arg_t thread_arg,
+                                        Error *error_ptr,
+                                        size_t min_stack_byte_size) {
+  Error error;
+  if (error_ptr)
+    error_ptr->Clear();
+
   // Host::ThreadCreateTrampoline will delete this pointer for us.
   HostThreadCreateInfo *info_ptr =
       new HostThreadCreateInfo(name.data(), thread_function, thread_arg);
@@ -32,8 +39,8 @@ llvm::Expected<HostThread> ThreadLauncher::LaunchThread(
   thread = (lldb::thread_t)::_beginthreadex(
       0, (unsigned)min_stack_byte_size,
       HostNativeThread::ThreadCreateTrampoline, info_ptr, 0, NULL);
-  if (thread == LLDB_INVALID_HOST_THREAD)
-    return llvm::errorCodeToError(llvm::mapWindowsError(GetLastError()));
+  if (thread == (lldb::thread_t)(-1L))
+    error.SetError(::GetLastError(), eErrorTypeWin32);
 #else
 
 // ASAN instrumentation adds a lot of bookkeeping overhead on stack frames.
@@ -44,7 +51,7 @@ llvm::Expected<HostThread> ThreadLauncher::LaunchThread(
   }
 #endif
 
-  pthread_attr_t *thread_attr_ptr = nullptr;
+  pthread_attr_t *thread_attr_ptr = NULL;
   pthread_attr_t thread_attr;
   bool destroy_attr = false;
   if (min_stack_byte_size > 0) {
@@ -68,10 +75,12 @@ llvm::Expected<HostThread> ThreadLauncher::LaunchThread(
   if (destroy_attr)
     ::pthread_attr_destroy(&thread_attr);
 
-  if (err)
-    return llvm::errorCodeToError(
-        std::error_code(err, std::generic_category()));
+  error.SetError(err, eErrorTypePOSIX);
 #endif
+  if (error_ptr)
+    *error_ptr = error;
+  if (!error.Success())
+    thread = LLDB_INVALID_HOST_THREAD;
 
   return HostThread(thread);
 }

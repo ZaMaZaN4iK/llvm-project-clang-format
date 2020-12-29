@@ -1,7 +1,11 @@
 """Test SBValue::Persist"""
 
+from __future__ import print_function
 
 
+import os
+import sys
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -11,7 +15,6 @@ from lldbsuite.test import lldbutil
 class SBValuePersistTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
-    NO_DEBUG_INFO_TESTCASE = True
 
     @add_test_categories(['pyapi'])
     @expectedFailureAll(oslist=["windows"], bugnumber="llvm.org/pr24772")
@@ -19,7 +22,7 @@ class SBValuePersistTestCase(TestBase):
         """Test SBValue::Persist"""
         self.build()
         self.setTearDownCleanup()
-        self.runCmd("file " + self.getBuildArtifact("a.out"), CURRENT_EXECUTABLE_SET)
+        self.runCmd("file a.out", CURRENT_EXECUTABLE_SET)
 
         lldbutil.run_break_set_by_source_regexp(self, "break here")
 

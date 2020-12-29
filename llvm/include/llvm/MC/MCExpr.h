@@ -1,8 +1,9 @@
 //===- MCExpr.h - Assembly Level Expressions --------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,11 +11,10 @@
 #define LLVM_MC_MCEXPR_H
 
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/Support/SMLoc.h"
-#include <cstdint>
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/DataTypes.h"
 
 namespace llvm {
-
 class MCAsmInfo;
 class MCAsmLayout;
 class MCAssembler;
@@ -27,10 +27,9 @@ class MCSymbol;
 class MCValue;
 class raw_ostream;
 class StringRef;
+typedef DenseMap<const MCSection *, uint64_t> SectionAddrMap;
 
-using SectionAddrMap = DenseMap<const MCSection *, uint64_t>;
-
-/// Base class for the full range of assembler expressions which are
+/// \brief Base class for the full range of assembler expressions which are
 /// needed for parsing.
 class MCExpr {
 public:
@@ -44,14 +43,20 @@ public:
 
 private:
   ExprKind Kind;
-  SMLoc Loc;
+
+  MCExpr(const MCExpr&) = delete;
+  void operator=(const MCExpr&) = delete;
+
+  bool evaluateAsAbsolute(int64_t &Res, const MCAssembler *Asm,
+                          const MCAsmLayout *Layout,
+                          const SectionAddrMap *Addrs) const;
 
   bool evaluateAsAbsolute(int64_t &Res, const MCAssembler *Asm,
                           const MCAsmLayout *Layout,
                           const SectionAddrMap *Addrs, bool InSet) const;
 
 protected:
-  explicit MCExpr(ExprKind Kind, SMLoc Loc) : Kind(Kind), Loc(Loc) {}
+  explicit MCExpr(ExprKind Kind) : Kind(Kind) {}
 
   bool evaluateAsRelocatableImpl(MCValue &Res, const MCAssembler *Asm,
                                  const MCAsmLayout *Layout,
@@ -59,14 +64,10 @@ protected:
                                  const SectionAddrMap *Addrs, bool InSet) const;
 
 public:
-  MCExpr(const MCExpr &) = delete;
-  MCExpr &operator=(const MCExpr &) = delete;
-
   /// \name Accessors
   /// @{
 
   ExprKind getKind() const { return Kind; }
-  SMLoc getLoc() const { return Loc; }
 
   /// @}
   /// \name Utility Methods
@@ -80,7 +81,7 @@ public:
   /// \name Expression Evaluation
   /// @{
 
-  /// Try to evaluate the expression to an absolute value.
+  /// \brief Try to evaluate the expression to an absolute value.
   ///
   /// \param Res - The absolute value, if evaluation succeeds.
   /// \param Layout - The assembler layout object to use for evaluating symbol
@@ -91,12 +92,11 @@ public:
                           const SectionAddrMap &Addrs) const;
   bool evaluateAsAbsolute(int64_t &Res) const;
   bool evaluateAsAbsolute(int64_t &Res, const MCAssembler &Asm) const;
-  bool evaluateAsAbsolute(int64_t &Res, const MCAssembler *Asm) const;
   bool evaluateAsAbsolute(int64_t &Res, const MCAsmLayout &Layout) const;
 
   bool evaluateKnownAbsolute(int64_t &Res, const MCAsmLayout &Layout) const;
 
-  /// Try to evaluate the expression to a relocatable value, i.e. an
+  /// \brief Try to evaluate the expression to a relocatable value, i.e. an
   /// expression of the fixed form (a - b + constant).
   ///
   /// \param Res - The relocatable value, if evaluation succeeds.
@@ -106,14 +106,14 @@ public:
   bool evaluateAsRelocatable(MCValue &Res, const MCAsmLayout *Layout,
                              const MCFixup *Fixup) const;
 
-  /// Try to evaluate the expression to the form (a - b + constant) where
+  /// \brief Try to evaluate the expression to the form (a - b + constant) where
   /// neither a nor b are variables.
   ///
   /// This is a more aggressive variant of evaluateAsRelocatable. The intended
   /// use is for when relocations are not available, like the .size directive.
   bool evaluateAsValue(MCValue &Res, const MCAsmLayout &Layout) const;
 
-  /// Find the "associated section" for this expression, which is
+  /// \brief Find the "associated section" for this expression, which is
   /// currently defined as the absolute section for constants, or
   /// otherwise the section associated with the first defined symbol in the
   /// expression.
@@ -127,32 +127,24 @@ inline raw_ostream &operator<<(raw_ostream &OS, const MCExpr &E) {
   return OS;
 }
 
-////  Represent a constant integer expression.
+//// \brief  Represent a constant integer expression.
 class MCConstantExpr : public MCExpr {
   int64_t Value;
-  bool PrintInHex = false;
 
   explicit MCConstantExpr(int64_t Value)
-      : MCExpr(MCExpr::Constant, SMLoc()), Value(Value) {}
-
-  MCConstantExpr(int64_t Value, bool PrintInHex)
-      : MCExpr(MCExpr::Constant, SMLoc()), Value(Value),
-        PrintInHex(PrintInHex) {}
+      : MCExpr(MCExpr::Constant), Value(Value) {}
 
 public:
   /// \name Construction
   /// @{
 
-  static const MCConstantExpr *create(int64_t Value, MCContext &Ctx,
-                                      bool PrintInHex = false);
+  static const MCConstantExpr *create(int64_t Value, MCContext &Ctx);
 
   /// @}
   /// \name Accessors
   /// @{
 
   int64_t getValue() const { return Value; }
-
-  bool useHexFormat() const { return PrintInHex; }
 
   /// @}
 
@@ -161,7 +153,7 @@ public:
   }
 };
 
-///  Represent a reference to a symbol from inside an expression.
+/// \brief  Represent a reference to a symbol from inside an expression.
 ///
 /// A symbol reference in an expression may be a use of a label, a use of an
 /// assembler variable (defined constant), or constitute an implicit definition
@@ -199,8 +191,6 @@ public:
     VK_SIZE,      // symbol@SIZE
     VK_WEAKREF,   // The link between the symbols in .weakref foo, bar
 
-    VK_X86_ABS8,
-
     VK_ARM_NONE,
     VK_ARM_GOT_PREL,
     VK_ARM_TARGET1,
@@ -210,19 +200,9 @@ public:
     VK_ARM_TLSLDO,         // symbol(tlsldo)
     VK_ARM_TLSDESCSEQ,
 
-    VK_AVR_NONE,
-    VK_AVR_LO8,
-    VK_AVR_HI8,
-    VK_AVR_HLO8,
-    VK_AVR_DIFF8,
-    VK_AVR_DIFF16,
-    VK_AVR_DIFF32,
-
     VK_PPC_LO,             // symbol@l
     VK_PPC_HI,             // symbol@h
     VK_PPC_HA,             // symbol@ha
-    VK_PPC_HIGH,           // symbol@high
-    VK_PPC_HIGHA,          // symbol@higha
     VK_PPC_HIGHER,         // symbol@higher
     VK_PPC_HIGHERA,        // symbol@highera
     VK_PPC_HIGHEST,        // symbol@highest
@@ -235,14 +215,10 @@ public:
     VK_PPC_TOC_LO,         // symbol@toc@l
     VK_PPC_TOC_HI,         // symbol@toc@h
     VK_PPC_TOC_HA,         // symbol@toc@ha
-    VK_PPC_U,              // symbol@u
-    VK_PPC_L,              // symbol@l
     VK_PPC_DTPMOD,         // symbol@dtpmod
     VK_PPC_TPREL_LO,       // symbol@tprel@l
     VK_PPC_TPREL_HI,       // symbol@tprel@h
     VK_PPC_TPREL_HA,       // symbol@tprel@ha
-    VK_PPC_TPREL_HIGH,     // symbol@tprel@high
-    VK_PPC_TPREL_HIGHA,    // symbol@tprel@higha
     VK_PPC_TPREL_HIGHER,   // symbol@tprel@higher
     VK_PPC_TPREL_HIGHERA,  // symbol@tprel@highera
     VK_PPC_TPREL_HIGHEST,  // symbol@tprel@highest
@@ -250,8 +226,6 @@ public:
     VK_PPC_DTPREL_LO,      // symbol@dtprel@l
     VK_PPC_DTPREL_HI,      // symbol@dtprel@h
     VK_PPC_DTPREL_HA,      // symbol@dtprel@ha
-    VK_PPC_DTPREL_HIGH,    // symbol@dtprel@high
-    VK_PPC_DTPREL_HIGHA,   // symbol@dtprel@higha
     VK_PPC_DTPREL_HIGHER,  // symbol@dtprel@higher
     VK_PPC_DTPREL_HIGHERA, // symbol@dtprel@highera
     VK_PPC_DTPREL_HIGHEST, // symbol@dtprel@highest
@@ -290,17 +264,12 @@ public:
     VK_Hexagon_IE,
     VK_Hexagon_IE_GOT,
 
-    VK_WASM_TYPEINDEX, // Reference to a symbol's type (signature)
-    VK_WASM_MBREL,     // Memory address relative to memory base
-    VK_WASM_TBREL,     // Table index relative to table bare
+    VK_WebAssembly_FUNCTION, // Function table index, rather than virtual addr
 
     VK_AMDGPU_GOTPCREL32_LO, // symbol@gotpcrel32@lo
     VK_AMDGPU_GOTPCREL32_HI, // symbol@gotpcrel32@hi
     VK_AMDGPU_REL32_LO,      // symbol@rel32@lo
     VK_AMDGPU_REL32_HI,      // symbol@rel32@hi
-    VK_AMDGPU_REL64,         // symbol@rel64
-    VK_AMDGPU_ABS32_LO,      // symbol@abs32@lo
-    VK_AMDGPU_ABS32_HI,      // symbol@abs32@hi
 
     VK_TPREL,
     VK_DTPREL
@@ -320,7 +289,7 @@ private:
   const MCSymbol *Symbol;
 
   explicit MCSymbolRefExpr(const MCSymbol *Symbol, VariantKind Kind,
-                           const MCAsmInfo *MAI, SMLoc Loc = SMLoc());
+                           const MCAsmInfo *MAI);
 
 public:
   /// \name Construction
@@ -331,7 +300,7 @@ public:
   }
 
   static const MCSymbolRefExpr *create(const MCSymbol *Symbol, VariantKind Kind,
-                                       MCContext &Ctx, SMLoc Loc = SMLoc());
+                                       MCContext &Ctx);
   static const MCSymbolRefExpr *create(StringRef Name, VariantKind Kind,
                                        MCContext &Ctx);
 
@@ -362,7 +331,7 @@ public:
   }
 };
 
-/// Unary assembler expressions.
+/// \brief Unary assembler expressions.
 class MCUnaryExpr : public MCExpr {
 public:
   enum Opcode {
@@ -376,40 +345,36 @@ private:
   Opcode Op;
   const MCExpr *Expr;
 
-  MCUnaryExpr(Opcode Op, const MCExpr *Expr, SMLoc Loc)
-      : MCExpr(MCExpr::Unary, Loc), Op(Op), Expr(Expr) {}
+  MCUnaryExpr(Opcode Op, const MCExpr *Expr)
+      : MCExpr(MCExpr::Unary), Op(Op), Expr(Expr) {}
 
 public:
   /// \name Construction
   /// @{
 
   static const MCUnaryExpr *create(Opcode Op, const MCExpr *Expr,
-                                   MCContext &Ctx, SMLoc Loc = SMLoc());
-
-  static const MCUnaryExpr *createLNot(const MCExpr *Expr, MCContext &Ctx, SMLoc Loc = SMLoc()) {
-    return create(LNot, Expr, Ctx, Loc);
+                                   MCContext &Ctx);
+  static const MCUnaryExpr *createLNot(const MCExpr *Expr, MCContext &Ctx) {
+    return create(LNot, Expr, Ctx);
   }
-
-  static const MCUnaryExpr *createMinus(const MCExpr *Expr, MCContext &Ctx, SMLoc Loc = SMLoc()) {
-    return create(Minus, Expr, Ctx, Loc);
+  static const MCUnaryExpr *createMinus(const MCExpr *Expr, MCContext &Ctx) {
+    return create(Minus, Expr, Ctx);
   }
-
-  static const MCUnaryExpr *createNot(const MCExpr *Expr, MCContext &Ctx, SMLoc Loc = SMLoc()) {
-    return create(Not, Expr, Ctx, Loc);
+  static const MCUnaryExpr *createNot(const MCExpr *Expr, MCContext &Ctx) {
+    return create(Not, Expr, Ctx);
   }
-
-  static const MCUnaryExpr *createPlus(const MCExpr *Expr, MCContext &Ctx, SMLoc Loc = SMLoc()) {
-    return create(Plus, Expr, Ctx, Loc);
+  static const MCUnaryExpr *createPlus(const MCExpr *Expr, MCContext &Ctx) {
+    return create(Plus, Expr, Ctx);
   }
 
   /// @}
   /// \name Accessors
   /// @{
 
-  /// Get the kind of this unary expression.
+  /// \brief Get the kind of this unary expression.
   Opcode getOpcode() const { return Op; }
 
-  /// Get the child of this unary expression.
+  /// \brief Get the child of this unary expression.
   const MCExpr *getSubExpr() const { return Expr; }
 
   /// @}
@@ -419,7 +384,7 @@ public:
   }
 };
 
-/// Binary assembler expressions.
+/// \brief Binary assembler expressions.
 class MCBinaryExpr : public MCExpr {
 public:
   enum Opcode {
@@ -452,108 +417,87 @@ private:
   Opcode Op;
   const MCExpr *LHS, *RHS;
 
-  MCBinaryExpr(Opcode Op, const MCExpr *LHS, const MCExpr *RHS,
-               SMLoc Loc = SMLoc())
-      : MCExpr(MCExpr::Binary, Loc), Op(Op), LHS(LHS), RHS(RHS) {}
+  MCBinaryExpr(Opcode Op, const MCExpr *LHS, const MCExpr *RHS)
+      : MCExpr(MCExpr::Binary), Op(Op), LHS(LHS), RHS(RHS) {}
 
 public:
   /// \name Construction
   /// @{
 
   static const MCBinaryExpr *create(Opcode Op, const MCExpr *LHS,
-                                    const MCExpr *RHS, MCContext &Ctx,
-                                    SMLoc Loc = SMLoc());
-
+                                    const MCExpr *RHS, MCContext &Ctx);
   static const MCBinaryExpr *createAdd(const MCExpr *LHS, const MCExpr *RHS,
                                        MCContext &Ctx) {
     return create(Add, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createAnd(const MCExpr *LHS, const MCExpr *RHS,
                                        MCContext &Ctx) {
     return create(And, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createDiv(const MCExpr *LHS, const MCExpr *RHS,
                                        MCContext &Ctx) {
     return create(Div, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createEQ(const MCExpr *LHS, const MCExpr *RHS,
                                       MCContext &Ctx) {
     return create(EQ, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createGT(const MCExpr *LHS, const MCExpr *RHS,
                                       MCContext &Ctx) {
     return create(GT, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createGTE(const MCExpr *LHS, const MCExpr *RHS,
                                        MCContext &Ctx) {
     return create(GTE, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createLAnd(const MCExpr *LHS, const MCExpr *RHS,
                                         MCContext &Ctx) {
     return create(LAnd, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createLOr(const MCExpr *LHS, const MCExpr *RHS,
                                        MCContext &Ctx) {
     return create(LOr, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createLT(const MCExpr *LHS, const MCExpr *RHS,
                                       MCContext &Ctx) {
     return create(LT, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createLTE(const MCExpr *LHS, const MCExpr *RHS,
                                        MCContext &Ctx) {
     return create(LTE, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createMod(const MCExpr *LHS, const MCExpr *RHS,
                                        MCContext &Ctx) {
     return create(Mod, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createMul(const MCExpr *LHS, const MCExpr *RHS,
                                        MCContext &Ctx) {
     return create(Mul, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createNE(const MCExpr *LHS, const MCExpr *RHS,
                                       MCContext &Ctx) {
     return create(NE, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createOr(const MCExpr *LHS, const MCExpr *RHS,
                                       MCContext &Ctx) {
     return create(Or, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createShl(const MCExpr *LHS, const MCExpr *RHS,
                                        MCContext &Ctx) {
     return create(Shl, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createAShr(const MCExpr *LHS, const MCExpr *RHS,
                                        MCContext &Ctx) {
     return create(AShr, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createLShr(const MCExpr *LHS, const MCExpr *RHS,
                                        MCContext &Ctx) {
     return create(LShr, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createSub(const MCExpr *LHS, const MCExpr *RHS,
                                        MCContext &Ctx) {
     return create(Sub, LHS, RHS, Ctx);
   }
-
   static const MCBinaryExpr *createXor(const MCExpr *LHS, const MCExpr *RHS,
                                        MCContext &Ctx) {
     return create(Xor, LHS, RHS, Ctx);
@@ -563,13 +507,13 @@ public:
   /// \name Accessors
   /// @{
 
-  /// Get the kind of this binary expression.
+  /// \brief Get the kind of this binary expression.
   Opcode getOpcode() const { return Op; }
 
-  /// Get the left-hand side expression of the binary operator.
+  /// \brief Get the left-hand side expression of the binary operator.
   const MCExpr *getLHS() const { return LHS; }
 
-  /// Get the right-hand side expression of the binary operator.
+  /// \brief Get the right-hand side expression of the binary operator.
   const MCExpr *getRHS() const { return RHS; }
 
   /// @}
@@ -579,28 +523,21 @@ public:
   }
 };
 
-/// This is an extension point for target-specific MCExpr subclasses to
+/// \brief This is an extension point for target-specific MCExpr subclasses to
 /// implement.
 ///
 /// NOTE: All subclasses are required to have trivial destructors because
 /// MCExprs are bump pointer allocated and not destructed.
 class MCTargetExpr : public MCExpr {
   virtual void anchor();
-
 protected:
-  MCTargetExpr() : MCExpr(Target, SMLoc()) {}
-  virtual ~MCTargetExpr() = default;
-
+  MCTargetExpr() : MCExpr(Target) {}
+  virtual ~MCTargetExpr() {}
 public:
   virtual void printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const = 0;
   virtual bool evaluateAsRelocatableImpl(MCValue &Res,
                                          const MCAsmLayout *Layout,
                                          const MCFixup *Fixup) const = 0;
-  // allow Target Expressions to be checked for equality
-  virtual bool isEqualTo(const MCExpr *x) const { return false; }
-  // This should be set when assigned expressions are not valid ".set"
-  // expressions, e.g. registers, and must be inlined.
-  virtual bool inlineAssignedExpr() const { return false; }
   virtual void visitUsedExpr(MCStreamer& Streamer) const = 0;
   virtual MCFragment *findAssociatedFragment() const = 0;
 
@@ -613,4 +550,4 @@ public:
 
 } // end namespace llvm
 
-#endif // LLVM_MC_MCEXPR_H
+#endif

@@ -1,8 +1,9 @@
 //===- IRMover.h ------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -70,11 +71,15 @@ public:
   ///   not present in ValuesToLink. The GlobalValue and a ValueAdder callback
   ///   are passed as an argument, and the callback is expected to be called
   ///   if the GlobalValue needs to be added to the \p ValuesToLink and linked.
+  /// - \p LinkModuleInlineAsm is true if the ModuleInlineAsm string in Src
+  ///   should be linked with (concatenated into) the ModuleInlineAsm string
+  ///   for the destination module. It should be true for full LTO, but not
+  ///   when importing for ThinLTO, otherwise we can have duplicate symbols.
   /// - \p IsPerformingImport is true when this IR link is to perform ThinLTO
   ///   function importing from Src.
   Error move(std::unique_ptr<Module> Src, ArrayRef<GlobalValue *> ValuesToLink,
              std::function<void(GlobalValue &GV, ValueAdder Add)> AddLazyFor,
-             bool IsPerformingImport);
+             bool LinkModuleInlineAsm, bool IsPerformingImport);
   Module &getModule() { return Composite; }
 
 private:

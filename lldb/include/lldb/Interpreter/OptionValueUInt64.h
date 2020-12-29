@@ -1,15 +1,20 @@
 //===-- OptionValueUInt64.h --------------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_OptionValueUInt64_h_
 #define liblldb_OptionValueUInt64_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Interpreter/OptionValue.h"
 
 namespace lldb_private {
@@ -27,23 +32,27 @@ public:
 
   ~OptionValueUInt64() override {}
 
+  //---------------------------------------------------------------------
   // Decode a uint64_t from "value_cstr" return a OptionValueUInt64 object
-  // inside of a lldb::OptionValueSP object if all goes well. If the string
-  // isn't a uint64_t value or any other error occurs, return an empty
-  // lldb::OptionValueSP and fill error in with the correct stuff.
-  static lldb::OptionValueSP Create(const char *, Status &) = delete;
-  static lldb::OptionValueSP Create(llvm::StringRef value_str, Status &error);
+  // inside of a lldb::OptionValueSP object if all goes well. If the
+  // string isn't a uint64_t value or any other error occurs, return an
+  // empty lldb::OptionValueSP and fill error in with the correct stuff.
+  //---------------------------------------------------------------------
+  static lldb::OptionValueSP Create(const char *, Error &) = delete;
+  static lldb::OptionValueSP Create(llvm::StringRef value_str, Error &error);
+  //---------------------------------------------------------------------
   // Virtual subclass pure virtual overrides
+  //---------------------------------------------------------------------
 
   OptionValue::Type GetType() const override { return eTypeUInt64; }
 
   void DumpValue(const ExecutionContext *exe_ctx, Stream &strm,
                  uint32_t dump_mask) override;
 
-  Status
+  Error
   SetValueFromString(llvm::StringRef value,
                      VarSetOperationType op = eVarSetOperationAssign) override;
-  Status
+  Error
   SetValueFromString(const char *,
                      VarSetOperationType = eVarSetOperationAssign) = delete;
 
@@ -55,7 +64,9 @@ public:
 
   lldb::OptionValueSP DeepCopy() const override;
 
+  //---------------------------------------------------------------------
   // Subclass specific functions
+  //---------------------------------------------------------------------
 
   const uint64_t &operator=(uint64_t value) {
     m_current_value = value;

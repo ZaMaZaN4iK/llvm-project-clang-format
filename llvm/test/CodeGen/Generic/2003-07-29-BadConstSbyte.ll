@@ -1,7 +1,5 @@
 ; RUN: llc < %s
 
-; Bug: PR31341
-
 ;; Date:     Jul 29, 2003.
 ;; From:     test/Programs/MultiSource/Ptrdist-bc
 ;; Function: ---

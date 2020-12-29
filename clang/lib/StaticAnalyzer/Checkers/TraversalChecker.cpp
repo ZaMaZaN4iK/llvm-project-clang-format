@@ -1,8 +1,9 @@
 //== TraversalChecker.cpp -------------------------------------- -*- C++ -*--=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,7 +11,7 @@
 // as it builds the ExplodedGraph.
 //
 //===----------------------------------------------------------------------===//
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/AST/StmtObjC.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -29,7 +30,7 @@ class TraversalDumper : public Checker< check::BranchCondition,
 public:
   void checkBranchCondition(const Stmt *Condition, CheckerContext &C) const;
   void checkBeginFunction(CheckerContext &C) const;
-  void checkEndFunction(const ReturnStmt *RS, CheckerContext &C) const;
+  void checkEndFunction(CheckerContext &C) const;
 };
 }
 
@@ -46,7 +47,7 @@ void TraversalDumper::checkBranchCondition(const Stmt *Condition,
   // It is mildly evil to print directly to llvm::outs() rather than emitting
   // warnings, but this ensures things do not get filtered out by the rest of
   // the static analyzer machinery.
-  SourceLocation Loc = Parent->getBeginLoc();
+  SourceLocation Loc = Parent->getLocStart();
   llvm::outs() << C.getSourceManager().getSpellingLineNumber(Loc) << " "
                << Parent->getStmtClassName() << "\n";
 }
@@ -55,17 +56,12 @@ void TraversalDumper::checkBeginFunction(CheckerContext &C) const {
   llvm::outs() << "--BEGIN FUNCTION--\n";
 }
 
-void TraversalDumper::checkEndFunction(const ReturnStmt *RS,
-                                       CheckerContext &C) const {
+void TraversalDumper::checkEndFunction(CheckerContext &C) const {
   llvm::outs() << "--END FUNCTION--\n";
 }
 
 void ento::registerTraversalDumper(CheckerManager &mgr) {
   mgr.registerChecker<TraversalDumper>();
-}
-
-bool ento::shouldRegisterTraversalDumper(const LangOptions &LO) {
-  return true;
 }
 
 //------------------------------------------------------------------------------
@@ -114,8 +110,4 @@ void CallDumper::checkPostCall(const CallEvent &Call, CheckerContext &C) const {
 
 void ento::registerCallDumper(CheckerManager &mgr) {
   mgr.registerChecker<CallDumper>();
-}
-
-bool ento::shouldRegisterCallDumper(const LangOptions &LO) {
-  return true;
 }

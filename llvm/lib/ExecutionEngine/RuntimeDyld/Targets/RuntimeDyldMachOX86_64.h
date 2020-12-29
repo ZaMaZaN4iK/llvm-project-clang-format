@@ -1,8 +1,9 @@
 //===-- RuntimeDyldMachOX86_64.h ---- MachO/X86_64 specific code. -*- C++ -*-=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,9 +27,9 @@ public:
                          JITSymbolResolver &Resolver)
       : RuntimeDyldMachOCRTPBase(MM, Resolver) {}
 
-  unsigned getMaxStubSize() const override { return 8; }
+  unsigned getMaxStubSize() override { return 8; }
 
-  unsigned getStubAlignment() override { return 8; }
+  unsigned getStubAlignment() override { return 1; }
 
   Expected<relocation_iterator>
   processRelocationRef(unsigned SectionID, relocation_iterator RelI,
@@ -84,7 +85,7 @@ public:
   }
 
   void resolveRelocation(const RelocationEntry &RE, uint64_t Value) override {
-    LLVM_DEBUG(dumpRelocationToResolve(RE, Value));
+    DEBUG(dumpRelocationToResolve(RE, Value));
     const SectionEntry &Section = Sections[RE.SectionID];
     uint8_t *LocalAddress = Section.getAddressWithOffset(RE.Offset);
 

@@ -1,8 +1,9 @@
 //===-- LanaiISelLowering.cpp - Lanai DAG Lowering Implementation ---------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,9 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "LanaiISelLowering.h"
 #include "Lanai.h"
 #include "LanaiCondCode.h"
+#include "LanaiISelLowering.h"
 #include "LanaiMachineFunctionInfo.h"
 #include "LanaiSubtarget.h"
 #include "LanaiTargetObjectFile.h"
@@ -27,24 +28,23 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/MachineValueType.h"
 #include "llvm/CodeGen/RuntimeLibcalls.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
-#include "llvm/CodeGen/TargetCallingConv.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/CodeGen.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/CodeGen.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/KnownBits.h"
-#include "llvm/Support/MachineValueType.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetCallingConv.h"
 #include "llvm/Target/TargetMachine.h"
 #include <cassert>
 #include <cmath>
@@ -86,6 +86,7 @@ LanaiTargetLowering::LanaiTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::BR_JT, MVT::Other, Expand);
   setOperationAction(ISD::BRCOND, MVT::Other, Expand);
   setOperationAction(ISD::SETCC, MVT::i32, Custom);
+  setOperationAction(ISD::SETCCE, MVT::i32, Custom);
   setOperationAction(ISD::SELECT, MVT::i32, Expand);
   setOperationAction(ISD::SELECT_CC, MVT::i32, Custom);
 
@@ -144,9 +145,9 @@ LanaiTargetLowering::LanaiTargetLowering(const TargetMachine &TM,
   setTargetDAGCombine(ISD::OR);
   setTargetDAGCombine(ISD::XOR);
 
-  // Function alignments
-  setMinFunctionAlignment(Align(4));
-  setPrefFunctionAlignment(Align(4));
+  // Function alignments (log2)
+  setMinFunctionAlignment(2);
+  setPrefFunctionAlignment(2);
 
   setJumpIsExpensive(true);
 
@@ -191,6 +192,8 @@ SDValue LanaiTargetLowering::LowerOperation(SDValue Op,
     return LowerSELECT_CC(Op, DAG);
   case ISD::SETCC:
     return LowerSETCC(Op, DAG);
+  case ISD::SETCCE:
+    return LowerSETCCE(Op, DAG);
   case ISD::SHL_PARTS:
     return LowerSHL_PARTS(Op, DAG);
   case ISD::SRL_PARTS:
@@ -212,11 +215,10 @@ SDValue LanaiTargetLowering::LowerOperation(SDValue Op,
 //                       Lanai Inline Assembly Support
 //===----------------------------------------------------------------------===//
 
-Register LanaiTargetLowering::getRegisterByName(
-  const char *RegName, LLT /*VT*/,
-  const MachineFunction & /*MF*/) const {
+unsigned LanaiTargetLowering::getRegisterByName(const char *RegName, EVT /*VT*/,
+                                                SelectionDAG & /*DAG*/) const {
   // Only unallocatable registers should be matched here.
-  Register Reg = StringSwitch<unsigned>(RegName)
+  unsigned Reg = StringSwitch<unsigned>(RegName)
                      .Case("pc", Lanai::PC)
                      .Case("sp", Lanai::SP)
                      .Case("fp", Lanai::FP)
@@ -402,7 +404,7 @@ SDValue LanaiTargetLowering::LowerFormalArguments(
   case CallingConv::Fast:
     return LowerCCCArguments(Chain, CallConv, IsVarArg, Ins, DL, DAG, InVals);
   default:
-    report_fatal_error("Unsupported calling convention");
+    llvm_unreachable("Unsupported calling convention");
   }
 }
 
@@ -428,7 +430,7 @@ SDValue LanaiTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     return LowerCCCCallTo(Chain, Callee, CallConv, IsVarArg, IsTailCall, Outs,
                           OutVals, Ins, DL, DAG, InVals);
   default:
-    report_fatal_error("Unsupported calling convention");
+    llvm_unreachable("Unsupported calling convention");
   }
 }
 
@@ -460,7 +462,7 @@ SDValue LanaiTargetLowering::LowerCCCArguments(
       EVT RegVT = VA.getLocVT();
       switch (RegVT.getSimpleVT().SimpleTy) {
       case MVT::i32: {
-        Register VReg = RegInfo.createVirtualRegister(&Lanai::GPRRegClass);
+        unsigned VReg = RegInfo.createVirtualRegister(&Lanai::GPRRegClass);
         RegInfo.addLiveIn(VA.getLocReg(), VReg);
         SDValue ArgValue = DAG.getCopyFromReg(Chain, DL, VReg, RegVT);
 
@@ -481,8 +483,8 @@ SDValue LanaiTargetLowering::LowerCCCArguments(
         break;
       }
       default:
-        LLVM_DEBUG(dbgs() << "LowerFormalArguments Unhandled argument type: "
-                          << RegVT.getEVTString() << "\n");
+        DEBUG(dbgs() << "LowerFormalArguments Unhandled argument type: "
+                     << RegVT.getEVTString() << "\n");
         llvm_unreachable("unhandled argument type");
       }
     } else {
@@ -510,7 +512,7 @@ SDValue LanaiTargetLowering::LowerCCCArguments(
   // The Lanai ABI for returning structs by value requires that we copy
   // the sret argument into rv for the return. Save the argument into
   // a virtual register so that we can access it from the return points.
-  if (MF.getFunction().hasStructRetAttr()) {
+  if (MF.getFunction()->hasStructRetAttr()) {
     unsigned Reg = LanaiMFI->getSRetReturnReg();
     if (!Reg) {
       Reg = MF.getRegInfo().createVirtualRegister(getRegClassFor(MVT::i32));
@@ -565,7 +567,7 @@ LanaiTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   // the sret argument into rv for the return. We saved the argument into
   // a virtual register in the entry block, so now we copy the value out
   // and into rv.
-  if (DAG.getMachineFunction().getFunction().hasStructRetAttr()) {
+  if (DAG.getMachineFunction().getFunction()->hasStructRetAttr()) {
     MachineFunction &MF = DAG.getMachineFunction();
     LanaiMachineFunctionInfo *LanaiMFI = MF.getInfo<LanaiMachineFunctionInfo>();
     unsigned Reg = LanaiMFI->getSRetReturnReg();
@@ -647,7 +649,10 @@ SDValue LanaiTargetLowering::LowerCCCCallTo(
     ByValArgs.push_back(FIPtr);
   }
 
-  Chain = DAG.getCALLSEQ_START(Chain, NumBytes, 0, DL);
+  Chain = DAG.getCALLSEQ_START(
+      Chain,
+      DAG.getConstant(NumBytes, DL, getPointerTy(DAG.getDataLayout()), true),
+      DL);
 
   SmallVector<std::pair<unsigned, SDValue>, 4> RegsToPass;
   SmallVector<SDValue, 12> MemOpChains;
@@ -964,6 +969,19 @@ SDValue LanaiTargetLowering::LowerMUL(SDValue Op, SelectionDAG &DAG) const {
       Res = DAG.getNode(ISD::SUB, DL, VT, Res, Op);
   }
   return Res;
+}
+
+SDValue LanaiTargetLowering::LowerSETCCE(SDValue Op, SelectionDAG &DAG) const {
+  SDValue LHS = Op.getOperand(0);
+  SDValue RHS = Op.getOperand(1);
+  SDValue Carry = Op.getOperand(2);
+  SDValue Cond = Op.getOperand(3);
+  SDLoc DL(Op);
+
+  LPCC::CondCode CC = IntCondCCodeToICC(Cond, DL, RHS, DAG);
+  SDValue TargetCC = DAG.getConstant(CC, DL, MVT::i32);
+  SDValue Flag = DAG.getNode(LanaiISD::SUBBF, DL, MVT::Glue, LHS, RHS, Carry);
+  return DAG.getNode(LanaiISD::SETCC, DL, Op.getValueType(), TargetCC, Flag);
 }
 
 SDValue LanaiTargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
@@ -1483,25 +1501,4 @@ SDValue LanaiTargetLowering::PerformDAGCombine(SDNode *N,
   }
 
   return SDValue();
-}
-
-void LanaiTargetLowering::computeKnownBitsForTargetNode(
-    const SDValue Op, KnownBits &Known, const APInt &DemandedElts,
-    const SelectionDAG &DAG, unsigned Depth) const {
-  unsigned BitWidth = Known.getBitWidth();
-  switch (Op.getOpcode()) {
-  default:
-    break;
-  case LanaiISD::SETCC:
-    Known = KnownBits(BitWidth);
-    Known.Zero.setBits(1, BitWidth);
-    break;
-  case LanaiISD::SELECT_CC:
-    KnownBits Known2;
-    Known = DAG.computeKnownBits(Op->getOperand(0), Depth + 1);
-    Known2 = DAG.computeKnownBits(Op->getOperand(1), Depth + 1);
-    Known.Zero &= Known2.Zero;
-    Known.One &= Known2.One;
-    break;
-  }
 }

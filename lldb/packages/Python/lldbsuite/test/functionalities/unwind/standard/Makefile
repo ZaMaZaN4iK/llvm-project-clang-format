@@ -1,1 +1,3 @@
-include Makefile.rules
+LEVEL = ../../../make
+
+include $(LEVEL)/Makefile.rules

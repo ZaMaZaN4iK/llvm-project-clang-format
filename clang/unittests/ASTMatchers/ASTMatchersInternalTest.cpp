@@ -1,8 +1,9 @@
 // unittests/ASTMatchers/ASTMatchersInternalTest.cpp - AST matcher unit tests //
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -32,6 +33,13 @@ TEST(HasNameDeathTest, DiesOnEmptyPattern) {
       EXPECT_TRUE(notMatches("class X {};", HasEmptyName));
     }, "");
 }
+
+TEST(IsDerivedFromDeathTest, DiesOnEmptyBaseName) {
+  ASSERT_DEBUG_DEATH({
+    DeclarationMatcher IsDerivedFromEmpty = cxxRecordDecl(isDerivedFrom(""));
+    EXPECT_TRUE(notMatches("class X {};", IsDerivedFromEmpty));
+  }, "");
+}
 #endif
 
 TEST(ConstructVariadic, MismatchedTypes_Regression) {
@@ -55,13 +63,13 @@ TEST(AstMatcherPMacro, Works) {
   DeclarationMatcher HasClassB = just(has(recordDecl(hasName("B")).bind("b")));
 
   EXPECT_TRUE(matchAndVerifyResultTrue("class A { class B {}; };",
-      HasClassB, std::make_unique<VerifyIdIsBoundTo<Decl>>("b")));
+      HasClassB, llvm::make_unique<VerifyIdIsBoundTo<Decl>>("b")));
 
   EXPECT_TRUE(matchAndVerifyResultFalse("class A { class B {}; };",
-      HasClassB, std::make_unique<VerifyIdIsBoundTo<Decl>>("a")));
+      HasClassB, llvm::make_unique<VerifyIdIsBoundTo<Decl>>("a")));
 
   EXPECT_TRUE(matchAndVerifyResultFalse("class A { class C {}; };",
-      HasClassB, std::make_unique<VerifyIdIsBoundTo<Decl>>("b")));
+      HasClassB, llvm::make_unique<VerifyIdIsBoundTo<Decl>>("b")));
 }
 
 AST_POLYMORPHIC_MATCHER_P(polymorphicHas,
@@ -69,7 +77,7 @@ AST_POLYMORPHIC_MATCHER_P(polymorphicHas,
                           internal::Matcher<Decl>, AMatcher) {
   return Finder->matchesChildOf(
       Node, AMatcher, Builder,
-      ast_type_traits::TraversalKind::TK_IgnoreImplicitCastsAndParentheses,
+      ASTMatchFinder::TK_IgnoreImplicitCastsAndParentheses,
       ASTMatchFinder::BK_First);
 }
 
@@ -78,13 +86,13 @@ TEST(AstPolymorphicMatcherPMacro, Works) {
       polymorphicHas(recordDecl(hasName("B")).bind("b"));
 
   EXPECT_TRUE(matchAndVerifyResultTrue("class A { class B {}; };",
-      HasClassB, std::make_unique<VerifyIdIsBoundTo<Decl>>("b")));
+      HasClassB, llvm::make_unique<VerifyIdIsBoundTo<Decl>>("b")));
 
   EXPECT_TRUE(matchAndVerifyResultFalse("class A { class B {}; };",
-      HasClassB, std::make_unique<VerifyIdIsBoundTo<Decl>>("a")));
+      HasClassB, llvm::make_unique<VerifyIdIsBoundTo<Decl>>("a")));
 
   EXPECT_TRUE(matchAndVerifyResultFalse("class A { class C {}; };",
-      HasClassB, std::make_unique<VerifyIdIsBoundTo<Decl>>("b")));
+      HasClassB, llvm::make_unique<VerifyIdIsBoundTo<Decl>>("b")));
 
   StatementMatcher StatementHasClassB =
       polymorphicHas(recordDecl(hasName("B")));
@@ -181,7 +189,7 @@ TEST(IsInlineMatcher, IsInline) {
 
 // FIXME: Figure out how to specify paths so the following tests pass on
 // Windows.
-#ifndef _WIN32
+#ifndef LLVM_ON_WIN32
 
 TEST(Matcher, IsExpansionInMainFileMatcher) {
   EXPECT_TRUE(matches("class X {};",
@@ -226,7 +234,7 @@ TEST(Matcher, IsExpansionInFileMatching) {
       "-isystem/", M));
 }
 
-#endif // _WIN32
+#endif // LLVM_ON_WIN32
 
 } // end namespace ast_matchers
 } // end namespace clang

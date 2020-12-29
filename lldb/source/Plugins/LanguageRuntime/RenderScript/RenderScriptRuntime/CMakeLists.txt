@@ -3,7 +3,7 @@ if(NOT LLDB_BUILT_STANDALONE)
 endif()
 
 
-add_lldb_library(lldbPluginRenderScriptRuntime PLUGIN
+add_lldb_library(lldbPluginRenderScriptRuntime
   RenderScriptRuntime.cpp
   RenderScriptExpressionOpts.cpp
   RenderScriptx86ABIFixups.cpp
@@ -11,21 +11,4 @@ add_lldb_library(lldbPluginRenderScriptRuntime PLUGIN
 
   DEPENDS
   ${tablegen_deps}
-
-  LINK_LIBS
-    lldbBreakpoint
-    lldbCore
-    lldbDataFormatters
-    lldbExpression
-    lldbHost
-    lldbInterpreter
-    lldbSymbol
-    lldbTarget
-  CLANG_LIBS
-    clangBasic
-  LINK_COMPONENTS
-    Core
-    IRReader
-    Support
-    Target
   )

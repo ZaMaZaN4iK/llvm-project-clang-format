@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -std=c++11 %s -Wunused -Wno-unused-lambda-capture -verify
+// RUN: %clang_cc1 -std=c++11 %s -Wunused -verify
 
 void f2() {
   int i = 1;

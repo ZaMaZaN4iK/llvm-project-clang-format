@@ -1,8 +1,9 @@
 //===------------- PPCEarlyReturn.cpp - Form Early Returns ----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MCTargetDesc/PPCPredicates.h"
 #include "PPC.h"
+#include "MCTargetDesc/PPCPredicates.h"
 #include "PPCInstrBuilder.h"
 #include "PPCInstrInfo.h"
 #include "PPCMachineFunctionInfo.h"
@@ -35,6 +36,10 @@ using namespace llvm;
 #define DEBUG_TYPE "ppc-early-ret"
 STATISTIC(NumBCLR, "Number of early conditional returns");
 STATISTIC(NumBLR,  "Number of early returns");
+
+namespace llvm {
+  void initializePPCEarlyReturnPass(PassRegistry&);
+}
 
 namespace {
   // PPCEarlyReturn pass - For simple functions without epilogue code, move
@@ -68,7 +73,7 @@ protected:
 
         if ((*PI)->empty())
           continue;
-
+        
         for (MachineBasicBlock::iterator J = (*PI)->getLastNonDebugInstr();;) {
           if (J == (*PI)->end())
             break;
@@ -123,7 +128,7 @@ protected:
                 if (J->getOperand(i).isMBB() &&
                     J->getOperand(i).getMBB() == &ReturnMBB)
                   OtherReference = true;
-          } else if (!J->isTerminator() && !J->isDebugInstr())
+          } else if (!J->isTerminator() && !J->isDebugValue())
             break;
 
           if (J == (*PI)->begin())
@@ -168,7 +173,7 @@ protected:
 
 public:
     bool runOnMachineFunction(MachineFunction &MF) override {
-      if (skipFunction(MF.getFunction()))
+      if (skipFunction(*MF.getFunction()))
         return false;
 
       TII = MF.getSubtarget().getInstrInfo();
@@ -179,11 +184,11 @@ public:
       // nothing to do.
       if (MF.size() < 2)
         return Changed;
-      
-      // We can't use a range-based for loop due to clobbering the iterator.
-      for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E;) {
+
+      for (MachineFunction::iterator I = MF.begin(); I != MF.end();) {
         MachineBasicBlock &B = *I++;
-        Changed |= processBlock(B);
+        if (processBlock(B))
+          Changed = true;
       }
 
       return Changed;

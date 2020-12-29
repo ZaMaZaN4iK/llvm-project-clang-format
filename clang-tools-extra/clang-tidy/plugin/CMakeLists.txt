@@ -8,6 +8,15 @@ add_clang_library(clangTidyPlugin
   clangFrontend
   clangSema
   clangTidy
+  clangTidyBoostModule
+  clangTidyCERTModule
+  clangTidyCppCoreGuidelinesModule
+  clangTidyGoogleModule
+  clangTidyLLVMModule
+  clangTidyMiscModule
+  clangTidyModernizeModule
+  clangTidyMPIModule
+  clangTidyPerformanceModule
+  clangTidyReadabilityModule
   clangTooling
-  ${ALL_CLANG_TIDY_CHECKS}
   )

@@ -1,8 +1,9 @@
 //===-- PosixApi.h ----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,14 +11,13 @@
 #define liblldb_Host_PosixApi_h
 
 // This file defines platform specific functions, macros, and types necessary
-// to provide a minimum level of compatibility across all platforms to rely on
-// various posix api functionality.
+// to provide a minimum level of compatibility across all platforms to rely
+// on various posix api functionality.
 
-#if defined(_WIN32)
+#include "llvm/Support/Compiler.h"
+
+#if defined(LLVM_ON_WIN32)
 #include "lldb/Host/windows/PosixApi.h"
-#else
-#include <unistd.h>
-#include <csignal>
 #endif
 
 #endif

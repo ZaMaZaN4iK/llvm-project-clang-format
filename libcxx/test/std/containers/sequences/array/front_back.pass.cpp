@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,19 +25,19 @@
 
 #if TEST_STD_VER > 14
 constexpr bool check_front( double val )
-{
+{ 
     std::array<double, 3> arr = {1, 2, 3.5};
-    return arr.front() == val;
+	return arr.front() == val;
 }
 
 constexpr bool check_back( double val )
-{
+{ 
     std::array<double, 3> arr = {1, 2, 3.5};
-    return arr.back() == val;
+	return arr.back() == val;
 }
 #endif
 
-int main(int, char**)
+int main()
 {
     {
         typedef double T;
@@ -63,46 +64,7 @@ int main(int, char**)
         C::const_reference r2 = c.back();
         assert(r2 == 3.5);
     }
-    {
-      typedef double T;
-      typedef std::array<T, 0> C;
-      C c = {};
-      C const& cc = c;
-      ASSERT_SAME_TYPE(decltype( c.back()), typename C::reference);
-      ASSERT_SAME_TYPE(decltype(cc.back()), typename C::const_reference);
-      LIBCPP_ASSERT_NOEXCEPT(    c.back());
-      LIBCPP_ASSERT_NOEXCEPT(   cc.back());
-      ASSERT_SAME_TYPE(decltype( c.front()), typename C::reference);
-      ASSERT_SAME_TYPE(decltype(cc.front()), typename C::const_reference);
-      LIBCPP_ASSERT_NOEXCEPT(    c.front());
-      LIBCPP_ASSERT_NOEXCEPT(   cc.front());
-      if (c.size() > (0)) { // always false
-        TEST_IGNORE_NODISCARD c.front();
-        TEST_IGNORE_NODISCARD c.back();
-        TEST_IGNORE_NODISCARD cc.front();
-        TEST_IGNORE_NODISCARD cc.back();
-      }
-    }
-    {
-      typedef double T;
-      typedef std::array<const T, 0> C;
-      C c = {{}};
-      C const& cc = c;
-      ASSERT_SAME_TYPE(decltype( c.back()), typename C::reference);
-      ASSERT_SAME_TYPE(decltype(cc.back()), typename C::const_reference);
-      LIBCPP_ASSERT_NOEXCEPT(    c.back());
-      LIBCPP_ASSERT_NOEXCEPT(   cc.back());
-      ASSERT_SAME_TYPE(decltype( c.front()), typename C::reference);
-      ASSERT_SAME_TYPE(decltype(cc.front()), typename C::const_reference);
-      LIBCPP_ASSERT_NOEXCEPT(    c.front());
-      LIBCPP_ASSERT_NOEXCEPT(   cc.front());
-      if (c.size() > (0)) {
-        TEST_IGNORE_NODISCARD c.front();
-        TEST_IGNORE_NODISCARD c.back();
-        TEST_IGNORE_NODISCARD cc.front();
-        TEST_IGNORE_NODISCARD cc.back();
-      }
-    }
+
 #if TEST_STD_VER > 11
     {
         typedef double T;
@@ -123,6 +85,4 @@ int main(int, char**)
         static_assert (check_back (3.5), "");
     }
 #endif
-
-  return 0;
 }

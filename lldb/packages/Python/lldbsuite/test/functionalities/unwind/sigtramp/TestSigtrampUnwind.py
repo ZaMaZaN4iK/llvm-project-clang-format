@@ -5,6 +5,8 @@ Test that we can backtrace correctly with 'sigtramp' functions on the stack
 from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -17,13 +19,12 @@ class SigtrampUnwind(TestBase):
     # On different platforms the "_sigtramp" and "__kill" frames are likely to be different.
     # This test could probably be adapted to run on linux/*bsd easily enough.
     @skipUnlessDarwin
-    @expectedFailureAll(oslist=["ios", "watchos", "tvos", "bridgeos"], bugnumber="<rdar://problem/34006863>")  # lldb skips 1 frame on arm64 above _sigtramp
     def test(self):
         """Test that we can backtrace correctly with _sigtramp on the stack"""
         self.build()
         self.setTearDownCleanup()
 
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
 

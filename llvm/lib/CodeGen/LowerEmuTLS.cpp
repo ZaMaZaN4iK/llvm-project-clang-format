@@ -1,8 +1,9 @@
 //===- LowerEmuTLS.cpp - Add __emutls_[vt].* variables --------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,12 +16,10 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/Passes.h"
-#include "llvm/CodeGen/TargetLowering.h"
-#include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
+#include "llvm/Target/TargetLowering.h"
 
 using namespace llvm;
 
@@ -29,12 +28,14 @@ using namespace llvm;
 namespace {
 
 class LowerEmuTLS : public ModulePass {
+  const TargetMachine *TM;
 public:
   static char ID; // Pass identification, replacement for typeid
-  LowerEmuTLS() : ModulePass(ID) {
+  explicit LowerEmuTLS() : ModulePass(ID), TM(nullptr) { }
+  explicit LowerEmuTLS(const TargetMachine *TM)
+      : ModulePass(ID), TM(TM) {
     initializeLowerEmuTLSPass(*PassRegistry::getPassRegistry());
   }
-
   bool runOnModule(Module &M) override;
 private:
   bool addEmuTlsVar(Module &M, const GlobalVariable *GV);
@@ -53,22 +54,19 @@ private:
 
 char LowerEmuTLS::ID = 0;
 
-INITIALIZE_PASS(LowerEmuTLS, DEBUG_TYPE,
-                "Add __emutls_[vt]. variables for emultated TLS model", false,
-                false)
+INITIALIZE_PASS(LowerEmuTLS, "loweremutls",
+                "Add __emutls_[vt]. variables for emultated TLS model",
+                false, false)
 
-ModulePass *llvm::createLowerEmuTLSPass() { return new LowerEmuTLS(); }
+ModulePass *llvm::createLowerEmuTLSPass(const TargetMachine *TM) {
+  return new LowerEmuTLS(TM);
+}
 
 bool LowerEmuTLS::runOnModule(Module &M) {
   if (skipModule(M))
     return false;
 
-  auto *TPC = getAnalysisIfAvailable<TargetPassConfig>();
-  if (!TPC)
-    return false;
-
-  auto &TM = TPC->getTM<TargetMachine>();
-  if (!TM.useEmulatedTLS())
+  if (!TM || !TM->Options.EmulatedTLS)
     return false;
 
   bool Changed = false;
@@ -143,7 +141,7 @@ bool LowerEmuTLS::addEmuTlsVar(Module &M, const GlobalVariable *GV) {
     assert(EmuTlsTmplVar && "Failed to create emualted TLS initializer");
     EmuTlsTmplVar->setConstant(true);
     EmuTlsTmplVar->setInitializer(const_cast<Constant*>(InitValue));
-    EmuTlsTmplVar->setAlignment(Align(GVAlignment));
+    EmuTlsTmplVar->setAlignment(GVAlignment);
     copyLinkageVisibility(M, GV, EmuTlsTmplVar);
   }
 
@@ -156,8 +154,9 @@ bool LowerEmuTLS::addEmuTlsVar(Module &M, const GlobalVariable *GV) {
   ArrayRef<Constant*> ElementValueArray(ElementValues, 4);
   EmuTlsVar->setInitializer(
       ConstantStruct::get(EmuTlsVarType, ElementValueArray));
-  Align MaxAlignment(std::max(DL.getABITypeAlignment(WordType),
-                              DL.getABITypeAlignment(VoidPtrType)));
+  unsigned MaxAlignment = std::max(
+      DL.getABITypeAlignment(WordType),
+      DL.getABITypeAlignment(VoidPtrType));
   EmuTlsVar->setAlignment(MaxAlignment);
   return true;
 }

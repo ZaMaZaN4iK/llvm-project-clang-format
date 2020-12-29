@@ -1,8 +1,9 @@
 //===-- Thumb2InstrInfo.h - Thumb-2 Instruction Information -----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -25,8 +26,8 @@ class Thumb2InstrInfo : public ARMBaseInstrInfo {
 public:
   explicit Thumb2InstrInfo(const ARMSubtarget &STI);
 
-  /// Return the noop instruction to use for a noop.
-  void getNoop(MCInst &NopInst) const override;
+  /// getNoopForMachoTarget - Return the noop instruction to use for a noop.
+  void getNoopForMachoTarget(MCInst &NopInst) const override;
 
   // Return the non-pre/post incrementing version of 'Opc'. Return 0
   // if there is not such an opcode.
@@ -39,7 +40,7 @@ public:
                            MachineBasicBlock::iterator MBBI) const override;
 
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
-                   const DebugLoc &DL, MCRegister DestReg, MCRegister SrcReg,
+                   const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
                    bool KillSrc) const override;
 
   void storeRegToStackSlot(MachineBasicBlock &MBB,
@@ -68,12 +69,6 @@ private:
 /// to llvm::getInstrPredicate except it returns AL for conditional branch
 /// instructions which are "predicated", but are not in IT blocks.
 ARMCC::CondCodes getITInstrPredicate(const MachineInstr &MI, unsigned &PredReg);
-
-// getVPTInstrPredicate: VPT analogue of that, plus a helper function
-// corresponding to MachineInstr::findFirstPredOperandIdx.
-int findFirstVPTPredOperandIdx(const MachineInstr &MI);
-ARMVCC::VPTCodes getVPTInstrPredicate(const MachineInstr &MI,
-                                      unsigned &PredReg);
 }
 
 #endif

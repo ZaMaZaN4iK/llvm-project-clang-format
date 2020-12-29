@@ -1,8 +1,9 @@
 //===-- DNBError.h ----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,7 +22,7 @@
 class DNBError {
 public:
   typedef uint32_t ValueType;
-  enum FlavorType {
+  typedef enum {
     Generic = 0,
     MachKernel = 1,
     POSIX = 2
@@ -37,7 +38,7 @@ public:
     ,
     FrontBoard = 5
 #endif
-  };
+  } FlavorType;
 
   explicit DNBError(ValueType err = 0, FlavorType flavor = Generic)
       : m_err(err), m_flavor(flavor) {}
@@ -48,7 +49,7 @@ public:
     m_flavor = Generic;
     m_str.clear();
   }
-  ValueType Status() const { return m_err; }
+  ValueType Error() const { return m_err; }
   FlavorType Flavor() const { return m_flavor; }
 
   ValueType operator=(kern_return_t err) {

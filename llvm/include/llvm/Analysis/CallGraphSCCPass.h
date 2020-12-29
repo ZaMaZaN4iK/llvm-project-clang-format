@@ -1,8 +1,9 @@
 //===- CallGraphSCCPass.h - Pass that operates BU on call graph -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,16 +21,16 @@
 #ifndef LLVM_ANALYSIS_CALLGRAPHSCCPASS_H
 #define LLVM_ANALYSIS_CALLGRAPHSCCPASS_H
 
-#include "llvm/ADT/ArrayRef.h"
+#include "llvm/Analysis/CallGraph.h"
 #include "llvm/Pass.h"
-#include <vector>
+#include "llvm/PassSupport.h"
 
 namespace llvm {
 
-class CallGraph;
 class CallGraphNode;
-class CallGraphSCC;
+class CallGraph;
 class PMStack;
+class CallGraphSCC;
 
 class CallGraphSCCPass : public Pass {
 public:
@@ -37,7 +38,7 @@ public:
 
   /// createPrinterPass - Get a pass that prints the Module
   /// corresponding to a CallGraph.
-  Pass *createPrinterPass(raw_ostream &OS,
+  Pass *createPrinterPass(raw_ostream &O,
                           const std::string &Banner) const override;
 
   using llvm::Pass::doInitialization;
@@ -56,6 +57,7 @@ public:
   ///
   /// SCC passes that add or delete functions to the SCC are required to update
   /// the SCC list, otherwise stale pointers may be dereferenced.
+  ///
   virtual bool runOnSCC(CallGraphSCC &SCC) = 0;
 
   /// doFinalization - This method is called after the SCC's of the program has
@@ -87,7 +89,7 @@ protected:
 class CallGraphSCC {
   const CallGraph &CG; // The call graph for this SCC.
   void *Context; // The CGPassManager object that is vending this.
-  std::vector<CallGraphNode *> Nodes;
+  std::vector<CallGraphNode*> Nodes;
 
 public:
   CallGraphSCC(CallGraph &cg, void *context) : CG(cg), Context(context) {}
@@ -103,8 +105,7 @@ public:
   /// Old node has been deleted, and New is to be used in its place.
   void ReplaceNode(CallGraphNode *Old, CallGraphNode *New);
 
-  using iterator = std::vector<CallGraphNode *>::const_iterator;
-
+  typedef std::vector<CallGraphNode *>::const_iterator iterator;
   iterator begin() const { return Nodes.begin(); }
   iterator end() const { return Nodes.end(); }
 
@@ -118,19 +119,16 @@ void initializeDummyCGSCCPassPass(PassRegistry &);
 class DummyCGSCCPass : public CallGraphSCCPass {
 public:
   static char ID;
-
   DummyCGSCCPass() : CallGraphSCCPass(ID) {
     PassRegistry &Registry = *PassRegistry::getPassRegistry();
     initializeDummyCGSCCPassPass(Registry);
-  }
-
+  };
   bool runOnSCC(CallGraphSCC &SCC) override { return false; }
-
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesAll();
   }
 };
 
-} // end namespace llvm
+} // End llvm namespace
 
-#endif // LLVM_ANALYSIS_CALLGRAPHSCCPASS_H
+#endif

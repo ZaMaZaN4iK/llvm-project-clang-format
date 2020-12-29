@@ -1,8 +1,6 @@
 lit - LLVM Integrated Tester
 ============================
 
-.. program:: lit
-
 SYNOPSIS
 --------
 
@@ -38,11 +36,6 @@ Finally, :program:`lit` also supports additional options for only running a
 subset of the options specified on the command line, see
 :ref:`selection-options` for more information.
 
-:program:`lit` parses options from the environment variable ``LIT_OPTS`` after
-parsing options from the command line.  ``LIT_OPTS`` is primarily useful for
-supplementing or overriding the command-line options supplied to :program:`lit`
-by ``check`` targets defined by a project's build system.
-
 Users interested in the :program:`lit` architecture or designing a
 :program:`lit` testing implementation should see :ref:`lit-infrastructure`.
 
@@ -53,7 +46,7 @@ GENERAL OPTIONS
 
  Show the :program:`lit` help message.
 
-.. option:: -j N, --workers=N
+.. option:: -j N, --threads=N
 
  Run ``N`` tests in parallel.  By default, this is automatically chosen to
  match the number of detected available CPUs.
@@ -63,7 +56,7 @@ GENERAL OPTIONS
  Search for :file:`{NAME}.cfg` and :file:`{NAME}.site.cfg` when searching for
  test suites, instead of :file:`lit.cfg` and :file:`lit.site.cfg`.
 
-.. option:: -D NAME[=VALUE], --param NAME[=VALUE]
+.. option:: -D NAME, -D NAME=VALUE, --param NAME, --param NAME=VALUE
 
  Add a user defined parameter ``NAME`` with the given ``VALUE`` (or the empty
  string if not given).  The meaning and use of these parameters is test suite
@@ -86,17 +79,6 @@ OUTPUT OPTIONS
 
  Show more information on test failures, for example the entire test output
  instead of just the test result.
-
-.. option:: -vv, --echo-all-commands
-
- Echo all commands to stdout, as they are being executed.
- This can be valuable for debugging test failures, as the last echoed command
- will be the one which has failed.
- :program:`lit` normally inserts a no-op command (``:`` in the case of bash)
- with argument ``'RUN: at line N'`` before each command pipeline, and this
- option also causes those no-op commands to be echoed to stdout to help you
- locate the source line of the failed command.
- This option implies ``--verbose``.
 
 .. option:: -a, --show-all
 
@@ -169,30 +151,6 @@ SELECTION OPTIONS
 .. option:: --shuffle
 
  Run the tests in a random order.
-
-.. option:: --num-shards=M
-
- Divide the set of selected tests into ``M`` equal-sized subsets or
- "shards", and run only one of them.  Must be used with the
- ``--run-shard=N`` option, which selects the shard to run. The environment
- variable ``LIT_NUM_SHARDS`` can also be used in place of this
- option. These two options provide a coarse mechanism for paritioning large
- testsuites, for parallel execution on separate machines (say in a large
- testing farm).
-
-.. option:: --run-shard=N
-
- Select which shard to run, assuming the ``--num-shards=M`` option was
- provided. The two options must be used together, and the value of ``N``
- must be in the range ``1..M``. The environment variable
- ``LIT_RUN_SHARD`` can also be used in place of this option.
-
-.. option:: --filter=REGEXP
-
-  Run only those tests whose name matches the regular expression specified in
-  ``REGEXP``. The environment variable ``LIT_FILTER`` can be also used in place
-  of this option, which is especially useful in environments where the call
-  to ``lit`` is issued indirectly.
 
 ADDITIONAL OPTIONS
 ------------------
@@ -404,46 +362,29 @@ PRE-DEFINED SUBSTITUTIONS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :program:`lit` provides various patterns that can be used with the RUN command.
-These are defined in TestRunner.py. The base set of substitutions are:
+These are defined in TestRunner.py.
 
- ======================= ==============
-  Macro                   Substitution
- ======================= ==============
- %s                      source path (path to the file currently being run)
- %S                      source dir (directory of the file currently being run)
- %p                      same as %S
- %{pathsep}              path separator
- %t                      temporary file name unique to the test
- %basename_t             The last path component of %t but without the ``.tmp`` extension
- %T                      parent directory of %t (not unique, deprecated, do not use)
- %%                      %
- %/s                     %s but ``\`` is replaced by ``/``
- %/S                     %S but ``\`` is replaced by ``/``
- %/p                     %p but ``\`` is replaced by ``/``
- %/t                     %t but ``\`` is replaced by ``/``
- %/T                     %T but ``\`` is replaced by ``/``
- %{/s:regex_replacement} %/s but escaped for use in the replacement of a ``s@@@`` command in sed
- %{/S:regex_replacement} %/S but escaped for use in the replacement of a ``s@@@`` command in sed
- %{/p:regex_replacement} %/p but escaped for use in the replacement of a ``s@@@`` command in sed
- %{/t:regex_replacement} %/t but escaped for use in the replacement of a ``s@@@`` command in sed
- %{/T:regex_replacement} %/T but escaped for use in the replacement of a ``s@@@`` command in sed
- %:s                     On Windows, %/s but a ``:`` is removed if its the second character.
-                         Otherwise, %s but with a single leading ``/`` removed.
- %:S                     On Windows, %/S but a ``:`` is removed if its the second character.
-                         Otherwise, %S but with a single leading ``/`` removed.
- %:p                     On Windows, %/p but a ``:`` is removed if its the second character.
-                         Otherwise, %p but with a single leading ``/`` removed.
- %:t                     On Windows, %/t but a ``:`` is removed if its the second character.
-                         Otherwise, %t but with a single leading ``/`` removed.
- %:T                     On Windows, %/T but a ``:`` is removed if its the second character.
-                         Otherwise, %T but with a single leading ``/`` removed.
- ======================= ==============
+ ========== ==============
+  Macro      Substitution
+ ========== ==============
+ %s         source path (path to the file currently being run)
+ %S         source dir (directory of the file currently being run)
+ %p         same as %S
+ %{pathsep} path separator
+ %t         temporary file name unique to the test
+ %T         temporary directory unique to the test
+ %%         %
+ %/s        same as %s but replace all / with \\
+ %/S        same as %S but replace all / with \\
+ %/p        same as %p but replace all / with \\
+ %/t        same as %t but replace all / with \\
+ %/T        same as %T but replace all / with \\
+ ========== ==============
 
-Other substitutions are provided that are variations on this base set and
-further substitution patterns can be defined by each test module. See the
-modules :ref:`local-configuration-files`.
+Further substitution patterns might be defined by each test module.
+See the modules :ref:`local-configuration-files`.
 
-More detailed information on substitutions can be found in the
+More information on the testing infrastucture can be found in the
 :doc:`../TestingGuide`.
 
 TEST RUN OUTPUT FORMAT

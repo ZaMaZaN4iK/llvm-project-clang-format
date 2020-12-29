@@ -1,11 +1,11 @@
-//===- ARCRuntimeEntryPoints.h - ObjC ARC Optimization ----------*- C++ -*-===//
+//===- ARCRuntimeEntryPoints.h - ObjC ARC Optimization --*- C++ -*---------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-//
 /// \file
 /// This file contains a class ARCRuntimeEntryPoints for use in
 /// creating/managing references to entry points to the arc objective c runtime.
@@ -16,26 +16,15 @@
 /// WARNING: This file knows about how certain Objective-C library functions are
 /// used. Naive LLVM IR transformations which would otherwise be
 /// behavior-preserving may break these assumptions.
-//
+///
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TRANSFORMS_OBJCARC_ARCRUNTIMEENTRYPOINTS_H
 #define LLVM_LIB_TRANSFORMS_OBJCARC_ARCRUNTIMEENTRYPOINTS_H
 
-#include "llvm/ADT/StringRef.h"
-#include "llvm/IR/Attributes.h"
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/Type.h"
-#include "llvm/Support/ErrorHandling.h"
-#include <cassert>
+#include "ObjCARC.h"
 
 namespace llvm {
-
-class Function;
-class LLVMContext;
-
 namespace objcarc {
 
 enum class ARCRuntimeEntryPointKind {
@@ -54,7 +43,16 @@ enum class ARCRuntimeEntryPointKind {
 /// lazily to avoid cluttering up the Module with unused declarations.
 class ARCRuntimeEntryPoints {
 public:
-  ARCRuntimeEntryPoints() = default;
+  ARCRuntimeEntryPoints() : TheModule(nullptr),
+                            AutoreleaseRV(nullptr),
+                            Release(nullptr),
+                            Retain(nullptr),
+                            RetainBlock(nullptr),
+                            Autorelease(nullptr),
+                            StoreStrong(nullptr),
+                            RetainRV(nullptr),
+                            RetainAutorelease(nullptr),
+                            RetainAutoreleaseRV(nullptr) { }
 
   void init(Module *M) {
     TheModule = M;
@@ -69,32 +67,32 @@ public:
     RetainAutoreleaseRV = nullptr;
   }
 
-  Function *get(ARCRuntimeEntryPointKind kind) {
+  Constant *get(ARCRuntimeEntryPointKind kind) {
     assert(TheModule != nullptr && "Not initialized.");
 
     switch (kind) {
     case ARCRuntimeEntryPointKind::AutoreleaseRV:
-      return getIntrinsicEntryPoint(AutoreleaseRV,
-                                    Intrinsic::objc_autoreleaseReturnValue);
+      return getI8XRetI8XEntryPoint(AutoreleaseRV,
+                                    "objc_autoreleaseReturnValue", true);
     case ARCRuntimeEntryPointKind::Release:
-      return getIntrinsicEntryPoint(Release, Intrinsic::objc_release);
+      return getVoidRetI8XEntryPoint(Release, "objc_release");
     case ARCRuntimeEntryPointKind::Retain:
-      return getIntrinsicEntryPoint(Retain, Intrinsic::objc_retain);
+      return getI8XRetI8XEntryPoint(Retain, "objc_retain", true);
     case ARCRuntimeEntryPointKind::RetainBlock:
-      return getIntrinsicEntryPoint(RetainBlock, Intrinsic::objc_retainBlock);
+      return getI8XRetI8XEntryPoint(RetainBlock, "objc_retainBlock", false);
     case ARCRuntimeEntryPointKind::Autorelease:
-      return getIntrinsicEntryPoint(Autorelease, Intrinsic::objc_autorelease);
+      return getI8XRetI8XEntryPoint(Autorelease, "objc_autorelease", true);
     case ARCRuntimeEntryPointKind::StoreStrong:
-      return getIntrinsicEntryPoint(StoreStrong, Intrinsic::objc_storeStrong);
+      return getI8XRetI8XXI8XEntryPoint(StoreStrong, "objc_storeStrong");
     case ARCRuntimeEntryPointKind::RetainRV:
-      return getIntrinsicEntryPoint(RetainRV,
-                                Intrinsic::objc_retainAutoreleasedReturnValue);
+      return getI8XRetI8XEntryPoint(RetainRV,
+                                    "objc_retainAutoreleasedReturnValue", true);
     case ARCRuntimeEntryPointKind::RetainAutorelease:
-      return getIntrinsicEntryPoint(RetainAutorelease,
-                                    Intrinsic::objc_retainAutorelease);
+      return getI8XRetI8XEntryPoint(RetainAutorelease, "objc_retainAutorelease",
+                                    true);
     case ARCRuntimeEntryPointKind::RetainAutoreleaseRV:
-      return getIntrinsicEntryPoint(RetainAutoreleaseRV,
-                                Intrinsic::objc_retainAutoreleaseReturnValue);
+      return getI8XRetI8XEntryPoint(RetainAutoreleaseRV,
+                                    "objc_retainAutoreleaseReturnValue", true);
     }
 
     llvm_unreachable("Switch should be a covered switch.");
@@ -102,45 +100,82 @@ public:
 
 private:
   /// Cached reference to the module which we will insert declarations into.
-  Module *TheModule = nullptr;
+  Module *TheModule;
 
   /// Declaration for ObjC runtime function objc_autoreleaseReturnValue.
-  Function *AutoreleaseRV = nullptr;
-
+  Constant *AutoreleaseRV;
   /// Declaration for ObjC runtime function objc_release.
-  Function *Release = nullptr;
-
+  Constant *Release;
   /// Declaration for ObjC runtime function objc_retain.
-  Function *Retain = nullptr;
-
+  Constant *Retain;
   /// Declaration for ObjC runtime function objc_retainBlock.
-  Function *RetainBlock = nullptr;
-
+  Constant *RetainBlock;
   /// Declaration for ObjC runtime function objc_autorelease.
-  Function *Autorelease = nullptr;
-
+  Constant *Autorelease;
   /// Declaration for objc_storeStrong().
-  Function *StoreStrong = nullptr;
-
+  Constant *StoreStrong;
   /// Declaration for objc_retainAutoreleasedReturnValue().
-  Function *RetainRV = nullptr;
-
+  Constant *RetainRV;
   /// Declaration for objc_retainAutorelease().
-  Function *RetainAutorelease = nullptr;
-
+  Constant *RetainAutorelease;
   /// Declaration for objc_retainAutoreleaseReturnValue().
-  Function *RetainAutoreleaseRV = nullptr;
+  Constant *RetainAutoreleaseRV;
 
-  Function *getIntrinsicEntryPoint(Function *&Decl, Intrinsic::ID IntID) {
+  Constant *getVoidRetI8XEntryPoint(Constant *&Decl, StringRef Name) {
     if (Decl)
       return Decl;
 
-    return Decl = Intrinsic::getDeclaration(TheModule, IntID);
+    LLVMContext &C = TheModule->getContext();
+    Type *Params[] = { PointerType::getUnqual(Type::getInt8Ty(C)) };
+    AttributeSet Attr =
+      AttributeSet().addAttribute(C, AttributeSet::FunctionIndex,
+                                  Attribute::NoUnwind);
+    FunctionType *Fty = FunctionType::get(Type::getVoidTy(C), Params,
+                                          /*isVarArg=*/false);
+    return Decl = TheModule->getOrInsertFunction(Name, Fty, Attr);
   }
-};
 
-} // end namespace objcarc
+  Constant *getI8XRetI8XEntryPoint(Constant *&Decl, StringRef Name,
+                                   bool NoUnwind = false) {
+    if (Decl)
+      return Decl;
 
-} // end namespace llvm
+    LLVMContext &C = TheModule->getContext();
+    Type *I8X = PointerType::getUnqual(Type::getInt8Ty(C));
+    Type *Params[] = { I8X };
+    FunctionType *Fty = FunctionType::get(I8X, Params, /*isVarArg=*/false);
+    AttributeSet Attr = AttributeSet();
 
-#endif // LLVM_LIB_TRANSFORMS_OBJCARC_ARCRUNTIMEENTRYPOINTS_H
+    if (NoUnwind)
+      Attr = Attr.addAttribute(C, AttributeSet::FunctionIndex,
+                               Attribute::NoUnwind);
+
+    return Decl = TheModule->getOrInsertFunction(Name, Fty, Attr);
+  }
+
+  Constant *getI8XRetI8XXI8XEntryPoint(Constant *&Decl, StringRef Name) {
+    if (Decl)
+      return Decl;
+
+    LLVMContext &C = TheModule->getContext();
+    Type *I8X = PointerType::getUnqual(Type::getInt8Ty(C));
+    Type *I8XX = PointerType::getUnqual(I8X);
+    Type *Params[] = { I8XX, I8X };
+
+    AttributeSet Attr =
+      AttributeSet().addAttribute(C, AttributeSet::FunctionIndex,
+                                  Attribute::NoUnwind);
+    Attr = Attr.addAttribute(C, 1, Attribute::NoCapture);
+
+    FunctionType *Fty = FunctionType::get(Type::getVoidTy(C), Params,
+                                          /*isVarArg=*/false);
+
+    return Decl = TheModule->getOrInsertFunction(Name, Fty, Attr);
+  }
+
+}; // class ARCRuntimeEntryPoints
+
+} // namespace objcarc
+} // namespace llvm
+
+#endif

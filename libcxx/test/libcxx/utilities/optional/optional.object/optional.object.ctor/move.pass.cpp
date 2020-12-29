@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,8 +17,6 @@
 #include <string>
 #include <type_traits>
 #include <utility>
-
-#include "test_macros.h"
 
 using std::optional;
 
@@ -38,7 +37,7 @@ struct Z
     Z& operator=(const Z&) = delete;
 };
 
-int main(int, char**)
+int main()
 {
     {
         using T = int;
@@ -58,6 +57,4 @@ int main(int, char**)
     static_assert(!(std::is_trivially_move_constructible<optional<std::string>>::value), "");
 
     static_assert(!(std::is_move_constructible<optional<Z>>::value), "");
-
-  return 0;
 }

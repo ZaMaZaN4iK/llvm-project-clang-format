@@ -1,12 +1,13 @@
 //===-- ARMUnwindOpAsm.h - ARM Unwind Opcodes Assembler ---------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
-// This file declares the unwind opcode assembler for ARM exception handling
+// This file declares the unwind opcode assmebler for ARM exception handling
 // table.
 //
 //===----------------------------------------------------------------------===//
@@ -15,8 +16,8 @@
 #define LLVM_LIB_TARGET_ARM_MCTARGETDESC_ARMUNWINDOPASM_H
 
 #include "llvm/ADT/SmallVector.h"
-#include <cstddef>
-#include <cstdint>
+#include "llvm/Support/ARMEHABI.h"
+#include "llvm/Support/DataTypes.h"
 
 namespace llvm {
 
@@ -24,12 +25,13 @@ class MCSymbol;
 
 class UnwindOpcodeAssembler {
 private:
-  SmallVector<uint8_t, 32> Ops;
-  SmallVector<unsigned, 8> OpBegins;
-  bool HasPersonality = false;
+  llvm::SmallVector<uint8_t, 32> Ops;
+  llvm::SmallVector<unsigned, 8> OpBegins;
+  bool HasPersonality;
 
 public:
-  UnwindOpcodeAssembler() {
+  UnwindOpcodeAssembler()
+      : HasPersonality(0) {
     OpBegins.push_back(0);
   }
 
@@ -38,12 +40,12 @@ public:
     Ops.clear();
     OpBegins.clear();
     OpBegins.push_back(0);
-    HasPersonality = false;
+    HasPersonality = 0;
   }
 
   /// Set the personality
   void setPersonality(const MCSymbol *Per) {
-    HasPersonality = true;
+    HasPersonality = 1;
   }
 
   /// Emit unwind opcodes for .save directives
@@ -86,6 +88,6 @@ private:
   }
 };
 
-} // end namespace llvm
+} // namespace llvm
 
-#endif // LLVM_LIB_TARGET_ARM_MCTARGETDESC_ARMUNWINDOPASM_H
+#endif

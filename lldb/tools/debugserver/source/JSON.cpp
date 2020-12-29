@@ -1,8 +1,9 @@
 //===--------------------- JSON.cpp -----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -57,6 +58,7 @@ uint64_t JSONNumber::GetAsUnsigned() const {
   case DataType::Double:
     return (uint64_t)m_data.m_double;
   }
+  assert("Unhandled data type");
 }
 
 int64_t JSONNumber::GetAsSigned() const {
@@ -68,6 +70,7 @@ int64_t JSONNumber::GetAsSigned() const {
   case DataType::Double:
     return (int64_t)m_data.m_double;
   }
+  assert("Unhandled data type");
 }
 
 double JSONNumber::GetAsDouble() const {
@@ -79,6 +82,7 @@ double JSONNumber::GetAsDouble() const {
   case DataType::Double:
     return m_data.m_double;
   }
+  assert("Unhandled data type");
 }
 
 void JSONNumber::Write(std::ostream &s) {
@@ -271,14 +275,14 @@ JSONParser::Token JSONParser::GetToken(std::string &value) {
     break;
 
   case '"': {
-    while (true) {
+    while (1) {
       bool was_escaped = false;
       int escaped_ch = GetEscapedChar(was_escaped);
       if (escaped_ch == -1) {
         error << "error: an error occurred getting a character from offset "
               << start_index;
         value = error.str();
-        return Token::Status;
+        return Token::Error;
 
       } else {
         const bool is_end_quote = escaped_ch == '"';
@@ -292,13 +296,13 @@ JSONParser::Token JSONParser::GetToken(std::string &value) {
                   << std::setprecision(4) << std::hex << escaped_ch;
             error << " at offset " << start_index;
             value = error.str();
-            return Token::Status;
+            return Token::Error;
           }
         } else if (is_end_quote) {
           return Token::String;
         } else if (is_null) {
           value = "error: missing end quote for string";
-          return Token::Status;
+          return Token::Error;
         }
       }
     }
@@ -348,7 +352,7 @@ JSONParser::Token JSONParser::GetToken(std::string &value) {
         if (got_decimal_point) {
           error << "error: extra decimal point found at offset " << start_index;
           value = error.str();
-          return Token::Status;
+          return Token::Error;
         } else {
           got_decimal_point = true;
           ++m_index; // Skip this character
@@ -361,7 +365,7 @@ JSONParser::Token JSONParser::GetToken(std::string &value) {
           error << "error: extra exponent character found at offset "
                 << start_index;
           value = error.str();
-          return Token::Status;
+          return Token::Error;
         } else {
           exp_index = m_index;
           ++m_index; // Skip this character
@@ -377,7 +381,7 @@ JSONParser::Token JSONParser::GetToken(std::string &value) {
           error << "error: unexpected " << next_ch << " character at offset "
                 << start_index;
           value = error.str();
-          return Token::Status;
+          return Token::Error;
         }
         break;
 
@@ -399,7 +403,7 @@ JSONParser::Token JSONParser::GetToken(std::string &value) {
                      "offset in float value \""
                   << value.c_str() << "\"";
             value = error.str();
-            return Token::Status;
+            return Token::Error;
           }
         } else {
           // No exponent, but we need at least one decimal after the decimal
@@ -410,7 +414,7 @@ JSONParser::Token JSONParser::GetToken(std::string &value) {
             error << "error: no digits after decimal point \"" << value.c_str()
                   << "\"";
             value = error.str();
-            return Token::Status;
+            return Token::Error;
           }
         }
       } else {
@@ -421,13 +425,13 @@ JSONParser::Token JSONParser::GetToken(std::string &value) {
         } else {
           error << "error: no digits negate sign \"" << value.c_str() << "\"";
           value = error.str();
-          return Token::Status;
+          return Token::Error;
         }
       }
     } else {
       error << "error: invalid number found at offset " << start_index;
       value = error.str();
-      return Token::Status;
+      return Token::Error;
     }
   } break;
   default:
@@ -436,7 +440,7 @@ JSONParser::Token JSONParser::GetToken(std::string &value) {
   error << "error: failed to parse token at offset " << start_index
         << " (around character '" << ch << "')";
   value = error.str();
-  return Token::Status;
+  return Token::Error;
 }
 
 int JSONParser::GetEscapedChar(bool &was_escaped) {
@@ -483,7 +487,7 @@ JSONValue::SP JSONParser::ParseJSONObject() {
 
   std::string value;
   std::string key;
-  while (true) {
+  while (1) {
     JSONParser::Token token = GetToken(value);
 
     if (token == JSONParser::Token::String) {
@@ -515,17 +519,14 @@ JSONValue::SP JSONParser::ParseJSONArray() {
 
   std::string value;
   std::string key;
-  while (true) {
-    JSONParser::Token token = GetToken(value);
-    if (token == JSONParser::Token::ArrayEnd)
-      return JSONValue::SP(array_up.release());
-    JSONValue::SP value_sp = ParseJSONValue(value, token);
+  while (1) {
+    JSONValue::SP value_sp = ParseJSONValue();
     if (value_sp)
       array_up->AppendObject(value_sp);
     else
       break;
 
-    token = GetToken(value);
+    JSONParser::Token token = GetToken(value);
     if (token == JSONParser::Token::Comma) {
       continue;
     } else if (token == JSONParser::Token::ArrayEnd) {
@@ -540,11 +541,6 @@ JSONValue::SP JSONParser::ParseJSONArray() {
 JSONValue::SP JSONParser::ParseJSONValue() {
   std::string value;
   const JSONParser::Token token = GetToken(value);
-  return ParseJSONValue(value, token);
-}
-
-JSONValue::SP JSONParser::ParseJSONValue(const std::string &value,
-                                         const Token &token) {
   switch (token) {
   case JSONParser::Token::ObjectStart:
     return ParseJSONObject();

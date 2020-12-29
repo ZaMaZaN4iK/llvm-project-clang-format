@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,14 +12,12 @@
 // basic_istream<charT,traits>&
 //    ignore(streamsize n = 1, int_type delim = traits::eof());
 
-// https://bugs.llvm.org/show_bug.cgi?id=16427
+// http://llvm.org/bugs/show_bug.cgi?id=16427
 
 #include <sstream>
 #include <cassert>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     int bad=-1;
     std::ostringstream os;
@@ -32,6 +31,4 @@ int main(int, char**)
     is.ignore(ignoreLen);
     std::istringstream::pos_type b=is.tellg();
     assert((b-a)==ignoreLen);
-
-  return 0;
 }

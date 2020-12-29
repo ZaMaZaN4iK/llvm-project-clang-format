@@ -1,7 +1,11 @@
 ; RUN: opt %loadPolly -basicaa -polly-codegen -S < %s | FileCheck %s
 ;
-; Verify that we remove the lifetime markers from everywhere.
+; Verify that we remove the lifetime markers from the optimized SCoP.
 ;
+; CHECK: for.body:
+; CHECK:   call void @llvm.lifetime.start
+; CHECK: for.end:
+; CHECK:   call void @llvm.lifetime.end
 ; CHECK-NOT: call void @llvm.lifetime.start
 ; CHECK-NOT: call void @llvm.lifetime.end
 ;
@@ -77,5 +81,5 @@ declare void @llvm.lifetime.start(i64, i8* nocapture) #1
 ; Function Attrs: nounwind
 declare void @llvm.lifetime.end(i64, i8* nocapture) #1
 
-attributes #0 = { nounwind uwtable "less-precise-fpmad"="false" "frame-pointer"="all" "no-infs-fp-math"="true" "no-nans-fp-math"="true" "stack-protector-buffer-size"="8" "unsafe-fp-math"="true" "use-soft-float"="false" }
+attributes #0 = { nounwind uwtable "less-precise-fpmad"="false" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="true" "no-nans-fp-math"="true" "stack-protector-buffer-size"="8" "unsafe-fp-math"="true" "use-soft-float"="false" }
 attributes #1 = { nounwind }

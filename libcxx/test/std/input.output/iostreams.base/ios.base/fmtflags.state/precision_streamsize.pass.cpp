@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,8 +16,6 @@
 #include <ios>
 #include <cassert>
 
-#include "test_macros.h"
-
 class test
     : public std::ios
 {
@@ -27,13 +26,11 @@ public:
     }
 };
 
-int main(int, char**)
+int main()
 {
     test t;
     assert(t.precision() == 6);
     std::streamsize p = t.precision(10);
     assert(p == 6);
     assert(t.precision() == 10);
-
-  return 0;
 }

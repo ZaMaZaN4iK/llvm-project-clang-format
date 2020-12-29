@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,28 +12,16 @@
 // template<ForwardIterator Iter, EquivalenceRelation<auto, Iter::value_type> Pred>
 //   requires OutputIterator<Iter, RvalueOf<Iter::reference>::type>
 //         && CopyConstructible<Pred>
-//   constexpr Iter        // constexpr after C++17
+//   Iter
 //   unique(Iter first, Iter last, Pred pred);
 
 #include <algorithm>
 #include <cassert>
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
 #include <memory>
-
-#include "test_macros.h"
-#include "test_iterators.h"
-
-#if TEST_STD_VER > 17
-TEST_CONSTEXPR bool test_constexpr() {
-          int ia[]       = {0, 1, 1, 3, 4};
-    const int expected[] = {0, 1, 3, 4};
-    const size_t N = 4;
-
-    auto it = std::unique(std::begin(ia), std::end(ia), [](int a, int b) {return a == b; });
-    return it == (std::begin(ia) + N)
-        && std::equal(std::begin(ia), it, std::begin(expected), std::end(expected))
-        ;
-    }
 #endif
+
+#include "test_iterators.h"
 
 struct count_equal
 {
@@ -121,7 +110,7 @@ test()
     assert(count_equal::count == si-1);
 }
 
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
 
 struct do_nothing
 {
@@ -221,25 +210,22 @@ test1()
     assert(*ii[2] == 2);
     assert(count_equal::count == si-1);
 }
-#endif // TEST_STD_VER >= 11
 
-int main(int, char**)
+#endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
+
+int main()
 {
     test<forward_iterator<int*> >();
     test<bidirectional_iterator<int*> >();
     test<random_access_iterator<int*> >();
     test<int*>();
 
-#if TEST_STD_VER >= 11
+#ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
+
     test1<forward_iterator<Ptr*> >();
     test1<bidirectional_iterator<Ptr*> >();
     test1<random_access_iterator<Ptr*> >();
     test1<Ptr*>();
-#endif
 
-#if TEST_STD_VER > 17
-    static_assert(test_constexpr());
-#endif
-
-  return 0;
+#endif  // _LIBCPP_HAS_NO_RVALUE_REFERENCES
 }

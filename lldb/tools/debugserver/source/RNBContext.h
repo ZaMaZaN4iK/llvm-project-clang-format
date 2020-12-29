@@ -1,8 +1,9 @@
 //===-- RNBContext.h --------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -42,7 +43,9 @@ public:
 
     all_event_bits = sticky_event_bits | normal_event_bits
   } event_t;
+  //------------------------------------------------------------------
   // Constructors and Destructors
+  //------------------------------------------------------------------
   RNBContext()
       : m_pid(INVALID_NUB_PROCESS), m_pid_stop_count(0),
         m_events(0, all_event_bits), m_pid_pthread(), m_launch_status(),
@@ -83,7 +86,6 @@ public:
     if (arg)
       m_env_vec.push_back(arg);
   }
-  void PushEnvironmentIfNeeded(const char *arg);
   void ClearEnvironment() {
     m_env_vec.erase(m_env_vec.begin(), m_env_vec.end());
   }
@@ -125,7 +127,9 @@ public:
   bool GetDetachOnError() { return m_detach_on_error; }
 
 protected:
+  //------------------------------------------------------------------
   // Classes that inherit from RNBContext can see and modify these
+  //------------------------------------------------------------------
   nub_process_t m_pid;
   std::string m_stdin;
   std::string m_stdout;
@@ -149,8 +153,11 @@ protected:
   static void *ThreadFunctionProcessStatus(void *arg);
 
 private:
-  RNBContext(const RNBContext &rhs) = delete;
-  RNBContext &operator=(const RNBContext &rhs) = delete;
+  //------------------------------------------------------------------
+  // Outlaw copy and assignment operators
+  //------------------------------------------------------------------
+  RNBContext(const RNBContext &rhs);
+  RNBContext &operator=(const RNBContext &rhs);
 };
 
 #endif // #ifndef __RNBContext_h__

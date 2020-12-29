@@ -1,13 +1,14 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03
-// REQUIRES: c++11 || c++14
+// REQUIRES-ANY: c++11, c++14
 
 // <functional>
 
@@ -23,7 +24,7 @@
 
 #include "test_macros.h"
 #include "min_allocator.h"
-#include "count_new.h"
+#include "count_new.hpp"
 
 class A
 {
@@ -54,7 +55,7 @@ int A::count = 0;
 
 int g(int) { return 0; }
 
-int main(int, char**)
+int main()
 {
     assert(globalMemCounter.checkOutstandingNewEq(0));
     {
@@ -105,6 +106,4 @@ int main(int, char**)
         assert(f2.target<Ptr>());
         assert(f.target<Ptr>()); // f is unchanged because the target is small
     }
-
-  return 0;
 }

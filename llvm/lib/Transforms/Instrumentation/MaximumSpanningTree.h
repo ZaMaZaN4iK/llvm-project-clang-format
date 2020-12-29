@@ -1,8 +1,9 @@
 //===- llvm/Analysis/MaximumSpanningTree.h - Interface ----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TRANSFORMS_INSTRUMENTATION_MAXIMUMSPANNINGTREE_H
-#define LLVM_LIB_TRANSFORMS_INSTRUMENTATION_MAXIMUMSPANNINGTREE_H
+#ifndef LLVM_ANALYSIS_MAXIMUMSPANNINGTREE_H
+#define LLVM_ANALYSIS_MAXIMUMSPANNINGTREE_H
 
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/IR/BasicBlock.h"
@@ -67,7 +68,8 @@ namespace llvm {
     /// MaximumSpanningTree() - Takes a vector of weighted edges and returns a
     /// spanning tree.
     MaximumSpanningTree(EdgeWeights &EdgeVector) {
-      llvm::stable_sort(EdgeVector, EdgeWeightCompare());
+
+      std::stable_sort(EdgeVector.begin(), EdgeVector.end(), EdgeWeightCompare());
 
       // Create spanning tree, Forest contains a special data structure
       // that makes checking if two nodes are already in a common (sub-)tree
@@ -106,4 +108,4 @@ namespace llvm {
 
 } // End llvm namespace
 
-#endif // LLVM_LIB_TRANSFORMS_INSTRUMENTATION_MAXIMUMSPANNINGTREE_H
+#endif

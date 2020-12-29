@@ -1,8 +1,9 @@
 //===-- SBBlock.h -----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -27,8 +28,6 @@ public:
   const lldb::SBBlock &operator=(const lldb::SBBlock &rhs);
 
   bool IsInlined() const;
-
-  explicit operator bool() const;
 
   bool IsValid() const;
 
@@ -60,14 +59,16 @@ public:
 
   lldb::SBValueList GetVariables(lldb::SBTarget &target, bool arguments,
                                  bool locals, bool statics);
+  //------------------------------------------------------------------
   /// Get the inlined block that contains this block.
   ///
-  /// \return
+  /// @return
   ///     If this block is inlined, it will return this block, else
   ///     parent blocks will be searched to see if any contain this
   ///     block and are themselves inlined. An invalid SBBlock will
   ///     be returned if this block nor any parent blocks are inlined
   ///     function blocks.
+  //------------------------------------------------------------------
   lldb::SBBlock GetContainingInlinedBlock();
 
   bool GetDescription(lldb::SBStream &description);

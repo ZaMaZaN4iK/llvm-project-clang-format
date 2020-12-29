@@ -1,8 +1,9 @@
 //===- LowerExpectIntrinsic.h - LowerExpectIntrinsic pass -------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -21,9 +22,9 @@
 namespace llvm {
 
 struct LowerExpectIntrinsicPass : PassInfoMixin<LowerExpectIntrinsicPass> {
-  /// Run the pass over the function.
+  /// \brief Run the pass over the function.
   ///
-  /// This will lower all of the expect intrinsic calls in this function into
+  /// This will lower all of th expect intrinsic calls in this function into
   /// branch weight metadata. That metadata will subsequently feed the analysis
   /// of the probabilities and frequencies of the CFG. After running this pass,
   /// no more expect intrinsics remain, allowing the rest of the optimizer to

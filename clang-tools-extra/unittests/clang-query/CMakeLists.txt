@@ -11,17 +11,12 @@ add_extra_unittest(ClangQueryTests
   QueryParserTest.cpp
   )
 
-clang_target_link_libraries(ClangQueryTests
-  PRIVATE
+target_link_libraries(ClangQueryTests
   clangAST
   clangASTMatchers
   clangBasic
   clangDynamicASTMatchers
   clangFrontend
-  clangSerialization
-  clangTooling
-  )
-target_link_libraries(ClangQueryTests
-  PRIVATE
   clangQuery
+  clangTooling
   )

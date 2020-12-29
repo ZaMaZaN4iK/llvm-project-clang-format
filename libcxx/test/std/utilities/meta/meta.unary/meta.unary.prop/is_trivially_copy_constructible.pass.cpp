@@ -1,14 +1,17 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // type_traits
 
 // is_trivially_copy_constructible
+
+// XFAIL: gcc-4.9
 
 #include <type_traits>
 #include "test_macros.h"
@@ -63,7 +66,7 @@ struct A
     A(const A&);
 };
 
-int main(int, char**)
+int main()
 {
     test_has_not_trivial_copy_constructor<void>();
     test_has_not_trivial_copy_constructor<A>();
@@ -78,6 +81,4 @@ int main(int, char**)
     test_is_trivially_copy_constructible<int*>();
     test_is_trivially_copy_constructible<const int*>();
     test_is_trivially_copy_constructible<bit_zero>();
-
-  return 0;
 }

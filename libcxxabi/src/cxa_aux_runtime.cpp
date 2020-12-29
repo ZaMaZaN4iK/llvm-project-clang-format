@@ -1,12 +1,13 @@
 //===------------------------ cxa_aux_runtime.cpp -------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //
 // This file implements the "Auxiliary Runtime APIs"
-// https://itanium-cxx-abi.github.io/cxx-abi/abi-eh.html#cxx-aux
+// http://mentorembedded.github.io/cxx-abi/abi-eh.html#cxx-aux
 //===----------------------------------------------------------------------===//
 
 #include "cxxabi.h"
@@ -15,7 +16,7 @@
 
 namespace __cxxabiv1 {
 extern "C" {
-_LIBCXXABI_FUNC_VIS _LIBCXXABI_NORETURN void __cxa_bad_cast(void) {
+_LIBCXXABI_FUNC_VIS LIBCXXABI_NORETURN void __cxa_bad_cast(void) {
 #ifndef _LIBCXXABI_NO_EXCEPTIONS
   throw std::bad_cast();
 #else
@@ -23,7 +24,7 @@ _LIBCXXABI_FUNC_VIS _LIBCXXABI_NORETURN void __cxa_bad_cast(void) {
 #endif
 }
 
-_LIBCXXABI_FUNC_VIS _LIBCXXABI_NORETURN void __cxa_bad_typeid(void) {
+_LIBCXXABI_FUNC_VIS LIBCXXABI_NORETURN void __cxa_bad_typeid(void) {
 #ifndef _LIBCXXABI_NO_EXCEPTIONS
   throw std::bad_typeid();
 #else
@@ -31,7 +32,7 @@ _LIBCXXABI_FUNC_VIS _LIBCXXABI_NORETURN void __cxa_bad_typeid(void) {
 #endif
 }
 
-_LIBCXXABI_FUNC_VIS _LIBCXXABI_NORETURN void
+_LIBCXXABI_FUNC_VIS LIBCXXABI_NORETURN void
 __cxa_throw_bad_array_new_length(void) {
 #ifndef _LIBCXXABI_NO_EXCEPTIONS
   throw std::bad_array_new_length();

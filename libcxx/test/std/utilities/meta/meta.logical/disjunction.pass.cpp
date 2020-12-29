@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,12 +17,10 @@
 #include <type_traits>
 #include <cassert>
 
-#include "test_macros.h"
-
 struct True  { static constexpr bool value = true; };
 struct False { static constexpr bool value = false; };
 
-int main(int, char**)
+int main()
 {
     static_assert (!std::disjunction<>::value, "" );
     static_assert ( std::disjunction<std::true_type >::value, "" );
@@ -64,6 +63,4 @@ int main(int, char**)
 
     static_assert ( std::disjunction_v<True >, "" );
     static_assert (!std::disjunction_v<False>, "" );
-
-  return 0;
 }

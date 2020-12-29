@@ -3,8 +3,12 @@ Test that we obey thread conditioned breakpoints and expression
 conditioned breakpoints simultaneously
 """
 
+from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -17,16 +21,13 @@ class ThreadSpecificBreakPlusConditionTestCase(TestBase):
 
     # test frequently times out or hangs
     @skipIf(oslist=['windows', 'freebsd'])
-    @skipIfDarwin
     # hits break in another thread in testrun
     @expectedFailureAll(oslist=['freebsd'], bugnumber='llvm.org/pr18522')
     @add_test_categories(['pyapi'])
-    @expectedFailureAll(oslist=['ios', 'watchos', 'tvos', 'bridgeos'], archs=['armv7', 'armv7k'], bugnumber='rdar://problem/34563348') # Two threads seem to end up with the same my_value when built for armv7.
-    @expectedFailureNetBSD
     def test_python(self):
         """Test that we obey thread conditioned breakpoints."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)

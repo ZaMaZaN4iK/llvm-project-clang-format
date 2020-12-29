@@ -1,14 +1,16 @@
 //===- DAGISelMatcher.cpp - Representation of DAG pattern matcher ---------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "DAGISelMatcher.h"
 #include "CodeGenDAGPatterns.h"
 #include "CodeGenTarget.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TableGen/Record.h"
 using namespace llvm;
@@ -78,48 +80,38 @@ bool Matcher::canMoveBeforeNode(const Matcher *Other) const {
 
 
 ScopeMatcher::~ScopeMatcher() {
-  for (Matcher *C : Children)
-    delete C;
+  for (unsigned i = 0, e = Children.size(); i != e; ++i)
+    delete Children[i];
 }
 
 SwitchOpcodeMatcher::~SwitchOpcodeMatcher() {
-  for (auto &C : Cases)
-    delete C.second;
+  for (unsigned i = 0, e = Cases.size(); i != e; ++i)
+    delete Cases[i].second;
 }
 
 SwitchTypeMatcher::~SwitchTypeMatcher() {
-  for (auto &C : Cases)
-    delete C.second;
+  for (unsigned i = 0, e = Cases.size(); i != e; ++i)
+    delete Cases[i].second;
 }
 
-CheckPredicateMatcher::CheckPredicateMatcher(
-    const TreePredicateFn &pred, const SmallVectorImpl<unsigned> &Ops)
-  : Matcher(CheckPredicate), Pred(pred.getOrigPatFragRecord()),
-    Operands(Ops.begin(), Ops.end()) {}
+CheckPredicateMatcher::CheckPredicateMatcher(const TreePredicateFn &pred)
+  : Matcher(CheckPredicate), Pred(pred.getOrigPatFragRecord()) {}
 
 TreePredicateFn CheckPredicateMatcher::getPredicate() const {
   return TreePredicateFn(Pred);
 }
 
-unsigned CheckPredicateMatcher::getNumOperands() const {
-  return Operands.size();
-}
-
-unsigned CheckPredicateMatcher::getOperandNo(unsigned i) const {
-  assert(i < Operands.size());
-  return Operands[i];
-}
 
 
 // printImpl methods.
 
 void ScopeMatcher::printImpl(raw_ostream &OS, unsigned indent) const {
   OS.indent(indent) << "Scope\n";
-  for (const Matcher *C : Children) {
-    if (!C)
+  for (unsigned i = 0, e = getNumChildren(); i != e; ++i) {
+    if (!getChild(i))
       OS.indent(indent+1) << "NULL POINTER\n";
     else
-      C->print(OS, indent+2);
+      getChild(i)->print(OS, indent+2);
   }
 }
 
@@ -170,9 +162,9 @@ void CheckOpcodeMatcher::printImpl(raw_ostream &OS, unsigned indent) const {
 
 void SwitchOpcodeMatcher::printImpl(raw_ostream &OS, unsigned indent) const {
   OS.indent(indent) << "SwitchOpcode: {\n";
-  for (const auto &C : Cases) {
-    OS.indent(indent) << "case " << C.first->getEnumName() << ":\n";
-    C.second->print(OS, indent+2);
+  for (unsigned i = 0, e = Cases.size(); i != e; ++i) {
+    OS.indent(indent) << "case " << Cases[i].first->getEnumName() << ":\n";
+    Cases[i].second->print(OS, indent+2);
   }
   OS.indent(indent) << "}\n";
 }
@@ -185,9 +177,9 @@ void CheckTypeMatcher::printImpl(raw_ostream &OS, unsigned indent) const {
 
 void SwitchTypeMatcher::printImpl(raw_ostream &OS, unsigned indent) const {
   OS.indent(indent) << "SwitchType: {\n";
-  for (const auto &C : Cases) {
-    OS.indent(indent) << "case " << getEnumName(C.first) << ":\n";
-    C.second->print(OS, indent+2);
+  for (unsigned i = 0, e = Cases.size(); i != e; ++i) {
+    OS.indent(indent) << "case " << getEnumName(Cases[i].first) << ":\n";
+    Cases[i].second->print(OS, indent+2);
   }
   OS.indent(indent) << "}\n";
 }
@@ -211,11 +203,6 @@ void CheckCondCodeMatcher::printImpl(raw_ostream &OS, unsigned indent) const {
   OS.indent(indent) << "CheckCondCode ISD::" << CondCodeName << '\n';
 }
 
-void CheckChild2CondCodeMatcher::printImpl(raw_ostream &OS,
-                                           unsigned indent) const {
-  OS.indent(indent) << "CheckChild2CondCode ISD::" << CondCodeName << '\n';
-}
-
 void CheckValueTypeMatcher::printImpl(raw_ostream &OS, unsigned indent) const {
   OS.indent(indent) << "CheckValueType MVT::" << TypeName << '\n';
 }
@@ -235,16 +222,6 @@ void CheckOrImmMatcher::printImpl(raw_ostream &OS, unsigned indent) const {
 void CheckFoldableChainNodeMatcher::printImpl(raw_ostream &OS,
                                               unsigned indent) const {
   OS.indent(indent) << "CheckFoldableChainNode\n";
-}
-
-void CheckImmAllOnesVMatcher::printImpl(raw_ostream &OS,
-                                        unsigned indent) const {
-  OS.indent(indent) << "CheckAllOnesV\n";
-}
-
-void CheckImmAllZerosVMatcher::printImpl(raw_ostream &OS,
-                                         unsigned indent) const {
-  OS.indent(indent) << "CheckAllZerosV\n";
 }
 
 void EmitIntegerMatcher::printImpl(raw_ostream &OS, unsigned indent) const {
@@ -412,12 +389,3 @@ bool CheckValueTypeMatcher::isContradictoryImpl(const Matcher *M) const {
   return false;
 }
 
-bool CheckImmAllOnesVMatcher::isContradictoryImpl(const Matcher *M) const {
-  // AllZeros is contradictory.
-  return isa<CheckImmAllZerosVMatcher>(M);
-}
-
-bool CheckImmAllZerosVMatcher::isContradictoryImpl(const Matcher *M) const {
-  // AllOnes is contradictory.
-  return isa<CheckImmAllOnesVMatcher>(M);
-}

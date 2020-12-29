@@ -1,8 +1,9 @@
 //===-- sanitizer_list.h ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -66,17 +67,6 @@ struct IntrusiveList {
     first_ = first_->next;
     if (!first_)
       last_ = nullptr;
-    size_--;
-  }
-
-  void extract(Item *prev, Item *x) {
-    CHECK(!empty());
-    CHECK_NE(prev, nullptr);
-    CHECK_NE(x, nullptr);
-    CHECK_EQ(prev->next, x);
-    prev->next = x->next;
-    if (last_ == x)
-      last_ = prev;
     size_--;
   }
 

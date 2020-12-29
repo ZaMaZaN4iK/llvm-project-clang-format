@@ -1,8 +1,9 @@
 //===-- X86.h - Top-level interface for X86 representation ------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,11 +21,7 @@ namespace llvm {
 
 class FunctionPass;
 class ImmutablePass;
-class InstructionSelector;
-class ModulePass;
 class PassRegistry;
-class X86RegisterBankInfo;
-class X86Subtarget;
 class X86TargetMachine;
 
 /// This pass converts a legalized DAG into a X86-specific DAG, ready for
@@ -49,10 +46,6 @@ FunctionPass *createX86FloatingPointStackifierPass();
 /// transition penalty between functions encoded with AVX and SSE.
 FunctionPass *createX86IssueVZeroUpperPass();
 
-/// This pass inserts ENDBR instructions before indirect jump/call
-/// destinations as part of CET IBT mechanism.
-FunctionPass *createX86IndirectBranchTrackingPass();
-
 /// Return a pass that pads short functions with NOOPs.
 /// This will prevent a stall when returning on the Atom.
 FunctionPass *createX86PadShortFunctions();
@@ -69,23 +62,8 @@ FunctionPass *createX86OptimizeLEAs();
 /// Return a pass that transforms setcc + movzx pairs into xor + setcc.
 FunctionPass *createX86FixupSetCC();
 
-/// Return a pass that folds conditional branch jumps.
-FunctionPass *createX86CondBrFolding();
-
-/// Return a pass that avoids creating store forward block issues in the hardware.
-FunctionPass *createX86AvoidStoreForwardingBlocks();
-
-/// Return a pass that lowers EFLAGS copy pseudo instructions.
-FunctionPass *createX86FlagsCopyLoweringPass();
-
 /// Return a pass that expands WinAlloca pseudo-instructions.
 FunctionPass *createX86WinAllocaExpander();
-
-/// Return a pass that inserts int3 at the end of the function if it ends with a
-/// CALL instruction. The pass does the same for each funclet as well. This
-/// ensures that the open interval of function start and end PCs contains all
-/// return addresses for the benefit of the Windows x64 unwinder.
-FunctionPass *createX86AvoidTrailingCallPass();
 
 /// Return a pass that optimizes the code-size of x86 call sequences. This is
 /// done by replacing esp-relative movs with pushes.
@@ -102,71 +80,19 @@ FunctionPass *createX86WinEHStatePass();
 /// the MachineInstr to MC.
 FunctionPass *createX86ExpandPseudoPass();
 
-/// This pass converts X86 cmov instructions into branch when profitable.
-FunctionPass *createX86CmovConverterPass();
-
 /// Return a Machine IR pass that selectively replaces
 /// certain byte and word instructions by equivalent 32 bit instructions,
 /// in order to eliminate partial register usage, false dependences on
 /// the upper portions of registers, and to save code size.
 FunctionPass *createX86FixupBWInsts();
 
-/// Return a Machine IR pass that reassigns instruction chains from one domain
-/// to another, when profitable.
-FunctionPass *createX86DomainReassignmentPass();
+void initializeFixupBWInstPassPass(PassRegistry &);
 
-/// This pass replaces EVEX encoded of AVX-512 instructiosn by VEX
+/// This pass replaces EVEX ecnoded of AVX-512 instructiosn by VEX 
 /// encoding when possible in order to reduce code size.
 FunctionPass *createX86EvexToVexInsts();
 
-/// This pass creates the thunks for the retpoline feature.
-FunctionPass *createX86IndirectThunksPass();
-
-/// This pass ensures instructions featuring a memory operand
-/// have distinctive <LineNumber, Discriminator> (with respect to eachother)
-FunctionPass *createX86DiscriminateMemOpsPass();
-
-/// This pass applies profiling information to insert cache prefetches.
-FunctionPass *createX86InsertPrefetchPass();
-
-InstructionSelector *createX86InstructionSelector(const X86TargetMachine &TM,
-                                                  X86Subtarget &,
-                                                  X86RegisterBankInfo &);
-
-FunctionPass *createX86LoadValueInjectionLoadHardeningPass();
-FunctionPass *createX86LoadValueInjectionLoadHardeningUnoptimizedPass();
-FunctionPass *createX86LoadValueInjectionRetHardeningPass();
-FunctionPass *createX86SpeculativeLoadHardeningPass();
-
 void initializeEvexToVexInstPassPass(PassRegistry &);
-void initializeFixupBWInstPassPass(PassRegistry &);
-void initializeFixupLEAPassPass(PassRegistry &);
-void initializeFPSPass(PassRegistry &);
-void initializeWinEHStatePassPass(PassRegistry &);
-void initializeX86AvoidSFBPassPass(PassRegistry &);
-void initializeX86CallFrameOptimizationPass(PassRegistry &);
-void initializeX86CmovConverterPassPass(PassRegistry &);
-void initializeX86CondBrFoldingPassPass(PassRegistry &);
-void initializeX86DomainReassignmentPass(PassRegistry &);
-void initializeX86ExecutionDomainFixPass(PassRegistry &);
-void initializeX86ExpandPseudoPass(PassRegistry &);
-void initializeX86FlagsCopyLoweringPassPass(PassRegistry &);
-void initializeX86LoadValueInjectionLoadHardeningUnoptimizedPassPass(PassRegistry &);
-void initializeX86LoadValueInjectionLoadHardeningPassPass(PassRegistry &);
-void initializeX86LoadValueInjectionRetHardeningPassPass(PassRegistry &);
-void initializeX86OptimizeLEAPassPass(PassRegistry &);
-void initializeX86SpeculativeLoadHardeningPassPass(PassRegistry &);
-
-namespace X86AS {
-enum : unsigned {
-  GS = 256,
-  FS = 257,
-  SS = 258,
-  PTR32_SPTR = 270,
-  PTR32_UPTR = 271,
-  PTR64 = 272
-};
-} // End X86AS namespace
 
 } // End llvm namespace
 

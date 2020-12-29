@@ -1,44 +1,33 @@
 //===-- Value.h -------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_Value_h_
 #define liblldb_Value_h_
 
-#include "lldb/Symbol/CompilerType.h"
-#include "lldb/Utility/DataBufferHeap.h"
-#include "lldb/Utility/Scalar.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/lldb-enumerations.h"
-#include "lldb/lldb-private-enumerations.h"
-#include "lldb/lldb-private-types.h"
-
-#include "llvm/ADT/APInt.h"
-
+// C Includes
+// C++ Includes
 #include <vector>
 
-#include <stdint.h>
-#include <string.h>
-
-namespace lldb_private {
-class DataExtractor;
-class ExecutionContext;
-class Module;
-class Stream;
-class Type;
-class Variable;
-}
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/DataBufferHeap.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Scalar.h"
+#include "lldb/Symbol/CompilerType.h"
+#include "lldb/lldb-private.h"
 
 namespace lldb_private {
 
 class Value {
 public:
-  // Values Less than zero are an error, greater than or equal to zero returns
-  // what the Scalar result is.
+  // Values Less than zero are an error, greater than or equal to zero
+  // returns what the Scalar result is.
   enum ValueType {
     // m_value contains...
     // ============================
@@ -96,7 +85,8 @@ public:
               byte_order != lldb::eByteOrderInvalid);
     }
     // Casts a vector, if valid, to an unsigned int of matching or largest
-    // supported size. Truncates to the beginning of the vector if required.
+    // supported size.
+    // Truncates to the beginning of the vector if required.
     // Returns a default constructed Scalar if the Vector data is internally
     // inconsistent.
     llvm::APInt rhs = llvm::APInt(BITWIDTH_INT128, NUM_OF_WORDS_INT128,
@@ -207,17 +197,15 @@ public:
 
   lldb::Format GetValueDefaultFormat();
 
-  uint64_t GetValueByteSize(Status *error_ptr, ExecutionContext *exe_ctx);
+  uint64_t GetValueByteSize(Error *error_ptr, ExecutionContext *exe_ctx);
 
-  Status GetValueAsData(ExecutionContext *exe_ctx, DataExtractor &data,
-                        Module *module); // Can be nullptr
+  Error GetValueAsData(ExecutionContext *exe_ctx, DataExtractor &data,
+                       uint32_t data_offset,
+                       Module *module); // Can be nullptr
 
   static const char *GetValueTypeAsCString(ValueType context_type);
 
   static const char *GetContextTypeAsCString(ContextType context_type);
-
-  /// Convert this value's file address to a load address, if possible.
-  void ConvertToLoadAddress(Module *module, Target *target);
 
   bool GetData(DataExtractor &data);
 

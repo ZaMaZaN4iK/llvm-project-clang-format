@@ -1,19 +1,19 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// UNSUPPORTED: c++98, c++03
 
 #include <memory>
 #include <cassert>
 
-// #include <memory>
-
 #include "test_macros.h"
+
+#if TEST_STD_VER >= 11
+// #include <memory>
 //
 // template <class Alloc>
 // struct allocator_traits
@@ -109,7 +109,7 @@ void test_void_pointer()
 
 struct Foo { int x; };
 
-int main(int, char**)
+int main()
 {
     test_pointer<std::allocator<char>> ();
     test_pointer<std::allocator<int>> ();
@@ -118,6 +118,7 @@ int main(int, char**)
     test_void_pointer<std::allocator<char>> ();
     test_void_pointer<std::allocator<int>> ();
     test_void_pointer<std::allocator<Foo>> ();
-
-  return 0;
 }
+#else
+int main() {}
+#endif

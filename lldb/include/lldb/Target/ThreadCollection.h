@@ -1,8 +1,9 @@
 //===-- ThreadCollection.h --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -38,9 +39,9 @@ public:
 
   void InsertThread(const lldb::ThreadSP &thread_sp, uint32_t idx);
 
-  // Note that "idx" is not the same as the "thread_index". It is a zero based
-  // index to accessing the current threads, whereas "thread_index" is a unique
-  // index assigned
+  // Note that "idx" is not the same as the "thread_index". It is a zero
+  // based index to accessing the current threads, whereas "thread_index"
+  // is a unique index assigned
   lldb::ThreadSP GetThreadAtIndex(uint32_t idx);
 
   virtual ThreadIterable Threads() {

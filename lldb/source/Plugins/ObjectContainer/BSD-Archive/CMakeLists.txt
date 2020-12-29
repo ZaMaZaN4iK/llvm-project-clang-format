@@ -1,10 +1,3 @@
-add_lldb_library(lldbPluginObjectContainerBSDArchive PLUGIN
+add_lldb_library(lldbPluginObjectContainerBSDArchive
   ObjectContainerBSDArchive.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbHost
-    lldbSymbol
-  LINK_COMPONENTS
-    Support
   )

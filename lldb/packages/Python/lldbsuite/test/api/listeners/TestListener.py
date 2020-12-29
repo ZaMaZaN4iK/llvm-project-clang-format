@@ -2,7 +2,11 @@
 Test that we can listen to modules loaded events.
 """
 
+from __future__ import print_function
 
+import copy
+import os
+import time
 
 import lldb
 from lldbsuite.test.decorators import *
@@ -16,9 +20,13 @@ class ListenToModuleLoadedEvents (TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
+    def setUp(self):
+        # Call super's setUp().
+        TestBase.setUp(self)
+        self.build()
+
     def test_receiving_breakpoint_added(self):
         """Test that we get breakpoint added events, waiting on event classes on the debugger"""
-        self.build()
 
         my_listener = lldb.SBListener("test_listener")
 
@@ -27,7 +35,7 @@ class ListenToModuleLoadedEvents (TestBase):
             lldb.SBTarget.GetBroadcasterClassName(),
             lldb.SBTarget.eBroadcastBitBreakpointChanged)
 
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
 

@@ -1,19 +1,24 @@
 //===-- BreakpointSite.cpp --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
 #include <inttypes.h>
 
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Breakpoint/BreakpointSite.h"
 
 #include "lldb/Breakpoint/Breakpoint.h"
 #include "lldb/Breakpoint/BreakpointLocation.h"
 #include "lldb/Breakpoint/BreakpointSiteList.h"
-#include "lldb/Utility/Stream.h"
+#include "lldb/Core/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -48,17 +53,9 @@ break_id_t BreakpointSite::GetNextID() {
 // should continue.
 
 bool BreakpointSite::ShouldStop(StoppointCallbackContext *context) {
+  std::lock_guard<std::recursive_mutex> guard(m_owners_mutex);
   IncrementHitCount();
-  // ShouldStop can do a lot of work, and might even come come back and hit
-  // this breakpoint site again.  So don't hold the m_owners_mutex the whole
-  // while.  Instead make a local copy of the collection and call ShouldStop on
-  // the copy.
-  BreakpointLocationCollection owners_copy;
-  {
-    std::lock_guard<std::recursive_mutex> guard(m_owners_mutex);
-    owners_copy = m_owners;
-  }
-  return owners_copy.ShouldStop(context);
+  return m_owners.ShouldStop(context);
 }
 
 bool BreakpointSite::IsBreakpointAtThisSite(lldb::break_id_t bp_id) {

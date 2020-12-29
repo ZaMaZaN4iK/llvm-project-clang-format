@@ -1,8 +1,9 @@
 //===-- main.cpp ------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -29,6 +30,7 @@
 
 using namespace lldb;
 
+//----------------------------------------------------------------------
 // This quick sample code shows how to create a debugger instance and
 // create an "i386" executable target. Then we can lookup the executable
 // module and resolve a file address into a section offset address,
@@ -44,6 +46,7 @@ using namespace lldb;
 //
 //    $ DYLD_FRAMEWORK_PATH=/Volumes/data/lldb/svn/ToT/build/Debug ./a.out
 //    executable_path file_address
+//----------------------------------------------------------------------
 class LLDBSentry {
 public:
   LLDBSentry() {

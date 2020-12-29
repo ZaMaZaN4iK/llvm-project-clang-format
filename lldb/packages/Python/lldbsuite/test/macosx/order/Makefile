@@ -1,5 +1,7 @@
+LEVEL = ../../make
+
 C_SOURCES := main.c
-LD_EXTRAS = -Xlinker -order_file -Xlinker $(SRCDIR)/order-file
+LDFLAGS = $(CFLAGS) -Xlinker -order_file -Xlinker ./order-file
 MAKE_DSYM := NO
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

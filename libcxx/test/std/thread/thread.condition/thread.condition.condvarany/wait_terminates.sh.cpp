@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -23,8 +24,8 @@
 
 // -----------------------------------------------------------------------------
 // Overview
-//   Check that std::terminate is called if wait(...) fails to meet its post
-//   conditions. This can happen when reacquiring the mutex throws
+//   Check that std::terminate is called if wait(...) fails to meet it's post
+//   conditions. This can happens when reacquiring the mutex throws
 //   an exception.
 //
 //  The following methods are tested within this file
@@ -36,7 +37,7 @@
 //   6.  void wait_until(Lock& lock, TimePoint, Pred);
 //
 // Plan
-//   1 Create a mutex type, 'ThrowingMutex', that throws when the lock is acquired
+//   1 Create a mutex type, 'ThrowingMutex', that throws when the lock is aquired
 //     for the *second* time.
 //
 //   2 Replace the terminate handler with one that exits with a '0' exit code.
@@ -109,7 +110,7 @@ void signal_me() {
 typedef std::chrono::system_clock Clock;
 typedef std::chrono::milliseconds MS;
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   assert(argc == 2);
   int id = std::stoi(argv[1]);
   assert(id >= 1 && id <= 6);
@@ -130,6 +131,4 @@ int main(int argc, char **argv) {
     }
   } catch (...) {}
   assert(false);
-
-  return 0;
 }

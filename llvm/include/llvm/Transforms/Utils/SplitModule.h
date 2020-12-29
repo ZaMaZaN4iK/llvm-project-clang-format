@@ -1,8 +1,9 @@
 //===- SplitModule.h - Split a module into partitions -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -21,6 +22,7 @@
 namespace llvm {
 
 class Module;
+class StringRef;
 
 /// Splits the module M into N linkable partitions. The function ModuleCallback
 /// is called N times passing each individual partition as the MPart argument.
@@ -37,6 +39,6 @@ void SplitModule(
     function_ref<void(std::unique_ptr<Module> MPart)> ModuleCallback,
     bool PreserveLocals = false);
 
-} // end namespace llvm
+} // End llvm namespace
 
-#endif // LLVM_TRANSFORMS_UTILS_SPLITMODULE_H
+#endif

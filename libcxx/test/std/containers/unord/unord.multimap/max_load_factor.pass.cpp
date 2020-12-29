@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -23,18 +24,19 @@
 #include <string>
 #include <cassert>
 
-#include "test_macros.h"
 #include "min_allocator.h"
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::unordered_multimap<int, std::string> C;
+        typedef std::pair<int, std::string> P;
         const C c;
         assert(c.max_load_factor() == 1);
     }
     {
         typedef std::unordered_multimap<int, std::string> C;
+        typedef std::pair<int, std::string> P;
         C c;
         assert(c.max_load_factor() == 1);
         c.max_load_factor(2.5);
@@ -44,12 +46,14 @@ int main(int, char**)
     {
         typedef std::unordered_multimap<int, std::string, std::hash<int>, std::equal_to<int>,
                             min_allocator<std::pair<const int, std::string>>> C;
+        typedef std::pair<int, std::string> P;
         const C c;
         assert(c.max_load_factor() == 1);
     }
     {
         typedef std::unordered_multimap<int, std::string, std::hash<int>, std::equal_to<int>,
                             min_allocator<std::pair<const int, std::string>>> C;
+        typedef std::pair<int, std::string> P;
         C c;
         assert(c.max_load_factor() == 1);
         c.max_load_factor(2.5);
@@ -64,6 +68,4 @@ int main(int, char**)
         assert(false);
     }
 #endif
-
-  return 0;
 }

@@ -1,5 +1,7 @@
+from __future__ import print_function
 
 
+import sys
 
 import unittest2
 import gdbremote_testcase
@@ -13,8 +15,6 @@ class TestGdbRemote_qThreadStopInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
     mydir = TestBase.compute_mydir(__file__)
     THREAD_COUNT = 5
 
-    @skipIfDarwinEmbedded # <rdar://problem/34539270> lldb-server tests not updated to work on ios etc yet
-    @skipIfDarwinEmbedded # <rdar://problem/27005337>
     def gather_stop_replies_via_qThreadStopInfo(self, thread_count):
         # Set up the inferior args.
         inferior_args = []
@@ -33,7 +33,7 @@ class TestGdbRemote_qThreadStopInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.assertIsNotNone(context)
 
         # Give threads time to start up, then break.
-        time.sleep(self._WAIT_TIMEOUT)
+        time.sleep(1)
         self.reset_test_sequence()
         self.test_sequence.add_log_lines(
             [
@@ -51,18 +51,9 @@ class TestGdbRemote_qThreadStopInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.assertIsNotNone(context)
 
         # Wait until all threads have started.
-        threads = self.wait_for_thread_count(thread_count,
-                                             timeout_seconds=self._WAIT_TIMEOUT)
+        threads = self.wait_for_thread_count(thread_count, timeout_seconds=3)
         self.assertIsNotNone(threads)
-
-        # On Windows, there could be more threads spawned. For example, DebugBreakProcess will
-        # create a new thread from the debugged process to handle an exception event. So here we
-        # assert 'GreaterEqual' condition.
-        triple = self.dbg.GetSelectedPlatform().GetTriple()
-        if re.match(".*-.*-windows", triple):
-            self.assertGreaterEqual(len(threads), thread_count)
-        else:
-            self.assertEqual(len(threads), thread_count)
+        self.assertEqual(len(threads), thread_count)
 
         # Grab stop reply for each thread via qThreadStopInfo{tid:hex}.
         stop_replies = {}
@@ -109,12 +100,7 @@ class TestGdbRemote_qThreadStopInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
 
     def qThreadStopInfo_works_for_multiple_threads(self, thread_count):
         (stop_replies, _) = self.gather_stop_replies_via_qThreadStopInfo(thread_count)
-        triple = self.dbg.GetSelectedPlatform().GetTriple()
-        # Consider one more thread created by calling DebugBreakProcess.
-        if re.match(".*-.*-windows", triple):
-            self.assertGreaterEqual(len(stop_replies), thread_count)
-        else:
-            self.assertEqual(len(stop_replies), thread_count)
+        self.assertEqual(len(stop_replies), thread_count)
 
     @debugserver_test
     def test_qThreadStopInfo_works_for_multiple_threads_debugserver(self):
@@ -124,7 +110,6 @@ class TestGdbRemote_qThreadStopInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.qThreadStopInfo_works_for_multiple_threads(self.THREAD_COUNT)
 
     @llgs_test
-    @skipIfNetBSD
     def test_qThreadStopInfo_works_for_multiple_threads_llgs(self):
         self.init_llgs_test()
         self.build()
@@ -144,13 +129,7 @@ class TestGdbRemote_qThreadStopInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
                 stop_replies.values()) if stop_reason != 0)
 
         # All but one thread should report no stop reason.
-        triple = self.dbg.GetSelectedPlatform().GetTriple()
-
-        # Consider one more thread created by calling DebugBreakProcess.
-        if re.match(".*-.*-windows", triple):
-            self.assertGreaterEqual(no_stop_reason_count, thread_count - 1)
-        else:
-            self.assertEqual(no_stop_reason_count, thread_count - 1)
+        self.assertEqual(no_stop_reason_count, thread_count - 1)
 
         # Only one thread should should indicate a stop reason.
         self.assertEqual(with_stop_reason_count, 1)
@@ -164,7 +143,6 @@ class TestGdbRemote_qThreadStopInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.qThreadStopInfo_only_reports_one_thread_stop_reason_during_interrupt(
             self.THREAD_COUNT)
 
-    @expectedFailureNetBSD
     @llgs_test
     def test_qThreadStopInfo_only_reports_one_thread_stop_reason_during_interrupt_llgs(
             self):
@@ -193,8 +171,7 @@ class TestGdbRemote_qThreadStopInfo(gdbremote_testcase.GdbRemoteTestCaseBase):
         self.qThreadStopInfo_has_valid_thread_names(self.THREAD_COUNT, "a.out")
 
     # test requires OS with set, equal thread names by default.
-    # Windows thread does not have name property, equal names as the process's by default.
-    @skipUnlessPlatform(["linux", "windows"])
+    @skipUnlessPlatform(["linux"])
     @llgs_test
     def test_qThreadStopInfo_has_valid_thread_names_llgs(self):
         self.init_llgs_test()

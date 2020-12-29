@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,8 +11,6 @@
 
 #include <cinttypes>
 #include <type_traits>
-
-#include "test_macros.h"
 
 #ifndef INT8_MIN
 #error INT8_MIN not defined
@@ -879,7 +878,7 @@ template <class T> void test()
     ((void)t); // Prevent unused warning
 }
 
-int main(int, char**)
+int main()
 {
     test<std::int8_t >();
     test<std::int16_t>();
@@ -929,6 +928,4 @@ int main(int, char**)
     static_assert((std::is_same<decltype(std::strtoumax("", (char**)0, 0)), std::uintmax_t>::value), "");
     static_assert((std::is_same<decltype(std::wcstoimax(L"", (wchar_t**)0, 0)), std::intmax_t>::value), "");
     static_assert((std::is_same<decltype(std::wcstoumax(L"", (wchar_t**)0, 0)), std::uintmax_t>::value), "");
-
-  return 0;
 }

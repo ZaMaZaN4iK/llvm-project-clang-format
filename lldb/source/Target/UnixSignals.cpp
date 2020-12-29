@@ -1,19 +1,23 @@
 //===-- UnixSignals.cpp -----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Target/UnixSignals.h"
 #include "Plugins/Process/Utility/FreeBSDSignals.h"
 #include "Plugins/Process/Utility/LinuxSignals.h"
 #include "Plugins/Process/Utility/MipsLinuxSignals.h"
 #include "Plugins/Process/Utility/NetBSDSignals.h"
-#include "lldb/Host/HostInfo.h"
+#include "lldb/Core/ArchSpec.h"
 #include "lldb/Host/StringConvert.h"
-#include "lldb/Utility/ArchSpec.h"
 
 using namespace lldb_private;
 
@@ -51,13 +55,9 @@ lldb::UnixSignalsSP UnixSignals::Create(const ArchSpec &arch) {
   }
 }
 
-lldb::UnixSignalsSP UnixSignals::CreateForHost() {
-  static lldb::UnixSignalsSP s_unix_signals_sp =
-      Create(HostInfo::GetArchitecture());
-  return s_unix_signals_sp;
-}
-
+//----------------------------------------------------------------------
 // UnixSignals constructor
+//----------------------------------------------------------------------
 UnixSignals::UnixSignals() { Reset(); }
 
 UnixSignals::UnixSignals(const UnixSignals &rhs) : m_signals(rhs.m_signals) {}
@@ -66,8 +66,9 @@ UnixSignals::~UnixSignals() = default;
 
 void UnixSignals::Reset() {
   // This builds one standard set of Unix Signals.  If yours aren't quite in
-  // this order, you can either subclass this class, and use Add & Remove to
-  // change them
+  // this
+  // order, you can either subclass this class, and use Add & Remove to change
+  // them
   // or you can subclass and build them afresh in your constructor;
   //
   // Note: the signals below are the Darwin signals.  Do not change these!
@@ -88,7 +89,7 @@ void UnixSignals::Reset() {
   AddSignal(10, "SIGBUS", false, true, true, "bus error");
   AddSignal(11, "SIGSEGV", false, true, true, "segmentation violation");
   AddSignal(12, "SIGSYS", false, true, true, "bad argument to system call");
-  AddSignal(13, "SIGPIPE", false, false, false,
+  AddSignal(13, "SIGPIPE", false, true, true,
             "write on a pipe with no one to read it");
   AddSignal(14, "SIGALRM", false, false, false, "alarm clock");
   AddSignal(15, "SIGTERM", false, true, true,
@@ -122,14 +123,12 @@ void UnixSignals::AddSignal(int signo, const char *name, bool default_suppress,
   Signal new_signal(name, default_suppress, default_stop, default_notify,
                     description, alias);
   m_signals.insert(std::make_pair(signo, new_signal));
-  ++m_version;
 }
 
 void UnixSignals::RemoveSignal(int signo) {
   collection::iterator pos = m_signals.find(signo);
   if (pos != m_signals.end())
     m_signals.erase(pos);
-  ++m_version;
 }
 
 const char *UnixSignals::GetSignalAsCString(int signo) const {
@@ -218,7 +217,6 @@ bool UnixSignals::SetShouldSuppress(int signo, bool value) {
   collection::iterator pos = m_signals.find(signo);
   if (pos != m_signals.end()) {
     pos->second.m_suppress = value;
-    ++m_version;
     return true;
   }
   return false;
@@ -242,7 +240,6 @@ bool UnixSignals::SetShouldStop(int signo, bool value) {
   collection::iterator pos = m_signals.find(signo);
   if (pos != m_signals.end()) {
     pos->second.m_stop = value;
-    ++m_version;
     return true;
   }
   return false;
@@ -266,7 +263,6 @@ bool UnixSignals::SetShouldNotify(int signo, bool value) {
   collection::iterator pos = m_signals.find(signo);
   if (pos != m_signals.end()) {
     pos->second.m_notify = value;
-    ++m_version;
     return true;
   }
   return false;
@@ -287,38 +283,4 @@ int32_t UnixSignals::GetSignalAtIndex(int32_t index) const {
   auto it = m_signals.begin();
   std::advance(it, index);
   return it->first;
-}
-
-uint64_t UnixSignals::GetVersion() const { return m_version; }
-
-std::vector<int32_t>
-UnixSignals::GetFilteredSignals(llvm::Optional<bool> should_suppress,
-                                llvm::Optional<bool> should_stop,
-                                llvm::Optional<bool> should_notify) {
-  std::vector<int32_t> result;
-  for (int32_t signo = GetFirstSignalNumber();
-       signo != LLDB_INVALID_SIGNAL_NUMBER;
-       signo = GetNextSignalNumber(signo)) {
-
-    bool signal_suppress = false;
-    bool signal_stop = false;
-    bool signal_notify = false;
-    GetSignalInfo(signo, signal_suppress, signal_stop, signal_notify);
-
-    // If any of filtering conditions are not met, we move on to the next
-    // signal.
-    if (should_suppress.hasValue() &&
-        signal_suppress != should_suppress.getValue())
-      continue;
-
-    if (should_stop.hasValue() && signal_stop != should_stop.getValue())
-      continue;
-
-    if (should_notify.hasValue() && signal_notify != should_notify.getValue())
-      continue;
-
-    result.push_back(signo);
-  }
-
-  return result;
 }

@@ -1,14 +1,4 @@
-add_lldb_library(lldbPluginInstructionARM PLUGIN
+add_lldb_library(lldbPluginInstructionARM
   EmulateInstructionARM.cpp
   EmulationStateARM.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbHost
-    lldbInterpreter
-    lldbSymbol
-    lldbTarget
-    lldbPluginProcessUtility
-  LINK_COMPONENTS
-    Support
   )

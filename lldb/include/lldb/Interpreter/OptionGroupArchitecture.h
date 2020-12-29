@@ -1,20 +1,27 @@
 //===-- OptionGroupArchitecture.h -------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_OptionGroupArchitecture_h_
 #define liblldb_OptionGroupArchitecture_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/ArchSpec.h"
 #include "lldb/Interpreter/Options.h"
-#include "lldb/Utility/ArchSpec.h"
 
 namespace lldb_private {
 
+//-------------------------------------------------------------------------
 // OptionGroupArchitecture
+//-------------------------------------------------------------------------
 
 class OptionGroupArchitecture : public OptionGroup {
 public:
@@ -24,8 +31,8 @@ public:
 
   llvm::ArrayRef<OptionDefinition> GetDefinitions() override;
 
-  Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
-                        ExecutionContext *execution_context) override;
+  Error SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
+                       ExecutionContext *execution_context) override;
 
   void OptionParsingStarting(ExecutionContext *execution_context) override;
 

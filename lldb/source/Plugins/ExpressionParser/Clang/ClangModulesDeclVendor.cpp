@@ -1,13 +1,17 @@
 //===-- ClangModulesDeclVendor.cpp ------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
 #include <mutex>
 
+// Other libraries and framework includes
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
@@ -16,33 +20,26 @@
 #include "clang/Parse/Parser.h"
 #include "clang/Sema/Lookup.h"
 #include "clang/Serialization/ASTReader.h"
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
-#include "llvm/Support/Threading.h"
 
-#include "ClangHost.h"
+// Project includes
 #include "ClangModulesDeclVendor.h"
-#include "ModuleDependencyCollector.h"
 
-#include "lldb/Core/ModuleList.h"
+#include "lldb/Core/Log.h"
+#include "lldb/Core/StreamString.h"
+#include "lldb/Host/FileSpec.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostInfo.h"
-#include "lldb/Symbol/ClangASTContext.h"
 #include "lldb/Symbol/CompileUnit.h"
-#include "lldb/Symbol/SourceModule.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/LLDBAssert.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Reproducer.h"
-#include "lldb/Utility/StreamString.h"
 
 using namespace lldb_private;
 
 namespace {
-// Any Clang compiler requires a consumer for diagnostics.  This one stores
-// them as strings so we can provide them to the user in case a module failed
-// to load.
+// Any Clang compiler requires a consumer for diagnostics.  This one stores them
+// as strings
+// so we can provide them to the user in case a module failed to load.
 class StoringDiagnosticConsumer : public clang::DiagnosticConsumer {
 public:
   StoringDiagnosticConsumer();
@@ -62,7 +59,8 @@ private:
 };
 
 // The private implementation of our ClangModulesDeclVendor.  Contains all the
-// Clang state required to load modules.
+// Clang state required
+// to load modules.
 class ClangModulesDeclVendorImpl : public ClangModulesDeclVendor {
 public:
   ClangModulesDeclVendorImpl(
@@ -73,17 +71,18 @@ public:
 
   ~ClangModulesDeclVendorImpl() override = default;
 
-  bool AddModule(const SourceModule &module, ModuleVector *exported_modules,
+  bool AddModule(ModulePath &path, ModuleVector *exported_modules,
                  Stream &error_stream) override;
 
   bool AddModulesForCompileUnit(CompileUnit &cu, ModuleVector &exported_modules,
                                 Stream &error_stream) override;
 
-  uint32_t FindDecls(ConstString name, bool append, uint32_t max_matches,
-                     std::vector<CompilerDecl> &decls) override;
+  uint32_t FindDecls(const ConstString &name, bool append, uint32_t max_matches,
+                     std::vector<clang::NamedDecl *> &decls) override;
 
   void ForEachMacro(const ModuleVector &modules,
                     std::function<bool(const std::string &)> handler) override;
+
 private:
   void
   ReportModuleExportsHelper(std::set<ClangModulesDeclVendor::ModuleID> &exports,
@@ -108,9 +107,6 @@ private:
   typedef std::set<ModuleID> ImportedModuleSet;
   ImportedModuleMap m_imported_modules;
   ImportedModuleSet m_user_imported_modules;
-  // We assume that every ASTContext has an ClangASTContext, so we also store
-  // a custom ClangASTContext for our internal ASTContext.
-  std::unique_ptr<ClangASTContext> m_ast_context;
 };
 } // anonymous namespace
 
@@ -144,8 +140,19 @@ void StoringDiagnosticConsumer::DumpDiagnostics(Stream &error_stream) {
   }
 }
 
-ClangModulesDeclVendor::ClangModulesDeclVendor()
-    : ClangDeclVendor(eClangModuleDeclVendor) {}
+static FileSpec GetResourceDir() {
+  static FileSpec g_cached_resource_dir;
+
+  static std::once_flag g_once_flag;
+
+  std::call_once(g_once_flag, []() {
+    HostInfo::GetLLDBPath(lldb::ePathTypeClangDir, g_cached_resource_dir);
+  });
+
+  return g_cached_resource_dir;
+}
+
+ClangModulesDeclVendor::ClangModulesDeclVendor() {}
 
 ClangModulesDeclVendor::~ClangModulesDeclVendor() {}
 
@@ -157,11 +164,7 @@ ClangModulesDeclVendorImpl::ClangModulesDeclVendorImpl(
     : m_diagnostics_engine(std::move(diagnostics_engine)),
       m_compiler_invocation(std::move(compiler_invocation)),
       m_compiler_instance(std::move(compiler_instance)),
-      m_parser(std::move(parser)) {
-
-  // Initialize our ClangASTContext.
-  m_ast_context.reset(new ClangASTContext(m_compiler_instance->getASTContext()));
-}
+      m_parser(std::move(parser)) {}
 
 void ClangModulesDeclVendorImpl::ReportModuleExportsHelper(
     std::set<ClangModulesDeclVendor::ModuleID> &exports,
@@ -191,7 +194,7 @@ void ClangModulesDeclVendorImpl::ReportModuleExports(
   }
 }
 
-bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
+bool ClangModulesDeclVendorImpl::AddModule(ModulePath &path,
                                            ModuleVector *exported_modules,
                                            Stream &error_stream) {
   // Fail early.
@@ -206,7 +209,7 @@ bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
 
   std::vector<ConstString> imported_module;
 
-  for (ConstString path_component : module.path) {
+  for (ConstString path_component : path) {
     imported_module.push_back(path_component);
   }
 
@@ -221,42 +224,11 @@ bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
     }
   }
 
-  clang::HeaderSearch &HS =
-    m_compiler_instance->getPreprocessor().getHeaderSearchInfo();
-
-  if (module.search_path) {
-    auto path_begin = llvm::sys::path::begin(module.search_path.GetStringRef());
-    auto path_end = llvm::sys::path::end(module.search_path.GetStringRef());
-    auto sysroot_begin = llvm::sys::path::begin(module.sysroot.GetStringRef());
-    auto sysroot_end = llvm::sys::path::end(module.sysroot.GetStringRef());
-    // FIXME: Use C++14 std::equal(it, it, it, it) variant once it's available.
-    bool is_system_module = (std::distance(path_begin, path_end) >=
-                             std::distance(sysroot_begin, sysroot_end)) &&
-                            std::equal(sysroot_begin, sysroot_end, path_begin);
-    // No need to inject search paths to modules in the sysroot.
-    if (!is_system_module) {
-      auto error = [&]() {
-        error_stream.Printf("error: No module map file in %s\n",
-                            module.search_path.AsCString());
-        return false;
-      };
-
-      bool is_system = true;
-      bool is_framework = false;
-      auto dir =
-          HS.getFileMgr().getDirectory(module.search_path.GetStringRef());
-      if (!dir)
-        return error();
-      auto *file = HS.lookupModuleMapFile(*dir, is_framework);
-      if (!file)
-        return error();
-      if (!HS.loadModuleMapFile(file, is_system))
-        return error();
-    }
-  }
-  if (!HS.lookupModule(module.path.front().GetStringRef())) {
+  if (!m_compiler_instance->getPreprocessor()
+           .getHeaderSearchInfo()
+           .lookupModule(path[0].GetStringRef())) {
     error_stream.Printf("error: Header search couldn't locate module %s\n",
-                        module.path.front().AsCString());
+                        path[0].AsCString());
     return false;
   }
 
@@ -268,7 +240,7 @@ bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
     clang::SourceManager &source_manager =
         m_compiler_instance->getASTContext().getSourceManager();
 
-    for (ConstString path_component : module.path) {
+    for (ConstString path_component : path) {
       clang_path.push_back(std::make_pair(
           &m_compiler_instance->getASTContext().Idents.get(
               path_component.GetStringRef()),
@@ -288,18 +260,19 @@ bool ClangModulesDeclVendorImpl::AddModule(const SourceModule &module,
   if (!top_level_module) {
     diagnostic_consumer->DumpDiagnostics(error_stream);
     error_stream.Printf("error: Couldn't load top-level module %s\n",
-                        module.path.front().AsCString());
+                        path[0].AsCString());
     return false;
   }
 
   clang::Module *submodule = top_level_module;
 
-  for (auto &component : llvm::ArrayRef<ConstString>(module.path).drop_front()) {
-    submodule = submodule->findSubmodule(component.GetStringRef());
+  for (size_t ci = 1; ci < path.size(); ++ci) {
+    llvm::StringRef component = path[ci].GetStringRef();
+    submodule = submodule->findSubmodule(component.str());
     if (!submodule) {
       diagnostic_consumer->DumpDiagnostics(error_stream);
       error_stream.Printf("error: Couldn't load submodule %s\n",
-                          component.GetCString());
+                          component.str().c_str());
       return false;
     }
   }
@@ -326,16 +299,12 @@ bool ClangModulesDeclVendor::LanguageSupportsClangModules(
   switch (language) {
   default:
     return false;
+  // C++ and friends to be added
   case lldb::LanguageType::eLanguageTypeC:
   case lldb::LanguageType::eLanguageTypeC11:
   case lldb::LanguageType::eLanguageTypeC89:
   case lldb::LanguageType::eLanguageTypeC99:
-  case lldb::LanguageType::eLanguageTypeC_plus_plus:
-  case lldb::LanguageType::eLanguageTypeC_plus_plus_03:
-  case lldb::LanguageType::eLanguageTypeC_plus_plus_11:
-  case lldb::LanguageType::eLanguageTypeC_plus_plus_14:
   case lldb::LanguageType::eLanguageTypeObjC:
-  case lldb::LanguageType::eLanguageTypeObjC_plus_plus:
     return true;
   }
 }
@@ -344,19 +313,30 @@ bool ClangModulesDeclVendorImpl::AddModulesForCompileUnit(
     CompileUnit &cu, ClangModulesDeclVendor::ModuleVector &exported_modules,
     Stream &error_stream) {
   if (LanguageSupportsClangModules(cu.GetLanguage())) {
-    for (auto &imported_module : cu.GetImportedModules())
-      if (!AddModule(imported_module, &exported_modules, error_stream))
+    std::vector<ConstString> imported_modules = cu.GetImportedModules();
+
+    for (ConstString imported_module : imported_modules) {
+      std::vector<ConstString> path;
+
+      path.push_back(imported_module);
+
+      if (!AddModule(path, &exported_modules, error_stream)) {
         return false;
+      }
+    }
+
+    return true;
   }
+
   return true;
 }
 
 // ClangImporter::lookupValue
 
 uint32_t
-ClangModulesDeclVendorImpl::FindDecls(ConstString name, bool append,
+ClangModulesDeclVendorImpl::FindDecls(const ConstString &name, bool append,
                                       uint32_t max_matches,
-                                      std::vector<CompilerDecl> &decls) {
+                                      std::vector<clang::NamedDecl *> &decls) {
   if (!m_enabled) {
     return 0;
   }
@@ -382,7 +362,7 @@ ClangModulesDeclVendorImpl::FindDecls(ConstString name, bool append,
     if (num_matches >= max_matches)
       return num_matches;
 
-    decls.push_back(CompilerDecl(m_ast_context.get(), named_decl));
+    decls.push_back(named_decl);
     ++num_matches;
   }
 
@@ -469,16 +449,16 @@ void ClangModulesDeclVendorImpl::ForEachMacro(
 
           bool first_arg = true;
 
-          for (auto pi = macro_info->param_begin(),
-                    pe = macro_info->param_end();
-               pi != pe; ++pi) {
+          for (clang::MacroInfo::arg_iterator ai = macro_info->arg_begin(),
+                                              ae = macro_info->arg_end();
+               ai != ae; ++ai) {
             if (!first_arg) {
               macro_expansion.append(", ");
             } else {
               first_arg = false;
             }
 
-            macro_expansion.append((*pi)->getName().str());
+            macro_expansion.append((*ai)->getName().str());
           }
 
           if (macro_info->isC99Varargs()) {
@@ -600,15 +580,18 @@ ClangModulesDeclVendor::Create(Target &target) {
   // Add additional search paths with { "-I", path } or { "-F", path } here.
 
   {
-    llvm::SmallString<128> path;
-    auto props = ModuleList::GetGlobalModuleListProperties();
-    props.GetClangModulesCachePath().GetPath(path);
+    llvm::SmallString<128> DefaultModuleCache;
+    const bool erased_on_reboot = false;
+    llvm::sys::path::system_temp_directory(erased_on_reboot,
+                                           DefaultModuleCache);
+    llvm::sys::path::append(DefaultModuleCache, "org.llvm.clang");
+    llvm::sys::path::append(DefaultModuleCache, "ModuleCache");
     std::string module_cache_argument("-fmodules-cache-path=");
-    module_cache_argument.append(path.str());
+    module_cache_argument.append(DefaultModuleCache.str().str());
     compiler_invocation_arguments.push_back(module_cache_argument);
   }
 
-  FileSpecList module_search_paths = target.GetClangModuleSearchPaths();
+  FileSpecList &module_search_paths = target.GetClangModuleSearchPaths();
 
   for (size_t spi = 0, spe = module_search_paths.GetSize(); spi < spe; ++spi) {
     const FileSpec &search_path = module_search_paths.GetFileSpecAtIndex(spi);
@@ -620,9 +603,9 @@ ClangModulesDeclVendor::Create(Target &target) {
   }
 
   {
-    FileSpec clang_resource_dir = GetClangResourceDir();
+    FileSpec clang_resource_dir = GetResourceDir();
 
-    if (FileSystem::Instance().IsDirectory(clang_resource_dir.GetPath())) {
+    if (clang_resource_dir.IsDirectory()) {
       compiler_invocation_arguments.push_back("-resource-dir");
       compiler_invocation_arguments.push_back(clang_resource_dir.GetPath());
     }
@@ -633,15 +616,10 @@ ClangModulesDeclVendor::Create(Target &target) {
                                                  new StoringDiagnosticConsumer);
 
   std::vector<const char *> compiler_invocation_argument_cstrs;
-  compiler_invocation_argument_cstrs.reserve(
-      compiler_invocation_arguments.size());
-  for (const std::string &arg : compiler_invocation_arguments)
-    compiler_invocation_argument_cstrs.push_back(arg.c_str());
 
-  Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
-  LLDB_LOG(log, "ClangModulesDeclVendor's compiler flags {0:$[ ]}",
-           llvm::make_range(compiler_invocation_arguments.begin(),
-                            compiler_invocation_arguments.end()));
+  for (const std::string &arg : compiler_invocation_arguments) {
+    compiler_invocation_argument_cstrs.push_back(arg.c_str());
+  }
 
   std::shared_ptr<clang::CompilerInvocation> invocation =
       clang::createInvocationFromCommandLine(compiler_invocation_argument_cstrs,
@@ -661,20 +639,6 @@ ClangModulesDeclVendor::Create(Target &target) {
   std::unique_ptr<clang::CompilerInstance> instance(
       new clang::CompilerInstance);
 
-  // When capturing a reproducer, hook up the file collector with clang to
-  // collector modules and headers.
-  if (repro::Generator *g = repro::Reproducer::Instance().GetGenerator()) {
-    repro::FileProvider &fp = g->GetOrCreate<repro::FileProvider>();
-    instance->setModuleDepCollector(
-        std::make_shared<ModuleDependencyCollectorAdaptor>(
-            fp.GetFileCollector()));
-    clang::DependencyOutputOptions &opts = instance->getDependencyOutputOpts();
-    opts.IncludeSystemHeaders = true;
-    opts.IncludeModuleFiles = true;
-  }
-
-  // Make sure clang uses the same VFS as LLDB.
-  instance->createFileManager(FileSystem::Instance().GetVirtualFileSystem());
   instance->setDiagnostics(diagnostics_engine.get());
   instance->setInvocation(invocation);
 
@@ -694,7 +658,7 @@ ClangModulesDeclVendor::Create(Target &target) {
 
   instance->getPreprocessor().enableIncrementalProcessing();
 
-  instance->createASTReader();
+  instance->createModuleManager();
 
   instance->createSema(action->getTranslationUnitKind(), nullptr);
 

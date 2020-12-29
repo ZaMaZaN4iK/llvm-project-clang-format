@@ -1,13 +1,14 @@
 //===-- DWARFAttribute.cpp --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "DWARFAttribute.h"
-#include "DWARFUnit.h"
+#include "DWARFCompileUnit.h"
 #include "DWARFDebugInfo.h"
 
 DWARFAttributes::DWARFAttributes() : m_infos() {}
@@ -25,34 +26,49 @@ uint32_t DWARFAttributes::FindAttributeIndex(dw_attr_t attr) const {
   return UINT32_MAX;
 }
 
-void DWARFAttributes::Append(const DWARFUnit *cu, dw_offset_t attr_die_offset,
-                             dw_attr_t attr, dw_form_t form) {
-  AttributeValue attr_value = {
-      cu, attr_die_offset, {attr, form, DWARFFormValue::ValueType()}};
+void DWARFAttributes::Append(const DWARFCompileUnit *cu,
+                             dw_offset_t attr_die_offset, dw_attr_t attr,
+                             dw_form_t form) {
+  AttributeValue attr_value = {cu, attr_die_offset, {attr, form}};
   m_infos.push_back(attr_value);
+}
+
+bool DWARFAttributes::ContainsAttribute(dw_attr_t attr) const {
+  return FindAttributeIndex(attr) != UINT32_MAX;
+}
+
+bool DWARFAttributes::RemoveAttribute(dw_attr_t attr) {
+  uint32_t attr_index = FindAttributeIndex(attr);
+  if (attr_index != UINT32_MAX) {
+    m_infos.erase(m_infos.begin() + attr_index);
+    return true;
+  }
+  return false;
 }
 
 bool DWARFAttributes::ExtractFormValueAtIndex(
     uint32_t i, DWARFFormValue &form_value) const {
-  const DWARFUnit *cu = CompileUnitAtIndex(i);
-  form_value.SetUnit(cu);
+  const DWARFCompileUnit *cu = CompileUnitAtIndex(i);
+  form_value.SetCompileUnit(cu);
   form_value.SetForm(FormAtIndex(i));
   lldb::offset_t offset = DIEOffsetAtIndex(i);
-  return form_value.ExtractValue(cu->GetData(), &offset);
+  return form_value.ExtractValue(
+      cu->GetSymbolFileDWARF()->get_debug_info_data(), &offset);
 }
 
-DWARFDIE
-DWARFAttributes::FormValueAsReference(dw_attr_t attr) const {
+uint64_t DWARFAttributes::FormValueAsUnsigned(dw_attr_t attr,
+                                              uint64_t fail_value) const {
   const uint32_t attr_idx = FindAttributeIndex(attr);
   if (attr_idx != UINT32_MAX)
-    return FormValueAsReferenceAtIndex(attr_idx);
-  return {};
+    return FormValueAsUnsignedAtIndex(attr_idx, fail_value);
+  return fail_value;
 }
 
-DWARFDIE
-DWARFAttributes::FormValueAsReferenceAtIndex(uint32_t i) const {
+uint64_t
+DWARFAttributes::FormValueAsUnsignedAtIndex(uint32_t i,
+                                            uint64_t fail_value) const {
   DWARFFormValue form_value;
   if (ExtractFormValueAtIndex(i, form_value))
     return form_value.Reference();
-  return {};
+  return fail_value;
 }

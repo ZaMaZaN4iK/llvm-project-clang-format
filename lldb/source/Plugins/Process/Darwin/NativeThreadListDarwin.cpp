@@ -1,9 +1,10 @@
 //===-- NativeThreadListDarwin.cpp ------------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -19,9 +20,9 @@
 #include <sys/sysctl.h>
 
 // LLDB includes
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/Stream.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Log.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/lldb-enumerations.h"
 
 #include "NativeProcessDarwin.h"
@@ -301,14 +302,14 @@ uint32_t NativeThreadListDarwin::UpdateThreadList(NativeProcessDarwin &process,
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_THREAD));
 
   std::lock_guard<std::recursive_mutex> locker(m_threads_mutex);
-  LLDB_LOGF(log,
-            "NativeThreadListDarwin::%s() (pid = %" PRIu64 ", update = "
-            "%u) process stop count = %u",
-            __FUNCTION__, process.GetID(), update, process.GetStopID());
+  if (log)
+    log->Printf("NativeThreadListDarwin::%s() (pid = %" PRIu64 ", update = "
+                "%u) process stop count = %u",
+                __FUNCTION__, process.GetID(), update, process.GetStopID());
 
   if (process.GetStopID() == 0) {
-    // On our first stop, we'll record details like 32/64 bitness and select
-    // the proper architecture implementation.
+    // On our first stop, we'll record details like 32/64 bitness and
+    // select the proper architecture implementation.
     //
     int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, (int)process.GetID()};
 
@@ -342,24 +343,24 @@ uint32_t NativeThreadListDarwin::UpdateThreadList(NativeProcessDarwin &process,
     mach_msg_type_number_t thread_list_count = 0;
     task_t task = process.GetTask();
 
-    Status error;
+    Error error;
     auto mach_err = ::task_threads(task, &thread_list, &thread_list_count);
     error.SetError(mach_err, eErrorTypeMachKernel);
     if (error.Fail()) {
-      LLDB_LOGF(log,
-                "::task_threads(task = 0x%4.4x, thread_list => %p, "
-                "thread_list_count => %u) failed: %u (%s)",
-                task, thread_list, thread_list_count, error.GetError(),
-                error.AsCString());
+      if (log)
+        log->Printf("::task_threads(task = 0x%4.4x, thread_list => %p, "
+                    "thread_list_count => %u) failed: %u (%s)",
+                    task, thread_list, thread_list_count, error.GetError(),
+                    error.AsCString());
       return 0;
     }
 
     if (thread_list_count > 0) {
       collection currThreads;
       size_t idx;
-      // Iterator through the current thread list and see which threads we
-      // already have in our list (keep them), which ones we don't (add them),
-      // and which ones are not around anymore (remove them).
+      // Iterator through the current thread list and see which threads
+      // we already have in our list (keep them), which ones we don't
+      // (add them), and which ones are not around anymore (remove them).
       for (idx = 0; idx < thread_list_count; ++idx) {
         // Get the Mach thread port.
         const ::thread_t mach_port_num = thread_list[idx];
@@ -372,18 +373,18 @@ uint32_t NativeThreadListDarwin::UpdateThreadList(NativeProcessDarwin &process,
         // Retrieve the thread if it exists.
         auto thread_sp = GetThreadByID(unique_thread_id);
         if (thread_sp) {
-          // We are already tracking it. Keep the existing native thread
-          // instance.
+          // We are already tracking it. Keep the existing native
+          // thread instance.
           currThreads.push_back(thread_sp);
         } else {
-          // We don't have a native thread instance for this thread. Create it
-          // now.
+          // We don't have a native thread instance for this thread.
+          // Create it now.
           thread_sp.reset(new NativeThreadDarwin(
               &process, m_is_64_bit, unique_thread_id, mach_port_num));
 
-          // Add the new thread regardless of its is user ready state. Make
-          // sure the thread is ready to be displayed and shown to users before
-          // we add this thread to our list...
+          // Add the new thread regardless of its is user ready state.
+          // Make sure the thread is ready to be displayed and shown
+          // to users before we add this thread to our list...
           if (thread_sp->IsUserReady()) {
             if (new_threads)
               new_threads->push_back(thread_sp);
@@ -416,9 +417,9 @@ NativeThreadListDarwin::CurrentThread (MachThreadSP& thread_sp)
     PTHREAD_MUTEX_LOCKER (locker, m_threads_mutex);
     if (m_current_thread.get() == NULL)
     {
-        // Figure out which thread is going to be our current thread. This is
-        // currently done by finding the first thread in the list that has a
-        // valid exception.
+        // Figure out which thread is going to be our current thread.
+        // This is currently done by finding the first thread in the list
+        // that has a valid exception.
         const size_t num_threads = m_threads.size();
         for (uint32_t idx = 0; idx < num_threads; ++idx)
         {
@@ -454,8 +455,8 @@ void NativeThreadListDarwin::ProcessWillResume(
     NativeProcessDarwin &process, const ResumeActionList &thread_actions) {
   std::lock_guard<std::recursive_mutex> locker(m_threads_mutex);
 
-  // Update our thread list, because sometimes libdispatch or the kernel will
-  // spawn threads while a task is suspended.
+  // Update our thread list, because sometimes libdispatch or the kernel
+  // will spawn threads while a task is suspended.
   NativeThreadListDarwin::collection new_threads;
 
 // TODO implement this.
@@ -488,8 +489,7 @@ void NativeThreadListDarwin::ProcessWillResume(
 
 #if 0
     DNBThreadResumeAction resume_new_threads = { -1U, eStateRunning, 0, INVALID_NUB_ADDRESS };
-    // If we are planning to run only one thread, any new threads should be
-    // suspended.
+    // If we are planning to run only one thread, any new threads should be suspended.
     if (run_one_thread)
         resume_new_threads.state = eStateSuspended;
 
@@ -548,15 +548,17 @@ uint32_t NativeThreadListDarwin::ProcessDidStop(NativeProcessDarwin &process) {
   return (uint32_t)m_threads.size();
 }
 
-// Check each thread in our thread list to see if we should notify our client
-// of the current halt in execution.
+//----------------------------------------------------------------------
+// Check each thread in our thread list to see if we should notify our
+// client of the current halt in execution.
 //
-// Breakpoints can have callback functions associated with them than can return
-// true to stop, or false to continue executing the inferior.
+// Breakpoints can have callback functions associated with them than
+// can return true to stop, or false to continue executing the inferior.
 //
 // RETURNS
 //    true if we should stop and notify our clients
 //    false if we should resume our child process and skip notification
+//----------------------------------------------------------------------
 bool NativeThreadListDarwin::ShouldStop(bool &step_more) {
   std::lock_guard<std::recursive_mutex> locker(m_threads_mutex);
   for (auto thread_sp : m_threads) {
@@ -605,9 +607,8 @@ NativeThreadListDarwin::DisableHardwareBreakpoint (const DNBBreakpoint* bp) cons
     return false;
 }
 
-// DNBWatchpointSet() -> MachProcess::CreateWatchpoint() ->
-// MachProcess::EnableWatchpoint() ->
-// NativeThreadListDarwin::EnableHardwareWatchpoint().
+// DNBWatchpointSet() -> MachProcess::CreateWatchpoint() -> MachProcess::EnableWatchpoint()
+// -> NativeThreadListDarwin::EnableHardwareWatchpoint().
 uint32_t
 NativeThreadListDarwin::EnableHardwareWatchpoint (const DNBBreakpoint* wp) const
 {
@@ -616,16 +617,14 @@ NativeThreadListDarwin::EnableHardwareWatchpoint (const DNBBreakpoint* wp) const
     {
         PTHREAD_MUTEX_LOCKER (locker, m_threads_mutex);
         const size_t num_threads = m_threads.size();
-        // On Mac OS X we have to prime the control registers for new threads.
-        // We do this using the control register data for the first thread, for
-        // lack of a better way of choosing.
+        // On Mac OS X we have to prime the control registers for new threads.  We do this
+        // using the control register data for the first thread, for lack of a better way of choosing.
         bool also_set_on_task = true;
         for (uint32_t idx = 0; idx < num_threads; ++idx)
         {                
             if ((hw_index = m_threads[idx]->EnableHardwareWatchpoint(wp, also_set_on_task)) == INVALID_NUB_HW_INDEX)
             {
-                // We know that idx failed for some reason.  Let's rollback the
-                // transaction for [0, idx).
+                // We know that idx failed for some reason.  Let's rollback the transaction for [0, idx).
                 for (uint32_t i = 0; i < idx; ++i)
                     m_threads[i]->RollbackTransForHWP();
                 return INVALID_NUB_HW_INDEX;
@@ -648,16 +647,14 @@ NativeThreadListDarwin::DisableHardwareWatchpoint (const DNBBreakpoint* wp) cons
         PTHREAD_MUTEX_LOCKER (locker, m_threads_mutex);
         const size_t num_threads = m_threads.size();
         
-        // On Mac OS X we have to prime the control registers for new threads.
-        // We do this using the control register data for the first thread, for
-        // lack of a better way of choosing.
+        // On Mac OS X we have to prime the control registers for new threads.  We do this
+        // using the control register data for the first thread, for lack of a better way of choosing.
         bool also_set_on_task = true;
         for (uint32_t idx = 0; idx < num_threads; ++idx)
         {
             if (!m_threads[idx]->DisableHardwareWatchpoint(wp, also_set_on_task))
             {
-                // We know that idx failed for some reason.  Let's rollback the
-                // transaction for [0, idx).
+                // We know that idx failed for some reason.  Let's rollback the transaction for [0, idx).
                 for (uint32_t i = 0; i < idx; ++i)
                     m_threads[i]->RollbackTransForHWP();
                 return false;
@@ -678,8 +675,7 @@ NativeThreadListDarwin::NumSupportedHardwareWatchpoints () const
 {
     PTHREAD_MUTEX_LOCKER (locker, m_threads_mutex);
     const size_t num_threads = m_threads.size();
-    // Use an arbitrary thread to retrieve the number of supported hardware
-    // watchpoints.
+    // Use an arbitrary thread to retrieve the number of supported hardware watchpoints.
     if (num_threads)
         return m_threads[0]->NumSupportedHardwareWatchpoints();
     return 0;

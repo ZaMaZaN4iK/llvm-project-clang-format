@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -30,7 +31,7 @@ struct testios
     void set_rdbuf(std::streambuf* x) {std::ios::set_rdbuf(x);}
 };
 
-int main(int, char**)
+int main()
 {
     testbuf sb1;
     testbuf sb2;
@@ -60,6 +61,4 @@ int main(int, char**)
 #endif
     ios.set_rdbuf(0);
     assert(ios.rdbuf() == 0);
-
-  return 0;
 }

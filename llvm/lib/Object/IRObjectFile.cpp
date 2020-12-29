@@ -1,8 +1,9 @@
 //===- IRObjectFile.cpp - IR object file implementation ---------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -11,15 +12,24 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Object/IRObjectFile.h"
+#include "RecordStreamer.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/IR/GVMaterializer.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Mangler.h"
 #include "llvm/IR/Module.h"
+#include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/MCObjectFileInfo.h"
+#include "llvm/MC/MCParser/MCAsmParser.h"
+#include "llvm/MC/MCParser/MCTargetAsmParser.h"
+#include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
@@ -42,9 +52,10 @@ void IRObjectFile::moveSymbolNext(DataRefImpl &Symb) const {
   Symb.p += sizeof(ModuleSymbolTable::Symbol);
 }
 
-Error IRObjectFile::printSymbolName(raw_ostream &OS, DataRefImpl Symb) const {
+std::error_code IRObjectFile::printSymbolName(raw_ostream &OS,
+                                              DataRefImpl Symb) const {
   SymTab.printSymbolName(OS, getSym(Symb));
-  return Error::success();
+  return std::error_code();
 }
 
 uint32_t IRObjectFile::getSymbolFlags(DataRefImpl Symb) const {
@@ -70,47 +81,43 @@ StringRef IRObjectFile::getTargetTriple() const {
   return Mods[0]->getTargetTriple();
 }
 
-Expected<MemoryBufferRef>
-IRObjectFile::findBitcodeInObject(const ObjectFile &Obj) {
+ErrorOr<MemoryBufferRef> IRObjectFile::findBitcodeInObject(const ObjectFile &Obj) {
   for (const SectionRef &Sec : Obj.sections()) {
     if (Sec.isBitcode()) {
-      Expected<StringRef> Contents = Sec.getContents();
-      if (!Contents)
-        return Contents.takeError();
-      if (Contents->size() <= 1)
-        return errorCodeToError(object_error::bitcode_section_not_found);
-      return MemoryBufferRef(*Contents, Obj.getFileName());
+      StringRef SecContents;
+      if (std::error_code EC = Sec.getContents(SecContents))
+        return EC;
+      return MemoryBufferRef(SecContents, Obj.getFileName());
     }
   }
 
-  return errorCodeToError(object_error::bitcode_section_not_found);
+  return object_error::bitcode_section_not_found;
 }
 
-Expected<MemoryBufferRef>
-IRObjectFile::findBitcodeInMemBuffer(MemoryBufferRef Object) {
-  file_magic Type = identify_magic(Object.getBuffer());
+ErrorOr<MemoryBufferRef> IRObjectFile::findBitcodeInMemBuffer(MemoryBufferRef Object) {
+  sys::fs::file_magic Type = sys::fs::identify_magic(Object.getBuffer());
   switch (Type) {
-  case file_magic::bitcode:
+  case sys::fs::file_magic::bitcode:
     return Object;
-  case file_magic::elf_relocatable:
-  case file_magic::macho_object:
-  case file_magic::coff_object: {
+  case sys::fs::file_magic::elf_relocatable:
+  case sys::fs::file_magic::macho_object:
+  case sys::fs::file_magic::coff_object: {
     Expected<std::unique_ptr<ObjectFile>> ObjFile =
         ObjectFile::createObjectFile(Object, Type);
     if (!ObjFile)
-      return ObjFile.takeError();
+      return errorToErrorCode(ObjFile.takeError());
     return findBitcodeInObject(*ObjFile->get());
   }
   default:
-    return errorCodeToError(object_error::invalid_file_type);
+    return object_error::invalid_file_type;
   }
 }
 
 Expected<std::unique_ptr<IRObjectFile>>
 IRObjectFile::create(MemoryBufferRef Object, LLVMContext &Context) {
-  Expected<MemoryBufferRef> BCOrErr = findBitcodeInMemBuffer(Object);
+  ErrorOr<MemoryBufferRef> BCOrErr = findBitcodeInMemBuffer(Object);
   if (!BCOrErr)
-    return BCOrErr.takeError();
+    return errorCodeToError(BCOrErr.getError());
 
   Expected<std::vector<BitcodeModule>> BMsOrErr =
       getBitcodeModuleList(*BCOrErr);
@@ -130,26 +137,4 @@ IRObjectFile::create(MemoryBufferRef Object, LLVMContext &Context) {
 
   return std::unique_ptr<IRObjectFile>(
       new IRObjectFile(*BCOrErr, std::move(Mods)));
-}
-
-Expected<IRSymtabFile> object::readIRSymtab(MemoryBufferRef MBRef) {
-  IRSymtabFile F;
-  Expected<MemoryBufferRef> BCOrErr =
-      IRObjectFile::findBitcodeInMemBuffer(MBRef);
-  if (!BCOrErr)
-    return BCOrErr.takeError();
-
-  Expected<BitcodeFileContents> BFCOrErr = getBitcodeFileContents(*BCOrErr);
-  if (!BFCOrErr)
-    return BFCOrErr.takeError();
-
-  Expected<irsymtab::FileContents> FCOrErr = irsymtab::readBitcode(*BFCOrErr);
-  if (!FCOrErr)
-    return FCOrErr.takeError();
-
-  F.Mods = std::move(BFCOrErr->Mods);
-  F.Symtab = std::move(FCOrErr->Symtab);
-  F.Strtab = std::move(FCOrErr->Strtab);
-  F.TheReader = std::move(FCOrErr->TheReader);
-  return std::move(F);
 }

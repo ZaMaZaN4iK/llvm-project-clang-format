@@ -1,12 +1,13 @@
 //===-- LanaiDelaySlotFiller.cpp - Lanai delay slot filler ----------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
-// Simple pass to fill delay slots with useful instructions.
+// Simple pass to fills delay slots with useful instructions.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,8 +17,8 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Target/TargetInstrInfo.h"
 
 using namespace llvm;
 
@@ -155,7 +156,7 @@ bool Filler::findDelayInstr(MachineBasicBlock &MBB,
   for (MachineBasicBlock::reverse_instr_iterator I = ++Slot.getReverse();
        I != MBB.instr_rend(); ++I) {
     // skip debug value
-    if (I->isDebugInstr())
+    if (I->isDebugValue())
       continue;
 
     // Convert to forward iterator.

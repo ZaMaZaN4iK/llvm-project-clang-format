@@ -1,12 +1,14 @@
 //===-- MipsTargetInfo.cpp - Mips Target Implementation -------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "TargetInfo/MipsTargetInfo.h"
+#include "Mips.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 
@@ -27,21 +29,20 @@ Target &llvm::getTheMips64elTarget() {
   return TheMips64elTarget;
 }
 
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeMipsTargetInfo() {
+extern "C" void LLVMInitializeMipsTargetInfo() {
   RegisterTarget<Triple::mips,
                  /*HasJIT=*/true>
-      X(getTheMipsTarget(), "mips", "MIPS (32-bit big endian)", "Mips");
+      X(getTheMipsTarget(), "mips", "Mips");
 
   RegisterTarget<Triple::mipsel,
                  /*HasJIT=*/true>
-      Y(getTheMipselTarget(), "mipsel", "MIPS (32-bit little endian)", "Mips");
+      Y(getTheMipselTarget(), "mipsel", "Mipsel");
 
   RegisterTarget<Triple::mips64,
                  /*HasJIT=*/true>
-      A(getTheMips64Target(), "mips64", "MIPS (64-bit big endian)", "Mips");
+      A(getTheMips64Target(), "mips64", "Mips64 [experimental]");
 
   RegisterTarget<Triple::mips64el,
                  /*HasJIT=*/true>
-      B(getTheMips64elTarget(), "mips64el", "MIPS (64-bit little endian)",
-        "Mips");
+      B(getTheMips64elTarget(), "mips64el", "Mips64el [experimental]");
 }

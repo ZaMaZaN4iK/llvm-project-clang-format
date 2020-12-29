@@ -2,15 +2,17 @@
 Base class for gdb-remote test cases.
 """
 
-from __future__ import division, print_function
+from __future__ import print_function
 
 
 import errno
 import os
 import os.path
+import platform
 import random
 import re
 import select
+import signal
 import socket
 import subprocess
 import sys
@@ -18,7 +20,6 @@ import tempfile
 import time
 from lldbsuite.test import configuration
 from lldbsuite.test.lldbtest import *
-from lldbsuite.support import seven
 from lldbgdbserverutils import *
 import logging
 
@@ -31,10 +32,7 @@ class GdbRemoteTestCaseBase(TestBase):
 
     NO_DEBUG_INFO_TESTCASE = True
 
-    _TIMEOUT_SECONDS = 120 * (10 if ('ASAN_OPTIONS' in os.environ) else 1)
-    _DEFAULT_TIMEOUT =  10 * (10 if ('ASAN_OPTIONS' in os.environ) else 1)
-    _READ_TIMEOUT    =   5 * (10 if ('ASAN_OPTIONS' in os.environ) else 1)
-    _WAIT_TIMEOUT    =   5 * (10 if ('ASAN_OPTIONS' in os.environ) else 1)
+    _TIMEOUT_SECONDS = 7
 
     _GDBREMOTE_KILL_PACKET = "$k#6b"
 
@@ -204,7 +202,7 @@ class GdbRemoteTestCaseBase(TestBase):
 
         return (named_pipe_path, named_pipe, named_pipe_fd)
 
-    def get_stub_port_from_named_socket(self, read_timeout_seconds):
+    def get_stub_port_from_named_socket(self, read_timeout_seconds=5):
         # Wait for something to read with a max timeout.
         (ready_readers, _, _) = select.select(
             [self.named_pipe_fd], [], [], read_timeout_seconds)
@@ -236,10 +234,6 @@ class GdbRemoteTestCaseBase(TestBase):
             # Remote platforms don't support named pipe based port negotiation
             use_named_pipe = False
 
-            triple = self.dbg.GetSelectedPlatform().GetTriple()
-            if re.match(".*-.*-windows", triple):
-                self.skipTest("Remotely testing is not supported on Windows yet.")
-
             # Grab the ppid from /proc/[shell pid]/stat
             err, retcode, shell_stat = self.run_platform_command(
                 "cat /proc/$$/stat")
@@ -265,10 +259,6 @@ class GdbRemoteTestCaseBase(TestBase):
             # Remove if it's there.
             self.debug_monitor_exe = re.sub(r' \(deleted\)$', '', exe)
         else:
-            # Need to figure out how to create a named pipe on Windows.
-            if platform.system() == 'Windows':
-                use_named_pipe = False
-
             self.debug_monitor_exe = get_lldb_server_exe()
             if not self.debug_monitor_exe:
                 self.skipTest("lldb-server exe not found")
@@ -379,18 +369,13 @@ class GdbRemoteTestCaseBase(TestBase):
                 ["*:{}".format(self.port)]
         else:
             commandline_args = self.debug_monitor_extra_args + \
-                ["127.0.0.1:{}".format(self.port)]
+                ["localhost:{}".format(self.port)]
 
         if attach_pid:
             commandline_args += ["--attach=%d" % attach_pid]
         if self.named_pipe_path:
             commandline_args += ["--named-pipe", self.named_pipe_path]
         return commandline_args
-
-    def get_target_byte_order(self):
-        inferior_exe_path = self.getBuildArtifact("a.out")
-        target = self.dbg.CreateTarget(inferior_exe_path)
-        return target.GetByteOrder()
 
     def launch_debug_monitor(self, attach_pid=None, logfile=None):
         # Create the command line.
@@ -408,7 +393,7 @@ class GdbRemoteTestCaseBase(TestBase):
         # If we're receiving the stub's listening port from the named pipe, do
         # that here.
         if self.named_pipe:
-            self.port = self.get_stub_port_from_named_socket(self._READ_TIMEOUT)
+            self.port = self.get_stub_port_from_named_socket()
 
         return server
 
@@ -498,7 +483,7 @@ class GdbRemoteTestCaseBase(TestBase):
         # This process needs to be started so that it just hangs around for a while.  We'll
         # have it sleep.
         if not exe_path:
-            exe_path = self.getBuildArtifact("a.out")
+            exe_path = os.path.abspath("a.out")
 
         args = []
         if inferior_args:
@@ -522,8 +507,7 @@ class GdbRemoteTestCaseBase(TestBase):
             self,
             inferior_args=None,
             inferior_sleep_seconds=3,
-            inferior_exe_path=None,
-            inferior_env=None):
+            inferior_exe_path=None):
         """Prep the debug monitor, the inferior, and the expected packet stream.
 
         Handle the separate cases of using the debug monitor in attach-to-inferior mode
@@ -562,10 +546,10 @@ class GdbRemoteTestCaseBase(TestBase):
         if self._inferior_startup == self._STARTUP_LAUNCH:
             # Build launch args
             if not inferior_exe_path:
-                inferior_exe_path = self.getBuildArtifact("a.out")
+                inferior_exe_path = os.path.abspath("a.out")
 
             if lldb.remote_platform:
-                remote_path = lldbutil.append_to_process_working_directory(self,
+                remote_path = lldbutil.append_to_process_working_directory(
                     os.path.basename(inferior_exe_path))
                 remote_file_spec = lldb.SBFileSpec(remote_path, False)
                 err = lldb.remote_platform.Install(lldb.SBFileSpec(
@@ -586,9 +570,6 @@ class GdbRemoteTestCaseBase(TestBase):
 
         # Build the expected protocol stream
         self.add_no_ack_remote_stream()
-        if inferior_env:
-            for name, value in inferior_env.items():
-                self.add_set_environment_packets(name, value)
         if self._inferior_startup == self._STARTUP_LAUNCH:
             self.add_verified_launch_packets(launch_args)
 
@@ -608,7 +589,7 @@ class GdbRemoteTestCaseBase(TestBase):
             if can_read and sock in can_read:
                 recv_bytes = sock.recv(4096)
                 if recv_bytes:
-                    response += seven.bitcast_to_string(recv_bytes)
+                    response += recv_bytes
 
         self.assertTrue(expected_content_regex.match(response))
 
@@ -619,21 +600,18 @@ class GdbRemoteTestCaseBase(TestBase):
         while len(request_bytes_remaining) > 0 and time.time() < timeout_time:
             _, can_write, _ = select.select([], [sock], [], timeout_seconds)
             if can_write and sock in can_write:
-                written_byte_count = sock.send(request_bytes_remaining.encode())
+                written_byte_count = sock.send(request_bytes_remaining)
                 request_bytes_remaining = request_bytes_remaining[
                     written_byte_count:]
         self.assertEqual(len(request_bytes_remaining), 0)
 
-    def do_handshake(self, stub_socket, timeout_seconds=None):
-        if not timeout_seconds:
-            timeout_seconds = self._WAIT_TIMEOUT
-
+    def do_handshake(self, stub_socket, timeout_seconds=5):
         # Write the ack.
         self.expect_socket_send(stub_socket, "+", timeout_seconds)
 
         # Send the start no ack mode packet.
         NO_ACK_MODE_REQUEST = "$QStartNoAckMode#b0"
-        bytes_sent = stub_socket.send(NO_ACK_MODE_REQUEST.encode())
+        bytes_sent = stub_socket.send(NO_ACK_MODE_REQUEST)
         self.assertEqual(bytes_sent, len(NO_ACK_MODE_REQUEST))
 
         # Receive the ack and "OK"
@@ -671,12 +649,6 @@ class GdbRemoteTestCaseBase(TestBase):
             ["read packet: $qProcessInfo#dc",
              {"direction": "send", "regex": r"^\$(.+)#[0-9a-fA-F]{2}$", "capture": {1: "process_info_raw"}}],
             True)
-
-    def add_set_environment_packets(self, name, value):
-        self.test_sequence.add_log_lines(
-            ["read packet: $QEnvironment:" + name + "=" + value + "#00",
-             "send packet: $OK#00",
-             ], True)
 
     _KNOWN_PROCESS_INFO_KEYS = [
         "pid",
@@ -838,7 +810,6 @@ class GdbRemoteTestCaseBase(TestBase):
                     "error"])
             self.assertIsNotNone(val)
 
-        mem_region_dict["name"] = seven.unhexlify(mem_region_dict.get("name", ""))
         # Return the dictionary of key-value pairs for the memory region.
         return mem_region_dict
 
@@ -885,9 +856,7 @@ class GdbRemoteTestCaseBase(TestBase):
             thread_ids.extend(new_thread_infos)
         return thread_ids
 
-    def wait_for_thread_count(self, thread_count, timeout_seconds=None):
-        if not timeout_seconds:
-            timeout_seconds = self._WAIT_TIMEOUT
+    def wait_for_thread_count(self, thread_count, timeout_seconds=3):
         start_time = time.time()
         timeout_time = start_time + timeout_seconds
 
@@ -914,13 +883,12 @@ class GdbRemoteTestCaseBase(TestBase):
     def add_set_breakpoint_packets(
             self,
             address,
-            z_packet_type=0,
             do_continue=True,
             breakpoint_kind=1):
         self.test_sequence.add_log_lines(
             [  # Set the breakpoint.
-                "read packet: $Z{2},{0:x},{1}#00".format(
-                    address, breakpoint_kind, z_packet_type),
+                "read packet: $Z0,{0:x},{1}#00".format(
+                    address, breakpoint_kind),
                 # Verify the stub could set it.
                 "send packet: $OK#00",
             ], True)
@@ -936,15 +904,11 @@ class GdbRemoteTestCaseBase(TestBase):
                                  2: "stop_thread_id"}},
                 ], True)
 
-    def add_remove_breakpoint_packets(
-            self,
-            address,
-            z_packet_type=0,
-            breakpoint_kind=1):
+    def add_remove_breakpoint_packets(self, address, breakpoint_kind=1):
         self.test_sequence.add_log_lines(
             [  # Remove the breakpoint.
-                "read packet: $z{2},{0:x},{1}#00".format(
-                    address, breakpoint_kind, z_packet_type),
+                "read packet: $z0,{0:x},{1}#00".format(
+                    address, breakpoint_kind),
                 # Verify the stub could unset it.
                 "send packet: $OK#00",
             ], True)
@@ -965,8 +929,7 @@ class GdbRemoteTestCaseBase(TestBase):
         "qXfer:libraries:read",
         "qXfer:libraries-svr4:read",
         "qXfer:features:read",
-        "qEcho",
-        "QPassSignals"
+        "qEcho"
     ]
 
     def parse_qSupported_response(self, context):
@@ -1025,22 +988,6 @@ class GdbRemoteTestCaseBase(TestBase):
 
         return context
 
-    def continue_process_and_wait_for_stop(self):
-        self.test_sequence.add_log_lines(
-            [
-                "read packet: $vCont;c#a8",
-                {
-                    "direction": "send",
-                    "regex": r"^\$T([0-9a-fA-F]{2})(.*)#[0-9a-fA-F]{2}$",
-                    "capture": {1: "stop_signo", 2: "stop_key_val_text"},
-                },
-            ],
-            True,
-        )
-        context = self.expect_gdbremote_sequence()
-        self.assertIsNotNone(context)
-        return self.parse_interrupt_packets(context)
-
     def select_modifiable_register(self, reg_infos):
         """Find a register that can be read/written freely."""
         PREFERRED_REGISTER_NAMES = set(["rax", ])
@@ -1055,10 +1002,9 @@ class GdbRemoteTestCaseBase(TestBase):
                     reg_info["name"] in PREFERRED_REGISTER_NAMES):
                 # We found a preferred register.  Use it.
                 return reg_info["lldb_register_index"]
-            if ("generic" in reg_info) and (reg_info["generic"] == "fp" or
-                    reg_info["generic"] == "arg1"):
-                # A frame pointer or first arg register will do as a
-                # register to modify temporarily.
+            if ("generic" in reg_info) and (reg_info["generic"] == "fp"):
+                # A frame pointer register will do as a register to modify
+                # temporarily.
                 alternative_register_index = reg_info["lldb_register_index"]
 
         # We didn't find a preferred register.  Return whatever alternative register
@@ -1124,18 +1070,6 @@ class GdbRemoteTestCaseBase(TestBase):
 
         auxv_dict = {}
 
-        # PowerPC64le's auxvec has a special key that must be ignored.
-        # This special key may be used multiple times, resulting in
-        # multiple key/value pairs with the same key, which would otherwise
-        # break this test check for repeated keys.
-        #
-        # AT_IGNOREPPC = 22
-        ignored_keys_for_arch = { 'powerpc64le' : [22] }
-        arch = self.getArchitecture()
-        ignore_keys = None
-        if arch in ignored_keys_for_arch:
-            ignore_keys = ignored_keys_for_arch[arch]
-
         while len(auxv_data) > 0:
             # Chop off key.
             raw_key = auxv_data[:word_size]
@@ -1148,9 +1082,6 @@ class GdbRemoteTestCaseBase(TestBase):
             # Convert raw text from target endian.
             key = unpack_endian_binary_string(endian, raw_key)
             value = unpack_endian_binary_string(endian, raw_value)
-
-            if ignore_keys and key in ignore_keys:
-                continue
 
             # Handle ending entry.
             if key == 0:
@@ -1282,7 +1213,7 @@ class GdbRemoteTestCaseBase(TestBase):
             reg_index = reg_info["lldb_register_index"]
             self.assertIsNotNone(reg_index)
 
-            reg_byte_size = int(reg_info["bitsize"]) // 8
+            reg_byte_size = int(reg_info["bitsize"]) / 8
             self.assertTrue(reg_byte_size > 0)
 
             # Handle thread suffix.
@@ -1308,7 +1239,7 @@ class GdbRemoteTestCaseBase(TestBase):
                 endian, p_response)
 
             # Flip the value by xoring with all 1s
-            all_one_bits_raw = "ff" * (int(reg_info["bitsize"]) // 8)
+            all_one_bits_raw = "ff" * (int(reg_info["bitsize"]) / 8)
             flipped_bits_int = initial_reg_value ^ int(all_one_bits_raw, 16)
             # print("reg (index={}, name={}): val={}, flipped bits (int={}, hex={:x})".format(reg_index, reg_info["name"], initial_reg_value, flipped_bits_int, flipped_bits_int))
 
@@ -1523,8 +1454,8 @@ class GdbRemoteTestCaseBase(TestBase):
         self.assertIsNotNone(context.get("g_c1_contents"))
         self.assertIsNotNone(context.get("g_c2_contents"))
 
-        return (seven.unhexlify(context.get("g_c1_contents")) == expected_g_c1) and (
-            seven.unhexlify(context.get("g_c2_contents")) == expected_g_c2)
+        return (context.get("g_c1_contents").decode("hex") == expected_g_c1) and (
+            context.get("g_c2_contents").decode("hex") == expected_g_c2)
 
     def single_step_only_steps_one_instruction(
             self, use_Hc_packet=True, step_instruction="s"):
@@ -1670,10 +1601,10 @@ class GdbRemoteTestCaseBase(TestBase):
             '.*' if lldbplatformutil.hasChattyStderr(self) else '^' + regex + '$'
 
     def install_and_create_launch_args(self):
-        exe_path = self.getBuildArtifact("a.out")
+        exe_path = os.path.abspath('a.out')
         if not lldb.remote_platform:
             return [exe_path]
-        remote_path = lldbutil.append_to_process_working_directory(self,
+        remote_path = lldbutil.append_to_process_working_directory(
             os.path.basename(exe_path))
         remote_file_spec = lldb.SBFileSpec(remote_path, False)
         err = lldb.remote_platform.Install(lldb.SBFileSpec(exe_path, True),

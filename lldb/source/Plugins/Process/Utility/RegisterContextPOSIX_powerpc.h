@@ -1,22 +1,29 @@
 //===-- RegisterContextPOSIX_powerpc.h --------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_RegisterContextPOSIX_powerpc_h_
 #define liblldb_RegisterContextPOSIX_powerpc_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "RegisterContext_powerpc.h"
 #include "RegisterInfoInterface.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Target/RegisterContext.h"
-#include "lldb/Utility/Log.h"
 
 class ProcessMonitor;
 
+// ---------------------------------------------------------------------------
 // Internal codes for all powerpc registers.
+// ---------------------------------------------------------------------------
 enum {
   k_first_gpr_powerpc,
   gpr_r0_powerpc = k_first_gpr_powerpc,
@@ -175,7 +182,7 @@ protected:
       m_fpr_powerpc[k_num_fpr_registers_powerpc]; // floating point registers.
   uint32_t m_vmx_powerpc[k_num_vmx_registers_powerpc][4];
   std::unique_ptr<lldb_private::RegisterInfoInterface>
-      m_register_info_up; // Register Info Interface (FreeBSD or Linux)
+      m_register_info_ap; // Register Info Interface (FreeBSD or Linux)
 
   // Determines if an extended register set is supported on the processor
   // running the inferior process.

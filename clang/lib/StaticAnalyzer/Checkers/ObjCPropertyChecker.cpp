@@ -1,8 +1,9 @@
 //==- ObjCPropertyChecker.cpp - Check ObjC properties ------------*- C++ -*-==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,7 +15,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 
@@ -57,7 +58,8 @@ void ObjCPropertyChecker::checkCopyMutable(const ObjCPropertyDecl *D,
   if (const ObjCInterfaceDecl *IntD =
           dyn_cast<ObjCInterfaceDecl>(D->getDeclContext())) {
     ImplD = IntD->getImplementation();
-  } else if (auto *CatD = dyn_cast<ObjCCategoryDecl>(D->getDeclContext())) {
+  } else {
+    const ObjCCategoryDecl *CatD = cast<ObjCCategoryDecl>(D->getDeclContext());
     ImplD = CatD->getClassInterface()->getImplementation();
   }
 
@@ -77,8 +79,4 @@ void ObjCPropertyChecker::checkCopyMutable(const ObjCPropertyDecl *D,
 
 void ento::registerObjCPropertyChecker(CheckerManager &Mgr) {
   Mgr.registerChecker<ObjCPropertyChecker>();
-}
-
-bool ento::shouldRegisterObjCPropertyChecker(const LangOptions &LO) {
-  return true;
 }

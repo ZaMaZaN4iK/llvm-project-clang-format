@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,8 +18,6 @@
 #include <utility>
 #include <memory>
 #include <cassert>
-
-#include "test_macros.h"
 
 
 struct NonAssignable {
@@ -47,10 +46,10 @@ struct CountAssign {
 int CountAssign::copied = 0;
 int CountAssign::moved = 0;
 
-int main(int, char**)
+int main()
 {
     {
-        typedef std::pair<std::unique_ptr<int>, int> P;
+        typedef std::pair<std::unique_ptr<int>, short> P;
         P p1(std::unique_ptr<int>(new int(3)), 4);
         P p2;
         p2 = std::move(p1);
@@ -94,6 +93,4 @@ int main(int, char**)
         assert(CountAssign::moved == 1);
         assert(CountAssign::copied == 0);
     }
-
-  return 0;
 }

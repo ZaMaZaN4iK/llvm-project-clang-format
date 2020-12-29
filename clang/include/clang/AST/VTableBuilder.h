@@ -1,8 +1,9 @@
 //===--- VTableBuilder.h - C++ vtable layout builder --------------*- C++ -*-=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -25,7 +26,7 @@
 namespace clang {
   class CXXRecordDecl;
 
-/// Represents a single component in a vtable.
+/// \brief Represents a single component in a vtable.
 class VTableComponent {
 public:
   enum Kind {
@@ -35,13 +36,13 @@ public:
     CK_RTTI,
     CK_FunctionPointer,
 
-    /// A pointer to the complete destructor.
+    /// \brief A pointer to the complete destructor.
     CK_CompleteDtorPointer,
 
-    /// A pointer to the deleting destructor.
+    /// \brief A pointer to the deleting destructor.
     CK_DeletingDtorPointer,
 
-    /// An entry that is never used.
+    /// \brief An entry that is never used.
     ///
     /// In some cases, a vtable function pointer will end up never being
     /// called. Such vtable function pointers are represented as a
@@ -92,7 +93,11 @@ public:
                            reinterpret_cast<uintptr_t>(MD));
   }
 
-  /// Get the kind of this vtable component.
+  static VTableComponent getFromOpaqueInteger(uint64_t I) {
+    return VTableComponent(I);
+  }
+
+  /// \brief Get the kind of this vtable component.
   Kind getKind() const {
     return (Kind)(Value & 0x7);
   }
@@ -149,28 +154,6 @@ public:
 
   bool isRTTIKind() const { return isRTTIKind(getKind()); }
 
-  GlobalDecl getGlobalDecl() const {
-    assert(isUsedFunctionPointerKind() &&
-           "GlobalDecl can be created only from virtual function");
-
-    auto *DtorDecl = dyn_cast<CXXDestructorDecl>(getFunctionDecl());
-    switch (getKind()) {
-    case CK_FunctionPointer:
-      return GlobalDecl(getFunctionDecl());
-    case CK_CompleteDtorPointer:
-      return GlobalDecl(DtorDecl, CXXDtorType::Dtor_Complete);
-    case CK_DeletingDtorPointer:
-      return GlobalDecl(DtorDecl, CXXDtorType::Dtor_Deleting);
-    case CK_VCallOffset:
-    case CK_VBaseOffset:
-    case CK_OffsetToTop:
-    case CK_RTTI:
-    case CK_UnusedFunctionPointer:
-      llvm_unreachable("Only function pointers kinds");
-    }
-    llvm_unreachable("Should already return");
-  }
-
 private:
   static bool isFunctionPointerKind(Kind ComponentKind) {
     return isUsedFunctionPointerKind(ComponentKind) ||
@@ -221,6 +204,9 @@ private:
     return static_cast<uintptr_t>(Value & ~7ULL);
   }
 
+  explicit VTableComponent(uint64_t Value)
+    : Value(Value) { }
+
   /// The kind is stored in the lower 3 bits of the value. For offsets, we
   /// make use of the facts that classes can't be larger than 2^55 bytes,
   /// so we store the offset in the lower part of the 61 bits that remain.
@@ -247,10 +233,10 @@ private:
 
   OwningArrayRef<VTableComponent> VTableComponents;
 
-  /// Contains thunks needed by vtables, sorted by indices.
+  /// \brief Contains thunks needed by vtables, sorted by indices.
   OwningArrayRef<VTableThunkTy> VTableThunks;
 
-  /// Address points for all vtables.
+  /// \brief Address points for all vtables.
   AddressPointsMapTy AddressPoints;
 
 public:
@@ -316,7 +302,7 @@ public:
 protected:
   typedef llvm::DenseMap<const CXXMethodDecl *, ThunkInfoVectorTy> ThunksMapTy;
 
-  /// Contains all thunks that a given method decl will need.
+  /// \brief Contains all thunks that a given method decl will need.
   ThunksMapTy Thunks;
 
   /// Compute and store all vtable related information (vtable layout, vbase
@@ -347,7 +333,7 @@ public:
 class ItaniumVTableContext : public VTableContextBase {
 private:
 
-  /// Contains the index (relative to the vtable address point)
+  /// \brief Contains the index (relative to the vtable address point)
   /// where the function pointer for a virtual function is stored.
   typedef llvm::DenseMap<GlobalDecl, int64_t> MethodVTableIndicesTy;
   MethodVTableIndicesTy MethodVTableIndices;
@@ -360,7 +346,7 @@ private:
   typedef std::pair<const CXXRecordDecl *,
                     const CXXRecordDecl *> ClassPairTy;
 
-  /// vtable offsets for offsets of virtual bases of a class.
+  /// \brief vtable offsets for offsets of virtual bases of a class.
   ///
   /// Contains the vtable offset (relative to the address point) in chars
   /// where the offsets for virtual bases of a class are stored.
@@ -385,7 +371,7 @@ public:
       const CXXRecordDecl *MostDerivedClass, CharUnits MostDerivedClassOffset,
       bool MostDerivedClassIsVirtual, const CXXRecordDecl *LayoutClass);
 
-  /// Locate a virtual function in the vtable.
+  /// \brief Locate a virtual function in the vtable.
   ///
   /// Return the index (relative to the vtable address point) where the
   /// function pointer for the given virtual function is stored.
@@ -393,7 +379,7 @@ public:
 
   /// Return the offset in chars (relative to the vtable address point) where
   /// the offset of the virtual base that contains the given base is stored,
-  /// otherwise, if no virtual base contains the given class, return 0.
+  /// otherwise, if no virtual base contains the given class, return 0. 
   ///
   /// Base must be a virtual base class or an unambiguous base.
   CharUnits getVirtualBaseOffsetOffset(const CXXRecordDecl *RD,
@@ -471,42 +457,41 @@ struct VirtualBaseInfo {
   VPtrInfoVector VBPtrPaths;
 };
 
-struct MethodVFTableLocation {
-  /// If nonzero, holds the vbtable index of the virtual base with the vfptr.
-  uint64_t VBTableIndex;
-
-  /// If nonnull, holds the last vbase which contains the vfptr that the
-  /// method definition is adjusted to.
-  const CXXRecordDecl *VBase;
-
-  /// This is the offset of the vfptr from the start of the last vbase, or the
-  /// complete type if there are no virtual bases.
-  CharUnits VFPtrOffset;
-
-  /// Method's index in the vftable.
-  uint64_t Index;
-
-  MethodVFTableLocation()
-      : VBTableIndex(0), VBase(nullptr), VFPtrOffset(CharUnits::Zero()),
-        Index(0) {}
-
-  MethodVFTableLocation(uint64_t VBTableIndex, const CXXRecordDecl *VBase,
-                        CharUnits VFPtrOffset, uint64_t Index)
-      : VBTableIndex(VBTableIndex), VBase(VBase), VFPtrOffset(VFPtrOffset),
-        Index(Index) {}
-
-  bool operator<(const MethodVFTableLocation &other) const {
-    if (VBTableIndex != other.VBTableIndex) {
-      assert(VBase != other.VBase);
-      return VBTableIndex < other.VBTableIndex;
-    }
-    return std::tie(VFPtrOffset, Index) <
-           std::tie(other.VFPtrOffset, other.Index);
-  }
-};
-
 class MicrosoftVTableContext : public VTableContextBase {
 public:
+  struct MethodVFTableLocation {
+    /// If nonzero, holds the vbtable index of the virtual base with the vfptr.
+    uint64_t VBTableIndex;
+
+    /// If nonnull, holds the last vbase which contains the vfptr that the
+    /// method definition is adjusted to.
+    const CXXRecordDecl *VBase;
+
+    /// This is the offset of the vfptr from the start of the last vbase, or the
+    /// complete type if there are no virtual bases.
+    CharUnits VFPtrOffset;
+
+    /// Method's index in the vftable.
+    uint64_t Index;
+
+    MethodVFTableLocation()
+        : VBTableIndex(0), VBase(nullptr), VFPtrOffset(CharUnits::Zero()),
+          Index(0) {}
+
+    MethodVFTableLocation(uint64_t VBTableIndex, const CXXRecordDecl *VBase,
+                          CharUnits VFPtrOffset, uint64_t Index)
+        : VBTableIndex(VBTableIndex), VBase(VBase),
+          VFPtrOffset(VFPtrOffset), Index(Index) {}
+
+    bool operator<(const MethodVFTableLocation &other) const {
+      if (VBTableIndex != other.VBTableIndex) {
+        assert(VBase != other.VBase);
+        return VBTableIndex < other.VBTableIndex;
+      }
+      return std::tie(VFPtrOffset, Index) <
+             std::tie(other.VFPtrOffset, other.Index);
+    }
+  };
 
 private:
   ASTContext &Context;
@@ -515,7 +500,7 @@ private:
     MethodVFTableLocationsTy;
   MethodVFTableLocationsTy MethodVFTableLocations;
 
-  typedef llvm::DenseMap<const CXXRecordDecl *, std::unique_ptr<VPtrInfoVector>>
+  typedef llvm::DenseMap<const CXXRecordDecl *, VPtrInfoVector>
       VFPtrLocationsMapTy;
   VFPtrLocationsMapTy VFPtrLocations;
 
@@ -552,7 +537,7 @@ public:
   const VTableLayout &getVFTableLayout(const CXXRecordDecl *RD,
                                        CharUnits VFPtrOffset);
 
-  MethodVFTableLocation getMethodVFTableLocation(GlobalDecl GD);
+  const MethodVFTableLocation &getMethodVFTableLocation(GlobalDecl GD);
 
   const ThunkInfoVectorTy *getThunkInfo(GlobalDecl GD) override {
     // Complete destructors don't have a slot in a vftable, so no thunks needed.
@@ -562,7 +547,7 @@ public:
     return VTableContextBase::getThunkInfo(GD);
   }
 
-  /// Returns the index of VBase in the vbtable of Derived.
+  /// \brief Returns the index of VBase in the vbtable of Derived.
   /// VBase must be a morally virtual base of Derived.
   /// The vbtable is an array of i32 offsets.  The first entry is a self entry,
   /// and the rest are offsets from the vbptr to virtual bases.

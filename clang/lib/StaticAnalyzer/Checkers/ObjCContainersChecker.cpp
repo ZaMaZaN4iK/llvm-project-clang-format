@@ -1,8 +1,9 @@
 //== ObjCContainersChecker.cpp - Path sensitive checker for CFArray *- C++ -*=//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,7 +16,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -38,7 +39,7 @@ class ObjCContainersChecker : public Checker< check::PreStmt<CallExpr>,
   }
 
   inline SymbolRef getArraySym(const Expr *E, CheckerContext &C) const {
-    SVal ArrayRef = C.getSVal(E);
+    SVal ArrayRef = C.getState()->getSVal(E, C.getLocationContext());
     SymbolRef ArraySym = ArrayRef.getAsSymbol();
     return ArraySym;
   }
@@ -56,9 +57,6 @@ public:
                                      const InvalidatedSymbols &Escaped,
                                      const CallEvent *Call,
                                      PointerEscapeKind Kind) const;
-
-  void printState(raw_ostream &OS, ProgramStateRef State,
-                  const char *NL, const char *Sep) const;
 };
 } // end anonymous namespace
 
@@ -68,13 +66,13 @@ REGISTER_MAP_WITH_PROGRAMSTATE(ArraySizeMap, SymbolRef, DefinedSVal)
 void ObjCContainersChecker::addSizeInfo(const Expr *Array, const Expr *Size,
                                         CheckerContext &C) const {
   ProgramStateRef State = C.getState();
-  SVal SizeV = C.getSVal(Size);
+  SVal SizeV = State->getSVal(Size, C.getLocationContext());
   // Undefined is reported by another checker.
   if (SizeV.isUnknownOrUndef())
     return;
 
   // Get the ArrayRef symbol.
-  SVal ArrayRef = C.getSVal(Array);
+  SVal ArrayRef = State->getSVal(Array, C.getLocationContext());
   SymbolRef ArraySym = ArrayRef.getAsSymbol();
   if (!ArraySym)
     return;
@@ -130,7 +128,7 @@ void ObjCContainersChecker::checkPreStmt(const CallExpr *CE,
 
     // Get the index.
     const Expr *IdxExpr = CE->getArg(1);
-    SVal IdxVal = C.getSVal(IdxExpr);
+    SVal IdxVal = State->getSVal(IdxExpr, C.getLocationContext());
     if (IdxVal.isUnknownOrUndef())
       return;
     DefinedSVal Idx = IdxVal.castAs<DefinedSVal>();
@@ -144,11 +142,8 @@ void ObjCContainersChecker::checkPreStmt(const CallExpr *CE,
       if (!N)
         return;
       initBugType();
-      auto R = std::make_unique<PathSensitiveBugReport>(
-          *BT, "Index is out of bounds", N);
+      auto R = llvm::make_unique<BugReport>(*BT, "Index is out of bounds", N);
       R->addRange(IdxExpr->getSourceRange());
-      bugreporter::trackExpressionValue(
-          N, IdxExpr, *R, bugreporter::TrackingKind::Thorough, false);
       C.emitReport(std::move(R));
       return;
     }
@@ -171,23 +166,7 @@ ObjCContainersChecker::checkPointerEscape(ProgramStateRef State,
   return State;
 }
 
-void ObjCContainersChecker::printState(raw_ostream &OS, ProgramStateRef State,
-                                       const char *NL, const char *Sep) const {
-  ArraySizeMapTy Map = State->get<ArraySizeMap>();
-  if (Map.isEmpty())
-    return;
-
-  OS << Sep << "ObjC container sizes :" << NL;
-  for (auto I : Map) {
-    OS << I.first << " : " << I.second << NL;
-  }
-}
-
 /// Register checker.
 void ento::registerObjCContainersChecker(CheckerManager &mgr) {
   mgr.registerChecker<ObjCContainersChecker>();
-}
-
-bool ento::shouldRegisterObjCContainersChecker(const LangOptions &LO) {
-  return true;
 }

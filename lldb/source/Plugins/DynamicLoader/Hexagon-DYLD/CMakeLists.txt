@@ -1,10 +1,4 @@
-add_lldb_library(lldbPluginDynamicLoaderHexagonDYLD PLUGIN
+add_lldb_library(lldbPluginDynamicLoaderHexagonDYLD
   HexagonDYLDRendezvous.cpp
   DynamicLoaderHexagonDYLD.cpp
-
-  LINK_LIBS
-    lldbBreakpoint
-    lldbCore
-    lldbSymbol
-    lldbTarget
   )

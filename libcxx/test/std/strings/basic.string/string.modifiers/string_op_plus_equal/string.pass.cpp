@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,7 +27,7 @@ test(S s, S str, S expected)
     assert(s == expected);
 }
 
-int main(int, char**)
+int main()
 {
     {
     typedef std::string S;
@@ -76,15 +77,4 @@ int main(int, char**)
          S("1234567890123456789012345678901234567890"));
     }
 #endif
-
-#if TEST_STD_VER > 3
-    {   // LWG 2946
-    std::string s;
-    s += {"abc", 1};
-    assert(s.size() == 1);
-    assert(s == "a");
-    }
-#endif
-
-  return 0;
 }

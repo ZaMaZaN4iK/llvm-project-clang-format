@@ -1,8 +1,9 @@
 //===---- CodePreparation.cpp - Code preparation for Scop Detection -------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -15,14 +16,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "polly/CodePreparation.h"
 #include "polly/LinkAllPasses.h"
+#include "polly/ScopDetection.h"
 #include "polly/Support/ScopHelper.h"
 #include "llvm/Analysis/DominanceFrontier.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/RegionInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
-#include "llvm/InitializePasses.h"
+#include "llvm/Transforms/Utils/Local.h"
 
 using namespace llvm;
 using namespace polly;
@@ -40,6 +41,8 @@ class CodePreparation : public FunctionPass {
 
   void clear();
 
+  bool eliminatePHINodes(Function &F);
+
 public:
   static char ID;
 
@@ -56,28 +59,6 @@ public:
 };
 } // namespace
 
-PreservedAnalyses CodePreparationPass::run(Function &F,
-                                           FunctionAnalysisManager &FAM) {
-
-  // Find first non-alloca instruction. Every basic block has a non-alloca
-  // instruction, as every well formed basic block has a terminator.
-  auto &EntryBlock = F.getEntryBlock();
-  BasicBlock::iterator I = EntryBlock.begin();
-  while (isa<AllocaInst>(I))
-    ++I;
-
-  auto &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  auto &LI = FAM.getResult<LoopAnalysis>(F);
-
-  // splitBlock updates DT, LI and RI.
-  splitEntryBlockForAlloca(&EntryBlock, &DT, &LI, nullptr);
-
-  PreservedAnalyses PA;
-  PA.preserve<DominatorTreeAnalysis>();
-  PA.preserve<LoopAnalysis>();
-  return PA;
-}
-
 void CodePreparation::clear() {}
 
 CodePreparation::~CodePreparation() { clear(); }
@@ -93,15 +74,12 @@ void CodePreparation::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool CodePreparation::runOnFunction(Function &F) {
-  if (skipFunction(F))
-    return false;
-
   LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
   SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
 
   splitEntryBlockForAlloca(&F.getEntryBlock(), this);
 
-  return true;
+  return false;
 }
 
 void CodePreparation::releaseMemory() { clear(); }

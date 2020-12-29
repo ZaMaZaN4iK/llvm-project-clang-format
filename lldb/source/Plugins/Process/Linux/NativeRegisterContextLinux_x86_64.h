@@ -1,8 +1,9 @@
 //===-- NativeRegisterContextLinux_x86_64.h ---------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,7 +15,6 @@
 #include "Plugins/Process/Linux/NativeRegisterContextLinux.h"
 #include "Plugins/Process/Utility/RegisterContext_x86.h"
 #include "Plugins/Process/Utility/lldb-x86-register-enums.h"
-#include <sys/uio.h>
 
 namespace lldb_private {
 namespace process_linux {
@@ -24,7 +24,8 @@ class NativeProcessLinux;
 class NativeRegisterContextLinux_x86_64 : public NativeRegisterContextLinux {
 public:
   NativeRegisterContextLinux_x86_64(const ArchSpec &target_arch,
-                                    NativeThreadProtocol &native_thread);
+                                    NativeThreadProtocol &native_thread,
+                                    uint32_t concrete_frame_idx);
 
   uint32_t GetRegisterSetCount() const override;
 
@@ -32,30 +33,29 @@ public:
 
   uint32_t GetUserRegisterCount() const override;
 
-  Status ReadRegister(const RegisterInfo *reg_info,
-                      RegisterValue &reg_value) override;
+  Error ReadRegister(const RegisterInfo *reg_info,
+                     RegisterValue &reg_value) override;
 
-  Status WriteRegister(const RegisterInfo *reg_info,
-                       const RegisterValue &reg_value) override;
+  Error WriteRegister(const RegisterInfo *reg_info,
+                      const RegisterValue &reg_value) override;
 
-  Status ReadAllRegisterValues(lldb::DataBufferSP &data_sp) override;
+  Error ReadAllRegisterValues(lldb::DataBufferSP &data_sp) override;
 
-  Status WriteAllRegisterValues(const lldb::DataBufferSP &data_sp) override;
+  Error WriteAllRegisterValues(const lldb::DataBufferSP &data_sp) override;
 
-  Status IsWatchpointHit(uint32_t wp_index, bool &is_hit) override;
+  Error IsWatchpointHit(uint32_t wp_index, bool &is_hit) override;
 
-  Status GetWatchpointHitIndex(uint32_t &wp_index,
-                               lldb::addr_t trap_addr) override;
+  Error GetWatchpointHitIndex(uint32_t &wp_index,
+                              lldb::addr_t trap_addr) override;
 
-  Status IsWatchpointVacant(uint32_t wp_index, bool &is_vacant) override;
+  Error IsWatchpointVacant(uint32_t wp_index, bool &is_vacant) override;
 
   bool ClearHardwareWatchpoint(uint32_t wp_index) override;
 
-  Status ClearAllHardwareWatchpoints() override;
+  Error ClearAllHardwareWatchpoints() override;
 
-  Status SetHardwareWatchpointWithIndex(lldb::addr_t addr, size_t size,
-                                        uint32_t watch_flags,
-                                        uint32_t wp_index);
+  Error SetHardwareWatchpointWithIndex(lldb::addr_t addr, size_t size,
+                                       uint32_t watch_flags, uint32_t wp_index);
 
   uint32_t SetHardwareWatchpoint(lldb::addr_t addr, size_t size,
                                  uint32_t watch_flags) override;
@@ -71,11 +71,9 @@ protected:
 
   size_t GetFPRSize() override;
 
-  Status ReadFPR() override;
+  Error ReadFPR() override;
 
-  Status WriteFPR() override;
-
-  uint32_t GetPtraceOffset(uint32_t reg_index) override;
+  Error WriteFPR() override;
 
 private:
   // Private member types.
@@ -110,9 +108,8 @@ private:
 
   // Private member variables.
   mutable XStateType m_xstate_type;
-  std::unique_ptr<FPR, llvm::FreeDeleter>
-      m_xstate; // Extended States Area, named FPR for historical reasons.
-  struct iovec m_iovec;
+  FPR m_fpr; // Extended States Area, named FPR for historical reasons.
+  IOVEC m_iovec;
   YMM m_ymm_set;
   MPX m_mpx_set;
   RegInfo m_reg_info;
@@ -139,8 +136,6 @@ private:
   bool CopyMPXtoXSTATE(uint32_t reg);
 
   bool IsMPX(uint32_t reg_index) const;
-
-  void UpdateXSTATEforWrite(uint32_t reg_index);
 };
 
 } // namespace process_linux

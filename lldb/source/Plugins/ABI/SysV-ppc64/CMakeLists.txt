@@ -1,10 +1,3 @@
-add_lldb_library(lldbPluginABISysV_ppc64 PLUGIN
+add_lldb_library(lldbPluginABISysV_ppc64
   ABISysV_ppc64.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbSymbol
-    lldbTarget
-  LINK_COMPONENTS
-    Support
   )

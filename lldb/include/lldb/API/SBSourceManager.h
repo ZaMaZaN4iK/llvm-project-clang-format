@@ -1,8 +1,9 @@
 //===-- SBSourceManager.h ---------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -38,8 +39,10 @@ protected:
   friend class SBCommandInterpreter;
   friend class SBDebugger;
 
+  SBSourceManager(lldb_private::SourceManager *source_manager);
+
 private:
-  std::unique_ptr<lldb_private::SourceManagerImpl> m_opaque_up;
+  std::unique_ptr<lldb_private::SourceManagerImpl> m_opaque_ap;
 };
 
 } // namespace lldb

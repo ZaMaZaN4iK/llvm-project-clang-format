@@ -1,8 +1,9 @@
 //===- CVSymbolVisitor.h ----------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,9 +25,7 @@ public:
   CVSymbolVisitor(SymbolVisitorCallbacks &Callbacks);
 
   Error visitSymbolRecord(CVSymbol &Record);
-  Error visitSymbolRecord(CVSymbol &Record, uint32_t Offset);
   Error visitSymbolStream(const CVSymbolArray &Symbols);
-  Error visitSymbolStream(const CVSymbolArray &Symbols, uint32_t InitialOffset);
 
 private:
   SymbolVisitorCallbacks &Callbacks;

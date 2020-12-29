@@ -1,9 +1,10 @@
 //===-- lldb-mips-linux-register-enums.h -------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -13,7 +14,9 @@
 namespace lldb_private {
 // LLDB register codes (e.g. RegisterKind == eRegisterKindLLDB)
 
+//---------------------------------------------------------------------------
 // Internal codes for all mips registers.
+//---------------------------------------------------------------------------
 enum {
   k_first_gpr_mips,
   gpr_zero_mips = k_first_gpr_mips,
@@ -146,7 +149,9 @@ enum {
                               k_num_msa_registers_mips
 };
 
+//---------------------------------------------------------------------------
 // Internal codes for all mips64 registers.
+//---------------------------------------------------------------------------
 enum {
   k_first_gpr_mips64,
   gpr_zero_mips64 = k_first_gpr_mips64,

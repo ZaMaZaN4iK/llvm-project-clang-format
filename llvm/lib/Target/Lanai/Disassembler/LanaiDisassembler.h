@@ -1,8 +1,9 @@
 //===- LanaiDisassembler.cpp - Disassembler for Lanai -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -28,7 +29,8 @@ public:
   // getInstruction - See MCDisassembler.
   MCDisassembler::DecodeStatus
   getInstruction(MCInst &Instr, uint64_t &Size, ArrayRef<uint8_t> Bytes,
-                 uint64_t Address, raw_ostream &CStream) const override;
+                 uint64_t Address, raw_ostream &VStream,
+                 raw_ostream &CStream) const override;
 };
 
 } // end namespace llvm

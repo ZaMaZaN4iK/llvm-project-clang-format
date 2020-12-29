@@ -1,8 +1,9 @@
 //===- lld/Core/LinkingContext.h - Linker Target Info Interface -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,6 +16,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/raw_ostream.h"
 #include <cassert>
 #include <cstdint>
 #include <memory>
@@ -29,7 +31,7 @@ class Writer;
 class Node;
 class SharedLibraryFile;
 
-/// The LinkingContext class encapsulates "what and how" to link.
+/// \brief The LinkingContext class encapsulates "what and how" to link.
 ///
 /// The base class LinkingContext contains the options needed by core linking.
 /// Subclasses of LinkingContext have additional options needed by specific
@@ -60,7 +62,7 @@ public:
   /// of DefinedAtoms that should be marked live (along with all Atoms they
   /// reference). Only Atoms with scope scopeLinkageUnit or scopeGlobal can
   /// be kept live using this method.
-  ArrayRef<StringRef> deadStripRoots() const {
+  const std::vector<StringRef> &deadStripRoots() const {
     return _deadStripRoots;
   }
 
@@ -104,7 +106,7 @@ public:
   /// options which are used to configure LLVM's command line settings.
   /// For instance the -debug-only XXX option can be used to dynamically
   /// trace different parts of LLVM and lld.
-  ArrayRef<const char *> llvmOptions() const { return _llvmOptions; }
+  const std::vector<const char *> &llvmOptions() const { return _llvmOptions; }
 
   /// \name Methods used by Drivers to configure TargetInfo
   /// @{
@@ -165,10 +167,10 @@ public:
   /// After all set* methods are called, the Driver calls this method
   /// to validate that there are no missing options or invalid combinations
   /// of options.  If there is a problem, a description of the problem
-  /// is written to the global error handler.
+  /// is written to the supplied stream.
   ///
   /// \returns true if there is an error with the current settings.
-  bool validate();
+  bool validate(raw_ostream &diagnostics);
 
   /// Formats symbol name for use in error messages.
   virtual std::string demangle(StringRef symbolName) const = 0;
@@ -248,7 +250,7 @@ protected:
 
 private:
   /// Validate the subclass bits. Only called by validate.
-  virtual bool validateImpl() = 0;
+  virtual bool validateImpl(raw_ostream &diagnostics) = 0;
 };
 
 } // end namespace lld

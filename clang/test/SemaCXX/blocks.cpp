@@ -145,11 +145,3 @@ namespace test6c {
             A::foo(); });
   }
 }
-
-namespace test7 {
-struct S {};
-void f() {
-  constexpr S s;
-  auto some_block = ^{ (void)s; };
-}
-}

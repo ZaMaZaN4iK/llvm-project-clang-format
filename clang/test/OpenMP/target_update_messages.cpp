@@ -1,12 +1,4 @@
-// RUN: %clang_cc1 -verify -fopenmp -ferror-limit 100 %s -Wuninitialized
-
-// RUN: %clang_cc1 -verify -fopenmp-simd -ferror-limit 100 %s -Wuninitialized
-
-void xxx(int argc) {
-  int x; // expected-note {{initialize the variable 'x' to silence this warning}}
-#pragma omp target update to(x)
-  argc = x; // expected-warning {{variable 'x' is uninitialized when used here}}
-}
+// RUN: %clang_cc1 -verify -fopenmp -ferror-limit 100 %s
 
 void foo() {
 }
@@ -32,7 +24,7 @@ int main(int argc, char **argv) {
   #pragma omp target update to(m) ] // expected-warning {{extra tokens at the end of '#pragma omp target update' are ignored}}
   #pragma omp target update to(m) ) // expected-warning {{extra tokens at the end of '#pragma omp target update' are ignored}}
 
-  #pragma omp target update from(m) allocate(m) // expected-error {{unexpected OpenMP clause 'allocate' in directive '#pragma omp target update'}}
+  #pragma omp target update from(m) // OK
   {
     foo();
   }

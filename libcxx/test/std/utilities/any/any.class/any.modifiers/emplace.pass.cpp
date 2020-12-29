@@ -1,26 +1,25 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
 
-// XFAIL: dylib-has-no-bad_any_cast && !libcpp-no-exceptions
-
 // <any>
 
-// template <class T, class ...Args> T& emplace(Args&&...);
+// template <class T, class ...Args> emplace(Args&&...);
 // template <class T, class U, class ...Args>
-// T& emplace(initializer_list<U>, Args&&...);
+// void emplace(initializer_list<U>, Args&&...);
 
 #include <any>
 #include <cassert>
 
 #include "any_helpers.h"
-#include "count_new.h"
+#include "count_new.hpp"
 #include "test_macros.h"
 
 using std::any;
@@ -43,9 +42,7 @@ void test_emplace_type() {
         any a(std::in_place_type<Tracked>);
         assert(Tracked::count == 1);
 
-        auto &v = a.emplace<Type>();
-        static_assert( std::is_same_v<Type&, decltype(v)>, "" );
-        assert(&v == std::any_cast<Type>(&a));
+        a.emplace<Type>();
 
         assert(Tracked::count == 0);
         assert(Type::count == 1);
@@ -59,9 +56,7 @@ void test_emplace_type() {
         any a(std::in_place_type<Tracked>);
         assert(Tracked::count == 1);
 
-        auto &v = a.emplace<Type>(101);
-        static_assert( std::is_same_v<Type&, decltype(v)>, "" );
-        assert(&v == std::any_cast<Type>(&a));
+        a.emplace<Type>(101);
 
         assert(Tracked::count == 0);
         assert(Type::count == 1);
@@ -75,9 +70,7 @@ void test_emplace_type() {
         any a(std::in_place_type<Tracked>);
         assert(Tracked::count == 1);
 
-        auto &v = a.emplace<Type>(-1, 42, -1);
-        static_assert( std::is_same_v<Type&, decltype(v)>, "" );
-        assert(&v == std::any_cast<Type>(&a));
+        a.emplace<Type>(-1, 42, -1);
 
         assert(Tracked::count == 0);
         assert(Type::count == 1);
@@ -96,20 +89,14 @@ void test_emplace_type_tracked() {
     {
         any a(std::in_place_type<Tracked>);
         assert(Tracked::count == 1);
-        auto &v = a.emplace<Type>();
-        static_assert( std::is_same_v<Type&, decltype(v)>, "" );
-        assert(&v == std::any_cast<Type>(&a));
-
+        a.emplace<Type>();
         assert(Tracked::count == 0);
         assertArgsMatch<Type>(a);
     }
     {
         any a(std::in_place_type<Tracked>);
         assert(Tracked::count == 1);
-        auto &v = a.emplace<Type>(-1, 42, -1);
-        static_assert( std::is_same_v<Type&, decltype(v)>, "" );
-        assert(&v == std::any_cast<Type>(&a));
-
+        a.emplace<Type>(-1, 42, -1);
         assert(Tracked::count == 0);
         assertArgsMatch<Type, int, int, int>(a);
     }
@@ -117,10 +104,7 @@ void test_emplace_type_tracked() {
     {
         any a(std::in_place_type<Tracked>);
         assert(Tracked::count == 1);
-        auto &v = a.emplace<Type>({-1, 42, -1});
-        static_assert( std::is_same_v<Type&, decltype(v)>, "" );
-        assert(&v == std::any_cast<Type>(&a));
-
+        a.emplace<Type>({-1, 42, -1});
         assert(Tracked::count == 0);
         assertArgsMatch<Type, std::initializer_list<int>>(a);
     }
@@ -128,10 +112,7 @@ void test_emplace_type_tracked() {
         int x = 42;
         any a(std::in_place_type<Tracked>);
         assert(Tracked::count == 1);
-        auto &v = a.emplace<Type>({-1, 42, -1}, x);
-        static_assert( std::is_same_v<Type&, decltype(v)>, "" );
-        assert(&v == std::any_cast<Type>(&a));
-
+        a.emplace<Type>({-1, 42, -1}, x);
         assert(Tracked::count == 0);
         assertArgsMatch<Type, std::initializer_list<int>, int&>(a);
     }
@@ -160,8 +141,7 @@ void test_emplace_throws()
         std::any a(small{42});
         assert(small::count == 1);
         try {
-            auto &v = a.emplace<Type>(101);
-            static_assert( std::is_same_v<Type&, decltype(v)>, "" );
+            a.emplace<Type>(101);
             assert(false);
         } catch (int const&) {
         }
@@ -171,8 +151,7 @@ void test_emplace_throws()
         std::any a(small{42});
         assert(small::count == 1);
         try {
-            auto &v = a.emplace<Type>({1, 2, 3}, 101);
-            static_assert( std::is_same_v<Type&, decltype(v)>, "" );
+            a.emplace<Type>({1, 2, 3}, 101);
             assert(false);
         } catch (int const&) {
         }
@@ -183,8 +162,7 @@ void test_emplace_throws()
         std::any a(large{42});
         assert(large::count == 1);
         try {
-            auto &v = a.emplace<Type>(101);
-            static_assert( std::is_same_v<Type&, decltype(v)>, "" );
+            a.emplace<Type>(101);
             assert(false);
         } catch (int const&) {
         }
@@ -194,8 +172,7 @@ void test_emplace_throws()
         std::any a(large{42});
         assert(large::count == 1);
         try {
-            auto &v = a.emplace<Type>({1, 2, 3}, 101);
-            static_assert( std::is_same_v<Type&, decltype(v)>, "" );
+            a.emplace<Type>({1, 2, 3}, 101);
             assert(false);
         } catch (int const&) {
         }
@@ -269,7 +246,7 @@ void test_emplace_sfinae_constraints() {
     }
 }
 
-int main(int, char**) {
+int main() {
     test_emplace_type<small>();
     test_emplace_type<large>();
     test_emplace_type<small_throws_on_copy>();
@@ -282,6 +259,4 @@ int main(int, char**) {
     test_emplace_throws<SmallThrows>();
     test_emplace_throws<LargeThrows>();
 #endif
-
-  return 0;
 }

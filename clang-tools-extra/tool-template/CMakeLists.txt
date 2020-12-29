@@ -6,12 +6,10 @@ add_clang_executable(tool-template
   ToolTemplate.cpp
   )
 
-clang_target_link_libraries(tool-template
-  PRIVATE
+target_link_libraries(tool-template
   clangAST
   clangASTMatchers
   clangBasic
   clangFrontend
   clangTooling
-  clangToolingRefactoring
   )

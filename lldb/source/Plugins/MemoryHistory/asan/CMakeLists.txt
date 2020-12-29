@@ -1,9 +1,3 @@
-add_lldb_library(lldbPluginMemoryHistoryASan PLUGIN
+add_lldb_library(lldbPluginMemoryHistoryASan
   MemoryHistoryASan.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbExpression
-    lldbTarget
-    lldbPluginProcessUtility
   )

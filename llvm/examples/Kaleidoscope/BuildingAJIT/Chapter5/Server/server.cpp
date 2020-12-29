@@ -1,18 +1,16 @@
-#include "../RemoteJITUtils.h"
-#include "llvm/ExecutionEngine/RTDyldMemoryManager.h"
-#include "llvm/ExecutionEngine/Orc/OrcRemoteTargetServer.h"
-#include "llvm/ExecutionEngine/Orc/OrcABISupport.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/DynamicLibrary.h"
-#include "llvm/Support/Error.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/TargetSelect.h"
-#include <cstdint>
-#include <cstdio>
+#include "llvm/ExecutionEngine/Orc/OrcRemoteTargetServer.h"
+#include "llvm/ExecutionEngine/Orc/OrcABISupport.h"
+
+#include "../RemoteJITUtils.h"
+
 #include <cstring>
-#include <string>
+#include <unistd.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+
 
 using namespace llvm;
 using namespace llvm::orc;
@@ -24,7 +22,7 @@ cl::opt<uint32_t> Port("port",
 
 ExitOnError ExitOnErr;
 
-using MainFun = int (*)(int, const char*[]);
+typedef int (*MainFun)(int, const char*[]);
 
 template <typename NativePtrT>
 NativePtrT MakeNative(uint64_t P) {
@@ -38,6 +36,7 @@ void printExprResult(double Val) {
 
 // --- LAZY COMPILE TEST ---
 int main(int argc, char* argv[]) {
+
   if (argc == 0)
     ExitOnErr.setBanner("jit_server: ");
   else
@@ -60,14 +59,14 @@ int main(int argc, char* argv[]) {
   int sockfd = socket(PF_INET, SOCK_STREAM, 0);
   sockaddr_in servAddr, clientAddr;
   socklen_t clientAddrLen = sizeof(clientAddr);
-  memset(&servAddr, 0, sizeof(servAddr));
+  bzero(&servAddr, sizeof(servAddr));
   servAddr.sin_family = PF_INET;
   servAddr.sin_family = INADDR_ANY;
   servAddr.sin_port = htons(Port);
 
   {
     // avoid "Address already in use" error.
-    int yes = 1;
+    int yes=1;
     if (setsockopt(sockfd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(int)) == -1) {
       errs() << "Error calling setsockopt.\n";
       return 1;
@@ -99,8 +98,7 @@ int main(int argc, char* argv[]) {
     };
 
   FDRPCChannel TCPChannel(newsockfd, newsockfd);
-
-  using MyServerT = remote::OrcRemoteTargetServer<FDRPCChannel, OrcX86_64_SysV>;
+  typedef remote::OrcRemoteTargetServer<FDRPCChannel, OrcX86_64_SysV> MyServerT;
 
   MyServerT Server(TCPChannel, SymbolLookup, RegisterEHFrames, DeregisterEHFrames);
 

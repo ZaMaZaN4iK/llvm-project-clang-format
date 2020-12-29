@@ -1,31 +1,30 @@
 // -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 // UNSUPPORTED: c++98, c++03, c++11, c++14
 
-// XFAIL: dylib-has-no-bad_variant_access && !libcpp-no-exceptions
-
 // <variant>
 
 // template <class ...Types> class variant;
 
-// template <class T, class ...Args> T& emplace(Args&&... args);
+// template <class T, class ...Args> void emplace(Args&&... args);
 
 #include <cassert>
 #include <string>
 #include <type_traits>
 #include <variant>
 
-#include "archetypes.h"
-#include "test_convertible.h"
+#include "archetypes.hpp"
+#include "test_convertible.hpp"
 #include "test_macros.h"
-#include "variant_test_helpers.h"
+#include "variant_test_helpers.hpp"
 
 template <class Var, class T, class... Args>
 constexpr auto test_emplace_exists_imp(int) -> decltype(
@@ -87,14 +86,10 @@ void test_basic() {
   {
     using V = std::variant<int>;
     V v(42);
-    auto& ref1 = v.emplace<int>();
-    static_assert(std::is_same_v<int&, decltype(ref1)>, "");
+    v.emplace<int>();
     assert(std::get<0>(v) == 0);
-    assert(&ref1 == &std::get<0>(v));
-    auto& ref2 = v.emplace<int>(42);
-    static_assert(std::is_same_v<int&, decltype(ref2)>, "");
+    v.emplace<int>(42);
     assert(std::get<0>(v) == 42);
-    assert(&ref2 == &std::get<0>(v));
   }
   {
     using V =
@@ -102,19 +97,13 @@ void test_basic() {
     const int x = 100;
     V v(std::in_place_type<int>, -1);
     // default emplace a value
-    auto& ref1 = v.emplace<long>();
-    static_assert(std::is_same_v<long&, decltype(ref1)>, "");
+    v.emplace<long>();
     assert(std::get<1>(v) == 0);
-    assert(&ref1 == &std::get<1>(v));
-    auto& ref2 = v.emplace<const void *>(&x);
-    static_assert(std::is_same_v<const void *&, decltype(ref2)>, "");
+    v.emplace<const void *>(&x);
     assert(std::get<2>(v) == &x);
-    assert(&ref2 == &std::get<2>(v));
     // emplace with multiple args
-    auto& ref3 = v.emplace<std::string>(3u, 'a');
-    static_assert(std::is_same_v<std::string&, decltype(ref3)>, "");
+    v.emplace<std::string>(3, 'a');
     assert(std::get<4>(v) == "aaa");
-    assert(&ref3 == &std::get<4>(v));
   }
 #if !defined(TEST_VARIANT_HAS_NO_REFERENCES)
   {
@@ -125,37 +114,25 @@ void test_basic() {
     int z = 43;
     V v(std::in_place_index<0>, -1);
     // default emplace a value
-    auto& ref1 = v.emplace<long>();
-    static_assert(std::is_same_v<long&, decltype(ref1)>, "");
+    v.emplace<long>();
     assert(std::get<long>(v) == 0);
-    assert(&ref1 == &std::get<long>(v));
     // emplace a reference
-    auto& ref2 = v.emplace<const int &>(x);
-    static_assert(std::is_same_v<const int&, decltype(ref2)>, "");
+    v.emplace<const int &>(x);
     assert(&std::get<const int &>(v) == &x);
-    assert(&ref2 == &std::get<const int &>(v));
     // emplace an rvalue reference
-    auto& ref3 = v.emplace<int &&>(std::move(y));
-    static_assert(std::is_same_v<int &&, decltype(ref3)>, "");
+    v.emplace<int &&>(std::move(y));
     assert(&std::get<int &&>(v) == &y);
-    assert(&ref3 == &std::get<int &&>(v));
     // re-emplace a new reference over the active member
-    auto& ref4 = v.emplace<int &&>(std::move(z));
-    static_assert(std::is_same_v<int &, decltype(ref4)>, "");
+    v.emplace<int &&>(std::move(z));
     assert(&std::get<int &&>(v) == &z);
-    assert(&ref4 == &std::get<int &&>(v));
     // emplace with multiple args
-    auto& ref5 = v.emplace<std::string>(3u, 'a');
-    static_assert(std::is_same_v<std::string&, decltype(ref5)>, "");
+    v.emplace<std::string>(3, 'a');
     assert(std::get<std::string>(v) == "aaa");
-    assert(&ref5 == &std::get<std::string>(v));
   }
 #endif
 }
 
-int main(int, char**) {
+int main() {
   test_basic();
   test_emplace_sfinae();
-
-  return 0;
 }

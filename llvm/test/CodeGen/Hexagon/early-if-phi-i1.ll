@@ -1,4 +1,4 @@
-; RUN: llc -march=hexagon < %s
+; RUN: llc < %s
 ; REQUIRES: asserts
 ; Check that the early if-conversion does not predicate block1 (where the
 ; join block has a phi node of type i1).

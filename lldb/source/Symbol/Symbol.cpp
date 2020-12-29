@@ -1,8 +1,9 @@
 //===-- Symbol.cpp ----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,13 +12,13 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/Section.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Symbol/Function.h"
 #include "lldb/Symbol/ObjectFile.h"
 #include "lldb/Symbol/SymbolVendor.h"
 #include "lldb/Symbol/Symtab.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/Stream.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -28,11 +29,11 @@ Symbol::Symbol()
       m_is_external(false), m_size_is_sibling(false),
       m_size_is_synthesized(false), m_size_is_valid(false),
       m_demangled_is_synthesized(false), m_contains_linker_annotations(false),
-      m_is_weak(false), m_type(eSymbolTypeInvalid), m_mangled(), m_addr_range(),
-      m_flags() {}
+      m_type(eSymbolTypeInvalid), m_mangled(), m_addr_range(), m_flags() {}
 
-Symbol::Symbol(uint32_t symID, llvm::StringRef name, SymbolType type, bool external,
-               bool is_debug, bool is_trampoline, bool is_artificial,
+Symbol::Symbol(uint32_t symID, const char *name, bool name_is_mangled,
+               SymbolType type, bool external, bool is_debug,
+               bool is_trampoline, bool is_artificial,
                const lldb::SectionSP &section_sp, addr_t offset, addr_t size,
                bool size_is_valid, bool contains_linker_annotations,
                uint32_t flags)
@@ -41,9 +42,8 @@ Symbol::Symbol(uint32_t symID, llvm::StringRef name, SymbolType type, bool exter
       m_is_debug(is_debug), m_is_external(external), m_size_is_sibling(false),
       m_size_is_synthesized(false), m_size_is_valid(size_is_valid || size > 0),
       m_demangled_is_synthesized(false),
-      m_contains_linker_annotations(contains_linker_annotations),
-      m_is_weak(false), m_type(type),
-      m_mangled(name),
+      m_contains_linker_annotations(contains_linker_annotations), m_type(type),
+      m_mangled(ConstString(name), name_is_mangled),
       m_addr_range(section_sp, offset, size), m_flags(flags) {}
 
 Symbol::Symbol(uint32_t symID, const Mangled &mangled, SymbolType type,
@@ -57,9 +57,8 @@ Symbol::Symbol(uint32_t symID, const Mangled &mangled, SymbolType type,
       m_size_is_synthesized(false),
       m_size_is_valid(size_is_valid || range.GetByteSize() > 0),
       m_demangled_is_synthesized(false),
-      m_contains_linker_annotations(contains_linker_annotations), 
-      m_is_weak(false), m_type(type), m_mangled(mangled), m_addr_range(range), 
-      m_flags(flags) {}
+      m_contains_linker_annotations(contains_linker_annotations), m_type(type),
+      m_mangled(mangled), m_addr_range(range), m_flags(flags) {}
 
 Symbol::Symbol(const Symbol &rhs)
     : SymbolContextScope(rhs), m_uid(rhs.m_uid), m_type_data(rhs.m_type_data),
@@ -70,7 +69,7 @@ Symbol::Symbol(const Symbol &rhs)
       m_size_is_valid(rhs.m_size_is_valid),
       m_demangled_is_synthesized(rhs.m_demangled_is_synthesized),
       m_contains_linker_annotations(rhs.m_contains_linker_annotations),
-      m_is_weak(rhs.m_is_weak), m_type(rhs.m_type), m_mangled(rhs.m_mangled),
+      m_type(rhs.m_type), m_mangled(rhs.m_mangled),
       m_addr_range(rhs.m_addr_range), m_flags(rhs.m_flags) {}
 
 const Symbol &Symbol::operator=(const Symbol &rhs) {
@@ -87,7 +86,6 @@ const Symbol &Symbol::operator=(const Symbol &rhs) {
     m_size_is_valid = rhs.m_size_is_valid;
     m_demangled_is_synthesized = rhs.m_demangled_is_synthesized;
     m_contains_linker_annotations = rhs.m_contains_linker_annotations;
-    m_is_weak = rhs.m_is_weak;
     m_type = rhs.m_type;
     m_mangled = rhs.m_mangled;
     m_addr_range = rhs.m_addr_range;
@@ -109,7 +107,6 @@ void Symbol::Clear() {
   m_size_is_valid = false;
   m_demangled_is_synthesized = false;
   m_contains_linker_annotations = false;
-  m_is_weak = false;
   m_type = eSymbolTypeInvalid;
   m_flags = 0;
   m_addr_range.Clear();
@@ -125,9 +122,9 @@ ConstString Symbol::GetDisplayName() const {
 
 ConstString Symbol::GetReExportedSymbolName() const {
   if (m_type == eSymbolTypeReExported) {
-    // For eSymbolTypeReExported, the "const char *" from a ConstString is used
-    // as the offset in the address range base address. We can then make this
-    // back into a string that is the re-exported name.
+    // For eSymbolTypeReExported, the "const char *" from a ConstString
+    // is used as the offset in the address range base address. We can
+    // then make this back into a string that is the re-exported name.
     intptr_t str_ptr = m_addr_range.GetBaseAddress().GetOffset();
     if (str_ptr != 0)
       return ConstString((const char *)str_ptr);
@@ -139,27 +136,27 @@ ConstString Symbol::GetReExportedSymbolName() const {
 
 FileSpec Symbol::GetReExportedSymbolSharedLibrary() const {
   if (m_type == eSymbolTypeReExported) {
-    // For eSymbolTypeReExported, the "const char *" from a ConstString is used
-    // as the offset in the address range base address. We can then make this
-    // back into a string that is the re-exported name.
+    // For eSymbolTypeReExported, the "const char *" from a ConstString
+    // is used as the offset in the address range base address. We can
+    // then make this back into a string that is the re-exported name.
     intptr_t str_ptr = m_addr_range.GetByteSize();
     if (str_ptr != 0)
-      return FileSpec((const char *)str_ptr);
+      return FileSpec((const char *)str_ptr, false);
   }
   return FileSpec();
 }
 
-void Symbol::SetReExportedSymbolName(ConstString name) {
+void Symbol::SetReExportedSymbolName(const ConstString &name) {
   SetType(eSymbolTypeReExported);
-  // For eSymbolTypeReExported, the "const char *" from a ConstString is used
-  // as the offset in the address range base address.
+  // For eSymbolTypeReExported, the "const char *" from a ConstString
+  // is used as the offset in the address range base address.
   m_addr_range.GetBaseAddress().SetOffset((uintptr_t)name.GetCString());
 }
 
 bool Symbol::SetReExportedSymbolSharedLibrary(const FileSpec &fspec) {
   if (m_type == eSymbolTypeReExported) {
-    // For eSymbolTypeReExported, the "const char *" from a ConstString is used
-    // as the offset in the address range base address.
+    // For eSymbolTypeReExported, the "const char *" from a ConstString
+    // is used as the offset in the address range base address.
     m_addr_range.SetByteSize(
         (uintptr_t)ConstString(fspec.GetPath().c_str()).GetCString());
     return true;
@@ -210,8 +207,7 @@ void Symbol::GetDescription(Stream *s, lldb::DescriptionLevel level,
     s->Printf(", mangled=\"%s\"", m_mangled.GetMangledName().AsCString());
 }
 
-void Symbol::Dump(Stream *s, Target *target, uint32_t index,
-                  Mangled::NamePreference name_preference) const {
+void Symbol::Dump(Stream *s, Target *target, uint32_t index) const {
   s->Printf("[%5u] %6u %c%c%c %-15s ", index, GetID(), m_is_debug ? 'D' : ' ',
             m_is_synthetic ? 'S' : ' ', m_is_external ? 'X' : ' ',
             GetTypeAsString());
@@ -219,7 +215,7 @@ void Symbol::Dump(Stream *s, Target *target, uint32_t index,
   // Make sure the size of the symbol is up to date before dumping
   GetByteSize();
 
-  ConstString name = m_mangled.GetName(GetLanguage(), name_preference);
+  ConstString name = m_mangled.GetName(GetLanguage());
   if (ValueIsAddress()) {
     if (!m_addr_range.GetBaseAddress().Dump(s, nullptr,
                                             Address::DumpStyleFileAddress))
@@ -266,8 +262,9 @@ uint32_t Symbol::GetPrologueByteSize() {
       Function *function = base_address.CalculateSymbolContextFunction();
       if (function) {
         // Functions have line entries which can also potentially have end of
-        // prologue information. So if this symbol points to a function, use
-        // the prologue information from there.
+        // prologue information.
+        // So if this symbol points to a function, use the prologue information
+        // from there.
         m_type_data = function->GetPrologueByteSize();
       } else {
         ModuleSP module_sp(base_address.GetModule());
@@ -283,9 +280,10 @@ uint32_t Symbol::GetPrologueByteSize() {
             Address addr(base_address);
             addr.Slide(m_type_data);
 
-            // Check the first few instructions and look for one that has a
-            // line number that is different than the first entry. This is also
-            // done in Function::GetPrologueByteSize().
+            // Check the first few instructions and look for one that has a line
+            // number that is
+            // different than the first entry. This is also done in
+            // Function::GetPrologueByteSize().
             uint16_t total_offset = m_type_data;
             for (int idx = 0; idx < 6; ++idx) {
               SymbolContext sc_temp;
@@ -295,8 +293,8 @@ uint32_t Symbol::GetPrologueByteSize() {
               if (!(resolved_flags & eSymbolContextLineEntry))
                 break;
 
-              // If this line number is different than our first one, use it
-              // and we're done.
+              // If this line number is different than our first one, use it and
+              // we're done.
               if (sc_temp.line_entry.line != sc.line_entry.line) {
                 m_type_data = total_offset;
                 break;
@@ -311,10 +309,12 @@ uint32_t Symbol::GetPrologueByteSize() {
             }
 
             // Sanity check - this may be a function in the middle of code that
-            // has debug information, but not for this symbol.  So the line
-            // entries surrounding us won't lie inside our function. In that
-            // case, the line entry will be bigger than we are, so we do that
-            // quick check and if that is true, we just return 0.
+            // has debug information, but
+            // not for this symbol.  So the line entries surrounding us won't
+            // lie inside our function.
+            // In that case, the line entry will be bigger than we are, so we do
+            // that quick check and
+            // if that is true, we just return 0.
             if (m_type_data >= m_addr_range.GetByteSize())
               m_type_data = 0;
           } else {
@@ -330,7 +330,7 @@ uint32_t Symbol::GetPrologueByteSize() {
   return 0;
 }
 
-bool Symbol::Compare(ConstString name, SymbolType type) const {
+bool Symbol::Compare(const ConstString &name, SymbolType type) const {
   if (type == eSymbolTypeAny || m_type == type)
     return m_mangled.GetMangledName() == name ||
            m_mangled.GetDemangledName(GetLanguage()) == name;
@@ -420,9 +420,9 @@ Symbol *Symbol::ResolveReExportedSymbolInModuleSpec(
     // Try searching for the module file spec first using the full path
     module_sp = target.GetImages().FindFirstModule(module_spec);
     if (!module_sp) {
-      // Next try and find the module by basename in case environment variables
-      // or other runtime trickery causes shared libraries to be loaded from
-      // alternate paths
+      // Next try and find the module by basename in case environment
+      // variables or other runtime trickery causes shared libraries
+      // to be loaded from alternate paths
       module_spec.GetFileSpec().GetDirectory().Clear();
       module_sp = target.GetImages().FindFirstModule(module_spec);
     }
@@ -430,7 +430,8 @@ Symbol *Symbol::ResolveReExportedSymbolInModuleSpec(
 
   if (module_sp) {
     // There should not be cycles in the reexport list, but we don't want to
-    // crash if there are so make sure we haven't seen this before:
+    // crash if there are so make sure
+    // we haven't seen this before:
     if (!seen_modules.AppendIfNeeded(module_sp))
       return nullptr;
 
@@ -448,8 +449,8 @@ Symbol *Symbol::ResolveReExportedSymbolInModuleSpec(
       }
     }
     // If we didn't find the symbol in this module, it may be because this
-    // module re-exports some whole other library.  We have to search those as
-    // well:
+    // module re-exports some
+    // whole other library.  We have to search those as well:
     seen_modules.Append(module_sp);
 
     FileSpecList reexported_libraries =

@@ -1,8 +1,9 @@
 //===- llvm/CodeGen/SlotIndexes.h - Slot indexes representation -*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -23,21 +24,12 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/ilist.h"
-#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
-#include "llvm/Pass.h"
 #include "llvm/Support/Allocator.h"
-#include <algorithm>
-#include <cassert>
-#include <iterator>
-#include <utility>
 
 namespace llvm {
-
-class raw_ostream;
 
   /// This class represents an entry in the slot index list held in the
   /// SlotIndexes pass. It should not be used directly. See the
@@ -48,6 +40,7 @@ class raw_ostream;
     unsigned index;
 
   public:
+
     IndexListEntry(MachineInstr *mi, unsigned index) : mi(mi), index(index) {}
 
     MachineInstr* getInstr() const { return mi; }
@@ -138,7 +131,7 @@ class raw_ostream;
     };
 
     /// Construct an invalid index.
-    SlotIndex() = default;
+    SlotIndex() : lie(nullptr, 0) {}
 
     // Construct a new slot index from the given one, and set the slot.
     SlotIndex(const SlotIndex &li, Slot s) : lie(li.listEntry(), unsigned(s)) {
@@ -301,12 +294,28 @@ class raw_ostream;
     }
   };
 
+  template <> struct isPodLike<SlotIndex> { static const bool value = true; };
+
   inline raw_ostream& operator<<(raw_ostream &os, SlotIndex li) {
     li.print(os);
     return os;
   }
 
-  using IdxMBBPair = std::pair<SlotIndex, MachineBasicBlock *>;
+  typedef std::pair<SlotIndex, MachineBasicBlock*> IdxMBBPair;
+
+  inline bool operator<(SlotIndex V, const IdxMBBPair &IM) {
+    return V < IM.first;
+  }
+
+  inline bool operator<(const IdxMBBPair &IM, SlotIndex V) {
+    return IM.first < V;
+  }
+
+  struct Idx2MBBCompare {
+    bool operator()(const IdxMBBPair &LHS, const IdxMBBPair &RHS) const {
+      return LHS.first < RHS.first;
+    }
+  };
 
   /// SlotIndexes pass.
   ///
@@ -316,12 +325,16 @@ class raw_ostream;
     // IndexListEntry allocator.
     BumpPtrAllocator ileAllocator;
 
-    using IndexList = ilist<IndexListEntry>;
+    typedef ilist<IndexListEntry> IndexList;
     IndexList indexList;
+
+#ifdef EXPENSIVE_CHECKS
+    IndexList graveyardList;
+#endif // EXPENSIVE_CHECKS
 
     MachineFunction *mf;
 
-    using Mi2IndexMap = DenseMap<const MachineInstr *, SlotIndex>;
+    typedef DenseMap<const MachineInstr*, SlotIndex> Mi2IndexMap;
     Mi2IndexMap mi2iMap;
 
     /// MBBRanges - Map MBB number to (start, stop) indexes.
@@ -347,9 +360,14 @@ class raw_ostream;
   public:
     static char ID;
 
-    SlotIndexes();
+    SlotIndexes() : MachineFunctionPass(ID) {
+      initializeSlotIndexesPass(*PassRegistry::getPassRegistry());
+    }
 
-    ~SlotIndexes() override;
+    ~SlotIndexes() override {
+      // The indexList's nodes are all allocated in the BumpPtrAllocator.
+      indexList.clearAndLeakNodesUnsafely();
+    }
 
     void getAnalysisUsage(AnalysisUsage &au) const override;
     void releaseMemory() override;
@@ -358,6 +376,9 @@ class raw_ostream;
 
     /// Dump the indexes.
     void dump() const;
+
+    /// Renumber the index list, providing space for new instructions.
+    void renumberIndexes();
 
     /// Repair indexes after adding and removing instructions.
     void repairIndexesInRange(MachineBasicBlock *MBB,
@@ -384,14 +405,8 @@ class raw_ostream;
     /// Returns the base index for the given instruction.
     SlotIndex getInstructionIndex(const MachineInstr &MI) const {
       // Instructions inside a bundle have the same number as the bundle itself.
-      auto BundleStart = getBundleStart(MI.getIterator());
-      auto BundleEnd = getBundleEnd(MI.getIterator());
-      // Use the first non-debug instruction in the bundle to get SlotIndex.
-      const MachineInstr &BundleNonDebug =
-          *skipDebugInstructionsForward(BundleStart, BundleEnd);
-      assert(!BundleNonDebug.isDebugInstr() &&
-             "Could not use a debug instruction to query mi2iMap.");
-      Mi2IndexMap::const_iterator itr = mi2iMap.find(&BundleNonDebug);
+      const MachineInstr &BundleStart = *getBundleStart(MI.getIterator());
+      Mi2IndexMap::const_iterator itr = mi2iMap.find(&BundleStart);
       assert(itr != mi2iMap.end() && "Instruction not found in maps.");
       return itr->second;
     }
@@ -419,9 +434,9 @@ class raw_ostream;
     /// MI is not required to have an index.
     SlotIndex getIndexBefore(const MachineInstr &MI) const {
       const MachineBasicBlock *MBB = MI.getParent();
-      assert(MBB && "MI must be inserted in a basic block");
+      assert(MBB && "MI must be inserted inna basic block");
       MachineBasicBlock::const_iterator I = MI, B = MBB->begin();
-      while (true) {
+      for (;;) {
         if (I == B)
           return getMBBStartIdx(MBB);
         --I;
@@ -436,9 +451,9 @@ class raw_ostream;
     /// MI is not required to have an index.
     SlotIndex getIndexAfter(const MachineInstr &MI) const {
       const MachineBasicBlock *MBB = MI.getParent();
-      assert(MBB && "MI must be inserted in a basic block");
+      assert(MBB && "MI must be inserted inna basic block");
       MachineBasicBlock::const_iterator I = MI, E = MBB->end();
-      while (true) {
+      for (;;) {
         ++I;
         if (I == E)
           return getMBBEndIdx(MBB);
@@ -482,27 +497,21 @@ class raw_ostream;
 
     /// Iterator over the idx2MBBMap (sorted pairs of slot index of basic block
     /// begin and basic block)
-    using MBBIndexIterator = SmallVectorImpl<IdxMBBPair>::const_iterator;
-
+    typedef SmallVectorImpl<IdxMBBPair>::const_iterator MBBIndexIterator;
     /// Move iterator to the next IdxMBBPair where the SlotIndex is greater or
     /// equal to \p To.
     MBBIndexIterator advanceMBBIndex(MBBIndexIterator I, SlotIndex To) const {
-      return std::partition_point(
-          I, idx2MBBMap.end(),
-          [=](const IdxMBBPair &IM) { return IM.first < To; });
+      return std::lower_bound(I, idx2MBBMap.end(), To);
     }
-
     /// Get an iterator pointing to the IdxMBBPair with the biggest SlotIndex
     /// that is greater or equal to \p Idx.
     MBBIndexIterator findMBBIndex(SlotIndex Idx) const {
       return advanceMBBIndex(idx2MBBMap.begin(), Idx);
     }
-
     /// Returns an iterator for the begin of the idx2MBBMap.
     MBBIndexIterator MBBIndexBegin() const {
       return idx2MBBMap.begin();
     }
-
     /// Return an iterator for the end of the idx2MBBMap.
     MBBIndexIterator MBBIndexEnd() const {
       return idx2MBBMap.end();
@@ -525,6 +534,29 @@ class raw_ostream;
       return J->second;
     }
 
+    /// Returns the MBB covering the given range, or null if the range covers
+    /// more than one basic block.
+    MachineBasicBlock* getMBBCoveringRange(SlotIndex start, SlotIndex end) const {
+
+      assert(start < end && "Backwards ranges not allowed.");
+      MBBIndexIterator itr = findMBBIndex(start);
+      if (itr == MBBIndexEnd()) {
+        itr = std::prev(itr);
+        return itr->second;
+      }
+
+      // Check that we don't cross the boundary into this block.
+      if (itr->first < end)
+        return nullptr;
+
+      itr = std::prev(itr);
+
+      if (itr->first <= start)
+        return itr->second;
+
+      return nullptr;
+    }
+
     /// Insert the given machine instruction into the mapping. Returns the
     /// assigned index.
     /// If Late is set and there are null indexes between mi's neighboring
@@ -534,9 +566,9 @@ class raw_ostream;
       assert(!MI.isInsideBundle() &&
              "Instructions inside bundles should use bundle start's slot.");
       assert(mi2iMap.find(&MI) == mi2iMap.end() && "Instr already indexed.");
-      // Numbering debug instructions could cause code generation to be
+      // Numbering DBG_VALUE instructions could cause code generation to be
       // affected by debug information.
-      assert(!MI.isDebugInstr() && "Cannot number debug instructions.");
+      assert(!MI.isDebugValue() && "Cannot number DBG_VALUE instructions.");
 
       assert(MI.getParent() != nullptr && "Instr must be added to function.");
 
@@ -570,15 +602,19 @@ class raw_ostream;
       return newIndex;
     }
 
-    /// Removes machine instruction (bundle) \p MI from the mapping.
-    /// This should be called before MachineInstr::eraseFromParent() is used to
-    /// remove a whole bundle or an unbundled instruction.
-    void removeMachineInstrFromMaps(MachineInstr &MI);
-
-    /// Removes a single machine instruction \p MI from the mapping.
-    /// This should be called before MachineInstr::eraseFromBundle() is used to
-    /// remove a single instruction (out of a bundle).
-    void removeSingleMachineInstrFromMaps(MachineInstr &MI);
+    /// Remove the given machine instruction from the mapping.
+    void removeMachineInstrFromMaps(MachineInstr &MI) {
+      // remove index -> MachineInstr and
+      // MachineInstr -> index mappings
+      Mi2IndexMap::iterator mi2iItr = mi2iMap.find(&MI);
+      if (mi2iItr != mi2iMap.end()) {
+        IndexListEntry *miEntry(mi2iItr->second.listEntry());
+        assert(miEntry->getInstr() == &MI && "Instruction indexes broken.");
+        // FIXME: Eventually we want to actually delete these indexes.
+        miEntry->setInstr(nullptr);
+        mi2iMap.erase(mi2iItr);
+      }
+    }
 
     /// ReplaceMachineInstrInMaps - Replacing a machine instr with a new one in
     /// maps used by register allocator. \returns the index where the new
@@ -630,7 +666,33 @@ class raw_ostream;
       idx2MBBMap.push_back(IdxMBBPair(startIdx, mbb));
 
       renumberIndexes(newItr);
-      llvm::sort(idx2MBBMap, less_first());
+      std::sort(idx2MBBMap.begin(), idx2MBBMap.end(), Idx2MBBCompare());
+    }
+
+    /// \brief Free the resources that were required to maintain a SlotIndex.
+    ///
+    /// Once an index is no longer needed (for instance because the instruction
+    /// at that index has been moved), the resources required to maintain the
+    /// index can be relinquished to reduce memory use and improve renumbering
+    /// performance. Any remaining SlotIndex objects that point to the same
+    /// index are left 'dangling' (much the same as a dangling pointer to a
+    /// freed object) and should not be accessed, except to destruct them.
+    ///
+    /// Like dangling pointers, access to dangling SlotIndexes can cause
+    /// painful-to-track-down bugs, especially if the memory for the index
+    /// previously pointed to has been re-used. To detect dangling SlotIndex
+    /// bugs, build with EXPENSIVE_CHECKS=1. This will cause "erased" indexes to
+    /// be retained in a graveyard instead of being freed. Operations on indexes
+    /// in the graveyard will trigger an assertion.
+    void eraseIndex(SlotIndex index) {
+      IndexListEntry *entry = index.listEntry();
+#ifdef EXPENSIVE_CHECKS
+      indexList.remove(entry);
+      graveyardList.push_back(entry);
+      entry->setPoison();
+#else
+      indexList.erase(entry);
+#endif
     }
   };
 

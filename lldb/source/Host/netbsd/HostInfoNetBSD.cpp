@@ -1,8 +1,9 @@
 //===-- HostInfoNetBSD.cpp -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,26 +21,34 @@
 
 using namespace lldb_private;
 
-llvm::VersionTuple HostInfoNetBSD::GetOSVersion() {
+uint32_t HostInfoNetBSD::GetMaxThreadNameLength() {
+  return PTHREAD_MAX_NAMELEN_NP;
+}
+
+bool HostInfoNetBSD::GetOSVersion(uint32_t &major, uint32_t &minor,
+                                  uint32_t &update) {
   struct utsname un;
 
   ::memset(&un, 0, sizeof(un));
   if (::uname(&un) < 0)
-    return llvm::VersionTuple();
+    return false;
 
   /* Accept versions like 7.99.21 and 6.1_STABLE */
-  uint32_t major, minor, update;
   int status = ::sscanf(un.release, "%" PRIu32 ".%" PRIu32 ".%" PRIu32, &major,
                         &minor, &update);
   switch (status) {
+  case 0:
+    return false;
   case 1:
-    return llvm::VersionTuple(major);
+    minor = 0;
+  /* FALLTHROUGH */
   case 2:
-    return llvm::VersionTuple(major, minor);
+    update = 0;
+  /* FALLTHROUGH */
   case 3:
-    return llvm::VersionTuple(major, minor, update);
+  default:
+    return true;
   }
-  return llvm::VersionTuple();
 }
 
 bool HostInfoNetBSD::GetOSBuildString(std::string &s) {
@@ -76,15 +85,15 @@ FileSpec HostInfoNetBSD::GetProgramFileSpec() {
   static FileSpec g_program_filespec;
 
   if (!g_program_filespec) {
-    static const int name[] = {
-        CTL_KERN, KERN_PROC_ARGS, -1, KERN_PROC_PATHNAME,
-    };
-    char path[MAXPATHLEN];
-    size_t len;
+    ssize_t len;
+    static char buf[PATH_MAX];
+    char name[PATH_MAX];
 
-    len = sizeof(path);
-    if (sysctl(name, __arraycount(name), path, &len, NULL, 0) != -1) {
-      g_program_filespec.SetFile(path, FileSpec::Style::native);
+    ::snprintf(name, PATH_MAX, "/proc/%d/exe", ::getpid());
+    len = ::readlink(name, buf, PATH_MAX - 1);
+    if (len != -1) {
+      buf[len] = '\0';
+      g_program_filespec.SetFile(buf, false);
     }
   }
   return g_program_filespec;

@@ -1,3 +1,5 @@
+LEVEL = ../../../make
+
 CXX_SOURCES := nested.cpp
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

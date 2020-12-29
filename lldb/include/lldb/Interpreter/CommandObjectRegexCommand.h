@@ -1,23 +1,29 @@
 //===-- CommandObjectRegexCommand.h -----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_CommandObjectRegexCommand_h_
 #define liblldb_CommandObjectRegexCommand_h_
 
+// C Includes
+// C++ Includes
 #include <list>
 
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/RegularExpression.h"
 #include "lldb/Interpreter/CommandObject.h"
-#include "lldb/Utility/CompletionRequest.h"
-#include "lldb/Utility/RegularExpression.h"
 
 namespace lldb_private {
 
+//-------------------------------------------------------------------------
 // CommandObjectRegexCommand
+//-------------------------------------------------------------------------
 
 class CommandObjectRegexCommand : public CommandObjectRaw {
 public:
@@ -34,10 +40,13 @@ public:
 
   bool HasRegexEntries() const { return !m_entries.empty(); }
 
-  void HandleCompletion(CompletionRequest &request) override;
+  int HandleCompletion(Args &input, int &cursor_index,
+                       int &cursor_char_position, int match_start_point,
+                       int max_return_elements, bool &word_complete,
+                       StringList &matches) override;
 
 protected:
-  bool DoExecute(llvm::StringRef command, CommandReturnObject &result) override;
+  bool DoExecute(const char *command, CommandReturnObject &result) override;
 
   struct Entry {
     RegularExpression regex;

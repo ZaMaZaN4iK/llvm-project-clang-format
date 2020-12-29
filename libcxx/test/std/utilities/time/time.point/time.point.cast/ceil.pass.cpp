@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,8 +19,6 @@
 #include <chrono>
 #include <type_traits>
 #include <cassert>
-
-#include "test_macros.h"
 
 template <class FromDuration, class ToDuration>
 void
@@ -51,7 +50,7 @@ void test_constexpr ()
 }
 
 
-int main(int, char**)
+int main()
 {
 //  7290000ms is 2 hours, 1 minute, and 30 seconds
     test(std::chrono::milliseconds( 7290000), std::chrono::hours( 3));
@@ -67,6 +66,4 @@ int main(int, char**)
 
     test_constexpr<std::chrono::milliseconds, 9000000, std::chrono::seconds, 9000> ();
     test_constexpr<std::chrono::milliseconds,-9000000, std::chrono::seconds,-9000> ();
-
-  return 0;
 }

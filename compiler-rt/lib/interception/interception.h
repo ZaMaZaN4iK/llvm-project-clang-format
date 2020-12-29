@@ -1,8 +1,9 @@
 //===-- interception.h ------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,13 +15,12 @@
 #ifndef INTERCEPTION_H
 #define INTERCEPTION_H
 
-#include "sanitizer_common/sanitizer_internal_defs.h"
-
-#if !SANITIZER_LINUX && !SANITIZER_FREEBSD && !SANITIZER_MAC && \
-    !SANITIZER_NETBSD && !SANITIZER_OPENBSD && !SANITIZER_WINDOWS && \
-    !SANITIZER_FUCHSIA && !SANITIZER_RTEMS && !SANITIZER_SOLARIS
+#if !defined(__linux__) && !defined(__FreeBSD__) && \
+  !defined(__APPLE__) && !defined(_WIN32)
 # error "Interception doesn't work on this operating system."
 #endif
+
+#include "sanitizer_common/sanitizer_internal_defs.h"
 
 // These typedefs should be used only in the interceptor definitions to replace
 // the standard system types (e.g. SSIZE_T instead of ssize_t)
@@ -28,7 +28,6 @@ typedef __sanitizer::uptr    SIZE_T;
 typedef __sanitizer::sptr    SSIZE_T;
 typedef __sanitizer::sptr    PTRDIFF_T;
 typedef __sanitizer::s64     INTMAX_T;
-typedef __sanitizer::u64     UINTMAX_T;
 typedef __sanitizer::OFF_T   OFF_T;
 typedef __sanitizer::OFF64_T OFF64_T;
 
@@ -88,7 +87,7 @@ typedef __sanitizer::OFF64_T OFF64_T;
 // As it's decided at compile time which functions are to be intercepted on Mac,
 // INTERCEPT_FUNCTION() is effectively a no-op on this system.
 
-#if SANITIZER_MAC
+#if defined(__APPLE__)
 #include <sys/cdefs.h>  // For __DARWIN_ALIAS_C().
 
 // Just a pair of pointers.
@@ -122,7 +121,7 @@ const interpose_substitution substitution_##func_name[] \
 # define INTERCEPTOR_ATTRIBUTE
 # define DECLARE_WRAPPER(ret_type, func, ...)
 
-#elif SANITIZER_WINDOWS
+#elif defined(_WIN32)
 # define WRAP(x) __asan_wrap_##x
 # define WRAPPER_NAME(x) "__asan_wrap_"#x
 # define INTERCEPTOR_ATTRIBUTE __declspec(dllexport)
@@ -130,12 +129,7 @@ const interpose_substitution substitution_##func_name[] \
     extern "C" ret_type func(__VA_ARGS__);
 # define DECLARE_WRAPPER_WINAPI(ret_type, func, ...) \
     extern "C" __declspec(dllimport) ret_type __stdcall func(__VA_ARGS__);
-#elif SANITIZER_RTEMS
-# define WRAP(x) x
-# define WRAPPER_NAME(x) #x
-# define INTERCEPTOR_ATTRIBUTE
-# define DECLARE_WRAPPER(ret_type, func, ...)
-#elif SANITIZER_FREEBSD || SANITIZER_NETBSD
+#elif defined(__FreeBSD__)
 # define WRAP(x) __interceptor_ ## x
 # define WRAPPER_NAME(x) "__interceptor_" #x
 # define INTERCEPTOR_ATTRIBUTE __attribute__((visibility("default")))
@@ -145,7 +139,7 @@ const interpose_substitution substitution_##func_name[] \
 # define DECLARE_WRAPPER(ret_type, func, ...) \
      extern "C" ret_type func(__VA_ARGS__) \
      __attribute__((alias("__interceptor_" #func), visibility("default")));
-#elif !SANITIZER_FUCHSIA
+#else
 # define WRAP(x) __interceptor_ ## x
 # define WRAPPER_NAME(x) "__interceptor_" #x
 # define INTERCEPTOR_ATTRIBUTE __attribute__((visibility("default")))
@@ -154,22 +148,10 @@ const interpose_substitution substitution_##func_name[] \
     __attribute__((weak, alias("__interceptor_" #func), visibility("default")));
 #endif
 
-#if SANITIZER_FUCHSIA
-// There is no general interception at all on Fuchsia.
-// Sanitizer runtimes just define functions directly to preempt them,
-// and have bespoke ways to access the underlying libc functions.
-# include <zircon/sanitizer.h>
-# define INTERCEPTOR_ATTRIBUTE __attribute__((visibility("default")))
-# define REAL(x) __unsanitized_##x
-# define DECLARE_REAL(ret_type, func, ...)
-#elif SANITIZER_RTEMS
-# define REAL(x) __real_ ## x
-# define DECLARE_REAL(ret_type, func, ...) \
-    extern "C" ret_type REAL(func)(__VA_ARGS__);
-#elif !SANITIZER_MAC
+#if !defined(__APPLE__)
 # define PTR_TO_REAL(x) real_##x
 # define REAL(x) __interception::PTR_TO_REAL(x)
-# define FUNC_TYPE(x) x##_type
+# define FUNC_TYPE(x) x##_f
 
 # define DECLARE_REAL(ret_type, func, ...) \
     typedef ret_type (*FUNC_TYPE(func))(__VA_ARGS__); \
@@ -177,32 +159,22 @@ const interpose_substitution substitution_##func_name[] \
       extern FUNC_TYPE(func) PTR_TO_REAL(func); \
     }
 # define ASSIGN_REAL(dst, src) REAL(dst) = REAL(src)
-#else  // SANITIZER_MAC
+#else  // __APPLE__
 # define REAL(x) x
 # define DECLARE_REAL(ret_type, func, ...) \
     extern "C" ret_type func(__VA_ARGS__);
 # define ASSIGN_REAL(x, y)
-#endif  // SANITIZER_MAC
+#endif  // __APPLE__
 
-#if !SANITIZER_FUCHSIA && !SANITIZER_RTEMS
-# define DECLARE_REAL_AND_INTERCEPTOR(ret_type, func, ...) \
+#define DECLARE_REAL_AND_INTERCEPTOR(ret_type, func, ...) \
   DECLARE_REAL(ret_type, func, __VA_ARGS__) \
   extern "C" ret_type WRAP(func)(__VA_ARGS__);
-// Declare an interceptor and its wrapper defined in a different translation
-// unit (ex. asm).
-# define DECLARE_EXTERN_INTERCEPTOR_AND_WRAPPER(ret_type, func, ...)    \
-  extern "C" ret_type WRAP(func)(__VA_ARGS__); \
-  extern "C" ret_type func(__VA_ARGS__);
-#else
-# define DECLARE_REAL_AND_INTERCEPTOR(ret_type, func, ...)
-# define DECLARE_EXTERN_INTERCEPTOR_AND_WRAPPER(ret_type, func, ...)
-#endif
 
 // Generally, you don't need to use DEFINE_REAL by itself, as INTERCEPTOR
 // macros does its job. In exceptional cases you may need to call REAL(foo)
 // without defining INTERCEPTOR(..., foo, ...). For example, if you override
 // foo with an interceptor for other function.
-#if !SANITIZER_MAC && !SANITIZER_FUCHSIA && !SANITIZER_RTEMS
+#if !defined(__APPLE__)
 # define DEFINE_REAL(ret_type, func, ...) \
     typedef ret_type (*FUNC_TYPE(func))(__VA_ARGS__); \
     namespace __interception { \
@@ -212,18 +184,7 @@ const interpose_substitution substitution_##func_name[] \
 # define DEFINE_REAL(ret_type, func, ...)
 #endif
 
-#if SANITIZER_FUCHSIA
-
-// We need to define the __interceptor_func name just to get
-// sanitizer_common/scripts/gen_dynamic_list.py to export func.
-// But we don't need to export __interceptor_func to get that.
-#define INTERCEPTOR(ret_type, func, ...)                                \
-  extern "C"[[ gnu::alias(#func), gnu::visibility("hidden") ]] ret_type \
-      __interceptor_##func(__VA_ARGS__);                                \
-  extern "C" INTERCEPTOR_ATTRIBUTE ret_type func(__VA_ARGS__)
-
-#elif !SANITIZER_MAC
-
+#if !defined(__APPLE__)
 #define INTERCEPTOR(ret_type, func, ...) \
   DEFINE_REAL(ret_type, func, __VA_ARGS__) \
   DECLARE_WRAPPER(ret_type, func, __VA_ARGS__) \
@@ -235,7 +196,7 @@ const interpose_substitution substitution_##func_name[] \
 #define INTERCEPTOR_WITH_SUFFIX(ret_type, func, ...) \
   INTERCEPTOR(ret_type, func, __VA_ARGS__)
 
-#else  // SANITIZER_MAC
+#else  // __APPLE__
 
 #define INTERCEPTOR_ZZZ(suffix, ret_type, func, ...) \
   extern "C" ret_type func(__VA_ARGS__) suffix; \
@@ -254,7 +215,7 @@ const interpose_substitution substitution_##func_name[] \
   INTERPOSER_2(overridee, WRAP(overrider))
 #endif
 
-#if SANITIZER_WINDOWS
+#if defined(_WIN32)
 # define INTERCEPTOR_WINAPI(ret_type, func, ...) \
     typedef ret_type (__stdcall *FUNC_TYPE(func))(__VA_ARGS__); \
     namespace __interception { \
@@ -272,27 +233,25 @@ const interpose_substitution substitution_##func_name[] \
 // INTERCEPT_FUNCTION macro, only its name.
 namespace __interception {
 #if defined(_WIN64)
-typedef unsigned long long uptr;
+typedef unsigned long long uptr;  // NOLINT
 #else
-typedef unsigned long uptr;
+typedef unsigned long uptr;  // NOLINT
 #endif  // _WIN64
 }  // namespace __interception
 
 #define INCLUDED_FROM_INTERCEPTION_LIB
 
-#if SANITIZER_LINUX || SANITIZER_FREEBSD || SANITIZER_NETBSD || \
-    SANITIZER_OPENBSD || SANITIZER_SOLARIS
-
+#if defined(__linux__) || defined(__FreeBSD__)
 # include "interception_linux.h"
 # define INTERCEPT_FUNCTION(func) INTERCEPT_FUNCTION_LINUX_OR_FREEBSD(func)
 # define INTERCEPT_FUNCTION_VER(func, symver) \
     INTERCEPT_FUNCTION_VER_LINUX_OR_FREEBSD(func, symver)
-#elif SANITIZER_MAC
+#elif defined(__APPLE__)
 # include "interception_mac.h"
 # define INTERCEPT_FUNCTION(func) INTERCEPT_FUNCTION_MAC(func)
 # define INTERCEPT_FUNCTION_VER(func, symver) \
     INTERCEPT_FUNCTION_VER_MAC(func, symver)
-#elif SANITIZER_WINDOWS
+#else  // defined(_WIN32)
 # include "interception_win.h"
 # define INTERCEPT_FUNCTION(func) INTERCEPT_FUNCTION_WIN(func)
 # define INTERCEPT_FUNCTION_VER(func, symver) \

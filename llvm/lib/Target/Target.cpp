@@ -1,24 +1,25 @@
 //===-- Target.cpp --------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the common infrastructure (including C bindings) for
+// This file implements the common infrastructure (including C bindings) for 
 // libLLVMTarget.a, which implements target information.
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm-c/Target.h"
 #include "llvm-c/Initialization.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Value.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include <cstring>
 
 using namespace llvm;

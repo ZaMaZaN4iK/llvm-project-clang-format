@@ -5,10 +5,12 @@
 ; CHECK-LABEL: {{^}}test1:
 ; CHECK: v_cmp_ne_u32_e32 vcc, 0
 ; CHECK: s_and_saveexec_b64
+; CHECK-NEXT: s_xor_b64
 ; CHECK-NEXT: ; mask branch
-; CHECK-NEXT: s_cbranch_execz BB{{[0-9]+_[0-9]+}}
 
-; CHECK: [[LOOP_BODY_LABEL:BB[0-9]+_[0-9]+]]: ; %loop_body
+; CHECK-NEXT: BB{{[0-9]+_[0-9]+}}: ; %loop_body.preheader
+
+; CHECK: [[LOOP_BODY_LABEL:BB[0-9]+_[0-9]+]]:
 ; CHECK: s_cbranch_scc0 [[LOOP_BODY_LABEL]]
 
 ; CHECK: s_endpgm
@@ -33,9 +35,10 @@ out:
 
 ; CHECK-LABEL: {{^}}test2:
 ; CHECK: s_and_saveexec_b64
+; CHECK-NEXT: s_xor_b64
 ; CHECK-NEXT: ; mask branch
 ; CHECK-NEXT: s_cbranch_execz
-define amdgpu_kernel void @test2(i32 addrspace(1)* %out, i32 %a, i32 %b) {
+define void @test2(i32 addrspace(1)* %out, i32 %a, i32 %b) {
 main_body:
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #1
   %cc = icmp eq i32 %tid, 0

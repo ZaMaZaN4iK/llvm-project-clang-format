@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -10,7 +11,7 @@
 
 // template <class... Types> class tuple;
 
-// explicit(see-below) constexpr tuple();
+// constexpr tuple();
 
 // UNSUPPORTED: c++98, c++03
 
@@ -19,7 +20,6 @@
 #include <cassert>
 #include <type_traits>
 
-#include "test_macros.h"
 #include "DefaultOnly.h"
 
 struct NoDefault {
@@ -45,11 +45,10 @@ struct IllFormedDefault {
     int value;
 };
 
-int main(int, char**)
+int main()
 {
     {
         std::tuple<> t;
-        (void)t;
     }
     {
         std::tuple<int> t;
@@ -87,9 +86,9 @@ int main(int, char**)
         static_assert(!noexcept(std::tuple<NoExceptDefault, ThrowingDefault>()), "");
         static_assert(!noexcept(std::tuple<ThrowingDefault, ThrowingDefault>()), "");
     }
+#ifndef _LIBCPP_HAS_NO_CONSTEXPR
     {
         constexpr std::tuple<> t;
-        (void)t;
     }
     {
         constexpr std::tuple<int> t;
@@ -101,17 +100,11 @@ int main(int, char**)
         assert(std::get<1>(t) == nullptr);
     }
     {
-    // Check that the SFINAE on the default constructor is not evaluated when
-    // it isn't needed. If the default constructor is evaluated then this test
+    // Check that the SFINAE on the default constructor is not evaluted when
+    // it isn't needed. If the default constructor is evaluted then this test
     // should fail to compile.
         IllFormedDefault v(0);
         std::tuple<IllFormedDefault> t(v);
     }
-    {
-        struct Base { };
-        struct Derived : Base { protected: Derived() = default; };
-        static_assert(!std::is_default_constructible<std::tuple<Derived, int> >::value, "");
-    }
-
-    return 0;
+#endif
 }

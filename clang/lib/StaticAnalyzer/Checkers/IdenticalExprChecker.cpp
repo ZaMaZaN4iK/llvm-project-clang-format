@@ -1,13 +1,14 @@
 //== IdenticalExprChecker.cpp - Identical expression checker----------------==//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// This defines IdenticalExprChecker, a check that warns about
+/// \brief This defines IdenticalExprChecker, a check that warns about
 /// unintended use of identical expressions.
 ///
 /// It checks for use of identical expressions with comparison operators and
@@ -15,7 +16,7 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "ClangSACheckers.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -115,7 +116,7 @@ bool FindIdenticalExprVisitor::VisitIfStmt(const IfStmt *I) {
   if (const CompoundStmt *CS = dyn_cast<CompoundStmt>(Stmt1)) {
     if (!CS->body_empty()) {
       const IfStmt *InnerIf = dyn_cast<IfStmt>(*CS->body_begin());
-      if (InnerIf && isIdenticalStmt(AC->getASTContext(), I->getCond(), InnerIf->getCond(), /*IgnoreSideEffects=*/ false)) {
+      if (InnerIf && isIdenticalStmt(AC->getASTContext(), I->getCond(), InnerIf->getCond(), /*ignoreSideEffects=*/ false)) {
         PathDiagnosticLocation ELoc(InnerIf->getCond(), BR.getSourceManager(), AC);
         BR.EmitBasicReport(AC->getDecl(), Checker, "Identical conditions",
           categories::LogicError,
@@ -254,10 +255,7 @@ void FindIdenticalExprVisitor::checkComparisonOp(const BinaryOperator *B) {
     PathDiagnosticLocation ELoc =
         PathDiagnosticLocation::createOperatorLoc(B, BR.getSourceManager());
     StringRef Message;
-    if (Op == BO_Cmp)
-      Message = "comparison of identical expressions always evaluates to "
-                "'equal'";
-    else if (((Op == BO_EQ) || (Op == BO_LE) || (Op == BO_GE)))
+    if (((Op == BO_EQ) || (Op == BO_LE) || (Op == BO_GE)))
       Message = "comparison of identical expressions always evaluates to true";
     else
       Message = "comparison of identical expressions always evaluates to false";
@@ -295,7 +293,7 @@ bool FindIdenticalExprVisitor::VisitConditionalOperator(
   return true;
 }
 
-/// Determines whether two statement trees are identical regarding
+/// \brief Determines whether two statement trees are identical regarding
 /// operators and symbols.
 ///
 /// Exceptions: expressions containing macros or functions with possible side
@@ -511,8 +509,4 @@ public:
 
 void ento::registerIdenticalExprChecker(CheckerManager &Mgr) {
   Mgr.registerChecker<FindIdenticalExprChecker>();
-}
-
-bool ento::shouldRegisterIdenticalExprChecker(const LangOptions &LO) {
-  return true;
 }

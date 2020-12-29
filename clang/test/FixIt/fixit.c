@@ -1,8 +1,9 @@
 // RUN: %clang_cc1 -pedantic -Wunused-label -verify -x c %s
 // RUN: cp %s %t
 // RUN: not %clang_cc1 -pedantic -Wunused-label -fixit -x c %t
+// RUN: grep -v CHECK %t > %t2
 // RUN: %clang_cc1 -pedantic -Wunused-label -Werror -x c %t
-// RUN: grep -v CHECK %t | FileCheck %t
+// RUN: FileCheck -input-file=%t2 %t
 
 /* This is a test of the various code modification hints that are
    provided as part of warning or extension diagnostics. All of the

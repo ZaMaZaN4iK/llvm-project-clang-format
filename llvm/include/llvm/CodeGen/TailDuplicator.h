@@ -1,8 +1,9 @@
-//===- llvm/CodeGen/TailDuplicator.h ----------------------------*- C++ -*-===//
+//===-- llvm/CodeGen/TailDuplicator.h ---------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,25 +15,19 @@
 #ifndef LLVM_CODEGEN_TAILDUPLICATOR_H
 #define LLVM_CODEGEN_TAILDUPLICATOR_H
 
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/SetVector.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
-#include <utility>
-#include <vector>
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/CodeGen/MachineBranchProbabilityInfo.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/MachineSSAUpdater.h"
+#include "llvm/CodeGen/RegisterScavenging.h"
+#include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 
 namespace llvm {
 
-class MachineBasicBlock;
-class MachineBlockFrequencyInfo;
-class MachineBranchProbabilityInfo;
-class MachineFunction;
-class MachineInstr;
-class MachineModuleInfo;
-class MachineRegisterInfo;
-class ProfileSummaryInfo;
-class TargetRegisterInfo;
+extern cl::opt<unsigned> TailDupIndirectBranchSize;
 
 /// Utility class to perform tail duplication.
 class TailDuplicator {
@@ -42,8 +37,6 @@ class TailDuplicator {
   const MachineModuleInfo *MMI;
   MachineRegisterInfo *MRI;
   MachineFunction *MF;
-  const MachineBlockFrequencyInfo *MBFI;
-  ProfileSummaryInfo *PSI;
   bool PreRegAlloc;
   bool LayoutMode;
   unsigned TailDupSize;
@@ -53,33 +46,27 @@ class TailDuplicator {
 
   // For each virtual register in SSAUpdateVals keep a list of source virtual
   // registers.
-  using AvailableValsTy = std::vector<std::pair<MachineBasicBlock *, unsigned>>;
+  typedef std::vector<std::pair<MachineBasicBlock *, unsigned>> AvailableValsTy;
 
   DenseMap<unsigned, AvailableValsTy> SSAUpdateVals;
 
 public:
   /// Prepare to run on a specific machine function.
   /// @param MF - Function that will be processed
-  /// @param PreRegAlloc - true if used before register allocation
   /// @param MBPI - Branch Probability Info. Used to propagate correct
   ///     probabilities when modifying the CFG.
   /// @param LayoutMode - When true, don't use the existing layout to make
   ///     decisions.
   /// @param TailDupSize - Maxmimum size of blocks to tail-duplicate. Zero
   ///     default implies using the command line value TailDupSize.
-  void initMF(MachineFunction &MF, bool PreRegAlloc,
+  void initMF(MachineFunction &MF,
               const MachineBranchProbabilityInfo *MBPI,
-              const MachineBlockFrequencyInfo *MBFI,
-              ProfileSummaryInfo *PSI,
               bool LayoutMode, unsigned TailDupSize = 0);
-
   bool tailDuplicateBlocks();
   static bool isSimpleBB(MachineBasicBlock *TailBB);
   bool shouldTailDuplicate(bool IsSimple, MachineBasicBlock &TailBB);
-
   /// Returns true if TailBB can successfully be duplicated into PredBB
   bool canTailDuplicate(MachineBasicBlock *TailBB, MachineBasicBlock *PredBB);
-
   /// Tail duplicate a single basic block into its predecessors, and then clean
   /// up.
   /// If \p DuplicatePreds is not null, it will be updated to contain the list
@@ -90,10 +77,10 @@ public:
       bool IsSimple, MachineBasicBlock *MBB,
       MachineBasicBlock *ForcedLayoutPred,
       SmallVectorImpl<MachineBasicBlock*> *DuplicatedPreds = nullptr,
-      function_ref<void(MachineBasicBlock *)> *RemovalCallback = nullptr);
+      llvm::function_ref<void(MachineBasicBlock *)> *RemovalCallback = nullptr);
 
 private:
-  using RegSubRegPair = TargetInstrInfo::RegSubRegPair;
+  typedef TargetInstrInfo::RegSubRegPair RegSubRegPair;
 
   void addSSAUpdateEntry(unsigned OrigReg, unsigned NewReg,
                          MachineBasicBlock *BB);
@@ -125,9 +112,9 @@ private:
 
   void removeDeadBlock(
       MachineBasicBlock *MBB,
-      function_ref<void(MachineBasicBlock *)> *RemovalCallback = nullptr);
+      llvm::function_ref<void(MachineBasicBlock *)> *RemovalCallback = nullptr);
 };
 
-} // end namespace llvm
+} // End llvm namespace
 
-#endif // LLVM_CODEGEN_TAILDUPLICATOR_H
+#endif

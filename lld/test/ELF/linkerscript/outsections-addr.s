@@ -1,13 +1,25 @@
 # REQUIRES: x86
 # RUN: llvm-mc -filetype=obj -triple=x86_64-unknown-linux %s -o %t
-# RUN: echo "SECTIONS { \
-# RUN:   .aaa 0x2000 : { *(.aaa) } \
-# RUN:   .bbb 0x1 ? 0x3000 : 0x4000 : { *(.bbb) } \
-# RUN:   .ccc ALIGN(CONSTANT(MAXPAGESIZE)) + (. & (CONSTANT(MAXPAGESIZE) - 1)) : { *(.ccc) } \
-# RUN:   .ddd 0x5001 : { *(.ddd) } \
+# RUN: echo "SECTIONS {                 \
+# RUN:   .aaa 0x2000 :                  \
+# RUN:   {                              \
+# RUN:    *(.aaa)                       \
+# RUN:   }                              \
+# RUN:   .bbb 0x1 ? 0x3000 : 0x4000 :   \
+# RUN:   {                              \
+# RUN:    *(.bbb)                       \
+# RUN:   }                              \
+# RUN:   .ccc ALIGN(CONSTANT (MAXPAGESIZE)) + (. & (CONSTANT (MAXPAGESIZE) - 1)) : \
+# RUN:   {                              \
+# RUN:    *(.ccc)                       \
+# RUN:   }                              \
+# RUN:   .ddd 0x5001 :                  \
+# RUN:   {                              \
+# RUN:    *(.ddd)                       \
+# RUN:   }                              \
 # RUN: }" > %t.script
 # RUN: ld.lld %t --script %t.script -o %tout
-# RUN: llvm-readobj -S %tout | FileCheck %s
+# RUN: llvm-readobj -s %tout | FileCheck %s
 
 ## Check:
 ## 1) Simple constant as address.

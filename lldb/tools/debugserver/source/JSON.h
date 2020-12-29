@@ -1,8 +1,9 @@
 //===---------------------JSON.h --------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -203,19 +204,21 @@ public:
 
   JSONValue::SP GetObject(const std::string &key) const;
 
+  // -------------------------------------------------------------------------
   /// Return keyed value as bool
   ///
-  /// \param[in] key
+  /// @param[in] key
   ///     The value of the key to lookup
   ///
-  /// \param[out] value
+  /// @param[out] value
   ///     The value of the key as a bool.  Undefined if the key doesn't
   ///     exist or if the key is not either true or false.
   ///
-  /// \return
+  /// @return
   ///     true if the key existed as was a bool value; false otherwise.
   ///     Note the return value is *not* the value of the bool, use
   ///     \b value for that.
+  // -------------------------------------------------------------------------
   bool GetObjectAsBool(const std::string &key, bool &value) const;
 
   bool GetObjectAsString(const std::string &key, std::string &value) const;
@@ -267,7 +270,7 @@ class JSONParser : public StdStringExtractor {
 public:
   enum Token {
     Invalid,
-    Status,
+    Error,
     ObjectStart,
     ObjectEnd,
     ArrayStart,
@@ -292,8 +295,6 @@ public:
   JSONValue::SP ParseJSONValue();
 
 protected:
-  JSONValue::SP ParseJSONValue(const std::string &value, const Token &token);
-
   JSONValue::SP ParseJSONObject();
 
   JSONValue::SP ParseJSONArray();

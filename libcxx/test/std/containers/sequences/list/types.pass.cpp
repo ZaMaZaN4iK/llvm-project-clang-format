@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,15 +25,14 @@
 #include <list>
 #include <type_traits>
 
-#include "test_macros.h"
 #include "min_allocator.h"
 
 struct A { std::list<A> v; }; // incomplete type support
 
-int main(int, char**)
+int main()
 {
-    {
-    typedef std::list<int> C;
+	{
+	typedef std::list<int> C;
     static_assert((std::is_same<C::value_type, int>::value), "");
     static_assert((std::is_same<C::allocator_type, std::allocator<int> >::value), "");
     static_assert((std::is_same<C::reference, std::allocator<int>::reference>::value), "");
@@ -46,11 +46,11 @@ int main(int, char**)
         typename std::iterator_traits<typename C::iterator>::difference_type>::value), "");
     static_assert((std::is_same<typename C::difference_type,
         typename std::iterator_traits<typename C::const_iterator>::difference_type>::value), "");
-    }
+	}
 
 #if TEST_STD_VER >= 11
     {
-    typedef std::list<int, min_allocator<int>> C;
+	typedef std::list<int, min_allocator<int>> C;
     static_assert((std::is_same<C::value_type, int>::value), "");
     static_assert((std::is_same<C::allocator_type, min_allocator<int> >::value), "");
     static_assert((std::is_same<C::reference, int&>::value), "");
@@ -66,6 +66,4 @@ int main(int, char**)
         typename std::iterator_traits<typename C::const_iterator>::difference_type>::value), "");
     }
 #endif
-
-  return 0;
 }

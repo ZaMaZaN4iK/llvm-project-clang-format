@@ -1,8 +1,9 @@
 //===----- HexagonMCShuffler.cpp - MC bundle shuffling --------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,16 +14,13 @@
 
 #define DEBUG_TYPE "hexagon-shuffle"
 
-#include "MCTargetDesc/HexagonMCShuffler.h"
+#include "Hexagon.h"
 #include "MCTargetDesc/HexagonMCInstrInfo.h"
-#include "MCTargetDesc/HexagonShuffler.h"
-#include "llvm/MC/MCInst.h"
-#include "llvm/MC/MCInstrDesc.h"
-#include "llvm/MC/MCInstrInfo.h"
+#include "MCTargetDesc/HexagonMCShuffler.h"
+#include "MCTargetDesc/HexagonMCTargetDesc.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
-#include <cassert>
 
 using namespace llvm;
 
@@ -35,59 +33,58 @@ void HexagonMCShuffler::init(MCInst &MCB) {
     MCInst const *Extender = nullptr;
     // Copy the bundle for the shuffling.
     for (const auto &I : HexagonMCInstrInfo::bundleInstructions(MCB)) {
-      MCInst &MI = *const_cast<MCInst *>(I.getInst());
-      LLVM_DEBUG(dbgs() << "Shuffling: " << MCII.getName(MI.getOpcode())
-                        << '\n');
-      assert(!HexagonMCInstrInfo::getDesc(MCII, MI).isPseudo());
+      assert(!HexagonMCInstrInfo::getDesc(MCII, *I.getInst()).isPseudo());
+      MCInst *MI = const_cast<MCInst *>(I.getInst());
 
-      if (!HexagonMCInstrInfo::isImmext(MI)) {
-        append(MI, Extender, HexagonMCInstrInfo::getUnits(MCII, STI, MI));
+      if (!HexagonMCInstrInfo::isImmext(*MI)) {
+        append(MI, Extender, HexagonMCInstrInfo::getUnits(MCII, STI, *MI),
+               false);
         Extender = nullptr;
       } else
-        Extender = &MI;
+        Extender = MI;
     }
   }
 
-  Loc = MCB.getLoc();
   BundleFlags = MCB.getOperand(0).getImm();
 }
 
-void HexagonMCShuffler::init(MCInst &MCB, MCInst const &AddMI,
+void HexagonMCShuffler::init(MCInst &MCB, MCInst const *AddMI,
                              bool bInsertAtFront) {
   if (HexagonMCInstrInfo::isBundle(MCB)) {
-    if (bInsertAtFront)
-      append(AddMI, nullptr, HexagonMCInstrInfo::getUnits(MCII, STI, AddMI));
+    if (bInsertAtFront && AddMI)
+      append(AddMI, nullptr, HexagonMCInstrInfo::getUnits(MCII, STI, *AddMI),
+             false);
     MCInst const *Extender = nullptr;
     // Copy the bundle for the shuffling.
     for (auto const &I : HexagonMCInstrInfo::bundleInstructions(MCB)) {
       assert(!HexagonMCInstrInfo::getDesc(MCII, *I.getInst()).isPseudo());
-      MCInst &MI = *const_cast<MCInst *>(I.getInst());
-      if (!HexagonMCInstrInfo::isImmext(MI)) {
-        append(MI, Extender, HexagonMCInstrInfo::getUnits(MCII, STI, MI));
+      MCInst *MI = const_cast<MCInst *>(I.getInst());
+      if (!HexagonMCInstrInfo::isImmext(*MI)) {
+        append(MI, Extender, HexagonMCInstrInfo::getUnits(MCII, STI, *MI),
+               false);
         Extender = nullptr;
       } else
-        Extender = &MI;
+        Extender = MI;
     }
-    if (!bInsertAtFront)
-      append(AddMI, nullptr, HexagonMCInstrInfo::getUnits(MCII, STI, AddMI));
+    if (!bInsertAtFront && AddMI)
+      append(AddMI, nullptr, HexagonMCInstrInfo::getUnits(MCII, STI, *AddMI),
+             false);
   }
 
-  Loc = MCB.getLoc();
   BundleFlags = MCB.getOperand(0).getImm();
 }
 
 void HexagonMCShuffler::copyTo(MCInst &MCB) {
   MCB.clear();
   MCB.addOperand(MCOperand::createImm(BundleFlags));
-  MCB.setLoc(Loc);
   // Copy the results into the bundle.
   for (HexagonShuffler::iterator I = begin(); I != end(); ++I) {
 
-    MCInst const &MI = I->getDesc();
+    MCInst const *MI = I->getDesc();
     MCInst const *Extender = I->getExtender();
     if (Extender)
       MCB.addOperand(MCOperand::createInst(Extender));
-    MCB.addOperand(MCOperand::createInst(&MI));
+    MCB.addOperand(MCOperand::createInst(MI));
   }
 }
 
@@ -95,16 +92,15 @@ bool HexagonMCShuffler::reshuffleTo(MCInst &MCB) {
   if (shuffle()) {
     // Copy the results into the bundle.
     copyTo(MCB);
-    return true;
-  }
-  LLVM_DEBUG(MCB.dump());
-  return false;
+  } else
+    DEBUG(MCB.dump());
+
+  return (!getError());
 }
 
-bool llvm::HexagonMCShuffle(MCContext &Context, bool Fatal,
-                            MCInstrInfo const &MCII, MCSubtargetInfo const &STI,
+bool llvm::HexagonMCShuffle(MCInstrInfo const &MCII, MCSubtargetInfo const &STI,
                             MCInst &MCB) {
-  HexagonMCShuffler MCS(Context, Fatal, MCII, STI, MCB);
+  HexagonMCShuffler MCS(MCII, STI, MCB);
 
   if (DisableShuffle)
     // Ignore if user chose so.
@@ -112,77 +108,102 @@ bool llvm::HexagonMCShuffle(MCContext &Context, bool Fatal,
 
   if (!HexagonMCInstrInfo::bundleSize(MCB)) {
     // There once was a bundle:
-    //    BUNDLE implicit-def %d2, implicit-def %r4, implicit-def %r5,
-    //    implicit-def %d7, ...
-    //      * %d2 = IMPLICIT_DEF; flags:
-    //      * %d7 = IMPLICIT_DEF; flags:
+    //    BUNDLE %D2<imp-def>, %R4<imp-def>, %R5<imp-def>, %D7<imp-def>, ...
+    //      * %D2<def> = IMPLICIT_DEF; flags:
+    //      * %D7<def> = IMPLICIT_DEF; flags:
     // After the IMPLICIT_DEFs were removed by the asm printer, the bundle
     // became empty.
-    LLVM_DEBUG(dbgs() << "Skipping empty bundle");
+    DEBUG(dbgs() << "Skipping empty bundle");
     return false;
   } else if (!HexagonMCInstrInfo::isBundle(MCB)) {
-    LLVM_DEBUG(dbgs() << "Skipping stand-alone insn");
+    DEBUG(dbgs() << "Skipping stand-alone insn");
     return false;
   }
 
-  return MCS.reshuffleTo(MCB);
+  // Reorder the bundle and copy the result.
+  if (!MCS.reshuffleTo(MCB)) {
+    // Unless there is any error, which should not happen at this point.
+    unsigned shuffleError = MCS.getError();
+    switch (shuffleError) {
+    default:
+      llvm_unreachable("unknown error");
+    case HexagonShuffler::SHUFFLE_ERROR_INVALID:
+      llvm_unreachable("invalid packet");
+    case HexagonShuffler::SHUFFLE_ERROR_STORES:
+      llvm_unreachable("too many stores");
+    case HexagonShuffler::SHUFFLE_ERROR_LOADS:
+      llvm_unreachable("too many loads");
+    case HexagonShuffler::SHUFFLE_ERROR_BRANCHES:
+      llvm_unreachable("too many branches");
+    case HexagonShuffler::SHUFFLE_ERROR_NOSLOTS:
+      llvm_unreachable("no suitable slot");
+    case HexagonShuffler::SHUFFLE_ERROR_SLOTS:
+      llvm_unreachable("over-subscribed slots");
+    case HexagonShuffler::SHUFFLE_SUCCESS: // Single instruction case.
+      return true;
+    }
+  }
+
+  return true;
 }
 
-bool
-llvm::HexagonMCShuffle(MCContext &Context, MCInstrInfo const &MCII,
-                       MCSubtargetInfo const &STI, MCInst &MCB,
+unsigned
+llvm::HexagonMCShuffle(MCInstrInfo const &MCII, MCSubtargetInfo const &STI,
+                       MCContext &Context, MCInst &MCB,
                        SmallVector<DuplexCandidate, 8> possibleDuplexes) {
+
   if (DisableShuffle)
-    return false;
+    return HexagonShuffler::SHUFFLE_SUCCESS;
 
   if (!HexagonMCInstrInfo::bundleSize(MCB)) {
     // There once was a bundle:
-    //    BUNDLE implicit-def %d2, implicit-def %r4, implicit-def %r5,
-    //    implicit-def %d7, ...
-    //      * %d2 = IMPLICIT_DEF; flags:
-    //      * %d7 = IMPLICIT_DEF; flags:
+    //    BUNDLE %D2<imp-def>, %R4<imp-def>, %R5<imp-def>, %D7<imp-def>, ...
+    //      * %D2<def> = IMPLICIT_DEF; flags:
+    //      * %D7<def> = IMPLICIT_DEF; flags:
     // After the IMPLICIT_DEFs were removed by the asm printer, the bundle
     // became empty.
-    LLVM_DEBUG(dbgs() << "Skipping empty bundle");
-    return false;
+    DEBUG(dbgs() << "Skipping empty bundle");
+    return HexagonShuffler::SHUFFLE_SUCCESS;
   } else if (!HexagonMCInstrInfo::isBundle(MCB)) {
-    LLVM_DEBUG(dbgs() << "Skipping stand-alone insn");
-    return false;
+    DEBUG(dbgs() << "Skipping stand-alone insn");
+    return HexagonShuffler::SHUFFLE_SUCCESS;
   }
 
   bool doneShuffling = false;
+  unsigned shuffleError;
   while (possibleDuplexes.size() > 0 && (!doneShuffling)) {
     // case of Duplex Found
     DuplexCandidate duplexToTry = possibleDuplexes.pop_back_val();
     MCInst Attempt(MCB);
     HexagonMCInstrInfo::replaceDuplex(Context, Attempt, duplexToTry);
-    HexagonMCShuffler MCS(Context, false, MCII, STI, Attempt); // copy packet to the shuffler
+    HexagonMCShuffler MCS(MCII, STI, Attempt); // copy packet to the shuffler
     if (MCS.size() == 1) {                     // case of one duplex
       // copy the created duplex in the shuffler to the bundle
       MCS.copyTo(MCB);
-      return false;
+      return HexagonShuffler::SHUFFLE_SUCCESS;
     }
     // try shuffle with this duplex
     doneShuffling = MCS.reshuffleTo(MCB);
+    shuffleError = MCS.getError();
 
     if (doneShuffling)
       break;
   }
 
-  if (!doneShuffling) {
-    HexagonMCShuffler MCS(Context, false, MCII, STI, MCB);
+  if (doneShuffling == false) {
+    HexagonMCShuffler MCS(MCII, STI, MCB);
     doneShuffling = MCS.reshuffleTo(MCB); // shuffle
+    shuffleError = MCS.getError();
   }
   if (!doneShuffling)
-    return true;
+    return shuffleError;
 
-  return false;
+  return HexagonShuffler::SHUFFLE_SUCCESS;
 }
 
-bool llvm::HexagonMCShuffle(MCContext &Context, MCInstrInfo const &MCII,
-                            MCSubtargetInfo const &STI, MCInst &MCB,
-                            MCInst const &AddMI, int fixupCount) {
-  if (!HexagonMCInstrInfo::isBundle(MCB))
+bool llvm::HexagonMCShuffle(MCInstrInfo const &MCII, MCSubtargetInfo const &STI,
+                            MCInst &MCB, MCInst const *AddMI, int fixupCount) {
+  if (!HexagonMCInstrInfo::isBundle(MCB) || !AddMI)
     return false;
 
   // if fixups present, make sure we don't insert too many nops that would
@@ -190,15 +211,8 @@ bool llvm::HexagonMCShuffle(MCContext &Context, MCInstrInfo const &MCII,
   unsigned int bundleSize = HexagonMCInstrInfo::bundleSize(MCB);
   if (bundleSize >= HEXAGON_PACKET_SIZE)
     return false;
-  bool bhasDuplex = HexagonMCInstrInfo::hasDuplex(MCII, MCB);
   if (fixupCount >= 2) {
-    if (bhasDuplex) {
-      if (bundleSize >= HEXAGON_PACKET_SIZE - 1) {
-        return false;
-      }
-    } else {
-      return false;
-    }
+    return false;
   } else {
     if (bundleSize == HEXAGON_PACKET_SIZE - 1 && fixupCount)
       return false;
@@ -207,15 +221,16 @@ bool llvm::HexagonMCShuffle(MCContext &Context, MCInstrInfo const &MCII,
   if (DisableShuffle)
     return false;
 
-  // mgl: temporary code (shuffler doesn't take into account the fact that
-  // a duplex takes up two slots.  for example, 3 nops can be put into a packet
-  // containing a duplex oversubscribing slots by 1).
-  unsigned maxBundleSize = (HexagonMCInstrInfo::hasImmExt(MCB))
-                               ? HEXAGON_PACKET_SIZE
-                               : HEXAGON_PACKET_SIZE - 1;
-  if (bhasDuplex && bundleSize >= maxBundleSize)
-    return false;
+  HexagonMCShuffler MCS(MCII, STI, MCB, AddMI);
+  if (!MCS.reshuffleTo(MCB)) {
+    unsigned shuffleError = MCS.getError();
+    switch (shuffleError) {
+    default:
+      return false;
+    case HexagonShuffler::SHUFFLE_SUCCESS: // single instruction case
+      return true;
+    }
+  }
 
-  HexagonMCShuffler MCS(Context, false, MCII, STI, MCB, AddMI, false);
-  return MCS.reshuffleTo(MCB);
+  return true;
 }

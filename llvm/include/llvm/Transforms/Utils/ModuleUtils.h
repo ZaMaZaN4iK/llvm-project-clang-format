@@ -1,8 +1,9 @@
 //===-- ModuleUtils.h - Functions to manipulate Modules ---------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,7 +14,6 @@
 #ifndef LLVM_TRANSFORMS_UTILS_MODULEUTILS_H
 #define LLVM_TRANSFORMS_UTILS_MODULEUTILS_H
 
-#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringRef.h"
 #include <utility> // for std::pair
 
@@ -22,7 +22,6 @@ namespace llvm {
 template <typename T> class ArrayRef;
 class Module;
 class Function;
-class FunctionCallee;
 class GlobalValue;
 class GlobalVariable;
 class Constant;
@@ -41,44 +40,29 @@ void appendToGlobalCtors(Module &M, Function *F, int Priority,
 void appendToGlobalDtors(Module &M, Function *F, int Priority,
                          Constant *Data = nullptr);
 
-FunctionCallee declareSanitizerInitFunction(Module &M, StringRef InitName,
-                                            ArrayRef<Type *> InitArgTypes);
+// Validate the result of Module::getOrInsertFunction called for an interface
+// function of given sanitizer. If the instrumented module defines a function
+// with the same name, their prototypes must match, otherwise
+// getOrInsertFunction returns a bitcast.
+Function *checkSanitizerInterfaceFunction(Constant *FuncOrBitcast);
 
-/// Creates sanitizer constructor function, and calls sanitizer's init
+/// \brief Creates sanitizer constructor function, and calls sanitizer's init
 /// function from it.
 /// \return Returns pair of pointers to constructor, and init functions
 /// respectively.
-std::pair<Function *, FunctionCallee> createSanitizerCtorAndInitFunctions(
+std::pair<Function *, Function *> createSanitizerCtorAndInitFunctions(
     Module &M, StringRef CtorName, StringRef InitName,
     ArrayRef<Type *> InitArgTypes, ArrayRef<Value *> InitArgs,
     StringRef VersionCheckName = StringRef());
-
-/// Creates sanitizer constructor function lazily. If a constructor and init
-/// function already exist, this function returns it. Otherwise it calls \c
-/// createSanitizerCtorAndInitFunctions. The FunctionsCreatedCallback is invoked
-/// in that case, passing the new Ctor and Init function.
-///
-/// \return Returns pair of pointers to constructor, and init functions
-/// respectively.
-std::pair<Function *, FunctionCallee> getOrCreateSanitizerCtorAndInitFunctions(
-    Module &M, StringRef CtorName, StringRef InitName,
-    ArrayRef<Type *> InitArgTypes, ArrayRef<Value *> InitArgs,
-    function_ref<void(Function *, FunctionCallee)> FunctionsCreatedCallback,
-    StringRef VersionCheckName = StringRef());
-
-// Creates and returns a sanitizer init function without argument if it doesn't
-// exist, and adds it to the global constructors list. Otherwise it returns the
-// existing function.
-Function *getOrCreateInitFunction(Module &M, StringRef Name);
 
 /// Rename all the anon globals in the module using a hash computed from
 /// the list of public globals in the module.
 bool nameUnamedGlobals(Module &M);
 
-/// Adds global values to the llvm.used list.
+/// \brief Adds global values to the llvm.used list.
 void appendToUsed(Module &M, ArrayRef<GlobalValue *> Values);
 
-/// Adds global values to the llvm.compiler.used list.
+/// \brief Adds global values to the llvm.compiler.used list.
 void appendToCompilerUsed(Module &M, ArrayRef<GlobalValue *> Values);
 
 /// Filter out potentially dead comdat functions where other entries keep the
@@ -97,25 +81,6 @@ void appendToCompilerUsed(Module &M, ArrayRef<GlobalValue *> Values);
 void filterDeadComdatFunctions(
     Module &M, SmallVectorImpl<Function *> &DeadComdatFunctions);
 
-/// Produce a unique identifier for this module by taking the MD5 sum of
-/// the names of the module's strong external symbols that are not comdat
-/// members.
-///
-/// This identifier is normally guaranteed to be unique, or the program would
-/// fail to link due to multiply defined symbols.
-///
-/// If the module has no strong external symbols (such a module may still have a
-/// semantic effect if it performs global initialization), we cannot produce a
-/// unique identifier for this module, so we return the empty string.
-std::string getUniqueModuleId(Module *M);
-
-class CallInst;
-namespace VFABI {
-/// Overwrite the Vector Function ABI variants attribute with the names provide
-/// in \p VariantMappings.
-void setVectorVariantNames(CallInst *CI,
-                           const SmallVector<std::string, 8> &VariantMappings);
-} // End VFABI namespace
 } // End llvm namespace
 
 #endif //  LLVM_TRANSFORMS_UTILS_MODULEUTILS_H

@@ -1,13 +1,14 @@
 //===-- SIMachineScheduler.h - SI Scheduler Interface -----------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 /// \file
-/// SI Machine Scheduler interface
+/// \brief SI Machine Scheduler interface
 //
 //===----------------------------------------------------------------------===//
 
@@ -39,12 +40,13 @@ enum SIScheduleCandReason {
 
 struct SISchedulerCandidate {
   // The reason for this candidate.
-  SIScheduleCandReason Reason = NoCand;
+  SIScheduleCandReason Reason;
 
   // Set of reasons that apply to multiple candidates.
-  uint32_t RepeatReasonSet = 0;
+  uint32_t RepeatReasonSet;
 
-  SISchedulerCandidate() = default;
+  SISchedulerCandidate()
+    :  Reason(NoCand), RepeatReasonSet(0) {}
 
   bool isRepeat(SIScheduleCandReason R) { return RepeatReasonSet & (1 << R); }
   void setRepeat(SIScheduleCandReason R) { RepeatReasonSet |= (1 << R); }
@@ -52,11 +54,6 @@ struct SISchedulerCandidate {
 
 class SIScheduleDAGMI;
 class SIScheduleBlockCreator;
-
-enum SIScheduleBlockLinkKind {
-  NoData,
-  Data
-};
 
 class SIScheduleBlock {
   SIScheduleDAGMI *DAG;
@@ -87,8 +84,8 @@ class SIScheduleBlock {
   std::set<unsigned> LiveInRegs;
   std::set<unsigned> LiveOutRegs;
 
-  bool Scheduled = false;
-  bool HighLatencyBlock = false;
+  bool Scheduled;
+  bool HighLatencyBlock;
 
   std::vector<unsigned> HasLowLatencyNonWaitedParent;
 
@@ -96,14 +93,14 @@ class SIScheduleBlock {
   unsigned ID;
 
   std::vector<SIScheduleBlock*> Preds;  // All blocks predecessors.
-  // All blocks successors, and the kind of link
-  std::vector<std::pair<SIScheduleBlock*, SIScheduleBlockLinkKind>> Succs;
-  unsigned NumHighLatencySuccessors = 0;
+  std::vector<SIScheduleBlock*> Succs;  // All blocks successors.
+  unsigned NumHighLatencySuccessors;
 
 public:
   SIScheduleBlock(SIScheduleDAGMI *DAG, SIScheduleBlockCreator *BC,
                   unsigned ID):
-    DAG(DAG), BC(BC), TopRPTracker(TopPressure), ID(ID) {}
+    DAG(DAG), BC(BC), TopRPTracker(TopPressure), Scheduled(false),
+    HighLatencyBlock(false), ID(ID), NumHighLatencySuccessors(0) {}
 
   ~SIScheduleBlock() = default;
 
@@ -117,11 +114,10 @@ public:
 
   // Add block pred, which has instruction predecessor of SU.
   void addPred(SIScheduleBlock *Pred);
-  void addSucc(SIScheduleBlock *Succ, SIScheduleBlockLinkKind Kind);
+  void addSucc(SIScheduleBlock *Succ);
 
   const std::vector<SIScheduleBlock*>& getPreds() const { return Preds; }
-  ArrayRef<std::pair<SIScheduleBlock*, SIScheduleBlockLinkKind>>
-    getSuccs() const { return Succs; }
+  const std::vector<SIScheduleBlock*>& getSuccs() const { return Succs; }
 
   unsigned Height;  // Maximum topdown path length to block without outputs
   unsigned Depth;   // Maximum bottomup path length to block without inputs
@@ -217,9 +213,9 @@ struct SIScheduleBlocks {
 };
 
 enum SISchedulerBlockCreatorVariant {
-  LatenciesAlone,
-  LatenciesGrouped,
-  LatenciesAlonePlusConsecutive
+    LatenciesAlone,
+    LatenciesGrouped,
+    LatenciesAlonePlusConsecutive
 };
 
 class SIScheduleBlockCreator {
@@ -248,6 +244,7 @@ class SIScheduleBlockCreator {
 
 public:
   SIScheduleBlockCreator(SIScheduleDAGMI *DAG);
+  ~SIScheduleBlockCreator();
 
   SIScheduleBlocks
   getBlocks(SISchedulerBlockCreatorVariant BlockVariant);
@@ -299,9 +296,6 @@ private:
   // Put in one group all instructions with no users in this scheduling region
   // (we'd want these groups be at the end).
   void regroupNoUserInstructions();
-
-  // Give Reserved color to export instructions
-  void colorExports();
 
   void createBlocksForVariant(SISchedulerBlockCreatorVariant BlockVariant);
 
@@ -457,7 +451,6 @@ public:
   LiveIntervals *getLIS() { return LIS; }
   MachineRegisterInfo *getMRI() { return &MRI; }
   const TargetRegisterInfo *getTRI() { return TRI; }
-  ScheduleDAGTopologicalSort *GetTopo() { return &Topo; }
   SUnit& getEntrySU() { return EntrySU; }
   SUnit& getExitSU() { return ExitSU; }
 
@@ -475,14 +468,6 @@ public:
     }
     return InRegs;
   }
-
-  std::set<unsigned> getOutRegs() {
-    std::set<unsigned> OutRegs;
-    for (const auto &RegMaskPair : RPTracker.getPressure().LiveOutRegs) {
-      OutRegs.insert(RegMaskPair.RegUnit);
-    }
-    return OutRegs;
-  };
 
   unsigned getVGPRSetID() const { return VGPRSetID; }
   unsigned getSGPRSetID() const { return SGPRSetID; }

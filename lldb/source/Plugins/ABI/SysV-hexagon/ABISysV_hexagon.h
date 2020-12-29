@@ -1,15 +1,20 @@
 //===-- ABISysV_hexagon.h ----------------------------------------*- C++
 //-*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ABISysV_hexagon_h_
 #define liblldb_ABISysV_hexagon_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Target/ABI.h"
 #include "lldb/lldb-private.h"
 
@@ -34,7 +39,7 @@ public:
   bool GetArgumentValues(lldb_private::Thread &thread,
                          lldb_private::ValueList &values) const override;
 
-  lldb_private::Status
+  lldb_private::Error
   SetReturnValueObject(lldb::StackFrameSP &frame_sp,
                        lldb::ValueObjectSP &new_value) override;
 
@@ -71,17 +76,21 @@ public:
   const lldb_private::RegisterInfo *
   GetRegisterInfoArray(uint32_t &count) override;
 
+  //------------------------------------------------------------------
   // Static Functions
+  //------------------------------------------------------------------
 
   static void Initialize();
 
   static void Terminate();
 
-  static lldb::ABISP CreateInstance(lldb::ProcessSP process_sp, const lldb_private::ArchSpec &arch);
+  static lldb::ABISP CreateInstance(const lldb_private::ArchSpec &arch);
 
   static lldb_private::ConstString GetPluginNameStatic();
 
+  //------------------------------------------------------------------
   // PluginInterface protocol
+  //------------------------------------------------------------------
 
   lldb_private::ConstString GetPluginName() override;
 
@@ -97,9 +106,7 @@ protected:
   bool RegisterIsCalleeSaved(const lldb_private::RegisterInfo *reg_info);
 
 private:
-  ABISysV_hexagon(lldb::ProcessSP process_sp,
-                  std::unique_ptr<llvm::MCRegisterInfo> info_up)
-      : lldb_private::ABI(std::move(process_sp), std::move(info_up)) {
+  ABISysV_hexagon() : lldb_private::ABI() {
     // Call CreateInstance instead.
   }
 };

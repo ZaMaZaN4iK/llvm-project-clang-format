@@ -32,4 +32,4 @@ void test0() {
   log(1);
 }
 
-// CHECK: attributes [[TF]] = { noinline optnone "{{.*}} }
+// CHECK: attributes [[TF]] = { noinline "{{.*}} }

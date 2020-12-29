@@ -9,8 +9,6 @@
 
 #include <string.h>
 
-#include <isl/id.h>
-#include <isl/val.h>
 #include <isl_ast_private.h>
 
 #undef BASE
@@ -358,7 +356,7 @@ isl_bool isl_ast_expr_is_equal(__isl_keep isl_ast_expr *expr1,
 			if (equal < 0 || !equal)
 				return equal;
 		}
-		return isl_bool_true;
+		return 1;
 	case isl_ast_expr_error:
 		return isl_bool_error;
 	}

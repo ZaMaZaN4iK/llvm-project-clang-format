@@ -1,8 +1,9 @@
-//===- IRCompileLayer.h -- Eagerly compile IR for JIT -----------*- C++ -*-===//
+//===------ IRCompileLayer.h -- Eagerly compile IR for JIT ------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,113 +14,81 @@
 #ifndef LLVM_EXECUTIONENGINE_ORC_IRCOMPILELAYER_H
 #define LLVM_EXECUTIONENGINE_ORC_IRCOMPILELAYER_H
 
-#include "llvm/ADT/STLExtras.h"
+#include "llvm/ExecutionEngine/ObjectCache.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"
-#include "llvm/ExecutionEngine/Orc/Layer.h"
-#include "llvm/Support/Error.h"
-#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Object/ObjectFile.h"
 #include <memory>
-#include <string>
 
 namespace llvm {
-
-class Module;
-
 namespace orc {
 
-class IRCompileLayer : public IRLayer {
+/// @brief Eager IR compiling layer.
+///
+///   This layer accepts sets of LLVM IR Modules (via addModuleSet). It
+/// immediately compiles each IR module to an object file (each IR Module is
+/// compiled separately). The resulting set of object files is then added to
+/// the layer below, which must implement the object layer concept.
+template <typename BaseLayerT> class IRCompileLayer {
 public:
-  class IRCompiler {
-  public:
-    IRCompiler(IRMaterializationUnit::ManglingOptions MO) : MO(std::move(MO)) {}
-    virtual ~IRCompiler();
-    const IRMaterializationUnit::ManglingOptions &getManglingOptions() const {
-      return MO;
-    }
-    virtual Expected<std::unique_ptr<MemoryBuffer>> operator()(Module &M) = 0;
-
-  protected:
-    IRMaterializationUnit::ManglingOptions &manglingOptions() { return MO; }
-
-  private:
-    IRMaterializationUnit::ManglingOptions MO;
-  };
-
-  using NotifyCompiledFunction =
-      std::function<void(VModuleKey K, ThreadSafeModule TSM)>;
-
-  IRCompileLayer(ExecutionSession &ES, ObjectLayer &BaseLayer,
-                 std::unique_ptr<IRCompiler> Compile);
-
-  IRCompiler &getCompiler() { return *Compile; }
-
-  void setNotifyCompiled(NotifyCompiledFunction NotifyCompiled);
-
-  void emit(MaterializationResponsibility R, ThreadSafeModule TSM) override;
+  typedef std::function<object::OwningBinary<object::ObjectFile>(Module &)>
+      CompileFtor;
 
 private:
-  mutable std::mutex IRLayerMutex;
-  ObjectLayer &BaseLayer;
-  std::unique_ptr<IRCompiler> Compile;
-  const IRMaterializationUnit::ManglingOptions *ManglingOpts;
-  NotifyCompiledFunction NotifyCompiled = NotifyCompiledFunction();
-};
+  typedef typename BaseLayerT::ObjSetHandleT ObjSetHandleT;
 
-/// Eager IR compiling layer.
-///
-///   This layer immediately compiles each IR module added via addModule to an
-/// object file and adds this module file to the layer below, which must
-/// implement the object layer concept.
-template <typename BaseLayerT, typename CompileFtor>
-class LegacyIRCompileLayer {
 public:
-  /// Callback type for notifications when modules are compiled.
-  using NotifyCompiledCallback =
-      std::function<void(VModuleKey K, std::unique_ptr<Module>)>;
+  /// @brief Handle to a set of compiled modules.
+  typedef ObjSetHandleT ModuleSetHandleT;
 
-  /// Construct an LegacyIRCompileLayer with the given BaseLayer, which must
+  /// @brief Construct an IRCompileLayer with the given BaseLayer, which must
   ///        implement the ObjectLayer concept.
-  LLVM_ATTRIBUTE_DEPRECATED(
-      LegacyIRCompileLayer(
-          BaseLayerT &BaseLayer, CompileFtor Compile,
-          NotifyCompiledCallback NotifyCompiled = NotifyCompiledCallback()),
-      "ORCv1 layers (layers with the 'Legacy' prefix) are deprecated. Please "
-      "use "
-      "the ORCv2 IRCompileLayer instead");
+  IRCompileLayer(BaseLayerT &BaseLayer, CompileFtor Compile)
+      : BaseLayer(BaseLayer), Compile(std::move(Compile)), ObjCache(nullptr) {}
 
-  /// Legacy layer constructor with deprecation acknowledgement.
-  LegacyIRCompileLayer(
-      ORCv1DeprecationAcknowledgement, BaseLayerT &BaseLayer,
-      CompileFtor Compile,
-      NotifyCompiledCallback NotifyCompiled = NotifyCompiledCallback())
-      : BaseLayer(BaseLayer), Compile(std::move(Compile)),
-        NotifyCompiled(std::move(NotifyCompiled)) {}
+  /// @brief Set an ObjectCache to query before compiling.
+  void setObjectCache(ObjectCache *NewCache) { ObjCache = NewCache; }
 
-  /// Get a reference to the compiler functor.
-  CompileFtor& getCompiler() { return Compile; }
+  /// @brief Compile each module in the given module set, then add the resulting
+  ///        set of objects to the base layer along with the memory manager and
+  ///        symbol resolver.
+  ///
+  /// @return A handle for the added modules.
+  template <typename ModuleSetT, typename MemoryManagerPtrT,
+            typename SymbolResolverPtrT>
+  ModuleSetHandleT addModuleSet(ModuleSetT Ms,
+                                MemoryManagerPtrT MemMgr,
+                                SymbolResolverPtrT Resolver) {
+    std::vector<std::unique_ptr<object::OwningBinary<object::ObjectFile>>>
+      Objects;
 
-  /// (Re)set the NotifyCompiled callback.
-  void setNotifyCompiled(NotifyCompiledCallback NotifyCompiled) {
-    this->NotifyCompiled = std::move(NotifyCompiled);
+    for (const auto &M : Ms) {
+      auto Object =
+        llvm::make_unique<object::OwningBinary<object::ObjectFile>>();
+
+      if (ObjCache)
+        *Object = tryToLoadFromObjectCache(*M);
+
+      if (!Object->getBinary()) {
+        *Object = Compile(*M);
+        if (ObjCache)
+          ObjCache->notifyObjectCompiled(&*M,
+                                     Object->getBinary()->getMemoryBufferRef());
+      }
+
+      Objects.push_back(std::move(Object));
+    }
+
+    ModuleSetHandleT H =
+      BaseLayer.addObjectSet(std::move(Objects), std::move(MemMgr),
+                             std::move(Resolver));
+
+    return H;
   }
 
-  /// Compile the module, and add the resulting object to the base layer
-  ///        along with the given memory manager and symbol resolver.
-  Error addModule(VModuleKey K, std::unique_ptr<Module> M) {
-    auto Obj = Compile(*M);
-    if (!Obj)
-      return Obj.takeError();
-    if (auto Err = BaseLayer.addObject(std::move(K), std::move(*Obj)))
-      return Err;
-    if (NotifyCompiled)
-      NotifyCompiled(std::move(K), std::move(M));
-    return Error::success();
-  }
+  /// @brief Remove the module set associated with the handle H.
+  void removeModuleSet(ModuleSetHandleT H) { BaseLayer.removeObjectSet(H); }
 
-  /// Remove the module associated with the VModuleKey K.
-  Error removeModule(VModuleKey K) { return BaseLayer.removeObject(K); }
-
-  /// Search for the given named symbol.
+  /// @brief Search for the given named symbol.
   /// @param Name The name of the symbol to search for.
   /// @param ExportedSymbolsOnly If true, search only for exported symbols.
   /// @return A handle for the given named symbol, if it exists.
@@ -127,38 +96,51 @@ public:
     return BaseLayer.findSymbol(Name, ExportedSymbolsOnly);
   }
 
-  /// Get the address of the given symbol in compiled module represented
-  ///        by the handle H. This call is forwarded to the base layer's
-  ///        implementation.
-  /// @param K The VModuleKey for the module to search in.
+  /// @brief Get the address of the given symbol in the context of the set of
+  ///        compiled modules represented by the handle H. This call is
+  ///        forwarded to the base layer's implementation.
+  /// @param H The handle for the module set to search in.
   /// @param Name The name of the symbol to search for.
   /// @param ExportedSymbolsOnly If true, search only for exported symbols.
   /// @return A handle for the given named symbol, if it is found in the
-  ///         given module.
-  JITSymbol findSymbolIn(VModuleKey K, const std::string &Name,
+  ///         given module set.
+  JITSymbol findSymbolIn(ModuleSetHandleT H, const std::string &Name,
                          bool ExportedSymbolsOnly) {
-    return BaseLayer.findSymbolIn(K, Name, ExportedSymbolsOnly);
+    return BaseLayer.findSymbolIn(H, Name, ExportedSymbolsOnly);
   }
 
-  /// Immediately emit and finalize the module represented by the given
-  ///        handle.
-  /// @param K The VModuleKey for the module to emit/finalize.
-  Error emitAndFinalize(VModuleKey K) { return BaseLayer.emitAndFinalize(K); }
+  /// @brief Immediately emit and finalize the moduleOB set represented by the
+  ///        given handle.
+  /// @param H Handle for module set to emit/finalize.
+  void emitAndFinalize(ModuleSetHandleT H) {
+    BaseLayer.emitAndFinalize(H);
+  }
 
 private:
+  object::OwningBinary<object::ObjectFile>
+  tryToLoadFromObjectCache(const Module &M) {
+    std::unique_ptr<MemoryBuffer> ObjBuffer = ObjCache->getObject(&M);
+    if (!ObjBuffer)
+      return object::OwningBinary<object::ObjectFile>();
+
+    Expected<std::unique_ptr<object::ObjectFile>> Obj =
+        object::ObjectFile::createObjectFile(ObjBuffer->getMemBufferRef());
+    if (!Obj) {
+      // TODO: Actually report errors helpfully.
+      consumeError(Obj.takeError());
+      return object::OwningBinary<object::ObjectFile>();
+    }
+
+    return object::OwningBinary<object::ObjectFile>(std::move(*Obj),
+                                                    std::move(ObjBuffer));
+  }
+
   BaseLayerT &BaseLayer;
   CompileFtor Compile;
-  NotifyCompiledCallback NotifyCompiled;
+  ObjectCache *ObjCache;
 };
 
-template <typename BaseLayerT, typename CompileFtor>
-LegacyIRCompileLayer<BaseLayerT, CompileFtor>::LegacyIRCompileLayer(
-    BaseLayerT &BaseLayer, CompileFtor Compile,
-    NotifyCompiledCallback NotifyCompiled)
-    : BaseLayer(BaseLayer), Compile(std::move(Compile)),
-      NotifyCompiled(std::move(NotifyCompiled)) {}
-
-} // end namespace orc
-} // end namespace llvm
+} // End namespace orc.
+} // End namespace llvm.
 
 #endif // LLVM_EXECUTIONENGINE_ORC_IRCOMPILINGLAYER_H

@@ -1,8 +1,9 @@
-//===- Option.h - Abstract Driver Options -----------------------*- C++ -*-===//
+//===--- Option.h - Abstract Driver Options ---------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,23 +12,15 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Option/OptSpecifier.h"
 #include "llvm/Option/OptTable.h"
 #include "llvm/Support/ErrorHandling.h"
-#include <cassert>
-#include <string>
 
 namespace llvm {
-
-class raw_ostream;
-
 namespace opt {
-
 class Arg;
 class ArgList;
-
 /// ArgStringList - Type used for constructing argv lists for subprocesses.
-using ArgStringList = SmallVector<const char *, 16>;
+typedef SmallVector<const char*, 16> ArgStringList;
 
 /// Base flags for all options. Custom flags may be added after.
 enum DriverFlag {
@@ -56,7 +49,6 @@ public:
     UnknownClass,
     FlagClass,
     JoinedClass,
-    ValuesClass,
     SeparateClass,
     RemainingArgsClass,
     RemainingArgsJoinedClass,
@@ -94,7 +86,7 @@ public:
     return OptionClass(Info->Kind);
   }
 
-  /// Get the name of this option without any prefix.
+  /// \brief Get the name of this option without any prefix.
   StringRef getName() const {
     assert(Info && "Must have a valid info!");
     return Info->Name;
@@ -112,7 +104,7 @@ public:
     return Owner->getOption(Info->AliasID);
   }
 
-  /// Get the alias arguments as a \0 separated list.
+  /// \brief Get the alias arguments as a \0 separated list.
   /// E.g. ["foo", "bar"] would be returned as "foo\0bar\0".
   const char *getAliasArgs() const {
     assert(Info && "Must have a valid info!");
@@ -122,13 +114,13 @@ public:
     return Info->AliasArgs;
   }
 
-  /// Get the default prefix for this option.
+  /// \brief Get the default prefix for this option.
   StringRef getPrefix() const {
     const char *Prefix = *Info->Prefixes;
     return Prefix ? Prefix : StringRef();
   }
 
-  /// Get the name of this option with the default prefix.
+  /// \brief Get the name of this option with the default prefix.
   std::string getPrefixedName() const {
     std::string Ret = getPrefix();
     Ret += getName();
@@ -155,7 +147,6 @@ public:
     case CommaJoinedClass:
       return RenderCommaJoinedStyle;
     case FlagClass:
-    case ValuesClass:
     case SeparateClass:
     case MultiArgClass:
     case JoinedOrSeparateClass:
@@ -206,17 +197,11 @@ public:
   ///                start.
   Arg *accept(const ArgList &Args, unsigned &Index, unsigned ArgSize) const;
 
-private:
-  Arg *acceptInternal(const ArgList &Args, unsigned &Index,
-                      unsigned ArgSize) const;
-
-public:
   void print(raw_ostream &O) const;
   void dump() const;
 };
 
 } // end namespace opt
-
 } // end namespace llvm
 
-#endif // LLVM_OPTION_OPTION_H
+#endif

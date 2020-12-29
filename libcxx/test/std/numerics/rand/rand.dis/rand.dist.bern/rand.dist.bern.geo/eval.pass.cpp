@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,24 +21,12 @@
 #include <vector>
 #include <cassert>
 
-#include "test_macros.h"
-
 template <class T>
 inline
 T
 sqr(T x)
 {
     return x * x;
-}
-
-void test_small_inputs() {
-  std::mt19937 engine;
-  std::geometric_distribution<std::int16_t> distribution(5.45361e-311);
-  typedef std::geometric_distribution<std::int16_t>::result_type result_type;
-  for (int i = 0; i < 1000; ++i) {
-    volatile result_type res = distribution(engine);
-    ((void)res);
-  }
 }
 
 void
@@ -298,7 +287,7 @@ test6()
     assert(std::abs((kurtosis - x_kurtosis) / x_kurtosis) < 0.02);
 }
 
-int main(int, char**)
+int main()
 {
     test1();
     test2();
@@ -306,7 +295,4 @@ int main(int, char**)
     test4();
     test5();
     test6();
-    test_small_inputs();
-
-  return 0;
 }

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,8 +21,6 @@
 #include <vector>
 #include <numeric>
 
-#include "test_macros.h"
-
 template <class T>
 inline
 T
@@ -34,6 +33,7 @@ void
 test1()
 {
     typedef std::lognormal_distribution<> D;
+    typedef D::param_type P;
     typedef std::mt19937 G;
     G g;
     D d(-1./8192, 0.015625);
@@ -78,6 +78,7 @@ void
 test2()
 {
     typedef std::lognormal_distribution<> D;
+    typedef D::param_type P;
     typedef std::mt19937 G;
     G g;
     D d(-1./32, 0.25);
@@ -122,6 +123,7 @@ void
 test3()
 {
     typedef std::lognormal_distribution<> D;
+    typedef D::param_type P;
     typedef std::mt19937 G;
     G g;
     D d(-1./8, 0.5);
@@ -166,6 +168,7 @@ void
 test4()
 {
     typedef std::lognormal_distribution<> D;
+    typedef D::param_type P;
     typedef std::mt19937 G;
     G g;
     D d;
@@ -210,6 +213,7 @@ void
 test5()
 {
     typedef std::lognormal_distribution<> D;
+    typedef D::param_type P;
     typedef std::mt19937 G;
     G g;
     D d(-0.78125, 1.25);
@@ -250,13 +254,11 @@ test5()
     assert(std::abs((kurtosis - x_kurtosis) / x_kurtosis) < 0.7);
 }
 
-int main(int, char**)
+int main()
 {
     test1();
     test2();
     test3();
     test4();
     test5();
-
-  return 0;
 }

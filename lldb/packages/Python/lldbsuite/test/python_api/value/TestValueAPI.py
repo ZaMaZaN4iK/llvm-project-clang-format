@@ -4,6 +4,9 @@ Test some SBValue APIs.
 
 from __future__ import print_function
 
+import os
+import re
+import time
 
 import lldb
 from lldbsuite.test.decorators import *
@@ -30,7 +33,7 @@ class ValueAPITestCase(TestBase):
         d = {'EXE': self.exe_name}
         self.build(dictionary=d)
         self.setTearDownCleanup(dictionary=d)
-        exe = self.getBuildArtifact(self.exe_name)
+        exe = os.path.join(os.getcwd(), self.exe_name)
 
         # Create a target by the debugger.
         target = self.dbg.CreateTarget(exe)
@@ -58,22 +61,8 @@ class ValueAPITestCase(TestBase):
         list = target.FindGlobalVariables('days_of_week', 1)
         days_of_week = list.GetValueAtIndex(0)
         self.assertTrue(days_of_week, VALID_VARIABLE)
-        self.assertEqual(days_of_week.GetNumChildren(), 7, VALID_VARIABLE)
+        self.assertTrue(days_of_week.GetNumChildren() == 7, VALID_VARIABLE)
         self.DebugSBValue(days_of_week)
-
-        # Use this to test the "child" and "children" accessors:
-        children = days_of_week.children
-        self.assertEqual(len(children), 7, VALID_VARIABLE)
-        for i in range(0, len(children)):
-            day = days_of_week.child[i]
-            list_day = children[i]
-            self.assertNotEqual(day, None)
-            self.assertNotEqual(list_day, None)
-            self.assertEqual(day.GetSummary(), list_day.GetSummary(), VALID_VARIABLE)
-
-        # Spot check the actual value:
-        first_day = days_of_week.child[1]
-        self.assertEqual(first_day.GetSummary(), '"Monday"', VALID_VARIABLE)
 
         # Get global variable 'weekdays'.
         list = target.FindGlobalVariables('weekdays', 1)
@@ -150,9 +139,6 @@ class ValueAPITestCase(TestBase):
         val_s = target.EvaluateExpression('s')
         val_a = target.EvaluateExpression('a')
         self.assertTrue(
-            val_s.GetChildMemberWithName('a').GetAddress().IsValid(),
-            VALID_VARIABLE)
-        self.assertTrue(
             val_s.GetChildMemberWithName('a').AddressOf(),
             VALID_VARIABLE)
         self.assertTrue(
@@ -160,21 +146,10 @@ class ValueAPITestCase(TestBase):
                 val_i.GetType()).AddressOf(),
             VALID_VARIABLE)
 
-        # Check that lldb.value implements truth testing.
-        self.assertFalse(lldb.value(frame0.FindVariable('bogus')))
-        self.assertTrue(lldb.value(frame0.FindVariable('uinthex')))
-
         self.assertTrue(int(lldb.value(frame0.FindVariable('uinthex')))
                         == 3768803088, 'uinthex == 3768803088')
         self.assertTrue(int(lldb.value(frame0.FindVariable('sinthex')))
                         == -526164208, 'sinthex == -526164208')
-
-        # Check value_iter works correctly.
-        for v in [
-                lldb.value(frame0.FindVariable('uinthex')),
-                lldb.value(frame0.FindVariable('sinthex'))
-        ]:
-            self.assertTrue(v)
 
         self.assertTrue(
             frame0.FindVariable('uinthex').GetValueAsUnsigned() == 3768803088,

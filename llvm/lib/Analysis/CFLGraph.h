@@ -1,50 +1,30 @@
-//===- CFLGraph.h - Abstract stratified sets implementation. -----*- C++-*-===//
+//======- CFLGraph.h - Abstract stratified sets implementation. --------======//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-//
 /// \file
 /// This file defines CFLGraph, an auxiliary data structure used by CFL-based
 /// alias analysis.
-//
+///
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_ANALYSIS_CFLGRAPH_H
-#define LLVM_LIB_ANALYSIS_CFLGRAPH_H
+#ifndef LLVM_ANALYSIS_CFLGRAPH_H
+#define LLVM_ANALYSIS_CFLGRAPH_H
 
 #include "AliasAnalysisSummary.h"
-#include "llvm/ADT/APInt.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/iterator_range.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/MemoryBuiltins.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
-#include "llvm/IR/Argument.h"
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/DataLayout.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/InstVisitor.h"
-#include "llvm/IR/InstrTypes.h"
-#include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/Operator.h"
-#include "llvm/IR/Type.h"
-#include "llvm/IR/Value.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/ErrorHandling.h"
-#include <cassert>
-#include <cstdint>
-#include <vector>
 
 namespace llvm {
 namespace cflaa {
 
-/// The Program Expression Graph (PEG) of CFL analysis
+/// \brief The Program Expression Graph (PEG) of CFL analysis
 /// CFLGraph is auxiliary data structure used by CFL-based alias analysis to
 /// describe flow-insensitive pointer-related behaviors. Given an LLVM function,
 /// the main purpose of this graph is to abstract away unrelated facts and
@@ -56,14 +36,14 @@ namespace cflaa {
 /// I+1) and a reference edge to (X, I-1).
 class CFLGraph {
 public:
-  using Node = InstantiatedValue;
+  typedef InstantiatedValue Node;
 
   struct Edge {
     Node Other;
     int64_t Offset;
   };
 
-  using EdgeList = std::vector<Edge>;
+  typedef std::vector<Edge> EdgeList;
 
   struct NodeInfo {
     EdgeList Edges, ReverseEdges;
@@ -95,8 +75,7 @@ public:
   };
 
 private:
-  using ValueMap = DenseMap<Value *, ValueInfo>;
-
+  typedef DenseMap<Value *, ValueInfo> ValueMap;
   ValueMap ValueImpls;
 
   NodeInfo *getNode(Node N) {
@@ -107,7 +86,7 @@ private:
   }
 
 public:
-  using const_value_iterator = ValueMap::const_iterator;
+  typedef ValueMap::const_iterator const_value_iterator;
 
   bool addNode(Node N, AliasAttrs Attr = AliasAttrs()) {
     assert(N.Val != nullptr);
@@ -152,7 +131,7 @@ public:
   }
 };
 
-/// A builder class used to create CFLGraph instance from a given function
+///\brief A builder class used to create CFLGraph instance from a given function
 /// The CFL-AA that uses this builder must provide its own type as a template
 /// argument. This is necessary for interprocedural processing: CFLGraphBuilder
 /// needs a way of obtaining the summary of other functions when callinsts are
@@ -181,23 +160,24 @@ template <typename CFLAA> class CFLGraphBuilder {
 
     static bool hasUsefulEdges(ConstantExpr *CE) {
       // ConstantExpr doesn't have terminators, invokes, or fences, so only
-      // needs to check for compares.
+      // needs
+      // to check for compares.
       return CE->getOpcode() != Instruction::ICmp &&
              CE->getOpcode() != Instruction::FCmp;
     }
 
     // Returns possible functions called by CS into the given SmallVectorImpl.
     // Returns true if targets found, false otherwise.
-    static bool getPossibleTargets(CallBase &Call,
+    static bool getPossibleTargets(CallSite CS,
                                    SmallVectorImpl<Function *> &Output) {
-      if (auto *Fn = Call.getCalledFunction()) {
+      if (auto *Fn = CS.getCalledFunction()) {
         Output.push_back(Fn);
         return true;
       }
 
       // TODO: If the call is indirect, we might be able to enumerate all
-      // potential targets of the call and return them, rather than just
-      // failing.
+      // potential
+      // targets of the call and return them, rather than just failing.
       return false;
     }
 
@@ -230,11 +210,6 @@ template <typename CFLAA> class CFLGraphBuilder {
 
     void addDerefEdge(Value *From, Value *To, bool IsRead) {
       assert(From != nullptr && To != nullptr);
-      // FIXME: This is subtly broken, due to how we model some instructions
-      // (e.g. extractvalue, extractelement) as loads. Since those take
-      // non-pointer operands, we'll entirely skip adding edges for those.
-      //
-      // addAssignEdge seems to have a similar issue with insertvalue, etc.
       if (!From->getType()->isPointerTy() || !To->getType()->isPointerTy())
         return;
       addNode(From);
@@ -289,11 +264,6 @@ template <typename CFLAA> class CFLGraphBuilder {
       auto *Op2 = Inst.getOperand(1);
       addAssignEdge(Op1, &Inst);
       addAssignEdge(Op2, &Inst);
-    }
-
-    void visitUnaryOperator(UnaryOperator &Inst) {
-      auto *Src = Inst.getOperand(0);
-      addAssignEdge(Src, &Inst);
     }
 
     void visitAtomicCmpXchgInst(AtomicCmpXchgInst &Inst) {
@@ -372,11 +342,11 @@ template <typename CFLAA> class CFLGraphBuilder {
       return !Fn->hasExactDefinition();
     }
 
-    bool tryInterproceduralAnalysis(CallBase &Call,
+    bool tryInterproceduralAnalysis(CallSite CS,
                                     const SmallVectorImpl<Function *> &Fns) {
       assert(Fns.size() > 0);
 
-      if (Call.arg_size() > MaxSupportedArgsInSummary)
+      if (CS.arg_size() > MaxSupportedArgsInSummary)
         return false;
 
       // Exit early if we'll fail anyway
@@ -384,7 +354,7 @@ template <typename CFLAA> class CFLGraphBuilder {
         if (isFunctionExternal(Fn) || Fn->isVarArg())
           return false;
         // Fail if the caller does not provide enough arguments
-        assert(Fn->arg_size() <= Call.arg_size());
+        assert(Fn->arg_size() <= CS.arg_size());
         if (!AA.getAliasSummary(*Fn))
           return false;
       }
@@ -395,7 +365,7 @@ template <typename CFLAA> class CFLGraphBuilder {
 
         auto &RetParamRelations = Summary->RetParamRelations;
         for (auto &Relation : RetParamRelations) {
-          auto IRelation = instantiateExternalRelation(Relation, Call);
+          auto IRelation = instantiateExternalRelation(Relation, CS);
           if (IRelation.hasValue()) {
             Graph.addNode(IRelation->From);
             Graph.addNode(IRelation->To);
@@ -405,7 +375,7 @@ template <typename CFLAA> class CFLGraphBuilder {
 
         auto &RetParamAttributes = Summary->RetParamAttributes;
         for (auto &Attribute : RetParamAttributes) {
-          auto IAttr = instantiateExternalAttribute(Attribute, Call);
+          auto IAttr = instantiateExternalAttribute(Attribute, CS);
           if (IAttr.hasValue())
             Graph.addNode(IAttr->IValue, IAttr->Attr);
         }
@@ -414,35 +384,40 @@ template <typename CFLAA> class CFLGraphBuilder {
       return true;
     }
 
-    void visitCallBase(CallBase &Call) {
+    void visitCallSite(CallSite CS) {
+      auto Inst = CS.getInstruction();
+
       // Make sure all arguments and return value are added to the graph first
-      for (Value *V : Call.args())
+      for (Value *V : CS.args())
         if (V->getType()->isPointerTy())
           addNode(V);
-      if (Call.getType()->isPointerTy())
-        addNode(&Call);
+      if (Inst->getType()->isPointerTy())
+        addNode(Inst);
 
       // Check if Inst is a call to a library function that
-      // allocates/deallocates on the heap. Those kinds of functions do not
-      // introduce any aliases.
+      // allocates/deallocates
+      // on the heap. Those kinds of functions do not introduce any aliases.
       // TODO: address other common library functions such as realloc(),
-      // strdup(), etc.
-      if (isMallocOrCallocLikeFn(&Call, &TLI) || isFreeCall(&Call, &TLI))
+      // strdup(),
+      // etc.
+      if (isMallocLikeFn(Inst, &TLI) || isCallocLikeFn(Inst, &TLI) ||
+          isFreeCall(Inst, &TLI))
         return;
 
       // TODO: Add support for noalias args/all the other fun function
-      // attributes that we can tack on.
+      // attributes
+      // that we can tack on.
       SmallVector<Function *, 4> Targets;
-      if (getPossibleTargets(Call, Targets))
-        if (tryInterproceduralAnalysis(Call, Targets))
+      if (getPossibleTargets(CS, Targets))
+        if (tryInterproceduralAnalysis(CS, Targets))
           return;
 
       // Because the function is opaque, we need to note that anything
       // could have happened to the arguments (unless the function is marked
       // readonly or readnone), and that the result could alias just about
       // anything, too (unless the result is marked noalias).
-      if (!Call.onlyReadsMemory())
-        for (Value *V : Call.args()) {
+      if (!CS.onlyReadsMemory())
+        for (Value *V : CS.args()) {
           if (V->getType()->isPointerTy()) {
             // The argument itself escapes.
             Graph.addAttr(InstantiatedValue{V, 0}, getAttrEscaped());
@@ -453,12 +428,12 @@ template <typename CFLAA> class CFLGraphBuilder {
           }
         }
 
-      if (Call.getType()->isPointerTy()) {
-        auto *Fn = Call.getCalledFunction();
-        if (Fn == nullptr || !Fn->returnDoesNotAlias())
+      if (Inst->getType()->isPointerTy()) {
+        auto *Fn = CS.getCalledFunction();
+        if (Fn == nullptr || !Fn->doesNotAlias(0))
           // No need to call addNode() since we've added Inst at the
           // beginning of this function and we know it is not a global.
-          Graph.addAttr(InstantiatedValue{&Call, 0}, getAttrUnknown());
+          Graph.addAttr(InstantiatedValue{Inst, 0}, getAttrUnknown());
       }
     }
 
@@ -513,17 +488,15 @@ template <typename CFLAA> class CFLGraphBuilder {
         visitGEP(*GEPOp);
         break;
       }
-
       case Instruction::PtrToInt: {
-        addNode(CE->getOperand(0), getAttrEscaped());
+        auto *Ptr = CE->getOperand(0);
+        addNode(Ptr, getAttrEscaped());
         break;
       }
-
       case Instruction::IntToPtr: {
         addNode(CE, getAttrUnknown());
         break;
       }
-
       case Instruction::BitCast:
       case Instruction::AddrSpaceCast:
       case Instruction::Trunc:
@@ -535,31 +508,48 @@ template <typename CFLAA> class CFLGraphBuilder {
       case Instruction::SIToFP:
       case Instruction::FPToUI:
       case Instruction::FPToSI: {
-        addAssignEdge(CE->getOperand(0), CE);
+        auto *Src = CE->getOperand(0);
+        addAssignEdge(Src, CE);
         break;
       }
-
       case Instruction::Select: {
-        addAssignEdge(CE->getOperand(1), CE);
-        addAssignEdge(CE->getOperand(2), CE);
+        auto *TrueVal = CE->getOperand(0);
+        auto *FalseVal = CE->getOperand(1);
+        addAssignEdge(TrueVal, CE);
+        addAssignEdge(FalseVal, CE);
         break;
       }
-
-      case Instruction::InsertElement:
+      case Instruction::InsertElement: {
+        auto *Vec = CE->getOperand(0);
+        auto *Val = CE->getOperand(1);
+        addAssignEdge(Vec, CE);
+        addStoreEdge(Val, CE);
+        break;
+      }
+      case Instruction::ExtractElement: {
+        auto *Ptr = CE->getOperand(0);
+        addLoadEdge(Ptr, CE);
+        break;
+      }
       case Instruction::InsertValue: {
-        addAssignEdge(CE->getOperand(0), CE);
-        addStoreEdge(CE->getOperand(1), CE);
+        auto *Agg = CE->getOperand(0);
+        auto *Val = CE->getOperand(1);
+        addAssignEdge(Agg, CE);
+        addStoreEdge(Val, CE);
         break;
       }
-
-      case Instruction::ExtractElement:
       case Instruction::ExtractValue: {
-        addLoadEdge(CE->getOperand(0), CE);
+        auto *Ptr = CE->getOperand(0);
+        addLoadEdge(Ptr, CE);
+      }
+      case Instruction::ShuffleVector: {
+        auto *From1 = CE->getOperand(0);
+        auto *From2 = CE->getOperand(1);
+        addAssignEdge(From1, CE);
+        addAssignEdge(From2, CE);
         break;
       }
-
       case Instruction::Add:
-      case Instruction::FAdd:
       case Instruction::Sub:
       case Instruction::FSub:
       case Instruction::Mul:
@@ -577,18 +567,11 @@ template <typename CFLAA> class CFLGraphBuilder {
       case Instruction::LShr:
       case Instruction::AShr:
       case Instruction::ICmp:
-      case Instruction::FCmp:
-      case Instruction::ShuffleVector: {
+      case Instruction::FCmp: {
         addAssignEdge(CE->getOperand(0), CE);
         addAssignEdge(CE->getOperand(1), CE);
         break;
       }
-
-      case Instruction::FNeg: {
-        addAssignEdge(CE->getOperand(0), CE);
-        break;
-      }
-
       default:
         llvm_unreachable("Unknown instruction type encountered!");
       }
@@ -600,7 +583,7 @@ template <typename CFLAA> class CFLGraphBuilder {
   // Determines whether or not we an instruction is useless to us (e.g.
   // FenceInst)
   static bool hasUsefulEdges(Instruction *Inst) {
-    bool IsNonInvokeRetTerminator = Inst->isTerminator() &&
+    bool IsNonInvokeRetTerminator = isa<TerminatorInst>(Inst) &&
                                     !isa<InvokeInst>(Inst) &&
                                     !isa<ReturnInst>(Inst);
     return !isa<CmpInst>(Inst) && !isa<FenceInst>(Inst) &&
@@ -653,8 +636,7 @@ public:
     return ReturnedValues;
   }
 };
+}
+}
 
-} // end namespace cflaa
-} // end namespace llvm
-
-#endif // LLVM_LIB_ANALYSIS_CFLGRAPH_H
+#endif

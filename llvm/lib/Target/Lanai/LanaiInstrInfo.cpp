@@ -1,8 +1,9 @@
 //===-- LanaiInstrInfo.cpp - Lanai Instruction Information ------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -10,10 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "Lanai.h"
 #include "LanaiInstrInfo.h"
-#include "LanaiAluCode.h"
-#include "LanaiCondCode.h"
-#include "MCTargetDesc/LanaiBaseInfo.h"
+#include "LanaiMachineFunctionInfo.h"
+#include "LanaiTargetMachine.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -34,8 +35,8 @@ LanaiInstrInfo::LanaiInstrInfo()
 void LanaiInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                  MachineBasicBlock::iterator Position,
                                  const DebugLoc &DL,
-                                 MCRegister DestinationRegister,
-                                 MCRegister SourceRegister,
+                                 unsigned DestinationRegister,
+                                 unsigned SourceRegister,
                                  bool KillSource) const {
   if (!Lanai::GPRRegClass.contains(DestinationRegister, SourceRegister)) {
     llvm_unreachable("Impossible reg-to-reg copy");
@@ -86,7 +87,7 @@ void LanaiInstrInfo::loadRegFromStackSlot(
 }
 
 bool LanaiInstrInfo::areMemAccessesTriviallyDisjoint(
-    const MachineInstr &MIa, const MachineInstr &MIb) const {
+    MachineInstr &MIa, MachineInstr &MIb, AliasAnalysis * /*AA*/) const {
   assert(MIa.mayLoadOrStore() && "MIa must be a load or store.");
   assert(MIb.mayLoadOrStore() && "MIb must be a load or store.");
 
@@ -100,12 +101,12 @@ bool LanaiInstrInfo::areMemAccessesTriviallyDisjoint(
   // the width doesn't overlap the offset of a higher memory access,
   // then the memory accesses are different.
   const TargetRegisterInfo *TRI = &getRegisterInfo();
-  const MachineOperand *BaseOpA = nullptr, *BaseOpB = nullptr;
+  unsigned BaseRegA = 0, BaseRegB = 0;
   int64_t OffsetA = 0, OffsetB = 0;
   unsigned int WidthA = 0, WidthB = 0;
-  if (getMemOperandWithOffsetWidth(MIa, BaseOpA, OffsetA, WidthA, TRI) &&
-      getMemOperandWithOffsetWidth(MIb, BaseOpB, OffsetB, WidthB, TRI)) {
-    if (BaseOpA->isIdenticalTo(*BaseOpB)) {
+  if (getMemOpBaseRegImmOfsWidth(MIa, BaseRegA, OffsetA, WidthA, TRI) &&
+      getMemOpBaseRegImmOfsWidth(MIb, BaseRegB, OffsetB, WidthB, TRI)) {
+    if (BaseRegA == BaseRegB) {
       int LowOffset = std::min(OffsetA, OffsetB);
       int HighOffset = std::max(OffsetA, OffsetB);
       int LowWidth = (LowOffset == OffsetA) ? WidthA : WidthB;
@@ -456,7 +457,7 @@ bool LanaiInstrInfo::analyzeSelect(const MachineInstr &MI,
 // return the defining instruction.
 static MachineInstr *canFoldIntoSelect(unsigned Reg,
                                        const MachineRegisterInfo &MRI) {
-  if (!Register::isVirtualRegister(Reg))
+  if (!TargetRegisterInfo::isVirtualRegister(Reg))
     return nullptr;
   if (!MRI.hasOneNonDBGUse(Reg))
     return nullptr;
@@ -478,7 +479,7 @@ static MachineInstr *canFoldIntoSelect(unsigned Reg,
     // MI can't have any tied operands, that would conflict with predication.
     if (MO.isTied())
       return nullptr;
-    if (Register::isPhysicalRegister(MO.getReg()))
+    if (TargetRegisterInfo::isPhysicalRegister(MO.getReg()))
       return nullptr;
     if (MO.isDef() && !MO.isDead())
       return nullptr;
@@ -504,7 +505,7 @@ LanaiInstrInfo::optimizeSelect(MachineInstr &MI,
 
   // Find new register class to use.
   MachineOperand FalseReg = MI.getOperand(Invert ? 1 : 2);
-  Register DestReg = MI.getOperand(0).getReg();
+  unsigned DestReg = MI.getOperand(0).getReg();
   const TargetRegisterClass *PreviousClass = MRI.getRegClass(FalseReg.getReg());
   if (!MRI.constrainRegClass(DestReg, PreviousClass))
     return nullptr;
@@ -517,7 +518,7 @@ LanaiInstrInfo::optimizeSelect(MachineInstr &MI,
   const MCInstrDesc &DefDesc = DefMI->getDesc();
   for (unsigned i = 1, e = DefDesc.getNumOperands();
        i != e && !DefDesc.OpInfo[i].isPredicate(); ++i)
-    NewMI.add(DefMI->getOperand(i));
+    NewMI.addOperand(DefMI->getOperand(i));
 
   unsigned CondCode = MI.getOperand(3).getImm();
   if (Invert)
@@ -530,7 +531,7 @@ LanaiInstrInfo::optimizeSelect(MachineInstr &MI,
   // register operand tied to the first def.  The tie makes the register
   // allocator ensure the FalseReg is allocated the same register as operand 0.
   FalseReg.setImplicit();
-  NewMI.add(FalseReg);
+  NewMI.addOperand(FalseReg);
   NewMI->tieOperands(0, NewMI->getNumOperands() - 1);
 
   // Update SeenMIs set: register newly created MI and erase removed DefMI.
@@ -572,8 +573,8 @@ bool LanaiInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
   while (Instruction != MBB.begin()) {
     --Instruction;
 
-    // Skip over debug instructions.
-    if (Instruction->isDebugInstr())
+    // Skip over debug values.
+    if (Instruction->isDebugValue())
       continue;
 
     // Working from the bottom, when we see a non-terminator
@@ -698,7 +699,7 @@ unsigned LanaiInstrInfo::removeBranch(MachineBasicBlock &MBB,
 
   while (Instruction != MBB.begin()) {
     --Instruction;
-    if (Instruction->isDebugInstr())
+    if (Instruction->isDebugValue())
       continue;
     if (Instruction->getOpcode() != Lanai::BT &&
         Instruction->getOpcode() != Lanai::BRCC) {
@@ -732,13 +733,8 @@ unsigned LanaiInstrInfo::isLoadFromStackSlotPostFE(const MachineInstr &MI,
     if ((Reg = isLoadFromStackSlot(MI, FrameIndex)))
       return Reg;
     // Check for post-frame index elimination operations
-    SmallVector<const MachineMemOperand *, 1> Accesses;
-    if (hasLoadFromStackSlot(MI, Accesses)){
-      FrameIndex =
-          cast<FixedStackPseudoSourceValue>(Accesses.front()->getPseudoValue())
-              ->getFrameIndex();
-      return 1;
-    }
+    const MachineMemOperand *Dummy;
+    return hasLoadFromStackSlot(MI, Dummy, FrameIndex);
   }
   return 0;
 }
@@ -754,9 +750,9 @@ unsigned LanaiInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
   return 0;
 }
 
-bool LanaiInstrInfo::getMemOperandWithOffsetWidth(
-    const MachineInstr &LdSt, const MachineOperand *&BaseOp, int64_t &Offset,
-    unsigned &Width, const TargetRegisterInfo * /*TRI*/) const {
+bool LanaiInstrInfo::getMemOpBaseRegImmOfsWidth(
+    MachineInstr &LdSt, unsigned &BaseReg, int64_t &Offset, unsigned &Width,
+    const TargetRegisterInfo * /*TRI*/) const {
   // Handle only loads/stores with base register followed by immediate offset
   // and with add as ALU op.
   if (LdSt.getNumOperands() != 4)
@@ -786,19 +782,14 @@ bool LanaiInstrInfo::getMemOperandWithOffsetWidth(
     break;
   }
 
-  BaseOp = &LdSt.getOperand(1);
+  BaseReg = LdSt.getOperand(1).getReg();
   Offset = LdSt.getOperand(2).getImm();
-
-  if (!BaseOp->isReg())
-    return false;
-
   return true;
 }
 
-bool LanaiInstrInfo::getMemOperandWithOffset(const MachineInstr &LdSt,
-                                        const MachineOperand *&BaseOp,
-                                        int64_t &Offset,
-                                        const TargetRegisterInfo *TRI) const {
+bool LanaiInstrInfo::getMemOpBaseRegImmOfs(
+    MachineInstr &LdSt, unsigned &BaseReg, int64_t &Offset,
+    const TargetRegisterInfo *TRI) const {
   switch (LdSt.getOpcode()) {
   default:
     return false;
@@ -812,6 +803,6 @@ bool LanaiInstrInfo::getMemOperandWithOffset(const MachineInstr &LdSt,
   case Lanai::LDBs_RI:
   case Lanai::LDBz_RI:
     unsigned Width;
-    return getMemOperandWithOffsetWidth(LdSt, BaseOp, Offset, Width, TRI);
+    return getMemOpBaseRegImmOfsWidth(LdSt, BaseReg, Offset, Width, TRI);
   }
 }

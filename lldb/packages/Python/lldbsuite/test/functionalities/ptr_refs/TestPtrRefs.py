@@ -2,7 +2,9 @@
 Test the ptr_refs tool on Darwin
 """
 
+from __future__ import print_function
 
+import os
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -17,7 +19,8 @@ class TestPtrRefs(TestBase):
     def test_ptr_refs(self):
         """Test format string functionality."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe_name = 'a.out'
+        exe = os.path.join(os.getcwd(), exe_name)
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)

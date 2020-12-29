@@ -1,3 +1,5 @@
+LEVEL = ../../make
+
 CXX_SOURCES := pass-to-base.cpp
 
-include Makefile.rules
+include $(LEVEL)/Makefile.rules

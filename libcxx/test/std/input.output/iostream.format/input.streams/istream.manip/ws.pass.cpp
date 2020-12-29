@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,7 +15,6 @@
 
 #include <istream>
 #include <cassert>
-#include "test_macros.h"
 
 template <class CharT>
 struct testbuf
@@ -40,7 +40,7 @@ public:
     CharT* egptr() const {return base::egptr();}
 };
 
-int main(int, char**)
+int main()
 {
     {
         testbuf<char> sb("   123");
@@ -76,42 +76,4 @@ int main(int, char**)
         assert(is.eof());
         assert(is.fail());
     }
-#ifndef TEST_HAS_NO_EXCEPTIONS
-    {
-        testbuf<char> sb("  ");
-        std::basic_istream<char> is(&sb);
-        is.exceptions(std::ios_base::eofbit);
-
-        bool threw = false;
-        try {
-            std::ws(is);
-        } catch (std::ios_base::failure const&) {
-            threw = true;
-        }
-
-        assert(!is.bad());
-        assert(!is.fail());
-        assert( is.eof());
-        assert(threw);
-    }
-    {
-        testbuf<wchar_t> sb(L"  ");
-        std::basic_istream<wchar_t> is(&sb);
-        is.exceptions(std::ios_base::eofbit);
-
-        bool threw = false;
-        try {
-            std::ws(is);
-        } catch (std::ios_base::failure const&) {
-            threw = true;
-        }
-
-        assert(!is.bad());
-        assert(!is.fail());
-        assert( is.eof());
-        assert(threw);
-    }
-#endif
-
-    return 0;
 }

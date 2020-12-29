@@ -1,16 +1,14 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: libcpp-has-no-threads
 // UNSUPPORTED: c++98, c++03, c++11
-// XFAIL: dylib-has-no-shared_mutex
-
-// FLAKY_TEST.
 
 // <shared_mutex>
 
@@ -23,8 +21,6 @@
 #include <vector>
 #include <cstdlib>
 #include <cassert>
-
-#include "test_macros.h"
 
 std::shared_timed_mutex m;
 
@@ -60,7 +56,7 @@ void f()
     assert(d < ms(200));  // within 200ms
 }
 
-int main(int, char**)
+int main()
 {
     m.lock();
     std::vector<std::thread> v;
@@ -70,6 +66,4 @@ int main(int, char**)
     m.unlock();
     for (auto& t : v)
         t.join();
-
-  return 0;
 }

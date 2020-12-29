@@ -1,8 +1,9 @@
 //===-- ScriptInterpreter.cpp -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,73 +13,72 @@
 #include <stdlib.h>
 #include <string>
 
-#include "lldb/Host/PseudoTerminal.h"
+#include "lldb/Core/Error.h"
+#include "lldb/Core/Stream.h"
+#include "lldb/Core/StringList.h"
 #include "lldb/Interpreter/CommandReturnObject.h"
-#include "lldb/Utility/Status.h"
-#include "lldb/Utility/Stream.h"
-#include "lldb/Utility/StringList.h"
+#include "lldb/Utility/PseudoTerminal.h"
 
 using namespace lldb;
 using namespace lldb_private;
 
-ScriptInterpreter::ScriptInterpreter(Debugger &debugger,
+ScriptInterpreter::ScriptInterpreter(CommandInterpreter &interpreter,
                                      lldb::ScriptLanguage script_lang)
-    : m_debugger(debugger), m_script_lang(script_lang) {}
+    : m_interpreter(interpreter), m_script_lang(script_lang) {}
 
 ScriptInterpreter::~ScriptInterpreter() {}
+
+CommandInterpreter &ScriptInterpreter::GetCommandInterpreter() {
+  return m_interpreter;
+}
 
 void ScriptInterpreter::CollectDataForBreakpointCommandCallback(
     std::vector<BreakpointOptions *> &bp_options_vec,
     CommandReturnObject &result) {
   result.SetStatus(eReturnStatusFailed);
   result.AppendError(
-      "This script interpreter does not support breakpoint callbacks.");
+      "ScriptInterpreter::GetScriptCommands(StringList &) is not implemented.");
 }
 
 void ScriptInterpreter::CollectDataForWatchpointCommandCallback(
     WatchpointOptions *bp_options, CommandReturnObject &result) {
   result.SetStatus(eReturnStatusFailed);
   result.AppendError(
-      "This script interpreter does not support watchpoint callbacks.");
-}
-
-bool ScriptInterpreter::LoadScriptingModule(
-    const char *filename, bool init_session, lldb_private::Status &error,
-    StructuredData::ObjectSP *module_sp) {
-  error.SetErrorString(
-      "This script interpreter does not support importing modules.");
-  return false;
+      "ScriptInterpreter::GetScriptCommands(StringList &) is not implemented.");
 }
 
 std::string ScriptInterpreter::LanguageToString(lldb::ScriptLanguage language) {
+  std::string return_value;
+
   switch (language) {
   case eScriptLanguageNone:
-    return "None";
+    return_value = "None";
+    break;
   case eScriptLanguagePython:
-    return "Python";
-  case eScriptLanguageLua:
-    return "Lua";
+    return_value = "Python";
+    break;
   case eScriptLanguageUnknown:
-    return "Unknown";
+    return_value = "Unknown";
+    break;
   }
-  llvm_unreachable("Unhandled ScriptInterpreter!");
+
+  return return_value;
 }
 
 lldb::ScriptLanguage
 ScriptInterpreter::StringToLanguage(const llvm::StringRef &language) {
   if (language.equals_lower(LanguageToString(eScriptLanguageNone)))
     return eScriptLanguageNone;
-  if (language.equals_lower(LanguageToString(eScriptLanguagePython)))
+  else if (language.equals_lower(LanguageToString(eScriptLanguagePython)))
     return eScriptLanguagePython;
-  if (language.equals_lower(LanguageToString(eScriptLanguageLua)))
-    return eScriptLanguageLua;
-  return eScriptLanguageUnknown;
+  else
+    return eScriptLanguageUnknown;
 }
 
-Status ScriptInterpreter::SetBreakpointCommandCallback(
+Error ScriptInterpreter::SetBreakpointCommandCallback(
     std::vector<BreakpointOptions *> &bp_options_vec,
     const char *callback_text) {
-  Status return_error;
+  Error return_error;
   for (BreakpointOptions *bp_options : bp_options_vec) {
     return_error = SetBreakpointCommandCallback(bp_options, callback_text);
     if (return_error.Success())
@@ -87,17 +87,12 @@ Status ScriptInterpreter::SetBreakpointCommandCallback(
   return return_error;
 }
 
-Status ScriptInterpreter::SetBreakpointCommandCallbackFunction(
-    std::vector<BreakpointOptions *> &bp_options_vec, const char *function_name,
-    StructuredData::ObjectSP extra_args_sp) {
-  Status error;
+void ScriptInterpreter::SetBreakpointCommandCallbackFunction(
+    std::vector<BreakpointOptions *> &bp_options_vec,
+    const char *function_name) {
   for (BreakpointOptions *bp_options : bp_options_vec) {
-    error = SetBreakpointCommandCallbackFunction(bp_options, function_name,
-                                                 extra_args_sp);
-    if (!error.Success())
-      return error;
+    SetBreakpointCommandCallbackFunction(bp_options, function_name);
   }
-  return error;
 }
 
 std::unique_ptr<ScriptInterpreterLocker>

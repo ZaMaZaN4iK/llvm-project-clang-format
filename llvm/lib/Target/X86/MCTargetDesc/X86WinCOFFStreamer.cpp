@@ -1,16 +1,13 @@
 //===-- X86WinCOFFStreamer.cpp - X86 Target WinCOFF Streamer ----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "X86MCTargetDesc.h"
-#include "X86TargetStreamer.h"
-#include "llvm/MC/MCAsmBackend.h"
-#include "llvm/MC/MCCodeEmitter.h"
-#include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCWin64EH.h"
 #include "llvm/MC/MCWinCOFFStreamer.h"
 
@@ -20,36 +17,27 @@ namespace {
 class X86WinCOFFStreamer : public MCWinCOFFStreamer {
   Win64EH::UnwindEmitter EHStreamer;
 public:
-  X86WinCOFFStreamer(MCContext &C, std::unique_ptr<MCAsmBackend> AB,
-                     std::unique_ptr<MCCodeEmitter> CE,
-                     std::unique_ptr<MCObjectWriter> OW)
-      : MCWinCOFFStreamer(C, std::move(AB), std::move(CE), std::move(OW)) {}
+  X86WinCOFFStreamer(MCContext &C, MCAsmBackend &AB, MCCodeEmitter *CE,
+                     raw_pwrite_stream &OS)
+      : MCWinCOFFStreamer(C, AB, *CE, OS) {}
 
-  void EmitWinEHHandlerData(SMLoc Loc) override;
+  void EmitWinEHHandlerData() override;
   void EmitWindowsUnwindTables() override;
-  void EmitCVFPOData(const MCSymbol *ProcSym, SMLoc Loc) override;
   void FinishImpl() override;
 };
 
-void X86WinCOFFStreamer::EmitWinEHHandlerData(SMLoc Loc) {
-  MCStreamer::EmitWinEHHandlerData(Loc);
+void X86WinCOFFStreamer::EmitWinEHHandlerData() {
+  MCStreamer::EmitWinEHHandlerData();
 
   // We have to emit the unwind info now, because this directive
-  // actually switches to the .xdata section.
-  if (WinEH::FrameInfo *CurFrame = getCurrentWinFrameInfo())
-    EHStreamer.EmitUnwindInfo(*this, CurFrame);
+  // actually switches to the .xdata section!
+  EHStreamer.EmitUnwindInfo(*this, getCurrentWinFrameInfo());
 }
 
 void X86WinCOFFStreamer::EmitWindowsUnwindTables() {
   if (!getNumWinFrameInfos())
     return;
   EHStreamer.Emit(*this);
-}
-
-void X86WinCOFFStreamer::EmitCVFPOData(const MCSymbol *ProcSym, SMLoc Loc) {
-  X86TargetStreamer *XTS =
-      static_cast<X86TargetStreamer *>(getTargetStreamer());
-  XTS->emitFPOData(ProcSym, Loc);
 }
 
 void X86WinCOFFStreamer::FinishImpl() {
@@ -60,14 +48,11 @@ void X86WinCOFFStreamer::FinishImpl() {
 }
 }
 
-MCStreamer *llvm::createX86WinCOFFStreamer(MCContext &C,
-                                           std::unique_ptr<MCAsmBackend> &&AB,
-                                           std::unique_ptr<MCObjectWriter> &&OW,
-                                           std::unique_ptr<MCCodeEmitter> &&CE,
-                                           bool RelaxAll,
+MCStreamer *llvm::createX86WinCOFFStreamer(MCContext &C, MCAsmBackend &AB,
+                                           raw_pwrite_stream &OS,
+                                           MCCodeEmitter *CE, bool RelaxAll,
                                            bool IncrementalLinkerCompatible) {
-  X86WinCOFFStreamer *S =
-      new X86WinCOFFStreamer(C, std::move(AB), std::move(CE), std::move(OW));
+  X86WinCOFFStreamer *S = new X86WinCOFFStreamer(C, AB, CE, OS);
   S->getAssembler().setRelaxAll(RelaxAll);
   S->getAssembler().setIncrementalLinkerCompatible(IncrementalLinkerCompatible);
   return S;

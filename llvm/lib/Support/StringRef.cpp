@@ -1,18 +1,16 @@
 //===-- StringRef.cpp - Lightweight String References ---------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/Hashing.h"
-#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/edit_distance.h"
-#include "llvm/Support/Error.h"
 #include <bitset>
 
 using namespace llvm;
@@ -22,12 +20,28 @@ using namespace llvm;
 const size_t StringRef::npos;
 #endif
 
+static char ascii_tolower(char x) {
+  if (x >= 'A' && x <= 'Z')
+    return x - 'A' + 'a';
+  return x;
+}
+
+static char ascii_toupper(char x) {
+  if (x >= 'a' && x <= 'z')
+    return x - 'a' + 'A';
+  return x;
+}
+
+static bool ascii_isdigit(char x) {
+  return x >= '0' && x <= '9';
+}
+
 // strncasecmp() is not available on non-POSIX systems, so define an
 // alternative function here.
 static int ascii_strncasecmp(const char *LHS, const char *RHS, size_t Length) {
   for (size_t I = 0; I < Length; ++I) {
-    unsigned char LHC = toLower(LHS[I]);
-    unsigned char RHC = toLower(RHS[I]);
+    unsigned char LHC = ascii_tolower(LHS[I]);
+    unsigned char RHC = ascii_tolower(RHS[I]);
     if (LHC != RHC)
       return LHC < RHC ? -1 : 1;
   }
@@ -56,21 +70,21 @@ bool StringRef::endswith_lower(StringRef Suffix) const {
 }
 
 size_t StringRef::find_lower(char C, size_t From) const {
-  char L = toLower(C);
-  return find_if([L](char D) { return toLower(D) == L; }, From);
+  char L = ascii_tolower(C);
+  return find_if([L](char D) { return ascii_tolower(D) == L; }, From);
 }
 
 /// compare_numeric - Compare strings, handle embedded numbers.
 int StringRef::compare_numeric(StringRef RHS) const {
   for (size_t I = 0, E = std::min(Length, RHS.Length); I != E; ++I) {
     // Check for sequences of digits.
-    if (isDigit(Data[I]) && isDigit(RHS.Data[I])) {
+    if (ascii_isdigit(Data[I]) && ascii_isdigit(RHS.Data[I])) {
       // The longer sequence of numbers is considered larger.
       // This doesn't really handle prefixed zeros well.
       size_t J;
       for (J = I + 1; J != E + 1; ++J) {
-        bool ld = J < Length && isDigit(Data[J]);
-        bool rd = J < RHS.Length && isDigit(RHS.Data[J]);
+        bool ld = J < Length && ascii_isdigit(Data[J]);
+        bool rd = J < RHS.Length && ascii_isdigit(RHS.Data[J]);
         if (ld != rd)
           return rd ? -1 : 1;
         if (!rd)
@@ -108,7 +122,7 @@ unsigned StringRef::edit_distance(llvm::StringRef Other,
 std::string StringRef::lower() const {
   std::string Result(size(), char());
   for (size_type i = 0, e = size(); i != e; ++i) {
-    Result[i] = toLower(Data[i]);
+    Result[i] = ascii_tolower(Data[i]);
   }
   return Result;
 }
@@ -116,7 +130,7 @@ std::string StringRef::lower() const {
 std::string StringRef::upper() const {
   std::string Result(size(), char());
   for (size_type i = 0, e = size(); i != e; ++i) {
-    Result[i] = toUpper(Data[i]);
+    Result[i] = ascii_toupper(Data[i]);
   }
   return Result;
 }
@@ -195,7 +209,7 @@ size_t StringRef::rfind_lower(char C, size_t From) const {
   size_t i = From;
   while (i != 0) {
     --i;
-    if (toLower(Data[i]) == toLower(C))
+    if (ascii_tolower(Data[i]) == ascii_tolower(C))
       return i;
   }
   return npos;
@@ -373,16 +387,11 @@ void StringRef::split(SmallVectorImpl<StringRef> &A, char Separator,
 size_t StringRef::count(StringRef Str) const {
   size_t Count = 0;
   size_t N = Str.size();
-  if (!N || N > Length)
+  if (N > Length)
     return 0;
-  for (size_t i = 0, e = Length - N + 1; i < e;) {
-    if (substr(i, N).equals(Str)) {
+  for (size_t i = 0, e = Length - N + 1; i != e; ++i)
+    if (substr(i, N).equals(Str))
       ++Count;
-      i += N;
-    }
-    else
-      ++i;
-  }
   return Count;
 }
 
@@ -394,7 +403,7 @@ static unsigned GetAutoSenseRadix(StringRef &Str) {
     Str = Str.substr(2);
     return 16;
   }
-
+  
   if (Str.startswith("0b") || Str.startswith("0B")) {
     Str = Str.substr(2);
     return 2;
@@ -405,7 +414,7 @@ static unsigned GetAutoSenseRadix(StringRef &Str) {
     return 8;
   }
 
-  if (Str[0] == '0' && Str.size() > 1 && isDigit(Str[1])) {
+  if (Str[0] == '0' && Str.size() > 1 && ascii_isdigit(Str[1])) {
     Str = Str.substr(1);
     return 8;
   }
@@ -586,21 +595,6 @@ bool StringRef::getAsInteger(unsigned Radix, APInt &Result) const {
   return false;
 }
 
-bool StringRef::getAsDouble(double &Result, bool AllowInexact) const {
-  APFloat F(0.0);
-  auto StatusOrErr = F.convertFromString(*this, APFloat::rmNearestTiesToEven);
-  if (errorToBool(StatusOrErr.takeError()))
-    return true;
-
-  APFloat::opStatus Status = *StatusOrErr;
-  if (Status != APFloat::opOK) {
-    if (!AllowInexact || !(Status & APFloat::opInexact))
-      return true;
-  }
-
-  Result = F.convertToDouble();
-  return false;
-}
 
 // Implementation of StringRef hashing.
 hash_code llvm::hash_value(StringRef S) {

@@ -8,14 +8,7 @@ if (POLICY CMP0042)
   cmake_policy(SET CMP0042 NEW) # Set MACOSX_RPATH=YES by default
 endif()
 
-# Add path for custom modules
-set(CMAKE_MODULE_PATH
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules"
-  ${CMAKE_MODULE_PATH}
-  )
-
-if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR LIBUNWIND_STANDALONE_BUILD)
+if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   project(libunwind)
 
   # Rely on llvm-config.
@@ -56,34 +49,29 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR LIBUNWIND_STANDALONE_B
     execute_process(
       COMMAND ${LLVM_CONFIG_PATH} --cmakedir
       RESULT_VARIABLE HAD_ERROR
-      OUTPUT_VARIABLE CONFIG_OUTPUT
-      ERROR_QUIET)
+      OUTPUT_VARIABLE CONFIG_OUTPUT)
     if(NOT HAD_ERROR)
-      string(STRIP "${CONFIG_OUTPUT}" LLVM_CMAKE_PATH_FROM_LLVM_CONFIG)
-      file(TO_CMAKE_PATH "${LLVM_CMAKE_PATH_FROM_LLVM_CONFIG}" LLVM_CMAKE_PATH)
+      string(STRIP "${CONFIG_OUTPUT}" LLVM_CMAKE_PATH)
     else()
-      file(TO_CMAKE_PATH "${LLVM_BINARY_DIR}" LLVM_BINARY_DIR_CMAKE_STYLE)
-      set(LLVM_CMAKE_PATH "${LLVM_BINARY_DIR_CMAKE_STYLE}/lib${LLVM_LIBDIR_SUFFIX}/cmake/llvm")
+      set(LLVM_CMAKE_PATH
+          "${LLVM_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX}/cmake/llvm")
     endif()
   else()
-    message(WARNING "UNSUPPORTED LIBUNWIND CONFIGURATION DETECTED: "
-                    "llvm-config not found and LLVM_MAIN_SRC_DIR not defined. "
-                    "Reconfigure with -DLLVM_CONFIG=path/to/llvm-config "
-                    "or -DLLVM_PATH=path/to/llvm-source-root.")
+    message(FATAL_ERROR "llvm-config not found and LLVM_MAIN_SRC_DIR not defined. "
+                        "Reconfigure with -DLLVM_CONFIG=path/to/llvm-config "
+                        "or -DLLVM_PATH=path/to/llvm-source-root.")
   endif()
 
   if (EXISTS ${LLVM_CMAKE_PATH})
-    # Enable warnings, otherwise -w gets added to the cflags by HandleLLVMOptions.
-    set(LLVM_ENABLE_WARNINGS ON)
     list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_PATH}")
     include("${LLVM_CMAKE_PATH}/AddLLVM.cmake")
     include("${LLVM_CMAKE_PATH}/HandleLLVMOptions.cmake")
   else()
-    message(WARNING "Not found: ${LLVM_CMAKE_PATH}")
+    message(FATAL_ERROR "Not found: ${LLVM_CMAKE_PATH}")
   endif()
 
   set(PACKAGE_NAME libunwind)
-  set(PACKAGE_VERSION 10.0.1)
+  set(PACKAGE_VERSION 4.0.0)
   set(PACKAGE_STRING "${PACKAGE_NAME} ${PACKAGE_VERSION}")
   set(PACKAGE_BUGREPORT "llvm-bugs@lists.llvm.org")
 
@@ -115,14 +103,13 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR LIBUNWIND_STANDALONE_B
   set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX})
   set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX})
 else()
+  set(LLVM_MAIN_SRC_DIR "${CMAKE_SOURCE_DIR}" CACHE PATH "Path to LLVM source tree")
   set(LLVM_LIT "${CMAKE_SOURCE_DIR}/utils/lit/lit.py")
 endif()
 
 #===============================================================================
 # Setup CMake Options
 #===============================================================================
-include(CMakeDependentOption)
-include(HandleCompilerRT)
 
 # Define options.
 option(LIBUNWIND_BUILD_32_BITS "Build 32 bit libunwind" ${LLVM_BUILD_32_BITS})
@@ -134,26 +121,10 @@ option(LIBUNWIND_ENABLE_STATIC "Build libunwind as a static library." ON)
 option(LIBUNWIND_ENABLE_CROSS_UNWINDING "Enable cross-platform unwinding support." OFF)
 option(LIBUNWIND_ENABLE_ARM_WMMX "Enable unwinding support for ARM WMMX registers." OFF)
 option(LIBUNWIND_ENABLE_THREADS "Build libunwind with threading support." ON)
-option(LIBUNWIND_WEAK_PTHREAD_LIB "Use weak references to refer to pthread functions." OFF)
-option(LIBUNWIND_USE_COMPILER_RT "Use compiler-rt instead of libgcc" OFF)
-option(LIBUNWIND_INCLUDE_DOCS "Build the libunwind documentation." ${LLVM_INCLUDE_DOCS})
 
-set(LIBUNWIND_LIBDIR_SUFFIX "${LLVM_LIBDIR_SUFFIX}" CACHE STRING
-    "Define suffix of library directory name (32/64)")
-option(LIBUNWIND_INSTALL_LIBRARY "Install the libunwind library." ON)
-cmake_dependent_option(LIBUNWIND_INSTALL_STATIC_LIBRARY
-  "Install the static libunwind library." ON
-  "LIBUNWIND_ENABLE_STATIC;LIBUNWIND_INSTALL_LIBRARY" OFF)
-cmake_dependent_option(LIBUNWIND_INSTALL_SHARED_LIBRARY
-  "Install the shared libunwind library." ON
-  "LIBUNWIND_ENABLE_SHARED;LIBUNWIND_INSTALL_LIBRARY" OFF)
 set(LIBUNWIND_TARGET_TRIPLE "" CACHE STRING "Target triple for cross compiling.")
 set(LIBUNWIND_GCC_TOOLCHAIN "" CACHE PATH "GCC toolchain for cross compiling.")
 set(LIBUNWIND_SYSROOT "" CACHE PATH "Sysroot for cross compiling.")
-set(LIBUNWIND_TEST_LINKER_FLAGS "" CACHE STRING
-    "Additional linker flags for test programs.")
-set(LIBUNWIND_TEST_COMPILER_FLAGS "" CACHE STRING
-    "Additional compiler flags for test programs.")
 
 if (NOT LIBUNWIND_ENABLE_SHARED AND NOT LIBUNWIND_ENABLE_STATIC)
   message(FATAL_ERROR "libunwind must be built as either a shared or static library.")
@@ -168,9 +139,6 @@ elseif(LIBUNWIND_BUILD_32_BITS)
   message(FATAL_ERROR "LIBUNWIND_BUILD_32_BITS=ON is not supported on this platform.")
 endif()
 
-option(LIBUNWIND_HERMETIC_STATIC_LIBRARY
-  "Do not export any symbols from the static library." OFF)
-
 #===============================================================================
 # Configure System
 #===============================================================================
@@ -183,175 +151,114 @@ set(CMAKE_MODULE_PATH
 set(LIBUNWIND_COMPILER    ${CMAKE_CXX_COMPILER})
 set(LIBUNWIND_SOURCE_DIR  ${CMAKE_CURRENT_SOURCE_DIR})
 set(LIBUNWIND_BINARY_DIR  ${CMAKE_CURRENT_BINARY_DIR})
-
-string(REGEX MATCH "[0-9]+\\.[0-9]+(\\.[0-9]+)?" CLANG_VERSION
-       ${PACKAGE_VERSION})
-
-if(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR AND NOT APPLE)
-  set(LIBUNWIND_LIBRARY_DIR ${LLVM_LIBRARY_OUTPUT_INTDIR}/${LLVM_DEFAULT_TARGET_TRIPLE}/c++)
-  set(LIBUNWIND_INSTALL_LIBRARY_DIR lib${LLVM_LIBDIR_SUFFIX}/${LLVM_DEFAULT_TARGET_TRIPLE}/c++)
-  if(LIBCXX_LIBDIR_SUBDIR)
-    string(APPEND LIBUNWIND_LIBRARY_DIR /${LIBUNWIND_LIBDIR_SUBDIR})
-    string(APPEND LIBUNWIND_INSTALL_LIBRARY_DIR /${LIBUNWIND_LIBDIR_SUBDIR})
-  endif()
-elseif(LLVM_LIBRARY_OUTPUT_INTDIR)
-  set(LIBUNWIND_LIBRARY_DIR ${LLVM_LIBRARY_OUTPUT_INTDIR})
-  set(LIBUNWIND_INSTALL_LIBRARY_DIR lib${LIBUNWIND_LIBDIR_SUFFIX})
-else()
-  set(LIBUNWIND_LIBRARY_DIR ${CMAKE_BINARY_DIR}/lib${LIBUNWIND_LIBDIR_SUFFIX})
-  set(LIBUNWIND_INSTALL_LIBRARY_DIR lib${LIBUNWIND_LIBDIR_SUFFIX})
-endif()
-
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${LIBUNWIND_LIBRARY_DIR})
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${LIBUNWIND_LIBRARY_DIR})
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${LIBUNWIND_LIBRARY_DIR})
-
-set(LIBUNWIND_INSTALL_PREFIX "" CACHE STRING "Define libunwind destination prefix.")
+set(LIBUNWIND_LIBRARY_DIR ${CMAKE_BINARY_DIR}/lib${LLVM_LIBDIR_SUFFIX})
 
 set(LIBUNWIND_C_FLAGS "")
 set(LIBUNWIND_CXX_FLAGS "")
 set(LIBUNWIND_COMPILE_FLAGS "")
 set(LIBUNWIND_LINK_FLAGS "")
 
-# Include macros for adding and removing libunwind flags.
-include(HandleLibunwindFlags)
+# Get required flags.
+macro(append_if list condition var)
+  if (${condition})
+    list(APPEND ${list} ${var})
+  endif()
+endmacro()
+
+macro(add_target_flags_if condition var)
+  if (${condition})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${var}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${var}")
+    list(APPEND LINUNWIND_COMPILE_FLAGS ${var})
+    list(APPEND LIBUNWIND_LINK_FLAGS ${var})
+  endif()
+endmacro()
+
+add_target_flags_if(LIBUNWIND_BUILD_32_BITS "-m32")
+add_target_flags_if(LIBUNWIND_TARGET_TRIPLE
+          "-target ${LIBUNWIND_TARGET_TRIPLE}")
+add_target_flags_if(LIBUNWIND_GCC_TOOLCHAIN
+          "-gcc-toolchain ${LIBUNWIND_GCC_TOOLCHAIN}")
+add_target_flags_if(LIBUNWIND_SYSROOT
+          "--sysroot=${LIBUNWIND_SYSROOT}")
+
+# Configure compiler.
+include(config-ix)
 
 #===============================================================================
 # Setup Compiler Flags
 #===============================================================================
 
-# Get required flags.
-add_target_flags_if(LIBUNWIND_BUILD_32_BITS "-m32")
-
-if(LIBUNWIND_TARGET_TRIPLE)
-  add_target_flags("--target=${LIBUNWIND_TARGET_TRIPLE}")
-elseif(CMAKE_CXX_COMPILER_TARGET)
-  set(LIBUNWIND_TARGET_TRIPLE "${CMAKE_CXX_COMPILER_TARGET}")
-endif()
-if(LIBUNWIND_GCC_TOOLCHAIN)
-  add_target_flags("--gcc-toolchain=${LIBUNWIND_GCC_TOOLCHAIN}")
-elseif(CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN)
-  set(LIBUNWIND_GCC_TOOLCHAIN "${CMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN}")
-endif()
-if(LIBUNWIND_SYSROOT)
-  add_target_flags("--sysroot=${LIBUNWIND_SYSROOT}")
-elseif(CMAKE_SYSROOT)
-  set(LIBUNWIND_SYSROOT "${CMAKE_SYSROOT}")
-endif()
-
-if (LIBUNWIND_TARGET_TRIPLE)
-  set(TARGET_TRIPLE "${LIBUNWIND_TARGET_TRIPLE}")
-endif()
-
-# Configure compiler.
-include(config-ix)
-
-if (LIBUNWIND_USE_COMPILER_RT AND NOT LIBUNWIND_HAS_NODEFAULTLIBS_FLAG)
-  list(APPEND LIBUNWIND_LINK_FLAGS "-rtlib=compiler-rt")
-endif()
-
-add_compile_flags_if_supported(-Werror=return-type)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WERROR_FLAG -Werror=return-type)
 
 # Get warning flags
-add_compile_flags_if_supported(-W)
-add_compile_flags_if_supported(-Wall)
-add_compile_flags_if_supported(-Wchar-subscripts)
-add_compile_flags_if_supported(-Wconversion)
-add_compile_flags_if_supported(-Wmismatched-tags)
-add_compile_flags_if_supported(-Wmissing-braces)
-add_compile_flags_if_supported(-Wnewline-eof)
-add_compile_flags_if_supported(-Wno-unused-function)
-add_compile_flags_if_supported(-Wshadow)
-add_compile_flags_if_supported(-Wshorten-64-to-32)
-add_compile_flags_if_supported(-Wsign-compare)
-add_compile_flags_if_supported(-Wsign-conversion)
-add_compile_flags_if_supported(-Wstrict-aliasing=2)
-add_compile_flags_if_supported(-Wstrict-overflow=4)
-add_compile_flags_if_supported(-Wunused-parameter)
-add_compile_flags_if_supported(-Wunused-variable)
-add_compile_flags_if_supported(-Wwrite-strings)
-add_compile_flags_if_supported(-Wundef)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_W_FLAG -W)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WALL_FLAG -Wall)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WCHAR_SUBSCRIPTS_FLAG -Wchar-subscripts)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WCONVERSION_FLAG -Wconversion)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WMISMATCHED_TAGS_FLAG -Wmismatched-tags)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WMISSING_BRACES_FLAG -Wmissing-braces)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WNEWLINE_EOF_FLAG -Wnewline-eof)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WNO_UNUSED_FUNCTION_FLAG -Wno-unused-function)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WSHADOW_FLAG -Wshadow)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WSHORTEN_64_TO_32_FLAG -Wshorten-64-to-32)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WSIGN_COMPARE_FLAG -Wsign-compare)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WSIGN_CONVERSION_FLAG -Wsign-conversion)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WSTRICT_ALIASING_FLAG -Wstrict-aliasing=2)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WSTRICT_OVERFLOW_FLAG -Wstrict-overflow=4)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WUNUSED_PARAMETER_FLAG -Wunused-parameter)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WUNUSED_VARIABLE_FLAG -Wunused-variable)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WWRITE_STRINGS_FLAG -Wwrite-strings)
+append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WUNDEF_FLAG -Wundef)
 
 if (LIBUNWIND_ENABLE_WERROR)
-  add_compile_flags_if_supported(-Werror)
-  add_compile_flags_if_supported(-WX)
+  append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WERROR_FLAG -Werror)
+  append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WX_FLAG -WX)
 else()
-  add_compile_flags_if_supported(-Wno-error)
-  add_compile_flags_if_supported(-WX-)
+  append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_WNO_ERROR_FLAG -Wno-error)
+  append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_NO_WX_FLAG -WX-)
 endif()
 
 if (LIBUNWIND_ENABLE_PEDANTIC)
-  add_compile_flags_if_supported(-pedantic)
+  append_if(LIBUNWIND_COMPILE_FLAGS LIBUNWIND_HAS_PEDANTIC_FLAG -pedantic)
 endif()
 
 # Get feature flags.
 # Exceptions
 # Catches C++ exceptions only and tells the compiler to assume that extern C
 # functions never throw a C++ exception.
-add_cxx_compile_flags_if_supported(-fstrict-aliasing)
-add_cxx_compile_flags_if_supported(-EHsc)
+append_if(LIBUNWIND_CXX_FLAGS LIBUNWIND_HAS_FSTRICT_ALIASING_FLAG -fstrict-aliasing)
+append_if(LIBUNWIND_CXX_FLAGS LIBUNWIND_HAS_EHSC_FLAG -EHsc)
 
-# Don't run the linker in this CMake check.
-#
-# The reason why this was added is that when building libunwind for
-# ARM Linux, we need to pass the -funwind-tables flag in order for it to
-# work properly with ARM EHABI.
-#
-# However, when performing CMake checks, adding this flag causes the check
-# to produce a false negative, because the compiler generates calls
-# to __aeabi_unwind_cpp_pr0, which is defined in libunwind itself,
-# which isn't built yet, so the linker complains about undefined symbols.
-#
-# This leads to libunwind not being built with this flag, which makes
-# libunwind quite useless in this setup.
-set(_previous_CMAKE_TRY_COMPILE_TARGET_TYPE ${CMAKE_TRY_COMPILE_TARGET_TYPE})
-set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-add_compile_flags_if_supported(-funwind-tables)
-set(CMAKE_TRY_COMPILE_TARGET_TYPE ${_previous_CMAKE_TRY_COMPILE_TARGET_TYPE})
-
-if (LIBUNWIND_USES_ARM_EHABI AND NOT LIBUNWIND_SUPPORTS_FUNWIND_TABLES_FLAG)
-  message(SEND_ERROR "The -funwind-tables flag must be supported "
-                     "because this target uses ARM Exception Handling ABI")
-endif()
-
-add_cxx_compile_flags_if_supported(-fno-exceptions)
-add_cxx_compile_flags_if_supported(-fno-rtti)
-
-# Ensure that we don't depend on C++ standard library.
-if (LIBUNWIND_HAS_NOSTDINCXX_FLAG)
-  list(APPEND LIBUNWIND_COMPILE_FLAGS -nostdinc++)
-  # Remove -stdlib flags to prevent them from causing an unused flag warning.
-  string(REPLACE "-stdlib=libc++" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  string(REPLACE "-stdlib=libstdc++" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-endif()
+append_if(LIBUNWIND_C_FLAGS LIBUNWIND_HAS_FUNWIND_TABLES -funwind-tables)
 
 # Assert
 string(TOUPPER "${CMAKE_BUILD_TYPE}" uppercase_CMAKE_BUILD_TYPE)
 if (LIBUNWIND_ENABLE_ASSERTIONS)
   # MSVC doesn't like _DEBUG on release builds. See PR 4379.
   if (NOT MSVC)
-    add_compile_flags(-D_DEBUG)
+    list(APPEND LIBUNWIND_COMPILE_FLAGS -D_DEBUG)
   endif()
 
   # On Release builds cmake automatically defines NDEBUG, so we
   # explicitly undefine it:
   if (uppercase_CMAKE_BUILD_TYPE STREQUAL "RELEASE")
-    add_compile_flags(-UNDEBUG)
+    list(APPEND LIBUNWIND_COMPILE_FLAGS -UNDEBUG)
   endif()
 else()
   if (NOT uppercase_CMAKE_BUILD_TYPE STREQUAL "RELEASE")
-    add_compile_flags(-DNDEBUG)
+    list(APPEND LIBUNWIND_COMPILE_FLAGS -DNDEBUG)
   endif()
 endif()
 
 # Cross-unwinding
 if (NOT LIBUNWIND_ENABLE_CROSS_UNWINDING)
-  add_compile_flags(-D_LIBUNWIND_IS_NATIVE_ONLY)
+  list(APPEND LIBUNWIND_COMPILE_FLAGS -D_LIBUNWIND_IS_NATIVE_ONLY)
 endif()
 
 # Threading-support
 if (NOT LIBUNWIND_ENABLE_THREADS)
-  add_compile_flags(-D_LIBUNWIND_HAS_NO_THREADS)
+  list(APPEND LIBUNWIND_COMPILE_FLAGS -D_LIBUNWIND_HAS_NO_THREADS)
 endif()
 
 # ARM WMMX register support
@@ -360,26 +267,12 @@ if (LIBUNWIND_ENABLE_ARM_WMMX)
   # define this macro for any supported target at present. Therefore, here we
   # provide the option to explicitly enable support for WMMX registers in the
   # unwinder.
-  add_compile_flags(-D__ARM_WMMX)
+  list(APPEND LIBUNWIND_COMPILE_FLAGS -D__ARM_WMMX)
 endif()
 
 # This is the _ONLY_ place where add_definitions is called.
 if (MSVC)
   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-endif()
-
-# Disable DLL annotations on Windows for static builds.
-if (WIN32 AND LIBUNWIND_ENABLE_STATIC AND NOT LIBUNWIND_ENABLE_SHARED)
-  add_definitions(-D_LIBUNWIND_DISABLE_VISIBILITY_ANNOTATIONS)
-endif()
-
-if (LIBUNWIND_HAS_COMMENT_LIB_PRAGMA)
-  if (LIBUNWIND_HAS_DL_LIB)
-    add_definitions(-D_LIBUNWIND_LINK_DL_LIB)
-  endif()
-  if (LIBUNWIND_HAS_PTHREAD_LIB)
-    add_definitions(-D_LIBUNWIND_LINK_PTHREAD_LIB)
-  endif()
 endif()
 
 #===============================================================================
@@ -389,11 +282,3 @@ endif()
 include_directories(include)
 
 add_subdirectory(src)
-
-if (LIBUNWIND_INCLUDE_DOCS)
-  add_subdirectory(docs)
-endif()
-
-if (EXISTS ${LLVM_CMAKE_PATH})
-  add_subdirectory(test)
-endif()

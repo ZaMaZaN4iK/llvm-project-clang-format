@@ -2,8 +2,12 @@
 Use lldb Python API to test dynamic values in C++
 """
 
+from __future__ import print_function
 
 
+import os
+import time
+import re
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -33,7 +37,7 @@ class DynamicValueTestCase(TestBase):
     def test_get_dynamic_vals(self):
         """Test fetching C++ dynamic values from pointers & references."""
         self.build(dictionary=self.getBuildFlags())
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target from the debugger.
 

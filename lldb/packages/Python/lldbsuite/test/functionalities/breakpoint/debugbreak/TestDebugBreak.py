@@ -2,7 +2,9 @@
 Test embedded breakpoints, like `asm int 3;` in x86 or or `__debugbreak` on Windows.
 """
 
+from __future__ import print_function
 
+import os
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -18,7 +20,7 @@ class DebugBreakTestCase(TestBase):
     def test_asm_int_3(self):
         """Test that intrinsics like `__debugbreak();` and `asm {"int3"}` are treated like breakpoints."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Run the program.
         target = self.dbg.CreateTarget(exe)

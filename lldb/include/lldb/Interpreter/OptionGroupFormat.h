@@ -1,14 +1,19 @@
 //===-- OptionGroupFormat.h -------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_OptionGroupFormat_h_
 #define liblldb_OptionGroupFormat_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Interpreter/OptionValueFormat.h"
 #include "lldb/Interpreter/OptionValueSInt64.h"
 #include "lldb/Interpreter/OptionValueUInt64.h"
@@ -16,7 +21,9 @@
 
 namespace lldb_private {
 
+//-------------------------------------------------------------------------
 // OptionGroupFormat
+//-------------------------------------------------------------------------
 
 class OptionGroupFormat : public OptionGroup {
 public:
@@ -36,9 +43,9 @@ public:
 
   llvm::ArrayRef<OptionDefinition> GetDefinitions() override;
 
-  Status SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
-                        ExecutionContext *execution_context) override;
-  Status SetOptionValue(uint32_t, const char *, ExecutionContext *) = delete;
+  Error SetOptionValue(uint32_t option_idx, llvm::StringRef option_value,
+                       ExecutionContext *execution_context) override;
+  Error SetOptionValue(uint32_t, const char *, ExecutionContext *) = delete;
 
   void OptionParsingStarting(ExecutionContext *execution_context) override;
 

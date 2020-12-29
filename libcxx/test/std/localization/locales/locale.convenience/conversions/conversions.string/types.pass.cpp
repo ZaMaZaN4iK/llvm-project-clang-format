@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,9 +23,7 @@
 #include <locale>
 #include <codecvt>
 
-#include "test_macros.h"
-
-int main(int, char**)
+int main()
 {
     {
         typedef std::wstring_convert<std::codecvt_utf8<wchar_t> > myconv;
@@ -33,6 +32,4 @@ int main(int, char**)
         static_assert((std::is_same<myconv::state_type, std::mbstate_t>::value), "");
         static_assert((std::is_same<myconv::int_type, std::char_traits<wchar_t>::int_type>::value), "");
     }
-
-  return 0;
 }

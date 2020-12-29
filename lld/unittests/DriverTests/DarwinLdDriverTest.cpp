@@ -1,19 +1,20 @@
 //===- lld/unittest/DarwinLdDriverTest.cpp --------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
 /// \file
-/// Darwin's ld driver tests.
+/// \brief Darwin's ld driver tests.
 ///
 //===----------------------------------------------------------------------===//
 
-#include "lld/Common/Driver.h"
+#include "lld/Driver/Driver.h"
 #include "lld/ReaderWriter/MachOLinkingContext.h"
-#include "llvm/BinaryFormat/MachO.h"
+#include "llvm/Support/MachO.h"
 #include "llvm/Support/raw_ostream.h"
 #include "gtest/gtest.h"
 
@@ -22,7 +23,8 @@ using namespace lld;
 
 namespace lld {
 namespace mach_o {
-bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx);
+bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx,
+           raw_ostream &diagnostics);
 }
 }
 
@@ -40,7 +42,9 @@ protected:
 
   bool parse(std::vector<const char *> args) {
     args.insert(args.begin(), "ld");
-    return mach_o::parse(args, _ctx);
+    std::string errorMessage;
+    raw_string_ostream os(errorMessage);
+    return mach_o::parse(args, _ctx, os);
   }
 
   MachOLinkingContext _ctx;

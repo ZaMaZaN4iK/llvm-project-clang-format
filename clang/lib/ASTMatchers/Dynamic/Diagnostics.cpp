@@ -1,8 +1,9 @@
 //===--- Diagnostics.cpp - Helper class for error diagnostics -----*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -117,8 +118,8 @@ static StringRef errorTypeToFormatString(Diagnostics::ErrorType Type) {
     return "Malformed bind() expression.";
   case Diagnostics::ET_ParserTrailingCode:
     return "Expected end of code.";
-  case Diagnostics::ET_ParserNumberError:
-    return "Error parsing numeric literal: <$0>";
+  case Diagnostics::ET_ParserUnsignedError:
+    return "Error parsing unsigned token: <$0>";
   case Diagnostics::ET_ParserOverloadedType:
     return "Input value has unresolved overloaded type: $0";
 

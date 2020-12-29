@@ -1,20 +1,24 @@
 //===-- LLDB.h --------------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLDB_LLDB_h_
 #define LLDB_LLDB_h_
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/API/SBAddress.h"
 #include "lldb/API/SBAttachInfo.h"
 #include "lldb/API/SBBlock.h"
 #include "lldb/API/SBBreakpoint.h"
 #include "lldb/API/SBBreakpointLocation.h"
-#include "lldb/API/SBBreakpointName.h"
 #include "lldb/API/SBBroadcaster.h"
 #include "lldb/API/SBCommandInterpreter.h"
 #include "lldb/API/SBCommandReturnObject.h"
@@ -28,7 +32,6 @@
 #include "lldb/API/SBEvent.h"
 #include "lldb/API/SBExecutionContext.h"
 #include "lldb/API/SBExpressionOptions.h"
-#include "lldb/API/SBFile.h"
 #include "lldb/API/SBFileSpec.h"
 #include "lldb/API/SBFileSpecList.h"
 #include "lldb/API/SBFrame.h"
@@ -46,10 +49,8 @@
 #include "lldb/API/SBModuleSpec.h"
 #include "lldb/API/SBPlatform.h"
 #include "lldb/API/SBProcess.h"
-#include "lldb/API/SBProcessInfo.h"
 #include "lldb/API/SBQueue.h"
 #include "lldb/API/SBQueueItem.h"
-#include "lldb/API/SBReproducer.h"
 #include "lldb/API/SBSection.h"
 #include "lldb/API/SBSourceManager.h"
 #include "lldb/API/SBStream.h"
@@ -62,8 +63,6 @@
 #include "lldb/API/SBThread.h"
 #include "lldb/API/SBThreadCollection.h"
 #include "lldb/API/SBThreadPlan.h"
-#include "lldb/API/SBTrace.h"
-#include "lldb/API/SBTraceOptions.h"
 #include "lldb/API/SBType.h"
 #include "lldb/API/SBTypeCategory.h"
 #include "lldb/API/SBTypeEnumMember.h"

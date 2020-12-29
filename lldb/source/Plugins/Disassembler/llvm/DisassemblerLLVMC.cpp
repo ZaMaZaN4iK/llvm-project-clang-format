@@ -1,13 +1,15 @@
 //===-- DisassemblerLLVMC.cpp -----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
-#include "DisassemblerLLVMC.h"
-
+// C Includes
+// C++ Includes
+// Project includes
 #include "llvm-c/Disassembler.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/MC/MCAsmInfo.h"
@@ -20,14 +22,19 @@
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
-#include "llvm/MC/MCTargetOptions.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ScopedPrinter.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 
+// Other libraries and framework includes
+#include "DisassemblerLLVMC.h"
+
 #include "lldb/Core/Address.h"
+#include "lldb/Core/DataExtractor.h"
+#include "lldb/Core/Log.h"
 #include "lldb/Core/Module.h"
+#include "lldb/Core/Stream.h"
 #include "lldb/Symbol/SymbolContext.h"
 #include "lldb/Target/ExecutionContext.h"
 #include "lldb/Target/Process.h"
@@ -35,48 +42,11 @@
 #include "lldb/Target/SectionLoadList.h"
 #include "lldb/Target/StackFrame.h"
 #include "lldb/Target/Target.h"
-#include "lldb/Utility/DataExtractor.h"
-#include "lldb/Utility/Log.h"
-#include "lldb/Utility/RegularExpression.h"
-#include "lldb/Utility/Stream.h"
+
+#include "lldb/Core/RegularExpression.h"
 
 using namespace lldb;
 using namespace lldb_private;
-
-class DisassemblerLLVMC::MCDisasmInstance {
-public:
-  static std::unique_ptr<MCDisasmInstance>
-  Create(const char *triple, const char *cpu, const char *features_str,
-         unsigned flavor, DisassemblerLLVMC &owner);
-
-  ~MCDisasmInstance() = default;
-
-  uint64_t GetMCInst(const uint8_t *opcode_data, size_t opcode_data_len,
-                     lldb::addr_t pc, llvm::MCInst &mc_inst) const;
-  void PrintMCInst(llvm::MCInst &mc_inst, std::string &inst_string,
-                   std::string &comments_string);
-  void SetStyle(bool use_hex_immed, HexImmediateStyle hex_style);
-  bool CanBranch(llvm::MCInst &mc_inst) const;
-  bool HasDelaySlot(llvm::MCInst &mc_inst) const;
-  bool IsCall(llvm::MCInst &mc_inst) const;
-
-private:
-  MCDisasmInstance(std::unique_ptr<llvm::MCInstrInfo> &&instr_info_up,
-                   std::unique_ptr<llvm::MCRegisterInfo> &&reg_info_up,
-                   std::unique_ptr<llvm::MCSubtargetInfo> &&subtarget_info_up,
-                   std::unique_ptr<llvm::MCAsmInfo> &&asm_info_up,
-                   std::unique_ptr<llvm::MCContext> &&context_up,
-                   std::unique_ptr<llvm::MCDisassembler> &&disasm_up,
-                   std::unique_ptr<llvm::MCInstPrinter> &&instr_printer_up);
-
-  std::unique_ptr<llvm::MCInstrInfo> m_instr_info_up;
-  std::unique_ptr<llvm::MCRegisterInfo> m_reg_info_up;
-  std::unique_ptr<llvm::MCSubtargetInfo> m_subtarget_info_up;
-  std::unique_ptr<llvm::MCAsmInfo> m_asm_info_up;
-  std::unique_ptr<llvm::MCContext> m_context_up;
-  std::unique_ptr<llvm::MCDisassembler> m_disasm_up;
-  std::unique_ptr<llvm::MCInstPrinter> m_instr_printer_up;
-};
 
 class InstructionLLVMC : public lldb_private::Instruction {
 public:
@@ -94,15 +64,16 @@ public:
 
   bool DoesBranch() override {
     if (m_does_branch == eLazyBoolCalculate) {
-      DisassemblerScope disasm(*this);
-      if (disasm) {
+      std::shared_ptr<DisassemblerLLVMC> disasm_sp(GetDisassembler());
+      if (disasm_sp) {
+        disasm_sp->Lock(this, NULL);
         DataExtractor data;
         if (m_opcode.GetData(data)) {
           bool is_alternate_isa;
           lldb::addr_t pc = m_address.GetFileAddress();
 
-          DisassemblerLLVMC::MCDisasmInstance *mc_disasm_ptr =
-              GetDisasmToUse(is_alternate_isa, disasm);
+          DisassemblerLLVMC::LLVMCDisassembler *mc_disasm_ptr =
+              GetDisasmToUse(is_alternate_isa);
           const uint8_t *opcode_data = data.GetDataStart();
           const size_t opcode_data_len = data.GetByteSize();
           llvm::MCInst inst;
@@ -120,6 +91,7 @@ public:
               m_does_branch = eLazyBoolNo;
           }
         }
+        disasm_sp->Unlock();
       }
     }
     return m_does_branch == eLazyBoolYes;
@@ -127,15 +99,16 @@ public:
 
   bool HasDelaySlot() override {
     if (m_has_delay_slot == eLazyBoolCalculate) {
-      DisassemblerScope disasm(*this);
-      if (disasm) {
+      std::shared_ptr<DisassemblerLLVMC> disasm_sp(GetDisassembler());
+      if (disasm_sp) {
+        disasm_sp->Lock(this, NULL);
         DataExtractor data;
         if (m_opcode.GetData(data)) {
           bool is_alternate_isa;
           lldb::addr_t pc = m_address.GetFileAddress();
 
-          DisassemblerLLVMC::MCDisasmInstance *mc_disasm_ptr =
-              GetDisasmToUse(is_alternate_isa, disasm);
+          DisassemblerLLVMC::LLVMCDisassembler *mc_disasm_ptr =
+              GetDisasmToUse(is_alternate_isa);
           const uint8_t *opcode_data = data.GetDataStart();
           const size_t opcode_data_len = data.GetByteSize();
           llvm::MCInst inst;
@@ -153,14 +126,27 @@ public:
               m_has_delay_slot = eLazyBoolNo;
           }
         }
+        disasm_sp->Unlock();
       }
     }
     return m_has_delay_slot == eLazyBoolYes;
   }
 
-  DisassemblerLLVMC::MCDisasmInstance *GetDisasmToUse(bool &is_alternate_isa) {
-    DisassemblerScope disasm(*this);
-    return GetDisasmToUse(is_alternate_isa, disasm);
+  DisassemblerLLVMC::LLVMCDisassembler *GetDisasmToUse(bool &is_alternate_isa) {
+    is_alternate_isa = false;
+    std::shared_ptr<DisassemblerLLVMC> disasm_sp(GetDisassembler());
+    if (disasm_sp) {
+      if (disasm_sp->m_alternate_disasm_ap.get() != NULL) {
+        const AddressClass address_class = GetAddressClass();
+
+        if (address_class == eAddressClassCodeAlternateISA) {
+          is_alternate_isa = true;
+          return disasm_sp->m_alternate_disasm_ap.get();
+        }
+      }
+      return disasm_sp->m_disasm_ap.get();
+    }
+    return nullptr;
   }
 
   size_t Decode(const lldb_private::Disassembler &disassembler,
@@ -169,9 +155,9 @@ public:
     // All we have to do is read the opcode which can be easy for some
     // architectures
     bool got_op = false;
-    DisassemblerScope disasm(*this);
-    if (disasm) {
-      const ArchSpec &arch = disasm->GetArchitecture();
+    std::shared_ptr<DisassemblerLLVMC> disasm_sp(GetDisassembler());
+    if (disasm_sp) {
+      const ArchSpec &arch = disasm_sp->GetArchitecture();
       const lldb::ByteOrder byte_order = data.GetByteOrder();
 
       const uint32_t min_op_byte_size = arch.GetMinimumOpcodeByteSize();
@@ -211,8 +197,8 @@ public:
       }
       if (!got_op) {
         bool is_alternate_isa = false;
-        DisassemblerLLVMC::MCDisasmInstance *mc_disasm_ptr =
-            GetDisasmToUse(is_alternate_isa, disasm);
+        DisassemblerLLVMC::LLVMCDisassembler *mc_disasm_ptr =
+            GetDisasmToUse(is_alternate_isa);
 
         const llvm::Triple::ArchType machine = arch.GetMachine();
         if (machine == llvm::Triple::arm || machine == llvm::Triple::thumb) {
@@ -241,8 +227,10 @@ public:
           const addr_t pc = m_address.GetFileAddress();
           llvm::MCInst inst;
 
+          disasm_sp->Lock(this, NULL);
           const size_t inst_size =
               mc_disasm_ptr->GetMCInst(opcode_data, opcode_data_len, pc, inst);
+          disasm_sp->Unlock();
           if (inst_size == 0)
             m_opcode.Clear();
           else {
@@ -274,19 +262,19 @@ public:
       std::string out_string;
       std::string comment_string;
 
-      DisassemblerScope disasm(*this, exe_ctx);
-      if (disasm) {
-        DisassemblerLLVMC::MCDisasmInstance *mc_disasm_ptr;
+      std::shared_ptr<DisassemblerLLVMC> disasm_sp(GetDisassembler());
+      if (disasm_sp) {
+        DisassemblerLLVMC::LLVMCDisassembler *mc_disasm_ptr;
 
-        if (address_class == AddressClass::eCodeAlternateISA)
-          mc_disasm_ptr = disasm->m_alternate_disasm_up.get();
+        if (address_class == eAddressClassCodeAlternateISA)
+          mc_disasm_ptr = disasm_sp->m_alternate_disasm_ap.get();
         else
-          mc_disasm_ptr = disasm->m_disasm_up.get();
+          mc_disasm_ptr = disasm_sp->m_disasm_ap.get();
 
         lldb::addr_t pc = m_address.GetFileAddress();
         m_using_file_addr = true;
 
-        const bool data_from_file = disasm->m_data_from_file;
+        const bool data_from_file = disasm_sp->m_data_from_file;
         bool use_hex_immediates = true;
         Disassembler::HexImmediateStyle hex_style = Disassembler::eHexStyleC;
 
@@ -306,6 +294,8 @@ public:
           }
         }
 
+        disasm_sp->Lock(this, exe_ctx);
+
         const uint8_t *opcode_data = data.GetDataStart();
         const size_t opcode_data_len = data.GetByteSize();
         llvm::MCInst inst;
@@ -320,6 +310,8 @@ public:
             AppendComment(comment_string);
           }
         }
+
+        disasm_sp->Unlock();
 
         if (inst_size == 0) {
           m_comment.assign("unknown opcode");
@@ -357,7 +349,7 @@ public:
               return;
             else {
               const uint8_t *bytes = data.PeekData(offset, inst_size);
-              if (bytes == nullptr)
+              if (bytes == NULL)
                 return;
               m_opcode_name.assign(".byte");
               m_opcode.SetOpcodeBytes(bytes, inst_size);
@@ -382,10 +374,11 @@ public:
         static RegularExpression s_regex(
             llvm::StringRef("[ \t]*([^ ^\t]+)[ \t]*([^ ^\t].*)?"));
 
-        llvm::SmallVector<llvm::StringRef, 4> matches;
+        RegularExpression::Match matches(3);
+
         if (s_regex.Execute(out_string, &matches)) {
-          m_opcode_name = matches[1].str();
-          m_mnemonics = matches[2].str();
+          matches.GetMatchAtIndex(out_string.c_str(), 1, m_opcode_name);
+          matches.GetMatchAtIndex(out_string.c_str(), 2, m_mnemonics);
         }
       }
     }
@@ -396,27 +389,9 @@ public:
   bool UsingFileAddress() const { return m_using_file_addr; }
   size_t GetByteSize() const { return m_opcode.GetByteSize(); }
 
-  /// Grants exclusive access to the disassembler and initializes it with the
-  /// given InstructionLLVMC and an optional ExecutionContext.
-  class DisassemblerScope {
-    std::shared_ptr<DisassemblerLLVMC> m_disasm;
-
-  public:
-    explicit DisassemblerScope(
-        InstructionLLVMC &i,
-        const lldb_private::ExecutionContext *exe_ctx = nullptr)
-        : m_disasm(i.m_disasm_wp.lock()) {
-      m_disasm->m_mutex.lock();
-      m_disasm->m_inst = &i;
-      m_disasm->m_exe_ctx = exe_ctx;
-    }
-    ~DisassemblerScope() { m_disasm->m_mutex.unlock(); }
-
-    /// Evaluates to true if this scope contains a valid disassembler.
-    operator bool() const { return static_cast<bool>(m_disasm); }
-
-    std::shared_ptr<DisassemblerLLVMC> operator->() { return m_disasm; }
-  };
+  std::shared_ptr<DisassemblerLLVMC> GetDisassembler() {
+    return m_disasm_wp.lock();
+  }
 
   static llvm::StringRef::const_iterator
   ConsumeWhitespace(llvm::StringRef::const_iterator osi,
@@ -867,15 +842,16 @@ public:
 
   bool IsCall() override {
     if (m_is_call == eLazyBoolCalculate) {
-      DisassemblerScope disasm(*this);
-      if (disasm) {
+      std::shared_ptr<DisassemblerLLVMC> disasm_sp(GetDisassembler());
+      if (disasm_sp) {
+        disasm_sp->Lock(this, NULL);
         DataExtractor data;
         if (m_opcode.GetData(data)) {
           bool is_alternate_isa;
           lldb::addr_t pc = m_address.GetFileAddress();
 
-          DisassemblerLLVMC::MCDisasmInstance *mc_disasm_ptr =
-              GetDisasmToUse(is_alternate_isa, disasm);
+          DisassemblerLLVMC::LLVMCDisassembler *mc_disasm_ptr =
+              GetDisasmToUse(is_alternate_isa);
           const uint8_t *opcode_data = data.GetDataStart();
           const size_t opcode_data_len = data.GetByteSize();
           llvm::MCInst inst;
@@ -890,6 +866,7 @@ public:
               m_is_call = eLazyBoolNo;
           }
         }
+        disasm_sp->Unlock();
       }
     }
     return m_is_call == eLazyBoolYes;
@@ -902,141 +879,99 @@ protected:
   LazyBool m_is_call;
   bool m_is_valid;
   bool m_using_file_addr;
-
-private:
-  DisassemblerLLVMC::MCDisasmInstance *
-  GetDisasmToUse(bool &is_alternate_isa, DisassemblerScope &disasm) {
-    is_alternate_isa = false;
-    if (disasm) {
-      if (disasm->m_alternate_disasm_up) {
-        const AddressClass address_class = GetAddressClass();
-
-        if (address_class == AddressClass::eCodeAlternateISA) {
-          is_alternate_isa = true;
-          return disasm->m_alternate_disasm_up.get();
-        }
-      }
-      return disasm->m_disasm_up.get();
-    }
-    return nullptr;
-  }
 };
 
-std::unique_ptr<DisassemblerLLVMC::MCDisasmInstance>
-DisassemblerLLVMC::MCDisasmInstance::Create(const char *triple, const char *cpu,
-                                            const char *features_str,
-                                            unsigned flavor,
-                                            DisassemblerLLVMC &owner) {
-  using Instance = std::unique_ptr<DisassemblerLLVMC::MCDisasmInstance>;
-
-  std::string Status;
+DisassemblerLLVMC::LLVMCDisassembler::LLVMCDisassembler(
+    const char *triple, const char *cpu, const char *features_str,
+    unsigned flavor, DisassemblerLLVMC &owner)
+    : m_is_valid(true) {
+  std::string Error;
   const llvm::Target *curr_target =
-      llvm::TargetRegistry::lookupTarget(triple, Status);
-  if (!curr_target)
-    return Instance();
+      llvm::TargetRegistry::lookupTarget(triple, Error);
+  if (!curr_target) {
+    m_is_valid = false;
+    return;
+  }
 
-  std::unique_ptr<llvm::MCInstrInfo> instr_info_up(
-      curr_target->createMCInstrInfo());
-  if (!instr_info_up)
-    return Instance();
+  m_instr_info_ap.reset(curr_target->createMCInstrInfo());
+  m_reg_info_ap.reset(curr_target->createMCRegInfo(triple));
 
-  std::unique_ptr<llvm::MCRegisterInfo> reg_info_up(
-      curr_target->createMCRegInfo(triple));
-  if (!reg_info_up)
-    return Instance();
-
-  std::unique_ptr<llvm::MCSubtargetInfo> subtarget_info_up(
+  m_subtarget_info_ap.reset(
       curr_target->createMCSubtargetInfo(triple, cpu, features_str));
-  if (!subtarget_info_up)
-    return Instance();
 
-  llvm::MCTargetOptions MCOptions;
-  std::unique_ptr<llvm::MCAsmInfo> asm_info_up(
-      curr_target->createMCAsmInfo(*reg_info_up, triple, MCOptions));
-  if (!asm_info_up)
-    return Instance();
+  std::unique_ptr<llvm::MCRegisterInfo> reg_info(
+      curr_target->createMCRegInfo(triple));
+  m_asm_info_ap.reset(curr_target->createMCAsmInfo(*reg_info, triple));
 
-  std::unique_ptr<llvm::MCContext> context_up(
-      new llvm::MCContext(asm_info_up.get(), reg_info_up.get(), nullptr));
-  if (!context_up)
-    return Instance();
+  if (m_instr_info_ap.get() == NULL || m_reg_info_ap.get() == NULL ||
+      m_subtarget_info_ap.get() == NULL || m_asm_info_ap.get() == NULL) {
+    m_is_valid = false;
+    return;
+  }
 
-  std::unique_ptr<llvm::MCDisassembler> disasm_up(
-      curr_target->createMCDisassembler(*subtarget_info_up, *context_up));
-  if (!disasm_up)
-    return Instance();
+  m_context_ap.reset(
+      new llvm::MCContext(m_asm_info_ap.get(), m_reg_info_ap.get(), 0));
 
-  std::unique_ptr<llvm::MCRelocationInfo> rel_info_up(
-      curr_target->createMCRelocationInfo(triple, *context_up));
-  if (!rel_info_up)
-    return Instance();
+  m_disasm_ap.reset(curr_target->createMCDisassembler(
+      *m_subtarget_info_ap.get(), *m_context_ap.get()));
+  if (m_disasm_ap.get() && m_context_ap.get()) {
+    std::unique_ptr<llvm::MCRelocationInfo> RelInfo(
+        curr_target->createMCRelocationInfo(triple, *m_context_ap.get()));
+    if (!RelInfo) {
+      m_is_valid = false;
+      return;
+    }
+    std::unique_ptr<llvm::MCSymbolizer> symbolizer_up(
+        curr_target->createMCSymbolizer(
+            triple, NULL, DisassemblerLLVMC::SymbolLookupCallback,
+            (void *)&owner, m_context_ap.get(), std::move(RelInfo)));
+    m_disasm_ap->setSymbolizer(std::move(symbolizer_up));
 
-  std::unique_ptr<llvm::MCSymbolizer> symbolizer_up(
-      curr_target->createMCSymbolizer(
-          triple, nullptr, DisassemblerLLVMC::SymbolLookupCallback, &owner,
-          context_up.get(), std::move(rel_info_up)));
-  disasm_up->setSymbolizer(std::move(symbolizer_up));
+    unsigned asm_printer_variant;
+    if (flavor == ~0U)
+      asm_printer_variant = m_asm_info_ap->getAssemblerDialect();
+    else {
+      asm_printer_variant = flavor;
+    }
 
-  unsigned asm_printer_variant =
-      flavor == ~0U ? asm_info_up->getAssemblerDialect() : flavor;
-
-  std::unique_ptr<llvm::MCInstPrinter> instr_printer_up(
-      curr_target->createMCInstPrinter(llvm::Triple{triple},
-                                       asm_printer_variant, *asm_info_up,
-                                       *instr_info_up, *reg_info_up));
-  if (!instr_printer_up)
-    return Instance();
-
-  return Instance(
-      new MCDisasmInstance(std::move(instr_info_up), std::move(reg_info_up),
-                           std::move(subtarget_info_up), std::move(asm_info_up),
-                           std::move(context_up), std::move(disasm_up),
-                           std::move(instr_printer_up)));
+    m_instr_printer_ap.reset(curr_target->createMCInstPrinter(
+        llvm::Triple{triple}, asm_printer_variant, *m_asm_info_ap.get(),
+        *m_instr_info_ap.get(), *m_reg_info_ap.get()));
+    if (m_instr_printer_ap.get() == NULL) {
+      m_disasm_ap.reset();
+      m_is_valid = false;
+    }
+  } else
+    m_is_valid = false;
 }
 
-DisassemblerLLVMC::MCDisasmInstance::MCDisasmInstance(
-    std::unique_ptr<llvm::MCInstrInfo> &&instr_info_up,
-    std::unique_ptr<llvm::MCRegisterInfo> &&reg_info_up,
-    std::unique_ptr<llvm::MCSubtargetInfo> &&subtarget_info_up,
-    std::unique_ptr<llvm::MCAsmInfo> &&asm_info_up,
-    std::unique_ptr<llvm::MCContext> &&context_up,
-    std::unique_ptr<llvm::MCDisassembler> &&disasm_up,
-    std::unique_ptr<llvm::MCInstPrinter> &&instr_printer_up)
-    : m_instr_info_up(std::move(instr_info_up)),
-      m_reg_info_up(std::move(reg_info_up)),
-      m_subtarget_info_up(std::move(subtarget_info_up)),
-      m_asm_info_up(std::move(asm_info_up)),
-      m_context_up(std::move(context_up)), m_disasm_up(std::move(disasm_up)),
-      m_instr_printer_up(std::move(instr_printer_up)) {
-  assert(m_instr_info_up && m_reg_info_up && m_subtarget_info_up &&
-         m_asm_info_up && m_context_up && m_disasm_up && m_instr_printer_up);
-}
+DisassemblerLLVMC::LLVMCDisassembler::~LLVMCDisassembler() = default;
 
-uint64_t DisassemblerLLVMC::MCDisasmInstance::GetMCInst(
+uint64_t DisassemblerLLVMC::LLVMCDisassembler::GetMCInst(
     const uint8_t *opcode_data, size_t opcode_data_len, lldb::addr_t pc,
-    llvm::MCInst &mc_inst) const {
+    llvm::MCInst &mc_inst) {
   llvm::ArrayRef<uint8_t> data(opcode_data, opcode_data_len);
   llvm::MCDisassembler::DecodeStatus status;
 
   uint64_t new_inst_size;
-  status = m_disasm_up->getInstruction(mc_inst, new_inst_size, data, pc,
-                                       llvm::nulls());
+  status = m_disasm_ap->getInstruction(mc_inst, new_inst_size, data, pc,
+                                       llvm::nulls(), llvm::nulls());
   if (status == llvm::MCDisassembler::Success)
     return new_inst_size;
   else
     return 0;
 }
 
-void DisassemblerLLVMC::MCDisasmInstance::PrintMCInst(
+void DisassemblerLLVMC::LLVMCDisassembler::PrintMCInst(
     llvm::MCInst &mc_inst, std::string &inst_string,
     std::string &comments_string) {
   llvm::raw_string_ostream inst_stream(inst_string);
   llvm::raw_string_ostream comments_stream(comments_string);
 
-  m_instr_printer_up->setCommentStream(comments_stream);
-  m_instr_printer_up->printInst(&mc_inst, 0, llvm::StringRef(),
-                                *m_subtarget_info_up, inst_stream);
-  m_instr_printer_up->setCommentStream(llvm::nulls());
+  m_instr_printer_ap->setCommentStream(comments_stream);
+  m_instr_printer_ap->printInst(&mc_inst, inst_stream, llvm::StringRef(),
+                                *m_subtarget_info_ap);
+  m_instr_printer_ap->setCommentStream(llvm::nulls());
   comments_stream.flush();
 
   static std::string g_newlines("\r\n");
@@ -1050,37 +985,35 @@ void DisassemblerLLVMC::MCDisasmInstance::PrintMCInst(
   }
 }
 
-void DisassemblerLLVMC::MCDisasmInstance::SetStyle(
+void DisassemblerLLVMC::LLVMCDisassembler::SetStyle(
     bool use_hex_immed, HexImmediateStyle hex_style) {
-  m_instr_printer_up->setPrintImmHex(use_hex_immed);
+  m_instr_printer_ap->setPrintImmHex(use_hex_immed);
   switch (hex_style) {
   case eHexStyleC:
-    m_instr_printer_up->setPrintHexStyle(llvm::HexStyle::C);
+    m_instr_printer_ap->setPrintHexStyle(llvm::HexStyle::C);
     break;
   case eHexStyleAsm:
-    m_instr_printer_up->setPrintHexStyle(llvm::HexStyle::Asm);
+    m_instr_printer_ap->setPrintHexStyle(llvm::HexStyle::Asm);
     break;
   }
 }
 
-bool DisassemblerLLVMC::MCDisasmInstance::CanBranch(
-    llvm::MCInst &mc_inst) const {
-  return m_instr_info_up->get(mc_inst.getOpcode())
-      .mayAffectControlFlow(mc_inst, *m_reg_info_up);
+bool DisassemblerLLVMC::LLVMCDisassembler::CanBranch(llvm::MCInst &mc_inst) {
+  return m_instr_info_ap->get(mc_inst.getOpcode())
+      .mayAffectControlFlow(mc_inst, *m_reg_info_ap.get());
 }
 
-bool DisassemblerLLVMC::MCDisasmInstance::HasDelaySlot(
-    llvm::MCInst &mc_inst) const {
-  return m_instr_info_up->get(mc_inst.getOpcode()).hasDelaySlot();
+bool DisassemblerLLVMC::LLVMCDisassembler::HasDelaySlot(llvm::MCInst &mc_inst) {
+  return m_instr_info_ap->get(mc_inst.getOpcode()).hasDelaySlot();
 }
 
-bool DisassemblerLLVMC::MCDisasmInstance::IsCall(llvm::MCInst &mc_inst) const {
-  return m_instr_info_up->get(mc_inst.getOpcode()).isCall();
+bool DisassemblerLLVMC::LLVMCDisassembler::IsCall(llvm::MCInst &mc_inst) {
+  return m_instr_info_ap->get(mc_inst.getOpcode()).isCall();
 }
 
 DisassemblerLLVMC::DisassemblerLLVMC(const ArchSpec &arch,
                                      const char *flavor_string)
-    : Disassembler(arch, flavor_string), m_exe_ctx(nullptr), m_inst(nullptr),
+    : Disassembler(arch, flavor_string), m_exe_ctx(NULL), m_inst(NULL),
       m_data_from_file(false) {
   if (!FlavorValidForArchSpec(arch, m_flavor.c_str())) {
     m_flavor.assign("default");
@@ -1090,7 +1023,8 @@ DisassemblerLLVMC::DisassemblerLLVMC(const ArchSpec &arch,
   llvm::Triple triple = arch.GetTriple();
 
   // So far the only supported flavor is "intel" on x86.  The base class will
-  // set this correctly coming in.
+  // set this
+  // correctly coming in.
   if (triple.getArch() == llvm::Triple::x86 ||
       triple.getArch() == llvm::Triple::x86_64) {
     if (m_flavor == "intel") {
@@ -1114,21 +1048,21 @@ DisassemblerLLVMC::DisassemblerLLVMC(const ArchSpec &arch,
   }
 
   // If no sub architecture specified then use the most recent arm architecture
-  // so the disassembler will return all instruction. Without it we will see a
-  // lot of unknow opcode in case the code uses instructions which are not
-  // available in the oldest arm version (used when no sub architecture is
-  // specified)
+  // so the
+  // disassembler will return all instruction. Without it we will see a lot of
+  // unknow opcode
+  // in case the code uses instructions which are not available in the oldest
+  // arm version
+  // (used when no sub architecture is specified)
   if (triple.getArch() == llvm::Triple::arm &&
       triple.getSubArch() == llvm::Triple::NoSubArch)
     triple.setArchName("armv8.2a");
 
-  std::string features_str = "";
   const char *triple_str = triple.getTriple().c_str();
 
   // ARM Cortex M0-M7 devices only execute thumb instructions
   if (arch.IsAlwaysThumbInstructions()) {
     triple_str = thumb_arch.GetTriple().getTriple().c_str();
-    features_str += "+fp-armv8,";
   }
 
   const char *cpu = "";
@@ -1179,7 +1113,11 @@ DisassemblerLLVMC::DisassemblerLLVMC(const ArchSpec &arch,
     break;
   }
 
-  if (arch.IsMIPS()) {
+  std::string features_str = "";
+  if (triple.getArch() == llvm::Triple::mips ||
+      triple.getArch() == llvm::Triple::mipsel ||
+      triple.getArch() == llvm::Triple::mips64 ||
+      triple.getArch() == llvm::Triple::mips64el) {
     uint32_t arch_flags = arch.GetFlags();
     if (arch_flags & ArchSpec::eMIPSAse_msa)
       features_str += "+msa,";
@@ -1189,23 +1127,15 @@ DisassemblerLLVMC::DisassemblerLLVMC(const ArchSpec &arch,
       features_str += "+dspr2,";
   }
 
-  // If any AArch64 variant, enable the ARMv8.5 ISA with SVE extensions so we
-  // can disassemble newer instructions.
-  if (triple.getArch() == llvm::Triple::aarch64 || 
-      triple.getArch() == llvm::Triple::aarch64_32)
-    features_str += "+v8.5a,+sve2";
-
-  if ((triple.getArch() == llvm::Triple::aarch64 ||
-       triple.getArch() == llvm::Triple::aarch64_32)
-      && triple.getVendor() == llvm::Triple::Apple) {
-    cpu = "apple-latest";
+  m_disasm_ap.reset(new LLVMCDisassembler(triple_str, cpu, features_str.c_str(),
+                                          flavor, *this));
+  if (!m_disasm_ap->IsValid()) {
+    // We use m_disasm_ap.get() to tell whether we are valid or not, so if this
+    // isn't good for some reason,
+    // we reset it, and then we won't be valid and FindPlugin will fail and we
+    // won't get used.
+    m_disasm_ap.reset();
   }
-
-  // We use m_disasm_up.get() to tell whether we are valid or not, so if this
-  // isn't good for some reason, we won't be valid and FindPlugin will fail and
-  // we won't get used.
-  m_disasm_up = MCDisasmInstance::Create(triple_str, cpu, features_str.c_str(),
-                                         flavor, *this);
 
   llvm::Triple::ArchType llvm_arch = triple.getArch();
 
@@ -1213,13 +1143,16 @@ DisassemblerLLVMC::DisassemblerLLVMC(const ArchSpec &arch,
   // thumb instruction disassembler.
   if (llvm_arch == llvm::Triple::arm) {
     std::string thumb_triple(thumb_arch.GetTriple().getTriple());
-    m_alternate_disasm_up =
-        MCDisasmInstance::Create(thumb_triple.c_str(), "", features_str.c_str(),
-                                 flavor, *this);
-    if (!m_alternate_disasm_up)
-      m_disasm_up.reset();
-
-  } else if (arch.IsMIPS()) {
+    m_alternate_disasm_ap.reset(
+        new LLVMCDisassembler(thumb_triple.c_str(), "", "", flavor, *this));
+    if (!m_alternate_disasm_ap->IsValid()) {
+      m_disasm_ap.reset();
+      m_alternate_disasm_ap.reset();
+    }
+  } else if (llvm_arch == llvm::Triple::mips ||
+             llvm_arch == llvm::Triple::mipsel ||
+             llvm_arch == llvm::Triple::mips64 ||
+             llvm_arch == llvm::Triple::mips64el) {
     /* Create alternate disassembler for MIPS16 and microMIPS */
     uint32_t arch_flags = arch.GetFlags();
     if (arch_flags & ArchSpec::eMIPSAse_mips16)
@@ -1227,10 +1160,12 @@ DisassemblerLLVMC::DisassemblerLLVMC(const ArchSpec &arch,
     else if (arch_flags & ArchSpec::eMIPSAse_micromips)
       features_str += "+micromips,";
 
-    m_alternate_disasm_up = MCDisasmInstance::Create(
-        triple_str, cpu, features_str.c_str(), flavor, *this);
-    if (!m_alternate_disasm_up)
-      m_disasm_up.reset();
+    m_alternate_disasm_ap.reset(new LLVMCDisassembler(
+        triple_str, cpu, features_str.c_str(), flavor, *this));
+    if (!m_alternate_disasm_ap->IsValid()) {
+      m_disasm_ap.reset();
+      m_alternate_disasm_ap.reset();
+    }
   }
 }
 
@@ -1239,13 +1174,13 @@ DisassemblerLLVMC::~DisassemblerLLVMC() = default;
 Disassembler *DisassemblerLLVMC::CreateInstance(const ArchSpec &arch,
                                                 const char *flavor) {
   if (arch.GetTriple().getArch() != llvm::Triple::UnknownArch) {
-    std::unique_ptr<DisassemblerLLVMC> disasm_up(
+    std::unique_ptr<DisassemblerLLVMC> disasm_ap(
         new DisassemblerLLVMC(arch, flavor));
 
-    if (disasm_up.get() && disasm_up->IsValid())
-      return disasm_up.release();
+    if (disasm_ap.get() && disasm_ap->IsValid())
+      return disasm_ap.release();
   }
-  return nullptr;
+  return NULL;
 }
 
 size_t DisassemblerLLVMC::DecodeInstructions(const Address &base_addr,
@@ -1268,9 +1203,9 @@ size_t DisassemblerLLVMC::DecodeInstructions(const Address &base_addr,
   while (data_cursor < data_byte_size &&
          instructions_parsed < num_instructions) {
 
-    AddressClass address_class = AddressClass::eCode;
+    AddressClass address_class = eAddressClassCode;
 
-    if (m_alternate_disasm_up)
+    if (m_alternate_disasm_ap.get() != NULL)
       address_class = inst_addr.GetAddressClass();
 
     InstructionSP inst_sp(
@@ -1332,17 +1267,18 @@ const char *DisassemblerLLVMC::SymbolLookupCallback(void *disassembler,
 bool DisassemblerLLVMC::FlavorValidForArchSpec(
     const lldb_private::ArchSpec &arch, const char *flavor) {
   llvm::Triple triple = arch.GetTriple();
-  if (flavor == nullptr || strcmp(flavor, "default") == 0)
+  if (flavor == NULL || strcmp(flavor, "default") == 0)
     return true;
 
   if (triple.getArch() == llvm::Triple::x86 ||
       triple.getArch() == llvm::Triple::x86_64) {
-    return strcmp(flavor, "intel") == 0 || strcmp(flavor, "att") == 0;
+    if (strcmp(flavor, "intel") == 0 || strcmp(flavor, "att") == 0)
+      return true;
+    else
+      return false;
   } else
     return false;
 }
-
-bool DisassemblerLLVMC::IsValid() const { return m_disasm_up.operator bool(); }
 
 int DisassemblerLLVMC::OpInfo(uint64_t PC, uint64_t Offset, uint64_t Size,
                               int tag_type, void *tag_bug) {
@@ -1361,7 +1297,7 @@ const char *DisassemblerLLVMC::SymbolLookup(uint64_t value, uint64_t *type_ptr,
   if (*type_ptr) {
     if (m_exe_ctx && m_inst) {
       // std::string remove_this_prior_to_checkin;
-      Target *target = m_exe_ctx ? m_exe_ctx->GetTargetPtr() : nullptr;
+      Target *target = m_exe_ctx ? m_exe_ctx->GetTargetPtr() : NULL;
       Address value_so_addr;
       Address pc_so_addr;
       if (m_inst->UsingFileAddress()) {
@@ -1376,7 +1312,7 @@ const char *DisassemblerLLVMC::SymbolLookup(uint64_t value, uint64_t *type_ptr,
       }
 
       SymbolContext sym_ctx;
-      const SymbolContextItem resolve_scope =
+      const uint32_t resolve_scope =
           eSymbolContextFunction | eSymbolContextSymbol;
       if (pc_so_addr.IsValid() && pc_so_addr.GetModule()) {
         pc_so_addr.GetModule()->ResolveSymbolContextForAddress(
@@ -1396,8 +1332,8 @@ const char *DisassemblerLLVMC::SymbolLookup(uint64_t value, uint64_t *type_ptr,
           }
         }
 
-        // If the "value" address (the target address we're symbolicating) is
-        // inside the same SymbolContext as the current instruction pc
+        // If the "value" address (the target address we're symbolicating)
+        // is inside the same SymbolContext as the current instruction pc
         // (pc_so_addr), don't print the full function name - just print it
         // with DumpStyleNoFunctionName style, e.g. "<+36>".
         if (format_omitting_current_func_name) {
@@ -1412,8 +1348,9 @@ const char *DisassemblerLLVMC::SymbolLookup(uint64_t value, uint64_t *type_ptr,
 
         if (!ss.GetString().empty()) {
           // If Address::Dump returned a multi-line description, most commonly
-          // seen when we have multiple levels of inlined functions at an
-          // address, only show the first line.
+          // seen when we
+          // have multiple levels of inlined functions at an address, only show
+          // the first line.
           std::string str = ss.GetString();
           size_t first_eol_char = str.find_first_of("\r\n");
           if (first_eol_char != std::string::npos) {
@@ -1426,11 +1363,13 @@ const char *DisassemblerLLVMC::SymbolLookup(uint64_t value, uint64_t *type_ptr,
   }
 
   *type_ptr = LLVMDisassembler_ReferenceType_InOut_None;
-  *name = nullptr;
-  return nullptr;
+  *name = NULL;
+  return NULL;
 }
 
+//------------------------------------------------------------------
 // PluginInterface protocol
+//------------------------------------------------------------------
 ConstString DisassemblerLLVMC::GetPluginName() { return GetPluginNameStatic(); }
 
 uint32_t DisassemblerLLVMC::GetPluginVersion() { return 1; }

@@ -1,14 +1,11 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
-
-// This test needs to be rewritten for the Windows exception_ptr semantics
-// which copy the exception each time the exception_ptr is copied.
-// XFAIL: LIBCXX-WINDOWS-FIXME
 
 // UNSUPPORTED: libcpp-no-exceptions
 // <exception>
@@ -17,8 +14,6 @@
 
 #include <exception>
 #include <cassert>
-
-#include "test_macros.h"
 
 struct A
 {
@@ -31,7 +26,7 @@ struct A
 
 int A::constructed = 0;
 
-int main(int, char**)
+int main()
 {
     {
         std::exception_ptr p = std::current_exception();
@@ -272,6 +267,4 @@ int main(int, char**)
         assert(p != nullptr);
     }
     assert(A::constructed == 0);
-
-  return 0;
 }

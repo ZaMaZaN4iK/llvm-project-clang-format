@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,33 +20,33 @@
 template <class T, class U>
 void test_add_pointer()
 {
-    ASSERT_SAME_TYPE(U, typename std::add_pointer<T>::type);
+    static_assert((std::is_same<typename std::add_pointer<T>::type, U>::value), "");
 #if TEST_STD_VER > 11
-    ASSERT_SAME_TYPE(U, std::add_pointer_t<T>);
+    static_assert((std::is_same<std::add_pointer_t<T>,     U>::value), "");
 #endif
 }
 
 template <class F>
 void test_function0()
 {
-    ASSERT_SAME_TYPE(F*, typename std::add_pointer<F>::type);
+    static_assert((std::is_same<typename std::add_pointer<F>::type, F*>::value), "");
 #if TEST_STD_VER > 11
-    ASSERT_SAME_TYPE(F*, std::add_pointer_t<F>);
+    static_assert((std::is_same<std::add_pointer_t<F>, F*>::value), "");
 #endif
 }
 
 template <class F>
 void test_function1()
 {
-    ASSERT_SAME_TYPE(F, typename std::add_pointer<F>::type);
+    static_assert((std::is_same<typename std::add_pointer<F>::type, F>::value), "");
 #if TEST_STD_VER > 11
-    ASSERT_SAME_TYPE(F, std::add_pointer_t<F>);
+    static_assert((std::is_same<std::add_pointer_t<F>, F>::value), "");
 #endif
 }
 
 struct Foo {};
 
-int main(int, char**)
+int main()
 {
     test_add_pointer<void, void*>();
     test_add_pointer<int, int*>();
@@ -76,6 +77,4 @@ int main(int, char**)
     test_function0<void (Foo::*)() const &>();
     test_function0<void (Foo::*)() const &&>();
 #endif
-
-  return 0;
 }

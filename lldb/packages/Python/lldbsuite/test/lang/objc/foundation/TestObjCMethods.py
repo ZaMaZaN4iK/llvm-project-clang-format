@@ -8,7 +8,9 @@ from __future__ import print_function
 
 import os
 import os.path
+import time
 import lldb
+import string
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
 from lldbsuite.test import lldbutil
@@ -33,7 +35,7 @@ class FoundationTestCase(TestBase):
     def test_break(self):
         """Test setting objc breakpoints using '_regexp-break' and 'breakpoint set'."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Stop at +[NSString stringWithFormat:].
@@ -115,7 +117,7 @@ class FoundationTestCase(TestBase):
     def test_data_type_and_expr(self):
         """Lookup objective-c data types and evaluate expressions."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Stop at -[MyString description].
@@ -191,7 +193,7 @@ class FoundationTestCase(TestBase):
             "expression self->non_existent_member",
             COMMAND_FAILED_AS_EXPECTED,
             error=True,
-            substrs=["error:", "'MyString' does not have a member named 'non_existent_member'"])
+            startstr="error: 'MyString' does not have a member named 'non_existent_member'")
 
         # Use expression parser.
         self.runCmd("expression self->str")
@@ -228,7 +230,7 @@ class FoundationTestCase(TestBase):
         self.build()
         # See: <rdar://problem/8717050> lldb needs to use the ObjC runtime symbols for ivar offsets
         # Only fails for the ObjC 2.0 runtime.
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         target = self.dbg.CreateTarget(exe)
         self.assertTrue(target, VALID_TARGET)
@@ -278,7 +280,7 @@ class FoundationTestCase(TestBase):
     def test_expression_lookups_objc(self):
         """Test running an expression detect spurious debug info lookups (DWARF)."""
         self.build()
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.runCmd("file " + exe, CURRENT_EXECUTABLE_SET)
 
         # Stop at -[MyString initWithNSString:].
@@ -294,7 +296,7 @@ class FoundationTestCase(TestBase):
         # Log any DWARF lookups
         ++file_index
         logfile = os.path.join(
-            self.getBuildDir(),
+            os.getcwd(),
             "dwarf-lookups-" +
             self.getArchitecture() +
             "-" +
@@ -315,7 +317,7 @@ class FoundationTestCase(TestBase):
             lines = f.readlines()
             num_errors = 0
             for line in lines:
-                if "$__lldb" in line:
+                if string.find(line, "$__lldb") != -1:
                     if num_errors == 0:
                         print(
                             "error: found spurious name lookups when evaluating an expression:")

@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,10 +19,10 @@
 
 #include "test_macros.h"
 #include "min_allocator.h"
-#include "private_constructor.h"
+#include "private_constructor.hpp"
 #include "is_transparent.h"
 
-int main(int, char**)
+int main()
 {
     typedef std::pair<const int, double> V;
     {
@@ -154,6 +155,7 @@ int main(int, char**)
 #endif
 #if TEST_STD_VER > 11
     {
+    typedef std::pair<const int, double> V;
     typedef std::multimap<int, double, std::less<>> M;
     typedef M::iterator R;
     V ar[] =
@@ -232,6 +234,4 @@ int main(int, char**)
     }
 
 #endif
-
-  return 0;
 }

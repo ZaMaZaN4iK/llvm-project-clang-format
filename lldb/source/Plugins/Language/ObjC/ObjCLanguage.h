@@ -1,27 +1,29 @@
 //===-- ObjCLanguage.h ------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef liblldb_ObjCLanguage_h_
 #define liblldb_ObjCLanguage_h_
 
+// C Includes
+// C++ Includes
 #include <cstring>
 #include <vector>
 
-#include "Plugins/Language/ClangCommon/ClangHighlighter.h"
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/ConstString.h"
 #include "lldb/Target/Language.h"
-#include "lldb/Utility/ConstString.h"
 #include "lldb/lldb-private.h"
 
 namespace lldb_private {
 
 class ObjCLanguage : public Language {
-  ClangHighlighter m_highlighter;
-
 public:
   class MethodName {
   public:
@@ -58,20 +60,32 @@ public:
 
     Type GetType() const { return m_type; }
 
-    ConstString GetFullName() const { return m_full; }
+    const ConstString &GetFullName() const { return m_full; }
 
     ConstString GetFullNameWithoutCategory(bool empty_if_no_category);
 
     bool SetName(const char *name, bool strict);
     bool SetName(llvm::StringRef name, bool strict);
 
-    ConstString GetClassName();
+    const ConstString &GetClassName();
 
-    ConstString GetClassNameWithCategory();
+    const ConstString &GetClassNameWithCategory();
 
-    ConstString GetCategory();
+    const ConstString &GetCategory();
 
-    ConstString GetSelector();
+    const ConstString &GetSelector();
+
+    // Get all possible names for a method. Examples:
+    // If name is "+[NSString(my_additions) myStringWithCString:]"
+    //  names[0] => "+[NSString(my_additions) myStringWithCString:]"
+    //  names[1] => "+[NSString myStringWithCString:]"
+    // If name is specified without the leading '+' or '-' like
+    // "[NSString(my_additions) myStringWithCString:]"
+    //  names[0] => "+[NSString(my_additions) myStringWithCString:]"
+    //  names[1] => "-[NSString(my_additions) myStringWithCString:]"
+    //  names[2] => "+[NSString myStringWithCString:]"
+    //  names[3] => "-[NSString myStringWithCString:]"
+    size_t GetFullNames(std::vector<ConstString> &names, bool append);
 
   protected:
     ConstString
@@ -93,18 +107,6 @@ public:
     return lldb::eLanguageTypeObjC;
   }
 
-  // Get all possible names for a method. Examples:
-  // If method_name is "+[NSString(my_additions) myStringWithCString:]"
-  //   variant_names[0] => "+[NSString myStringWithCString:]"
-  // If name is specified without the leading '+' or '-' like
-  // "[NSString(my_additions) myStringWithCString:]"
-  //  variant_names[0] => "+[NSString(my_additions) myStringWithCString:]"
-  //  variant_names[1] => "-[NSString(my_additions) myStringWithCString:]"
-  //  variant_names[2] => "+[NSString myStringWithCString:]"
-  //  variant_names[3] => "-[NSString myStringWithCString:]"
-  std::vector<ConstString>
-  GetMethodNameVariants(ConstString method_name) const override;
-
   lldb::TypeCategoryImplSP GetFormatters() override;
 
   std::vector<ConstString>
@@ -119,11 +121,9 @@ public:
 
   bool IsNilReference(ValueObject &valobj) override;
 
-  bool IsSourceFile(llvm::StringRef file_path) const override;
-
-  const Highlighter *GetHighlighter() const override { return &m_highlighter; }
-
+  //------------------------------------------------------------------
   // Static Functions
+  //------------------------------------------------------------------
   static void Initialize();
 
   static void Terminate();
@@ -152,7 +152,9 @@ public:
       return false;
   }
 
+  //------------------------------------------------------------------
   // PluginInterface protocol
+  //------------------------------------------------------------------
   ConstString GetPluginName() override;
 
   uint32_t GetPluginVersion() override;

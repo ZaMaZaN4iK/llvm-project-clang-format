@@ -1,11 +1,16 @@
 //===-- UnwindAssembly.cpp --------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
 #include "lldb/Target/UnwindAssembly.h"
 #include "lldb/Core/PluginInterface.h"
 #include "lldb/Core/PluginManager.h"
@@ -21,9 +26,9 @@ UnwindAssemblySP UnwindAssembly::FindPlugin(const ArchSpec &arch) {
        (create_callback = PluginManager::GetUnwindAssemblyCreateCallbackAtIndex(
             idx)) != nullptr;
        ++idx) {
-    UnwindAssemblySP assembly_profiler_up(create_callback(arch));
-    if (assembly_profiler_up)
-      return assembly_profiler_up;
+    UnwindAssemblySP assembly_profiler_ap(create_callback(arch));
+    if (assembly_profiler_ap)
+      return assembly_profiler_ap;
   }
   return nullptr;
 }

@@ -1,8 +1,9 @@
 //===-- SystemZCallingConv.h - Calling conventions for SystemZ --*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -122,13 +123,6 @@ inline bool CC_SystemZ_I128Indirect(unsigned &ValNo, MVT &ValVT,
   PendingMembers.clear();
 
   return true;
-}
-
-inline bool CC_SystemZ_GHC_Error(unsigned &, MVT &, MVT &,
-                                 CCValAssign::LocInfo &, ISD::ArgFlagsTy &,
-                                 CCState &) {
-  report_fatal_error("No registers left in GHC calling convention");
-  return false;
 }
 
 } // end namespace llvm

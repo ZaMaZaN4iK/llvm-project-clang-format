@@ -2,8 +2,11 @@
 Test lldb breakpoint ids.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.lldbtest import *
 import lldbsuite.test.lldbutil as lldbutil
@@ -16,7 +19,7 @@ class BreakpointIDTestCase(TestBase):
     def test(self):
         self.build()
 
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
         self.expect("file " + exe,
                     patterns=["Current executable set to .*a.out"])
 

@@ -1,8 +1,8 @@
-// RUN: %clang_analyze_cc1 -analyzer-checker=apiModeling.StdCLibraryFunctions,debug.ExprInspection -verify -analyzer-config eagerly-assume=false %s
-// RUN: %clang_analyze_cc1 -triple i686-unknown-linux -analyzer-checker=apiModeling.StdCLibraryFunctions,debug.ExprInspection -verify -analyzer-config eagerly-assume=false %s
-// RUN: %clang_analyze_cc1 -triple x86_64-unknown-linux -analyzer-checker=apiModeling.StdCLibraryFunctions,debug.ExprInspection -verify -analyzer-config eagerly-assume=false %s
-// RUN: %clang_analyze_cc1 -triple armv7-a15-linux -analyzer-checker=apiModeling.StdCLibraryFunctions,debug.ExprInspection -verify -analyzer-config eagerly-assume=false %s
-// RUN: %clang_analyze_cc1 -triple thumbv7-a15-linux -analyzer-checker=apiModeling.StdCLibraryFunctions,debug.ExprInspection -verify -analyzer-config eagerly-assume=false %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=unix.StdCLibraryFunctions,debug.ExprInspection -verify %s
+// RUN: %clang_cc1 -triple i686-unknown-linux -analyze -analyzer-checker=unix.StdCLibraryFunctions,debug.ExprInspection -verify %s
+// RUN: %clang_cc1 -triple x86_64-unknown-linux -analyze -analyzer-checker=unix.StdCLibraryFunctions,debug.ExprInspection -verify %s
+// RUN: %clang_cc1 -triple armv7-a15-linux -analyze -analyzer-checker=unix.StdCLibraryFunctions,debug.ExprInspection -verify %s
+// RUN: %clang_cc1 -triple thumbv7-a15-linux -analyze -analyzer-checker=unix.StdCLibraryFunctions,debug.ExprInspection -verify %s
 
 void clang_analyzer_eval(int);
 
@@ -57,7 +57,8 @@ void test_fread_fwrite(FILE *fp, int *buf) {
   size_t y = fread(buf, sizeof(int), 10, fp);
   clang_analyzer_eval(y <= 10); // expected-warning{{TRUE}}
   size_t z = fwrite(buf, sizeof(int), y, fp);
-  clang_analyzer_eval(z <= y); // expected-warning{{TRUE}}
+  // FIXME: should be TRUE once symbol-symbol constraint support is improved.
+  clang_analyzer_eval(z <= y); // expected-warning{{UNKNOWN}}
 }
 
 ssize_t getline(char **, size_t *, FILE *);

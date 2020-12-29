@@ -1,8 +1,9 @@
-//===- MCMachObjectTargetWriter.cpp - Mach-O Target Writer Subclass -------===//
+//===-- MCMachObjectTargetWriter.cpp - Mach-O Target Writer Subclass ------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,4 +16,4 @@ MCMachObjectTargetWriter::MCMachObjectTargetWriter(bool Is64Bit_,
                                                    uint32_t CPUSubtype_)
     : Is64Bit(Is64Bit_), CPUType(CPUType_), CPUSubtype(CPUSubtype_) {}
 
-MCMachObjectTargetWriter::~MCMachObjectTargetWriter() = default;
+MCMachObjectTargetWriter::~MCMachObjectTargetWriter() {}

@@ -1,8 +1,9 @@
 //===- lib/Driver/DarwinLdDriver.cpp --------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -12,37 +13,35 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "lld/Common/Args.h"
-#include "lld/Common/ErrorHandler.h"
-#include "lld/Common/LLVM.h"
 #include "lld/Core/ArchiveLibraryFile.h"
 #include "lld/Core/Error.h"
 #include "lld/Core/File.h"
 #include "lld/Core/Instrumentation.h"
-#include "lld/Core/LinkingContext.h"
+#include "lld/Core/LLVM.h"
 #include "lld/Core/Node.h"
 #include "lld/Core/PassManager.h"
 #include "lld/Core/Resolver.h"
 #include "lld/Core/SharedLibraryFile.h"
 #include "lld/Core/Simple.h"
+#include "lld/Core/LinkingContext.h"
 #include "lld/ReaderWriter/MachOLinkingContext.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Optional.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Option/Arg.h"
 #include "llvm/Option/ArgList.h"
-#include "llvm/Option/OptTable.h"
 #include "llvm/Option/Option.h"
+#include "llvm/Option/OptTable.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/ErrorOr.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/MachO.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -62,9 +61,9 @@ namespace {
 // Create enum with OPT_xxx values for each option in DarwinLdOptions.td
 enum {
   OPT_INVALID = 0,
-#define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,  \
-               HELP, META, VALUES)                                             \
-  OPT_##ID,
+#define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM, \
+               HELP, META) \
+          OPT_##ID,
 #include "DarwinLdOptions.inc"
 #undef OPTION
 };
@@ -75,13 +74,11 @@ enum {
 #undef PREFIX
 
 // Create table mapping all options defined in DarwinLdOptions.td
-static const llvm::opt::OptTable::Info InfoTable[] = {
-#define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM,  \
-               HELPTEXT, METAVAR, VALUES)                                      \
-  {PREFIX,      NAME,      HELPTEXT,                                           \
-   METAVAR,     OPT_##ID,  llvm::opt::Option::KIND##Class,                     \
-   PARAM,       FLAGS,     OPT_##GROUP,                                        \
-   OPT_##ALIAS, ALIASARGS, VALUES},
+static const llvm::opt::OptTable::Info infoTable[] = {
+#define OPTION(PREFIX, NAME, ID, KIND, GROUP, ALIAS, ALIASARGS, FLAGS, PARAM, \
+               HELPTEXT, METAVAR)   \
+  { PREFIX, NAME, HELPTEXT, METAVAR, OPT_##ID, llvm::opt::Option::KIND##Class, \
+    PARAM, FLAGS, OPT_##GROUP, OPT_##ALIAS, ALIASARGS },
 #include "DarwinLdOptions.inc"
 #undef OPTION
 };
@@ -89,13 +86,13 @@ static const llvm::opt::OptTable::Info InfoTable[] = {
 // Create OptTable class for parsing actual command line arguments
 class DarwinLdOptTable : public llvm::opt::OptTable {
 public:
-  DarwinLdOptTable() : OptTable(InfoTable) {}
+  DarwinLdOptTable() : OptTable(infoTable) {}
 };
 
 static std::vector<std::unique_ptr<File>>
 makeErrorFile(StringRef path, std::error_code ec) {
   std::vector<std::unique_ptr<File>> result;
-  result.push_back(std::make_unique<ErrorFile>(path, ec));
+  result.push_back(llvm::make_unique<ErrorFile>(path, ec));
   return result;
 }
 
@@ -111,11 +108,11 @@ parseMemberFiles(std::unique_ptr<File> file) {
   return members;
 }
 
-std::vector<std::unique_ptr<File>> loadFile(MachOLinkingContext &ctx,
-                                            StringRef path, bool wholeArchive,
-                                            bool upwardDylib) {
+std::vector<std::unique_ptr<File>>
+loadFile(MachOLinkingContext &ctx, StringRef path,
+         raw_ostream &diag, bool wholeArchive, bool upwardDylib) {
   if (ctx.logInputFiles())
-    message(path);
+    diag << path << "\n";
 
   ErrorOr<std::unique_ptr<MemoryBuffer>> mbOrErr = ctx.getMemoryBuffer(path);
   if (std::error_code ec = mbOrErr.getError())
@@ -156,17 +153,19 @@ static std::string canonicalizePath(StringRef path) {
 }
 
 static void addFile(StringRef path, MachOLinkingContext &ctx,
-                    bool loadWholeArchive, bool upwardDylib) {
+                    bool loadWholeArchive,
+                    bool upwardDylib, raw_ostream &diag) {
   std::vector<std::unique_ptr<File>> files =
-      loadFile(ctx, path, loadWholeArchive, upwardDylib);
+      loadFile(ctx, path, diag, loadWholeArchive, upwardDylib);
   for (std::unique_ptr<File> &file : files)
-    ctx.getNodes().push_back(std::make_unique<FileNode>(std::move(file)));
+    ctx.getNodes().push_back(llvm::make_unique<FileNode>(std::move(file)));
 }
 
 // Export lists are one symbol per line.  Blank lines are ignored.
 // Trailing comments start with #.
 static std::error_code parseExportsList(StringRef exportFilePath,
-                                        MachOLinkingContext &ctx) {
+                                        MachOLinkingContext &ctx,
+                                        raw_ostream &diagnostics) {
   // Map in export list file.
   ErrorOr<std::unique_ptr<MemoryBuffer>> mb =
                                    MemoryBuffer::getFileOrSTDIN(exportFilePath);
@@ -196,7 +195,8 @@ static std::error_code parseExportsList(StringRef exportFilePath,
 ///     libfrob.a(bar.o):_bar
 ///     x86_64:_foo64
 static std::error_code parseOrderFile(StringRef orderFilePath,
-                                      MachOLinkingContext &ctx) {
+                                      MachOLinkingContext &ctx,
+                                      raw_ostream &diagnostics) {
   // Map in order file.
   ErrorOr<std::unique_ptr<MemoryBuffer>> mb =
                                    MemoryBuffer::getFileOrSTDIN(orderFilePath);
@@ -232,7 +232,7 @@ static std::error_code parseOrderFile(StringRef orderFilePath,
      sym = prefixAndSym.first;
     if (!sym.empty()) {
       ctx.appendOrderedSymbol(sym, prefix);
-      // llvm::errs() << sym << ", prefix=" << prefix << "\n";
+      //llvm::errs() << sym << ", prefix=" << prefix << "\n";
     }
   }
   return std::error_code();
@@ -250,7 +250,8 @@ static std::error_code parseOrderFile(StringRef orderFilePath,
 // per line. The <dir> prefix is prepended to each partial path.
 //
 static llvm::Error loadFileList(StringRef fileListPath,
-                                MachOLinkingContext &ctx, bool forceLoad) {
+                                MachOLinkingContext &ctx, bool forceLoad,
+                                raw_ostream &diagnostics) {
   // If there is a comma, split off <dir>.
   std::pair<StringRef, StringRef> opt = fileListPath.split(',');
   StringRef filePath = opt.first;
@@ -283,9 +284,9 @@ static llvm::Error loadFileList(StringRef fileListPath,
                                             + "'");
     }
     if (ctx.testingFileUsage()) {
-      message("Found filelist entry " + canonicalizePath(path));
+      diagnostics << "Found filelist entry " << canonicalizePath(path) << '\n';
     }
-    addFile(path, ctx, forceLoad, false);
+    addFile(path, ctx, forceLoad, false, diagnostics);
     buffer = lineAndRest.second;
   }
   return llvm::Error::success();
@@ -314,7 +315,8 @@ static void parseLLVMOptions(const LinkingContext &ctx) {
 namespace lld {
 namespace mach_o {
 
-bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
+bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx,
+           raw_ostream &diagnostics) {
   // Parse command line options using DarwinLdOptions.td
   DarwinLdOptTable table;
   unsigned missingIndex;
@@ -322,19 +324,16 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
   llvm::opt::InputArgList parsedArgs =
       table.ParseArgs(args.slice(1), missingIndex, missingCount);
   if (missingCount) {
-    error("missing arg value for '" +
-          Twine(parsedArgs.getArgString(missingIndex)) + "' expected " +
-          Twine(missingCount) + " argument(s).");
+    diagnostics << "error: missing arg value for '"
+                << parsedArgs.getArgString(missingIndex) << "' expected "
+                << missingCount << " argument(s).\n";
     return false;
   }
 
   for (auto unknownArg : parsedArgs.filtered(OPT_UNKNOWN)) {
-    warn("ignoring unknown argument: " +
-         Twine(unknownArg->getAsString(parsedArgs)));
+    diagnostics << "warning: ignoring unknown argument: "
+                << unknownArg->getAsString(parsedArgs) << "\n";
   }
-
-  errorHandler().verbose = parsedArgs.hasArg(OPT_v);
-  errorHandler().errorLimit = args::getInteger(parsedArgs, OPT_error_limit, 20);
 
   // Figure out output kind ( -dylib, -r, -bundle, -preload, or -static )
   llvm::MachO::HeaderFileType fileType = llvm::MachO::MH_EXECUTE;
@@ -366,7 +365,8 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
   if (llvm::opt::Arg *archStr = parsedArgs.getLastArg(OPT_arch)) {
     arch = MachOLinkingContext::archFromName(archStr->getValue());
     if (arch == MachOLinkingContext::arch_unknown) {
-      error("unknown arch named '" + Twine(archStr->getValue()) + "'");
+      diagnostics << "error: unknown arch named '" << archStr->getValue()
+                  << "'\n";
       return false;
     }
   }
@@ -381,13 +381,10 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
     if (arch == MachOLinkingContext::arch_unknown &&
         !parsedArgs.getLastArg(OPT_test_file_usage)) {
       // If no -arch and no options at all, print usage message.
-      if (parsedArgs.size() == 0) {
-        table.PrintHelp(llvm::outs(),
-                        (std::string(args[0]) + " [options] file...").c_str(),
-                        "LLVM Linker", false);
-      } else {
-        error("-arch not specified and could not be inferred");
-      }
+      if (parsedArgs.size() == 0)
+        table.PrintHelp(llvm::outs(), args[0], "LLVM Linker", false);
+      else
+        diagnostics << "error: -arch not specified and could not be inferred\n";
       return false;
     }
   }
@@ -403,7 +400,7 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
       os = MachOLinkingContext::OS::macOSX;
       if (MachOLinkingContext::parsePackedVersion(minOS->getValue(),
                                                   minOSVersion)) {
-        error("malformed macosx_version_min value");
+        diagnostics << "error: malformed macosx_version_min value\n";
         return false;
       }
       break;
@@ -411,7 +408,7 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
       os = MachOLinkingContext::OS::iOS;
       if (MachOLinkingContext::parsePackedVersion(minOS->getValue(),
                                                   minOSVersion)) {
-        error("malformed ios_version_min value");
+        diagnostics << "error: malformed ios_version_min value\n";
         return false;
       }
       break;
@@ -419,7 +416,7 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
       os = MachOLinkingContext::OS::iOS_simulator;
       if (MachOLinkingContext::parsePackedVersion(minOS->getValue(),
                                                   minOSVersion)) {
-        error("malformed ios_simulator_version_min value");
+        diagnostics << "error: malformed ios_simulator_version_min value\n";
         return false;
       }
       break;
@@ -453,14 +450,14 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
   if (llvm::opt::Arg *imageBase = parsedArgs.getLastArg(OPT_image_base)) {
     uint64_t baseAddress;
     if (parseNumberBase16(imageBase->getValue(), baseAddress)) {
-      error("image_base expects a hex number");
+      diagnostics << "error: image_base expects a hex number\n";
       return false;
     } else if (baseAddress < ctx.pageZeroSize()) {
-      error("image_base overlaps with __PAGEZERO");
+      diagnostics << "error: image_base overlaps with __PAGEZERO\n";
       return false;
     } else if (baseAddress % ctx.pageSize()) {
-      error("image_base must be a multiple of page size (0x" +
-            llvm::utohexstr(ctx.pageSize()) + ")");
+      diagnostics << "error: image_base must be a multiple of page size ("
+                  << "0x" << llvm::utohexstr(ctx.pageSize()) << ")\n";
       return false;
     }
 
@@ -489,12 +486,13 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
   // Handle -compatibility_version and -current_version
   if (llvm::opt::Arg *vers = parsedArgs.getLastArg(OPT_compatibility_version)) {
     if (ctx.outputMachOType() != llvm::MachO::MH_DYLIB) {
-      error("-compatibility_version can only be used with -dylib");
+      diagnostics
+          << "error: -compatibility_version can only be used with -dylib\n";
       return false;
     }
     uint32_t parsedVers;
     if (MachOLinkingContext::parsePackedVersion(vers->getValue(), parsedVers)) {
-      error("-compatibility_version value is malformed");
+      diagnostics << "error: -compatibility_version value is malformed\n";
       return false;
     }
     ctx.setCompatibilityVersion(parsedVers);
@@ -502,12 +500,12 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
 
   if (llvm::opt::Arg *vers = parsedArgs.getLastArg(OPT_current_version)) {
     if (ctx.outputMachOType() != llvm::MachO::MH_DYLIB) {
-      error("-current_version can only be used with -dylib");
+      diagnostics << "-current_version can only be used with -dylib\n";
       return false;
     }
     uint32_t parsedVers;
     if (MachOLinkingContext::parsePackedVersion(vers->getValue(), parsedVers)) {
-      error("-current_version value is malformed");
+      diagnostics << "error: -current_version value is malformed\n";
       return false;
     }
     ctx.setCurrentVersion(parsedVers);
@@ -526,19 +524,17 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
       alignStr += 2;
     unsigned long long alignValue;
     if (llvm::getAsUnsignedInteger(alignStr, 16, alignValue)) {
-      error("-sectalign alignment value '" + Twine(alignStr) +
-            "' not a valid number");
+      diagnostics << "error: -sectalign alignment value '"
+                  << alignStr << "' not a valid number\n";
       return false;
     }
     uint16_t align = 1 << llvm::countTrailingZeros(alignValue);
     if (!llvm::isPowerOf2_64(alignValue)) {
-      std::string Msg;
-      llvm::raw_string_ostream OS(Msg);
-      OS << "alignment for '-sectalign " << segName << " " << sectName
-         << llvm::format(" 0x%llX", alignValue)
-         << "' is not a power of two, using " << llvm::format("0x%08X", align);
-      OS.flush();
-      warn(Msg);
+      diagnostics << "warning: alignment for '-sectalign "
+                  << segName << " " << sectName
+                  << llvm::format(" 0x%llX", alignValue)
+                  << "' is not a power of two, using "
+                  << llvm::format("0x%08X", align) << "\n";
     }
     ctx.addSectionAlignment(segName, sectName, align);
   }
@@ -564,14 +560,18 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
   if (parsedArgs.getLastArg(OPT_keep_private_externs)) {
     ctx.setKeepPrivateExterns(true);
     if (ctx.outputMachOType() != llvm::MachO::MH_OBJECT)
-      warn("-keep_private_externs only used in -r mode");
+      diagnostics << "warning: -keep_private_externs only used in -r mode\n";
   }
 
   // Handle -dependency_info <path> used by Xcode.
-  if (llvm::opt::Arg *depInfo = parsedArgs.getLastArg(OPT_dependency_info))
-    if (std::error_code ec = ctx.createDependencyFile(depInfo->getValue()))
-      warn(ec.message() + ", processing '-dependency_info " +
-           depInfo->getValue());
+  if (llvm::opt::Arg *depInfo = parsedArgs.getLastArg(OPT_dependency_info)) {
+    if (std::error_code ec = ctx.createDependencyFile(depInfo->getValue())) {
+      diagnostics << "warning: " << ec.message()
+                  << ", processing '-dependency_info "
+                  << depInfo->getValue()
+                  << "'\n";
+    }
+  }
 
   // In -test_file_usage mode, we'll be given an explicit list of paths that
   // exist. We'll also be expected to print out information about how we located
@@ -637,28 +637,31 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
 
   // Now that we've constructed the final set of search paths, print out those
   // search paths in verbose mode.
-  if (errorHandler().verbose) {
-    message("Library search paths:");
+  if (parsedArgs.getLastArg(OPT_v)) {
+    diagnostics << "Library search paths:\n";
     for (auto path : ctx.searchDirs()) {
-      message("    " + path);
+      diagnostics << "    " << path << '\n';
     }
-    message("Framework search paths:");
+    diagnostics << "Framework search paths:\n";
     for (auto path : ctx.frameworkDirs()) {
-      message("    " + path);
+      diagnostics << "    " << path << '\n';
     }
   }
 
   // Handle -exported_symbols_list <file>
   for (auto expFile : parsedArgs.filtered(OPT_exported_symbols_list)) {
     if (ctx.exportMode() == MachOLinkingContext::ExportMode::blackList) {
-      error("-exported_symbols_list cannot be combined with "
-            "-unexported_symbol[s_list]");
-      return false;
+      diagnostics << "error: -exported_symbols_list cannot be combined "
+                  << "with -unexported_symbol[s_list]\n";
+       return false;
     }
     ctx.setExportMode(MachOLinkingContext::ExportMode::whiteList);
-    if (std::error_code ec = parseExportsList(expFile->getValue(), ctx)) {
-      error(ec.message() + ", processing '-exported_symbols_list " +
-            expFile->getValue());
+    if (std::error_code ec = parseExportsList(expFile->getValue(), ctx,
+                                              diagnostics)) {
+      diagnostics << "error: " << ec.message()
+                  << ", processing '-exported_symbols_list "
+                  << expFile->getValue()
+                  << "'\n";
       return false;
     }
   }
@@ -666,9 +669,9 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
   // Handle -exported_symbol <symbol>
   for (auto symbol : parsedArgs.filtered(OPT_exported_symbol)) {
     if (ctx.exportMode() == MachOLinkingContext::ExportMode::blackList) {
-      error("-exported_symbol cannot be combined with "
-            "-unexported_symbol[s_list]");
-      return false;
+      diagnostics << "error: -exported_symbol cannot be combined "
+                  << "with -unexported_symbol[s_list]\n";
+       return false;
     }
     ctx.setExportMode(MachOLinkingContext::ExportMode::whiteList);
     ctx.addExportSymbol(symbol->getValue());
@@ -677,14 +680,17 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
   // Handle -unexported_symbols_list <file>
   for (auto expFile : parsedArgs.filtered(OPT_unexported_symbols_list)) {
     if (ctx.exportMode() == MachOLinkingContext::ExportMode::whiteList) {
-      error("-unexported_symbols_list cannot be combined with "
-            "-exported_symbol[s_list]");
-      return false;
+      diagnostics << "error: -unexported_symbols_list cannot be combined "
+                  << "with -exported_symbol[s_list]\n";
+       return false;
     }
     ctx.setExportMode(MachOLinkingContext::ExportMode::blackList);
-    if (std::error_code ec = parseExportsList(expFile->getValue(), ctx)) {
-      error(ec.message() + ", processing '-unexported_symbols_list " +
-            expFile->getValue());
+    if (std::error_code ec = parseExportsList(expFile->getValue(), ctx,
+                                              diagnostics)) {
+      diagnostics << "error: " << ec.message()
+                  << ", processing '-unexported_symbols_list "
+                  << expFile->getValue()
+                  << "'\n";
       return false;
     }
   }
@@ -692,9 +698,9 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
   // Handle -unexported_symbol <symbol>
   for (auto symbol : parsedArgs.filtered(OPT_unexported_symbol)) {
     if (ctx.exportMode() == MachOLinkingContext::ExportMode::whiteList) {
-      error("-unexported_symbol cannot be combined with "
-            "-exported_symbol[s_list]");
-      return false;
+      diagnostics << "error: -unexported_symbol cannot be combined "
+                  << "with -exported_symbol[s_list]\n";
+       return false;
     }
     ctx.setExportMode(MachOLinkingContext::ExportMode::blackList);
     ctx.addExportSymbol(symbol->getValue());
@@ -703,26 +709,30 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
   // Handle obosolete -multi_module and -single_module
   if (llvm::opt::Arg *mod =
           parsedArgs.getLastArg(OPT_multi_module, OPT_single_module)) {
-    if (mod->getOption().getID() == OPT_multi_module)
-      warn("-multi_module is obsolete and being ignored");
-    else if (ctx.outputMachOType() != llvm::MachO::MH_DYLIB)
-      warn("-single_module being ignored. It is only for use when producing a "
-           "dylib");
+    if (mod->getOption().getID() == OPT_multi_module) {
+      diagnostics << "warning: -multi_module is obsolete and being ignored\n";
+    }
+    else {
+      if (ctx.outputMachOType() != llvm::MachO::MH_DYLIB) {
+        diagnostics << "warning: -single_module being ignored. "
+                       "It is only for use when producing a dylib\n";
+      }
+    }
   }
 
   // Handle obsolete ObjC options: -objc_gc_compaction, -objc_gc, -objc_gc_only
   if (parsedArgs.getLastArg(OPT_objc_gc_compaction)) {
-    error("-objc_gc_compaction is not supported");
+    diagnostics << "error: -objc_gc_compaction is not supported\n";
     return false;
   }
 
   if (parsedArgs.getLastArg(OPT_objc_gc)) {
-    error("-objc_gc is not supported");
+    diagnostics << "error: -objc_gc is not supported\n";
     return false;
   }
 
   if (parsedArgs.getLastArg(OPT_objc_gc_only)) {
-    error("-objc_gc_only is not supported");
+    diagnostics << "error: -objc_gc_only is not supported\n";
     return false;
   }
 
@@ -734,20 +744,22 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
       case MachOLinkingContext::OS::macOSX:
         if ((minOSVersion < 0x000A0500) &&
             (pie->getOption().getID() == OPT_pie)) {
-          error("-pie can only be used when targeting Mac OS X 10.5 or later");
+          diagnostics << "-pie can only be used when targeting "
+                         "Mac OS X 10.5 or later\n";
           return false;
         }
         break;
       case MachOLinkingContext::OS::iOS:
         if ((minOSVersion < 0x00040200) &&
             (pie->getOption().getID() == OPT_pie)) {
-          error("-pie can only be used when targeting iOS 4.2 or later");
+          diagnostics << "-pie can only be used when targeting "
+                         "iOS 4.2 or later\n";
           return false;
         }
         break;
       case MachOLinkingContext::OS::iOS_simulator:
         if (pie->getOption().getID() == OPT_no_pie) {
-          error("iOS simulator programs must be built PIE");
+          diagnostics << "iOS simulator programs must be built PIE\n";
           return false;
         }
         break;
@@ -760,12 +772,12 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
       break;
     case llvm::MachO::MH_DYLIB:
     case llvm::MachO::MH_BUNDLE:
-      warn(pie->getSpelling() +
-           " being ignored. It is only used when linking main executables");
+      diagnostics << "warning: " << pie->getSpelling() << " being ignored. "
+                  << "It is only used when linking main executables\n";
       break;
     default:
-      error(pie->getSpelling() +
-            " can only used when linking main executables");
+      diagnostics << pie->getSpelling()
+                  << " can only used when linking main executables\n";
       return false;
     }
   }
@@ -788,7 +800,7 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
         break;
       case llvm::MachO::MH_EXECUTE:
         // dynamic executables default to generating a version load command,
-        // while static executables only generate it if required.
+        // while static exectuables only generate it if required.
         if (isStaticExecutable) {
           if (flagOn)
             ctx.setGenerateVersionLoadCommand(true);
@@ -836,7 +848,7 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
         break;
       case llvm::MachO::MH_EXECUTE:
         // dynamic executables default to generating a version load command,
-        // while static executables only generate it if required.
+        // while static exectuables only generate it if required.
         if (isStaticExecutable) {
           if (flagOn)
             ctx.setGenerateFunctionStartsLoadCommand(true);
@@ -885,7 +897,7 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
         break;
       case llvm::MachO::MH_EXECUTE:
         // dynamic executables default to generating a version load command,
-        // while static executables only generate it if required.
+        // while static exectuables only generate it if required.
         if (isStaticExecutable) {
           if (flagOn)
             ctx.setGenerateDataInCodeLoadCommand(true);
@@ -920,17 +932,18 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
     uint32_t sdkVersion = 0;
     if (MachOLinkingContext::parsePackedVersion(arg->getValue(),
                                                 sdkVersion)) {
-      error("malformed sdkVersion value");
+      diagnostics << "error: malformed sdkVersion value\n";
       return false;
     }
     ctx.setSdkVersion(sdkVersion);
   } else if (ctx.generateVersionLoadCommand()) {
     // If we don't have an sdk version, but were going to emit a load command
-    // with min_version, then we need to give a warning as we have no sdk
+    // with min_version, then we need to give an warning as we have no sdk
     // version to put in that command.
     // FIXME: We need to decide whether to make this an error.
-    warn("-sdk_version is required when emitting min version load command.  "
-         "Setting sdk version to match provided min version");
+    diagnostics << "warning: -sdk_version is required when emitting "
+                   "min version load command.  "
+                   "Setting sdk version to match provided min version\n";
     ctx.setSdkVersion(ctx.osMinVersion());
   }
 
@@ -939,7 +952,7 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
     uint64_t version = 0;
     if (MachOLinkingContext::parsePackedVersion(arg->getValue(),
                                                 version)) {
-      error("malformed source_version value");
+      diagnostics << "error: malformed source_version value\n";
       return false;
     }
     ctx.setSourceVersion(version);
@@ -949,12 +962,12 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
   if (llvm::opt::Arg *stackSize = parsedArgs.getLastArg(OPT_stack_size)) {
     uint64_t stackSizeVal;
     if (parseNumberBase16(stackSize->getValue(), stackSizeVal)) {
-      error("stack_size expects a hex number");
+      diagnostics << "error: stack_size expects a hex number\n";
       return false;
     }
     if ((stackSizeVal % ctx.pageSize()) != 0) {
-      error("stack_size must be a multiple of page size (0x" +
-            llvm::utohexstr(ctx.pageSize()) + ")");
+      diagnostics << "error: stack_size must be a multiple of page size ("
+                  << "0x" << llvm::utohexstr(ctx.pageSize()) << ")\n";
       return false;
     }
 
@@ -967,9 +980,12 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
 
   // Handle -order_file <file>
   for (auto orderFile : parsedArgs.filtered(OPT_order_file)) {
-    if (std::error_code ec = parseOrderFile(orderFile->getValue(), ctx)) {
-      error(ec.message() + ", processing '-order_file " + orderFile->getValue()
-            + "'");
+    if (std::error_code ec = parseOrderFile(orderFile->getValue(), ctx,
+                                              diagnostics)) {
+      diagnostics << "error: " << ec.message()
+                  << ", processing '-order_file "
+                  << orderFile->getValue()
+                  << "'\n";
       return false;
     }
   }
@@ -993,8 +1009,8 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
     else if (StringRef(undef->getValue()).equals("dynamic_lookup"))
       UndefMode = MachOLinkingContext::UndefinedMode::dynamicLookup;
     else {
-      error("invalid option to -undefined [ warning | error | suppress | "
-            "dynamic_lookup ]");
+      diagnostics << "error: invalid option to -undefined "
+                     "[ warning | error | suppress | dynamic_lookup ]\n";
       return false;
     }
 
@@ -1008,8 +1024,8 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
       // illegal. Emit a diagnostic if they've been (mis)used.
       if (UndefMode == MachOLinkingContext::UndefinedMode::warning ||
           UndefMode == MachOLinkingContext::UndefinedMode::suppress) {
-        error("can't use -undefined warning or suppress with "
-              "-twolevel_namespace");
+        diagnostics << "error: can't use -undefined warning or suppress with "
+                       "-twolevel_namespace\n";
         return false;
       }
     }
@@ -1028,16 +1044,19 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
       case llvm::MachO::MH_DYLIB:
       case llvm::MachO::MH_BUNDLE:
         if (!ctx.minOS("10.5", "2.0")) {
-          if (ctx.os() == MachOLinkingContext::OS::macOSX)
-            error("-rpath can only be used when targeting OS X 10.5 or later");
-          else
-            error("-rpath can only be used when targeting iOS 2.0 or later");
+          if (ctx.os() == MachOLinkingContext::OS::macOSX) {
+            diagnostics << "error: -rpath can only be used when targeting "
+                           "OS X 10.5 or later\n";
+          } else {
+            diagnostics << "error: -rpath can only be used when targeting "
+                           "iOS 2.0 or later\n";
+          }
           return false;
         }
         break;
       default:
-        error("-rpath can only be used when creating a dynamic final linked "
-              "image");
+        diagnostics << "error: -rpath can only be used when creating "
+                       "a dynamic final linked image\n";
         return false;
     }
 
@@ -1047,7 +1066,7 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
   }
 
   // Parse the LLVM options before we process files in case the file handling
-  // makes use of things like LLVM_DEBUG().
+  // makes use of things like DEBUG().
   parseLLVMOptions(ctx);
 
   // Handle input files and sectcreate.
@@ -1058,46 +1077,52 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
     default:
       continue;
     case OPT_INPUT:
-      addFile(arg->getValue(), ctx, globalWholeArchive, false);
+      addFile(arg->getValue(), ctx, globalWholeArchive, false, diagnostics);
       break;
     case OPT_upward_library:
-      addFile(arg->getValue(), ctx, false, true);
+      addFile(arg->getValue(), ctx, false, true, diagnostics);
       break;
     case OPT_force_load:
-      addFile(arg->getValue(), ctx, true, false);
+      addFile(arg->getValue(), ctx, true, false, diagnostics);
       break;
     case OPT_l:
     case OPT_upward_l:
       upward = (arg->getOption().getID() == OPT_upward_l);
       resolvedPath = ctx.searchLibrary(arg->getValue());
       if (!resolvedPath) {
-        error("Unable to find library for " + arg->getSpelling() +
-              arg->getValue());
+        diagnostics << "Unable to find library for " << arg->getSpelling()
+                    << arg->getValue() << "\n";
         return false;
       } else if (ctx.testingFileUsage()) {
-        message(Twine("Found ") + (upward ? "upward " : " ") + "library " +
-                canonicalizePath(resolvedPath.getValue()));
+        diagnostics << "Found " << (upward ? "upward " : " ") << "library "
+                   << canonicalizePath(resolvedPath.getValue()) << '\n';
       }
-      addFile(resolvedPath.getValue(), ctx, globalWholeArchive, upward);
+      addFile(resolvedPath.getValue(), ctx, globalWholeArchive,
+              upward, diagnostics);
       break;
     case OPT_framework:
     case OPT_upward_framework:
       upward = (arg->getOption().getID() == OPT_upward_framework);
       resolvedPath = ctx.findPathForFramework(arg->getValue());
       if (!resolvedPath) {
-        error("Unable to find framework for " + arg->getSpelling() + " " +
-              arg->getValue());
+        diagnostics << "Unable to find framework for "
+                    << arg->getSpelling() << " " << arg->getValue() << "\n";
         return false;
       } else if (ctx.testingFileUsage()) {
-        message(Twine("Found ") + (upward ? "upward " : " ") + "framework " +
-                canonicalizePath(resolvedPath.getValue()));
+        diagnostics << "Found " << (upward ? "upward " : " ") << "framework "
+                    << canonicalizePath(resolvedPath.getValue()) << '\n';
       }
-      addFile(resolvedPath.getValue(), ctx, globalWholeArchive, upward);
+      addFile(resolvedPath.getValue(), ctx, globalWholeArchive,
+              upward, diagnostics);
       break;
     case OPT_filelist:
-      if (auto ec = loadFileList(arg->getValue(), ctx, globalWholeArchive)) {
+      if (auto ec = loadFileList(arg->getValue(),
+                                 ctx, globalWholeArchive,
+                                 diagnostics)) {
         handleAllErrors(std::move(ec), [&](const llvm::ErrorInfoBase &EI) {
-          error(EI.message() + ", processing '-filelist " + arg->getValue());
+          diagnostics << "error: ";
+          EI.log(diagnostics);
+          diagnostics << ", processing '-filelist " << arg->getValue() << "'\n";
         });
         return false;
       }
@@ -1111,7 +1136,7 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
           MemoryBuffer::getFile(fileName);
 
         if (!contentOrErr) {
-          error("can't open -sectcreate file " + Twine(fileName));
+          diagnostics << "error: can't open -sectcreate file " << fileName << "\n";
           return false;
         }
 
@@ -1122,12 +1147,12 @@ bool parse(llvm::ArrayRef<const char *> args, MachOLinkingContext &ctx) {
   }
 
   if (ctx.getNodes().empty()) {
-    error("No input files");
+    diagnostics << "No input files\n";
     return false;
   }
 
   // Validate the combination of options used.
-  return ctx.validate();
+  return ctx.validate(diagnostics);
 }
 
 static void createFiles(MachOLinkingContext &ctx, bool Implicit) {
@@ -1138,25 +1163,14 @@ static void createFiles(MachOLinkingContext &ctx, bool Implicit) {
     ctx.createInternalFiles(Files);
   for (auto i = Files.rbegin(), e = Files.rend(); i != e; ++i) {
     auto &members = ctx.getNodes();
-    members.insert(members.begin(), std::make_unique<FileNode>(std::move(*i)));
+    members.insert(members.begin(), llvm::make_unique<FileNode>(std::move(*i)));
   }
 }
 
 /// This is where the link is actually performed.
-bool link(llvm::ArrayRef<const char *> args, bool CanExitEarly,
-          raw_ostream &StdoutOS, raw_ostream &StderrOS) {
-  lld::stdoutOS = &StdoutOS;
-  lld::stderrOS = &StderrOS;
-
-  errorHandler().logName = args::getFilenameWithoutExe(args[0]);
-  errorHandler().errorLimitExceededMsg =
-      "too many errors emitted, stopping now (use "
-      "'-error-limit 0' to see all errors)";
-  errorHandler().exitEarly = CanExitEarly;
-  StderrOS.enable_colors(StderrOS.has_colors());
-
+bool link(llvm::ArrayRef<const char *> args, raw_ostream &diagnostics) {
   MachOLinkingContext ctx;
-  if (!parse(args, ctx))
+  if (!parse(args, ctx, diagnostics))
     return false;
   if (ctx.doNothing())
     return true;
@@ -1187,7 +1201,7 @@ bool link(llvm::ArrayRef<const char *> args, bool CanExitEarly,
     merged = mergedFile.get();
     auto &members = ctx.getNodes();
     members.insert(members.begin(),
-                   std::make_unique<FileNode>(std::move(mergedFile)));
+                   llvm::make_unique<FileNode>(std::move(mergedFile)));
   }
   resolveTask.end();
 
@@ -1198,9 +1212,9 @@ bool link(llvm::ArrayRef<const char *> args, bool CanExitEarly,
   if (auto ec = pm.runOnFile(*merged)) {
     // FIXME: This should be passed to logAllUnhandledErrors but it needs
     // to be passed a Twine instead of a string.
-    lld::errs() << "Failed to run passes on file '" << ctx.outputPath()
+    diagnostics << "Failed to run passes on file '" << ctx.outputPath()
                 << "': ";
-    logAllUnhandledErrors(std::move(ec), lld::errs(), std::string());
+    logAllUnhandledErrors(std::move(ec), diagnostics, std::string());
     return false;
   }
 
@@ -1211,15 +1225,10 @@ bool link(llvm::ArrayRef<const char *> args, bool CanExitEarly,
   if (auto ec = ctx.writeFile(*merged)) {
     // FIXME: This should be passed to logAllUnhandledErrors but it needs
     // to be passed a Twine instead of a string.
-    lld::errs() << "Failed to write file '" << ctx.outputPath() << "': ";
-    logAllUnhandledErrors(std::move(ec), lld::errs(), std::string());
+    diagnostics << "Failed to write file '" << ctx.outputPath() << "': ";
+    logAllUnhandledErrors(std::move(ec), diagnostics, std::string());
     return false;
   }
-
-  // Call exit() if we can to avoid calling destructors.
-  if (CanExitEarly)
-    exitLld(errorCount() ? 1 : 0);
-
 
   return true;
 }

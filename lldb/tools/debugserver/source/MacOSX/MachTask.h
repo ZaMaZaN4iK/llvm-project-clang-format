@@ -1,10 +1,12 @@
 //===-- MachTask.h ----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
+//----------------------------------------------------------------------
 //
 //  MachTask.h
 //  debugserver
@@ -16,10 +18,14 @@
 #ifndef __MachTask_h__
 #define __MachTask_h__
 
+// C Includes
 #include <mach/mach.h>
 #include <sys/socket.h>
+// C++ Includes
 #include <map>
 #include <string>
+// Other libraries and framework includes
+// Project includes
 #include "DNBDefs.h"
 #include "MachException.h"
 #include "MachVMMemory.h"
@@ -44,7 +50,9 @@ struct MachMallocEvent {
 
 class MachTask {
 public:
+  //------------------------------------------------------------------
   // Constructors and Destructors
+  //------------------------------------------------------------------
   MachTask(MachProcess *process);
   virtual ~MachTask();
 
@@ -102,8 +110,8 @@ protected:
   allocation_collection m_allocations;
 
 private:
-  MachTask(const MachTask &) = delete;
-  MachTask &operator=(const MachTask &rhs) = delete;
+  MachTask(const MachTask &);               // Outlaw
+  MachTask &operator=(const MachTask &rhs); // Outlaw
 };
 
 #endif // __MachTask_h__

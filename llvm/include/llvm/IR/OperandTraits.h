@@ -1,8 +1,9 @@
 //===-- llvm/OperandTraits.h - OperandTraits class definition ---*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -29,9 +30,6 @@ namespace llvm {
 template <typename SubClass, unsigned ARITY>
 struct FixedNumOperandTraits {
   static Use *op_begin(SubClass* U) {
-    static_assert(
-        !std::is_polymorphic<SubClass>::value,
-        "adding virtual methods to subclasses of User breaks use lists");
     return reinterpret_cast<Use*>(U) - ARITY;
   }
   static Use *op_end(SubClass* U) {
@@ -67,9 +65,6 @@ struct OptionalOperandTraits : public FixedNumOperandTraits<SubClass, ARITY> {
 template <typename SubClass, unsigned MINARITY = 0>
 struct VariadicOperandTraits {
   static Use *op_begin(SubClass* U) {
-    static_assert(
-        !std::is_polymorphic<SubClass>::value,
-        "adding virtual methods to subclasses of User breaks use lists");
     return reinterpret_cast<Use*>(U) - static_cast<User*>(U)->getNumOperands();
   }
   static Use *op_end(SubClass* U) {
@@ -87,6 +82,9 @@ struct VariadicOperandTraits {
 /// HungoffOperandTraits - determine the allocation regime of the Use array
 /// when it is not a prefix to the User object, but allocated at an unrelated
 /// heap address.
+/// Assumes that the User subclass that is determined by this traits class
+/// has an OperandList member of type User::op_iterator. [Note: this is now
+/// trivially satisfied, because User has that member for historic reasons.]
 ///
 /// This is the traits class that is needed when the Use array must be
 /// resizable.

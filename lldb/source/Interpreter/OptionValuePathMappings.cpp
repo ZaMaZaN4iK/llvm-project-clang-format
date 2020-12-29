@@ -1,25 +1,29 @@
 //===-- OptionValuePathMappings.cpp -----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Interpreter/OptionValuePathMappings.h"
 
-#include "lldb/Host/FileSystem.h"
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/Stream.h"
+#include "lldb/Host/FileSpec.h"
 #include "lldb/Host/StringConvert.h"
-#include "lldb/Utility/Args.h"
-#include "lldb/Utility/FileSpec.h"
-#include "lldb/Utility/Stream.h"
+#include "lldb/Interpreter/Args.h"
 
 using namespace lldb;
 using namespace lldb_private;
 namespace {
 static bool VerifyPathExists(const char *path) {
   if (path && path[0])
-    return FileSystem::Instance().Exists(path);
+    return FileSpec(path, false).Exists();
   else
     return false;
 }
@@ -36,9 +40,9 @@ void OptionValuePathMappings::DumpValue(const ExecutionContext *exe_ctx,
   }
 }
 
-Status OptionValuePathMappings::SetValueFromString(llvm::StringRef value,
-                                                   VarSetOperationType op) {
-  Status error;
+Error OptionValuePathMappings::SetValueFromString(llvm::StringRef value,
+                                                  VarSetOperationType op) {
+  Error error;
   Args args(value.str());
   const size_t argc = args.GetArgumentCount();
 
@@ -176,7 +180,7 @@ Status OptionValuePathMappings::SetValueFromString(llvm::StringRef value,
         size_t num_remove_indexes = remove_indexes.size();
         if (num_remove_indexes) {
           // Sort and then erase in reverse so indexes are always valid
-          llvm::sort(remove_indexes.begin(), remove_indexes.end());
+          std::sort(remove_indexes.begin(), remove_indexes.end());
           for (size_t j = num_remove_indexes - 1; j < num_remove_indexes; ++j) {
             m_path_mappings.Remove(j, m_notify_changes);
           }

@@ -1,6 +1,7 @@
 // RUN: %clang_cc1 -triple=x86_64-apple-darwin10 -emit-llvm -fexceptions %s -o - |FileCheck %s
 // RUN: %clang_cc1 -triple=x86_64-apple-darwin10 -emit-llvm %s -o - |FileCheck -check-prefix CHECK-NOEXC %s
-// RUN: %clang_cc1 -triple=x86_64-apple-darwin10 -emit-llvm -mframe-pointer=non-leaf %s -o - \
+// RUN: %clang_cc1 -triple=x86_64-apple-darwin10 -emit-llvm \
+// RUN:     -momit-leaf-frame-pointer -mdisable-fp-elim %s -o - \
 // RUN:   | FileCheck -check-prefix CHECK-FP %s
 
 struct A {
@@ -14,7 +15,7 @@ struct C { void *field; };
 
 struct D { ~D(); };
 
-// CHECK: @__dso_handle = external hidden global i8
+// CHECK: @__dso_handle = external global i8
 // CHECK: @c = global %struct.C zeroinitializer, align 8
 
 // PR6205: The casts should not require global initializers
@@ -207,4 +208,4 @@ namespace test7 {
 
 // PR21811: attach the appropriate attribute to the global init function
 // CHECK-FP: define internal void @_GLOBAL__sub_I_global_init.cpp() [[NUX:#[0-9]+]] section "__TEXT,__StaticInit,regular,pure_instructions" {
-// CHECK-FP: attributes [[NUX]] = { noinline nounwind {{.*}}"frame-pointer"="non-leaf"{{.*}} }
+// CHECK-FP: attributes [[NUX]] = { noinline nounwind {{.*}}"no-frame-pointer-elim-non-leaf"{{.*}} }

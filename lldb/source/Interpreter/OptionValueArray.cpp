@@ -1,16 +1,21 @@
 //===-- OptionValueArray.cpp ------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
 #include "lldb/Interpreter/OptionValueArray.h"
 
+// C Includes
+// C++ Includes
+// Other libraries and framework includes
+// Project includes
+#include "lldb/Core/Stream.h"
 #include "lldb/Host/StringConvert.h"
-#include "lldb/Utility/Args.h"
-#include "lldb/Utility/Stream.h"
+#include "lldb/Interpreter/Args.h"
 
 using namespace lldb;
 using namespace lldb_private;
@@ -26,17 +31,13 @@ void OptionValueArray::DumpValue(const ExecutionContext *exe_ctx, Stream &strm,
       strm.Printf("(%s)", GetTypeAsCString());
   }
   if (dump_mask & eDumpOptionValue) {
-    const bool one_line = dump_mask & eDumpOptionCommand;
-    const uint32_t size = m_values.size();
     if (dump_mask & eDumpOptionType)
-      strm.Printf(" =%s", (m_values.size() > 0 && !one_line) ? "\n" : "");
-    if (!one_line)
-      strm.IndentMore();
+      strm.Printf(" =%s", (m_values.size() > 0) ? "\n" : "");
+    strm.IndentMore();
+    const uint32_t size = m_values.size();
     for (uint32_t i = 0; i < size; ++i) {
-      if (!one_line) {
-        strm.Indent();
-        strm.Printf("[%u]: ", i);
-      }
+      strm.Indent();
+      strm.Printf("[%u]: ", i);
       const uint32_t extra_dump_options = m_raw_value_dump ? eDumpOptionRaw : 0;
       switch (array_element_type) {
       default:
@@ -62,32 +63,25 @@ void OptionValueArray::DumpValue(const ExecutionContext *exe_ctx, Stream &strm,
                                                   extra_dump_options);
         break;
       }
-
-      if (!one_line) {
-        if (i < (size - 1))
-          strm.EOL();
-      } else {
-        strm << ' ';
-      }
+      if (i < (size - 1))
+        strm.EOL();
     }
-    if (!one_line)
-      strm.IndentLess();
+    strm.IndentLess();
   }
 }
 
-Status OptionValueArray::SetValueFromString(llvm::StringRef value,
-                                            VarSetOperationType op) {
+Error OptionValueArray::SetValueFromString(llvm::StringRef value,
+                                           VarSetOperationType op) {
   Args args(value.str());
-  Status error = SetArgs(args, op);
+  Error error = SetArgs(args, op);
   if (error.Success())
     NotifyValueChanged();
   return error;
 }
 
 lldb::OptionValueSP
-OptionValueArray::GetSubValue(const ExecutionContext *exe_ctx,
-                              llvm::StringRef name, bool will_modify,
-                              Status &error) const {
+OptionValueArray::GetSubValue(const ExecutionContext *exe_ctx, llvm::StringRef name,
+                              bool will_modify, Error &error) const {
   if (name.empty() || name.front() != '[') {
     error.SetErrorStringWithFormat(
       "invalid value path '%s', %s values only support '[<index>]' subvalues "
@@ -155,8 +149,8 @@ size_t OptionValueArray::GetArgs(Args &args) const {
   return args.GetArgumentCount();
 }
 
-Status OptionValueArray::SetArgs(const Args &args, VarSetOperationType op) {
-  Status error;
+Error OptionValueArray::SetArgs(const Args &args, VarSetOperationType op) {
+  Error error;
   const size_t argc = args.GetArgumentCount();
   switch (op) {
   case eVarSetOperationInvalid:
@@ -220,7 +214,7 @@ Status OptionValueArray::SetArgs(const Args &args, VarSetOperationType op) {
         if (num_remove_indexes) {
           // Sort and then erase in reverse so indexes are always valid
           if (num_remove_indexes > 1) {
-            llvm::sort(remove_indexes.begin(), remove_indexes.end());
+            std::sort(remove_indexes.begin(), remove_indexes.end());
             for (std::vector<int>::const_reverse_iterator
                      pos = remove_indexes.rbegin(),
                      end = remove_indexes.rend();

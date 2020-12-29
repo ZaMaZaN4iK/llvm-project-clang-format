@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,8 +20,6 @@
 #include <sstream>
 #include <cstddef>
 
-#include "test_macros.h"
-
 bool is_about(double x, double y, int p)
 {
     std::ostringstream o;
@@ -33,7 +32,7 @@ bool is_about(double x, double y, int p)
     return a == o.str();
 }
 
-int main(int, char**)
+int main()
 {
     {
         typedef double T;
@@ -50,6 +49,4 @@ int main(int, char**)
         for (std::size_t i = 0; i < v3.size(); ++i)
             assert(is_about(v3[i], a3[i], 10));
     }
-
-  return 0;
 }

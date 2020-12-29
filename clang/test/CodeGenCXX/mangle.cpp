@@ -893,8 +893,7 @@ namespace test39 {
     struct {} a;
   } *foo;
   template<typename T> void func(T) {}
-  void test() {
-    foo x;
+  void test(foo x) {
     func(x->a);
   }
 }
@@ -960,7 +959,7 @@ namespace test45 {
   template <typename T>
   void f(enum T::e *) {}
   template void f<S>(S::e *);
-  // CHECK-LABEL: define weak_odr void @_ZN6test451fINS_1SEEEvPTeNT_1eE(i32* %0)
+  // CHECK-LABEL: define weak_odr void @_ZN6test451fINS_1SEEEvPTeNT_1eE(i32*)
 }
 
 namespace test46 {
@@ -970,7 +969,7 @@ namespace test46 {
   template <typename T>
   void f(struct T::s *) {}
   template void f<S>(S::s *);
-  // CHECK-LABEL: define weak_odr void @_ZN6test461fINS_1SEEEvPTsNT_1sE(%"struct.test46::S::s"* %0)
+  // CHECK-LABEL: define weak_odr void @_ZN6test461fINS_1SEEEvPTsNT_1sE(%"struct.test46::S::s"*)
 }
 
 namespace test47 {
@@ -980,7 +979,7 @@ namespace test47 {
   template <typename T>
   void f(class T::c *) {}
   template void f<S>(S::c *);
-  // CHECK-LABEL: define weak_odr void @_ZN6test471fINS_1SEEEvPTsNT_1cE(%"class.test47::S::c"* %0)
+  // CHECK-LABEL: define weak_odr void @_ZN6test471fINS_1SEEEvPTsNT_1cE(%"class.test47::S::c"*)
 }
 
 namespace test48 {
@@ -990,7 +989,7 @@ namespace test48 {
   template <typename T>
   void f(union T::u *) {}
   template void f<S>(S::u *);
-  // CHECK-LABEL: define weak_odr void @_ZN6test481fINS_1SEEEvPTuNT_1uE(%"union.test48::S::u"* %0)
+  // CHECK-LABEL: define weak_odr void @_ZN6test481fINS_1SEEEvPTuNT_1uE(%"union.test48::S::u"*)
 }
 
 namespace test49 {
@@ -1125,16 +1124,4 @@ namespace test57 {
   template<int N> void f(decltype(x.f<0>() + N)) {}
   // CHECK-LABEL: @_ZN6test571fILi0EEEvDTplcldtL_ZNS_1xEE1fIXLi0EEEET_E
   template void f<0>(int);
-}
-
-namespace test58 {
-  struct State {
-   bool m_fn1();
-  } a;
-  template <class T> struct identity { typedef T type; };
-  struct A {
-   template <typename T> A(T, bool (identity<T>::type::*)());
-  };
-  // CHECK-LABEL: @_ZN6test581AC1INS_5StateEEET_MNS_8identityIS3_E4typeEFbvE
-  void fn1() { A(a, &State::m_fn1); }
 }

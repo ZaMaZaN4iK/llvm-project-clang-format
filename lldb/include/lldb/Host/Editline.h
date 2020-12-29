@@ -1,8 +1,9 @@
 //===-- Editline.h ----------------------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,8 +23,8 @@
 // broken, which is why we're
 //    working around it here.
 // c) When resizing the terminal window, if the cursor moves between rows
-// libedit will get confused. d) The incremental search uses escape to cancel
-// input, so it's confused by
+// libedit will get confused.
+// d) The incremental search uses escape to cancel input, so it's confused by
 // ANSI sequences starting with escape.
 // e) Emoji support is fairly terrible, presumably it doesn't understand
 // composed characters?
@@ -32,14 +33,22 @@
 #define liblldb_Editline_h_
 #if defined(__cplusplus)
 
-#include "lldb/Host/Config.h"
-
-#if LLDB_EDITLINE_USE_WCHAR
-#include <codecvt>
-#endif
 #include <locale>
 #include <sstream>
 #include <vector>
+
+// components needed to handle wide characters ( <codecvt>, codecvt_utf8,
+// libedit built with '--enable-widec' )
+// are available on some platforms. The wchar_t versions of libedit functions
+// will only be
+// used in cases where this is true.  This is a compile time dependecy, for now
+// selected per target Platform
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__)
+#define LLDB_EDITLINE_USE_WCHAR 1
+#include <codecvt>
+#else
+#define LLDB_EDITLINE_USE_WCHAR 0
+#endif
 
 #include "lldb/Host/ConnectionFileDescriptor.h"
 #include "lldb/lldb-private.h"
@@ -55,9 +64,8 @@
 #include <vector>
 
 #include "lldb/Host/ConnectionFileDescriptor.h"
-#include "lldb/Utility/CompletionRequest.h"
-#include "lldb/Utility/FileSpec.h"
-#include "lldb/Utility/Predicate.h"
+#include "lldb/Host/FileSpec.h"
+#include "lldb/Host/Predicate.h"
 
 namespace lldb_private {
 namespace line_editor {
@@ -73,18 +81,8 @@ using EditLineStringStreamType = std::stringstream;
 using EditLineCharType = char;
 #endif
 
-// At one point the callback type of el_set getchar callback changed from char
-// to wchar_t. It is not possible to detect differentiate between the two
-// versions exactly, but this is a pretty good approximation and allows us to
-// build against almost any editline version out there.
-#if LLDB_EDITLINE_USE_WCHAR || defined(EL_CLIENTDATA) || LLDB_HAVE_EL_RFUNC_T
-using EditLineGetCharType = wchar_t;
-#else
-using EditLineGetCharType = char;
-#endif
-
 typedef int (*EditlineGetCharCallbackType)(::EditLine *editline,
-                                           EditLineGetCharType *c);
+                                           EditLineCharType *c);
 typedef unsigned char (*EditlineCommandCallbackType)(::EditLine *editline,
                                                      int ch);
 typedef const char *(*EditlinePromptCallbackType)(::EditLine *editline);
@@ -100,7 +98,10 @@ typedef int (*FixIndentationCallbackType)(Editline *editline,
                                           const StringList &lines,
                                           int cursor_position, void *baton);
 
-typedef void (*CompleteCallbackType)(CompletionRequest &request, void *baton);
+typedef int (*CompleteCallbackType)(const char *current_line,
+                                    const char *cursor, const char *last_char,
+                                    int skip_first_n_matches, int max_matches,
+                                    StringList &matches, void *baton);
 
 /// Status used to decide when and how to start editing another line in
 /// multi-line sessions
@@ -134,15 +135,6 @@ enum class CursorLocation {
   /// The location immediately after the last character in a multi-line edit
   /// session
   BlockEnd
-};
-
-/// Operation for the history.
-enum class HistoryOperation {
-  Oldest,
-  Older,
-  Current,
-  Newer,
-  Newest
 };
 }
 
@@ -269,11 +261,15 @@ private:
   StringList GetInputAsStringList(int line_count = UINT32_MAX);
 
   /// Replaces the current multi-line session with the next entry from history.
-  unsigned char RecallHistory(HistoryOperation op);
+  /// When the parameter is
+  /// true it will take the next earlier entry from history, when it is false it
+  /// takes the next most
+  /// recent.
+  unsigned char RecallHistory(bool earlier);
 
   /// Character reading implementation for EditLine that supports our multi-line
   /// editing trickery.
-  int GetCharacter(EditLineGetCharType *c);
+  int GetCharacter(EditLineCharType *c);
 
   /// Prompt implementation for EditLine.
   const char *Prompt();
@@ -326,7 +322,7 @@ private:
   /// single or multi-line editing.
   void ConfigureEditor(bool multiline);
 
-  bool CompleteCharacter(char ch, EditLineGetCharType &out);
+  bool CompleteCharacter(char ch, EditLineCharType &out);
 
 private:
 #if LLDB_EDITLINE_USE_WCHAR

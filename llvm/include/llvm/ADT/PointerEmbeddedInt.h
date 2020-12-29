@@ -1,8 +1,9 @@
 //===- llvm/ADT/PointerEmbeddedInt.h ----------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -12,10 +13,7 @@
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/PointerLikeTypeTraits.h"
-#include <cassert>
 #include <climits>
-#include <cstdint>
-#include <type_traits>
 
 namespace llvm {
 
@@ -31,7 +29,7 @@ namespace llvm {
 /// Also, the default constructed value zero initializes the integer.
 template <typename IntT, int Bits = sizeof(IntT) * CHAR_BIT>
 class PointerEmbeddedInt {
-  uintptr_t Value = 0;
+  uintptr_t Value;
 
   // Note: This '<' is correct; using '<=' would result in some shifts
   // overflowing their storage types.
@@ -51,17 +49,20 @@ class PointerEmbeddedInt {
     explicit RawValueTag() = default;
   };
 
-  friend struct PointerLikeTypeTraits<PointerEmbeddedInt>;
+  friend class PointerLikeTypeTraits<PointerEmbeddedInt>;
 
   explicit PointerEmbeddedInt(uintptr_t Value, RawValueTag) : Value(Value) {}
 
 public:
-  PointerEmbeddedInt() = default;
+  PointerEmbeddedInt() : Value(0) {}
 
-  PointerEmbeddedInt(IntT I) { *this = I; }
+  PointerEmbeddedInt(IntT I) {
+    *this = I;
+  }
 
   PointerEmbeddedInt &operator=(IntT I) {
-    assert((std::is_signed<IntT>::value ? isInt<Bits>(I) : isUInt<Bits>(I)) &&
+    assert((std::is_signed<IntT>::value ? llvm::isInt<Bits>(I)
+                                        : llvm::isUInt<Bits>(I)) &&
            "Integer has bits outside those preserved!");
     Value = static_cast<uintptr_t>(I) << Shift;
     return *this;
@@ -79,17 +80,16 @@ public:
 // Provide pointer like traits to support use with pointer unions and sum
 // types.
 template <typename IntT, int Bits>
-struct PointerLikeTypeTraits<PointerEmbeddedInt<IntT, Bits>> {
-  using T = PointerEmbeddedInt<IntT, Bits>;
+class PointerLikeTypeTraits<PointerEmbeddedInt<IntT, Bits>> {
+  typedef PointerEmbeddedInt<IntT, Bits> T;
 
+public:
   static inline void *getAsVoidPointer(const T &P) {
     return reinterpret_cast<void *>(P.Value);
   }
-
   static inline T getFromVoidPointer(void *P) {
     return T(reinterpret_cast<uintptr_t>(P), typename T::RawValueTag());
   }
-
   static inline T getFromVoidPointer(const void *P) {
     return T(reinterpret_cast<uintptr_t>(P), typename T::RawValueTag());
   }
@@ -101,19 +101,17 @@ struct PointerLikeTypeTraits<PointerEmbeddedInt<IntT, Bits>> {
 // itself can be a key.
 template <typename IntT, int Bits>
 struct DenseMapInfo<PointerEmbeddedInt<IntT, Bits>> {
-  using T = PointerEmbeddedInt<IntT, Bits>;
-  using IntInfo = DenseMapInfo<IntT>;
+  typedef PointerEmbeddedInt<IntT, Bits> T;
+
+  typedef DenseMapInfo<IntT> IntInfo;
 
   static inline T getEmptyKey() { return IntInfo::getEmptyKey(); }
   static inline T getTombstoneKey() { return IntInfo::getTombstoneKey(); }
-
   static unsigned getHashValue(const T &Arg) {
     return IntInfo::getHashValue(Arg);
   }
-
   static bool isEqual(const T &LHS, const T &RHS) { return LHS == RHS; }
 };
+}
 
-} // end namespace llvm
-
-#endif // LLVM_ADT_POINTEREMBEDDEDINT_H
+#endif

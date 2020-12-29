@@ -1,8 +1,9 @@
 //===-- llvm/GlobalVariable.h - GlobalVariable class ------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -22,7 +23,6 @@
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/ADT/ilist_node.h"
-#include "llvm/IR/Attributes.h"
 #include "llvm/IR/GlobalObject.h"
 #include "llvm/IR/OperandTraits.h"
 #include "llvm/IR/Value.h"
@@ -41,7 +41,6 @@ class DIGlobalVariableExpression;
 class GlobalVariable : public GlobalObject, public ilist_node<GlobalVariable> {
   friend class SymbolTableListTraits<GlobalVariable>;
 
-  AttributeSet Attrs;
   bool isConstantGlobal : 1;                   // Is this a global constant?
   bool isExternallyInitializedConstant : 1;    // Is this a global whose value
                                                // can change from its initial
@@ -65,8 +64,11 @@ public:
   GlobalVariable(const GlobalVariable &) = delete;
   GlobalVariable &operator=(const GlobalVariable &) = delete;
 
-  ~GlobalVariable() {
+  ~GlobalVariable() override {
     dropAllReferences();
+
+    // FIXME: needed by operator delete
+    setGlobalVariableNumOperands(1);
   }
 
   // allocate space for exactly one operand
@@ -74,15 +76,7 @@ public:
     return User::operator new(s, 1);
   }
 
-  // delete space for exactly one operand as created in the corresponding new operator
-  void operator delete(void *ptr){
-    assert(ptr != nullptr && "must not be nullptr");
-    User *Obj = static_cast<User *>(ptr);
-    // Number of operands can be set to 0 after construction and initialization. Make sure
-    // that number of operands is reset to 1, as this is needed in User::operator delete
-    Obj->setGlobalVariableNumOperands(1);
-    User::operator delete(Obj);
-  }
+  void *operator new(size_t, unsigned) = delete;
 
   /// Provide fast operand accessors
   DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
@@ -162,17 +156,17 @@ public:
 
   /// copyAttributesFrom - copy all additional attributes (those not needed to
   /// create a GlobalVariable) from the GlobalVariable Src to this one.
-  void copyAttributesFrom(const GlobalVariable *Src);
+  void copyAttributesFrom(const GlobalValue *Src) override;
 
   /// removeFromParent - This method unlinks 'this' from the containing module,
   /// but does not delete it.
   ///
-  void removeFromParent();
+  void removeFromParent() override;
 
   /// eraseFromParent - This method unlinks 'this' from the containing module
   /// and deletes it.
   ///
-  void eraseFromParent();
+  void eraseFromParent() override;
 
   /// Drop all references in preparation to destroy the GlobalVariable. This
   /// drops not only the reference to the initializer but also to any metadata.
@@ -184,71 +178,8 @@ public:
   /// Fill the vector with all debug info attachements.
   void getDebugInfo(SmallVectorImpl<DIGlobalVariableExpression *> &GVs) const;
 
-  /// Add attribute to this global.
-  void addAttribute(Attribute::AttrKind Kind) {
-    Attrs = Attrs.addAttribute(getContext(), Kind);
-  }
-
-  /// Add attribute to this global.
-  void addAttribute(StringRef Kind, StringRef Val = StringRef()) {
-    Attrs = Attrs.addAttribute(getContext(), Kind, Val);
-  }
-
-  /// Return true if the attribute exists.
-  bool hasAttribute(Attribute::AttrKind Kind) const {
-    return Attrs.hasAttribute(Kind);
-  }
-
-  /// Return true if the attribute exists.
-  bool hasAttribute(StringRef Kind) const {
-    return Attrs.hasAttribute(Kind);
-  }
-
-  /// Return true if any attributes exist.
-  bool hasAttributes() const {
-    return Attrs.hasAttributes();
-  }
-
-  /// Return the attribute object.
-  Attribute getAttribute(Attribute::AttrKind Kind) const {
-    return Attrs.getAttribute(Kind);
-  }
-
-  /// Return the attribute object.
-  Attribute getAttribute(StringRef Kind) const {
-    return Attrs.getAttribute(Kind);
-  }
-
-  /// Return the attribute set for this global
-  AttributeSet getAttributes() const {
-    return Attrs;
-  }
-
-  /// Return attribute set as list with index.
-  /// FIXME: This may not be required once ValueEnumerators
-  /// in bitcode-writer can enumerate attribute-set.
-  AttributeList getAttributesAsList(unsigned index) const {
-    if (!hasAttributes())
-      return AttributeList();
-    std::pair<unsigned, AttributeSet> AS[1] = {{index, Attrs}};
-    return AttributeList::get(getContext(), AS);
-  }
-
-  /// Set attribute list for this global
-  void setAttributes(AttributeSet A) {
-    Attrs = A;
-  }
-
-  /// Check if section name is present
-  bool hasImplicitSection() const {
-    return getAttributes().hasAttribute("bss-section") ||
-           getAttributes().hasAttribute("data-section") ||
-           getAttributes().hasAttribute("relro-section") ||
-           getAttributes().hasAttribute("rodata-section");
-  }
-
   // Methods for support type inquiry through isa, cast, and dyn_cast:
-  static bool classof(const Value *V) {
+  static inline bool classof(const Value *V) {
     return V->getValueID() == Value::GlobalVariableVal;
   }
 };

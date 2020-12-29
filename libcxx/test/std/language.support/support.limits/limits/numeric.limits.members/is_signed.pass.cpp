@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,8 +12,6 @@
 // is_signed
 
 #include <limits>
-
-#include "test_macros.h"
 
 template <class T, bool expected>
 void
@@ -24,16 +23,13 @@ test()
     static_assert(std::numeric_limits<const volatile T>::is_signed == expected, "is_signed test 4");
 }
 
-int main(int, char**)
+int main()
 {
     test<bool, false>();
     test<char, char(-1) < char(0)>();
     test<signed char, true>();
     test<unsigned char, false>();
     test<wchar_t, wchar_t(-1) < wchar_t(0)>();
-#if TEST_STD_VER > 17 && defined(__cpp_char8_t)
-    test<char8_t, false>();
-#endif
 #ifndef _LIBCPP_HAS_NO_UNICODE_CHARS
     test<char16_t, false>();
     test<char32_t, false>();
@@ -53,6 +49,4 @@ int main(int, char**)
     test<float, true>();
     test<double, true>();
     test<long double, true>();
-
-  return 0;
 }

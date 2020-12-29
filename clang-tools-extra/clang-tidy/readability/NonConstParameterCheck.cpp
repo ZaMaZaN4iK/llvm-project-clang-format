@@ -1,8 +1,9 @@
 //===--- NonConstParameterCheck.cpp - clang-tidy---------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -137,18 +138,9 @@ void NonConstParameterCheck::diagnoseNonConstParameters() {
     if (!ParamInfo.CanBeConst)
       continue;
 
-    SmallVector<FixItHint, 8> Fixes;
-    auto *Function =
-        dyn_cast_or_null<const FunctionDecl>(Par->getParentFunctionOrMethod());
-    if (!Function)
-      continue;
-    unsigned Index = Par->getFunctionScopeIndex();
-    for (FunctionDecl *FnDecl : Function->redecls())
-      Fixes.push_back(FixItHint::CreateInsertion(
-          FnDecl->getParamDecl(Index)->getBeginLoc(), "const "));
-
     diag(Par->getLocation(), "pointer parameter '%0' can be pointer to const")
-        << Par->getName() << Fixes;
+        << Par->getName()
+        << FixItHint::CreateInsertion(Par->getLocStart(), "const ");
   }
 }
 
@@ -202,7 +194,7 @@ void NonConstParameterCheck::markCanNotBeConst(const Expr *E,
   } else if (const auto *Constr = dyn_cast<CXXConstructExpr>(E)) {
     for (const auto *Arg : Constr->arguments()) {
       if (const auto *M = dyn_cast<MaterializeTemporaryExpr>(Arg))
-        markCanNotBeConst(cast<Expr>(M->getSubExpr()), CanNotBeConst);
+        markCanNotBeConst(cast<Expr>(M->getTemporary()), CanNotBeConst);
     }
   } else if (const auto *ILE = dyn_cast<InitListExpr>(E)) {
     for (unsigned I = 0U; I < ILE->getNumInits(); ++I)

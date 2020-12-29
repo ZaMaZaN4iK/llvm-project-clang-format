@@ -2,20 +2,15 @@ set(LLVM_LINK_COMPONENTS
   Support
   )
 
-add_clang_unittest(ClangAnalysisTests
-  CFGDominatorTree.cpp
+add_clang_unittest(CFGTests
   CFGTest.cpp
-  CloneDetectionTest.cpp
-  ExprMutationAnalyzerTest.cpp
   )
 
-clang_target_link_libraries(ClangAnalysisTests
-  PRIVATE
+target_link_libraries(CFGTests
   clangAnalysis
   clangAST
   clangASTMatchers
   clangBasic
   clangFrontend
-  clangSerialization
   clangTooling
   )

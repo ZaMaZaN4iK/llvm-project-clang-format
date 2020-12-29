@@ -2,8 +2,11 @@
 Test lldb breakpoint command for CPP methods & functions in a namespace.
 """
 
+from __future__ import print_function
 
 
+import os
+import time
 import lldb
 from lldbsuite.test.decorators import *
 from lldbsuite.test.lldbtest import *
@@ -32,7 +35,7 @@ class CPPBreakpointCommandsTestCase(TestBase):
         """Test a sequence of breakpoint command add, list, and delete."""
         self.build()
 
-        exe = self.getBuildArtifact("a.out")
+        exe = os.path.join(os.getcwd(), "a.out")
 
         # Create a target from the debugger.
 

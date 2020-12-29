@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,12 +17,9 @@
 
 #include <unordered_map>
 #include <string>
-#include <set>
 #include <cassert>
 #include <cstddef>
 
-#include "test_macros.h"
-#include "../../../check_consecutive.h"
 #include "min_allocator.h"
 
 struct TemplateConstructor
@@ -33,7 +31,7 @@ struct TemplateConstructor
 bool operator==(const TemplateConstructor&, const TemplateConstructor&) { return false; }
 struct Hash { size_t operator() (const TemplateConstructor &) const { return 0; } };
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::unordered_multimap<int, std::string> C;
@@ -51,7 +49,6 @@ int main(int, char**)
         C::const_iterator i = c.find(2);
         C::const_iterator i_next = i;
         ++i_next;
-        std::string es = i->second;
         C::iterator j = c.erase(i);
         assert(j == i_next);
 
@@ -59,15 +56,17 @@ int main(int, char**)
         typedef std::pair<C::const_iterator, C::const_iterator> Eq;
         Eq eq = c.equal_range(1);
         assert(std::distance(eq.first, eq.second) == 2);
-        std::multiset<std::string> s;
-        s.insert("one");
-        s.insert("four");
-        CheckConsecutiveKeys<C::const_iterator>(c.find(1), c.end(), 1, s);
+        C::const_iterator k = eq.first;
+        assert(k->first == 1);
+        assert(k->second == "one");
+        ++k;
+        assert(k->first == 1);
+        assert(k->second == "four");
         eq = c.equal_range(2);
         assert(std::distance(eq.first, eq.second) == 1);
-        C::const_iterator k = eq.first;
+        k = eq.first;
         assert(k->first == 2);
-        assert(k->second == (es == "two" ? "four" : "two"));
+        assert(k->second == "four");
         eq = c.equal_range(3);
         assert(std::distance(eq.first, eq.second) == 1);
         k = eq.first;
@@ -99,7 +98,6 @@ int main(int, char**)
         C::const_iterator i = c.find(2);
         C::const_iterator i_next = i;
         ++i_next;
-        std::string es = i->second;
         C::iterator j = c.erase(i);
         assert(j == i_next);
 
@@ -107,15 +105,17 @@ int main(int, char**)
         typedef std::pair<C::const_iterator, C::const_iterator> Eq;
         Eq eq = c.equal_range(1);
         assert(std::distance(eq.first, eq.second) == 2);
-        std::multiset<std::string> s;
-        s.insert("one");
-        s.insert("four");
-        CheckConsecutiveKeys<C::const_iterator>(c.find(1), c.end(), 1, s);
+        C::const_iterator k = eq.first;
+        assert(k->first == 1);
+        assert(k->second == "one");
+        ++k;
+        assert(k->first == 1);
+        assert(k->second == "four");
         eq = c.equal_range(2);
         assert(std::distance(eq.first, eq.second) == 1);
-        C::const_iterator k = eq.first;
+        k = eq.first;
         assert(k->first == 2);
-        assert(k->second == (es == "two" ? "four" : "two"));
+        assert(k->second == "four");
         eq = c.equal_range(3);
         assert(std::distance(eq.first, eq.second) == 1);
         k = eq.first;
@@ -144,6 +144,4 @@ int main(int, char**)
             m.erase(it);
     }
 #endif
-
-  return 0;
 }

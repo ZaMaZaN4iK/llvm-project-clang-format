@@ -1,17 +1,12 @@
-add_clang_tool(clang-reorder-fields
-  ClangReorderFields.cpp
-  )
+add_clang_executable(clang-reorder-fields ClangReorderFields.cpp)
 
-clang_target_link_libraries(clang-reorder-fields
-  PRIVATE
+target_link_libraries(clang-reorder-fields
   clangBasic
   clangFrontend
+  clangReorderFields
   clangRewrite
-  clangSerialization
   clangTooling
   clangToolingCore
   )
-target_link_libraries(clang-reorder-fields
-  PRIVATE
-  clangReorderFields
-  )
+
+install(TARGETS clang-reorder-fields RUNTIME DESTINATION bin)

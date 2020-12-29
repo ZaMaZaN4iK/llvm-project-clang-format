@@ -1,8 +1,3 @@
-add_lldb_library(lldbPluginUnwindAssemblyInstEmulation PLUGIN
+add_lldb_library(lldbPluginUnwindAssemblyInstEmulation
   UnwindAssemblyInstEmulation.cpp
-
-  LINK_LIBS
-    lldbCore
-    lldbSymbol
-    lldbTarget
   )

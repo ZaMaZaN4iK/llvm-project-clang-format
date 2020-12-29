@@ -1,8 +1,9 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//                     The LLVM Compiler Infrastructure
+//
+// This file is dual licensed under the MIT and the University of Illinois Open
+// Source Licenses. See LICENSE.TXT for details.
 //
 //===----------------------------------------------------------------------===//
 //
@@ -23,8 +24,6 @@
 #include <cassert>
 #include <limits>
 
-#include "test_macros.h"
-
 template <class T>
 inline
 T
@@ -39,7 +38,7 @@ f(double x, double a, double m, double b, double c)
     return a + m*(sqr(x) - sqr(b))/2 + c*(x-b);
 }
 
-int main(int, char**)
+int main()
 {
     {
         typedef std::piecewise_linear_distribution<> D;
@@ -92,6 +91,4 @@ int main(int, char**)
             assert(std::abs(f(u[i], a, m, bk, c) - double(i)/N) < .001);
         }
     }
-
-  return 0;
 }
